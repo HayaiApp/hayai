@@ -146,13 +146,8 @@ open class BrowseSourceController(bundle: Bundle) :
      */
     private var progressItem: ProgressItem? = null
 
-    /** Current filter sheet — Compose + M3 Expressive. Built lazily and reused across opens so the
-     * first tap doesn't pay the Compose first-frame cost on every show. */
+    /** Current filter sheet — Compose + M3 Expressive */
     private var composeFilterSheet: eu.kanade.tachiyomi.ui.source.browse.compose.ComposeSourceFilterSheet? = null
-    /** Snapshot of filter state taken at the moment the sheet was last shown. The dismiss
-     * callback diffs against this to decide whether the query needs to be re-run. Held at the
-     * controller scope (not the closure) so the sheet instance survives across opens. */
-    private var preShowFilterSnapshot: List<Any?> = emptyList()
     private var lastPosition: Int = -1
 
     // Basically a cache just so the filter sheet is shown faster
@@ -244,27 +239,12 @@ open class BrowseSourceController(bundle: Bundle) :
 
         presenter.restartPager()
 
-        // Pre-warm the filter sheet on the next main-thread idle so the first tap doesn't pay
-        // Compose's first-frame cost. Gated on the source having filters — otherwise the button
-        // isn't visible anyway.
-        if (presenter.sourceIsInitialized && presenter.sourceFilters.isNotEmpty()) {
-            view.post {
-                if (this.view !== view) return@post
-                if (composeFilterSheet == null && activity != null) {
-                    composeFilterSheet = buildComposeFilterSheet()
-                }
-            }
-        }
     }
 
     override fun onDestroyView(view: View) {
         adapter = null
         snack = null
         recycler = null
-        // Dialog is tied to the activity context; drop on view destroy so we don't leak the
-        // ComposeView across controller-view rebuilds.
-        composeFilterSheet?.let { runCatching { it.dismiss() } }
-        composeFilterSheet = null
         super.onDestroyView(view)
     }
 
@@ -416,11 +396,8 @@ open class BrowseSourceController(bundle: Bundle) :
     }
 
     private fun showFilters() {
-        val sheet = composeFilterSheet ?: buildComposeFilterSheet().also { composeFilterSheet = it }
-        if (sheet.isShowing) return
-        preShowFilterSnapshot = snapshotCurrentFilters()
-        presenter.filtersChanged = false
-        sheet.show()
+        if (composeFilterSheet != null) return
+        showComposeFilters()
     }
 
     /**
@@ -459,20 +436,14 @@ open class BrowseSourceController(bundle: Bundle) :
         return !matches
     }
 
-    /**
-     * Build the sheet once per controller-view lifetime. Reused across opens so re-tapping the
-     * filter button doesn't repeat Compose's first-frame setup. Dismiss/cancel no longer null the
-     * field — the snapshot is refreshed by [showFilters] every time the sheet is shown, and the
-     * sheet's own version counters cover any FilterList-pointer swaps (reset, saved-search
-     * apply).
-     */
-    private fun buildComposeFilterSheet(): eu.kanade.tachiyomi.ui.source.browse.compose.ComposeSourceFilterSheet {
-        return eu.kanade.tachiyomi.ui.source.browse.compose.ComposeSourceFilterSheet(
+    private fun showComposeFilters() {
+        val oldFilters = snapshotCurrentFilters()
+        val sheet = eu.kanade.tachiyomi.ui.source.browse.compose.ComposeSourceFilterSheet(
             activity = activity!!,
             getSavedSearches = { savedSearches },
             getFilters = { presenter.sourceFilters },
             onSearchClicked = {
-                if (filtersDifferFromSnapshot(preShowFilterSnapshot)) { applyFilters() }
+                if (filtersDifferFromSnapshot(oldFilters)) { applyFilters() }
             },
             onResetClicked = {
                 presenter.appliedFilters = FilterList()
@@ -521,6 +492,11 @@ open class BrowseSourceController(bundle: Bundle) :
                     .show()
             },
         )
+        composeFilterSheet = sheet
+        presenter.filtersChanged = false
+        sheet.setOnCancelListener { composeFilterSheet = null }
+        sheet.setOnDismissListener { composeFilterSheet = null }
+        sheet.show()
     }
 
     /**

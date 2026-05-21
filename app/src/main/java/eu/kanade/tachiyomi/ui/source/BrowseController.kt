@@ -255,12 +255,10 @@ class BrowseController :
             }
         }
 
-        // Defer the bottom-sheet wiring past the cross-fade settle. The user can't
-        // open the sheet inside the first ~300ms of cold entry (they just tapped
-        // the bottom-nav), and pushing `pager.adapter = TabbedSheetAdapter()` plus
-        // the slide callback plus `setSheetToolbar()` off the cold frame is the
-        // dominant first-entry-jank win. See [initBottomSheet] for what runs.
-        view.postDelayed({ initBottomSheet() }, POST_ENTRY_DEFER_MS)
+        // Wire the bottom sheet up front so it's ready instantly. We previously deferred this
+        // 280ms past cross-fade settle to avoid cold-entry jank, but the visible "sheet loading
+        // in" delay was a worse user experience than the brief jank.
+        initBottomSheet()
     }
 
     private var bottomSheetReady = false
