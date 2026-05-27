@@ -1465,10 +1465,10 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                     Trace.endSection()
                     return
                 }
+                syncActivityAppBarVisibility(to)
                 Trace.beginSection("Hayai/syncActivityViewWithController")
                 syncActivityViewWithController(to, from, isPush)
                 Trace.endSection()
-                syncActivityAppBarVisibility(to)
                 binding.appBar.alpha = 1f
                 if (binding.backShadow.isVisible && !isPush) {
                     val bA = ObjectAnimator.ofFloat(binding.backShadow, View.ALPHA, 0f)

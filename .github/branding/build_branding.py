@@ -35,9 +35,9 @@ ICON_VIEWPORT = 2201
 LOGO_SCALE = 0.72
 
 # Notification small-icon (status bar) wants the silhouette to fill more of
-# its 24dp canvas — at LOGO_SCALE it disappears against the status bar. Keep
-# this close to 1.0; a touch of padding only so it doesn't kiss the edges.
-NOTIFICATION_LOGO_SCALE = 0.92
+# its 24dp canvas. Since the master SVG already has built-in padding,
+# we scale it up to fill the canvas area beautifully.
+NOTIFICATION_LOGO_SCALE = 1.35
 
 DENSITY_SIZES = {
     "mdpi": 48,
@@ -212,14 +212,14 @@ def write_vector_drawables() -> None:
     )
 
     # Splash-screen vector — silhouette only (windowSplashScreenBackground
-    # sets the rosé fill). 288dp is the Android 12 spec for foreground-only
-    # splash icons; the LOGO_SCALE padding matches the launcher look.
+    # sets the rosé fill). 108dp is the Android 12 spec for adaptive / splash
+    # icons; the LOGO_SCALE padding matches the launcher look.
     write_text(
         RES / "drawable" / "ic_hayai_splash.xml",
         vector_drawable(
             fg_paths,
-            width_dp=288,
-            height_dp=288,
+            width_dp=108,
+            height_dp=108,
             viewport_w=ICON_VIEWPORT,
             viewport_h=ICON_VIEWPORT,
         ),

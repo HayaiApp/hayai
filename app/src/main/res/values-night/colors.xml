@@ -29,6 +29,7 @@
     <color name="onPrimaryTachiyomi">#071D39</color>
     <color name="primaryTachiyomi">#78bcff</color>
     <color name="primaryInverseTachiyomi">#2c517f</color>
+    <color name="splashBackground">#1C1C1D</color>
     <color name="legacyRippleColor">@color/md_white_1000_20</color>
     <color name="colorOnSurface">@color/md_white_1000</color>
     <color name="colorOnBackground">@color/md_white_1000</color>

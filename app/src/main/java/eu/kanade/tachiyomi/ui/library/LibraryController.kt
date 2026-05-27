@@ -809,12 +809,6 @@ open class LibraryController(
                 appBar.attrToolbarHeight + appBar.paddingTop + 48.dpToPx
             if (appBar.y < pinnedY) appBar.y = pinnedY
             appBar.updateAppBarAfterY(recycler)
-            // Defer the color-on until scroll is settling at dy=0; with the pin in place the
-            // "fully tucked" branch (appBar.y <= -appBar.height) can never trigger, so the
-            // notAtTop reconcile below is what flips bg on while scrolling past the threshold.
-            if (!isPageToolbarElevated && dy == 0) {
-                setPageToolbarElevated(true)
-            }
             // Final reconcile against the large-toolbar offset threshold.
             val notAtTop = !atTopOfPageRecycler(recycler)
             if (notAtTop != isPageToolbarElevated) setPageToolbarElevated(notAtTop)
@@ -1587,20 +1581,30 @@ open class LibraryController(
         pagerAdapter?.adapterForPosition(position)?.let(::applySelectionStateTo)
         pagerAdapter?.recyclerForPosition(position)?.let { pageRecycler ->
             pageRecycler.stopScroll()
-            pageRecycler.scrollToPosition(0)
             appBar()?.let { appBar ->
-                // Snap the appBar to fully-expanded immediately so the user sees the
-                // swap as instant. updateAppBarAfterY then re-reads the (now zero) scroll
-                // offset and confirms — but RecyclerView.computeVerticalScrollOffset()
-                // doesn't return 0 until after the next layout pass, so we defer it via
-                // post(). Without this defer, the appBar reads the *old* tab's scroll
-                // offset and stays half-collapsed; the user only sees it snap to the
-                // correct position once they nudge the new tab's recycler.
-                appBar.y = 0f
-                appBar.updateAppBarAfterY(pageRecycler)
-                pageRecycler.post { appBar.updateAppBarAfterY(pageRecycler) }
+                val offset = pageRecycler.computeVerticalScrollOffset()
+                if (offset == 0) {
+                    appBar.y = 0f
+                    appBar.updateAppBarAfterY(pageRecycler)
+                    pageRecycler.post {
+                        if (activeCategory == target.order) {
+                            appBar.updateAppBarAfterY(pageRecycler)
+                        }
+                    }
+                    setPageToolbarElevated(false)
+                } else {
+                    val pinnedY = -appBar.height.toFloat() +
+                        appBar.attrToolbarHeight + appBar.paddingTop + 48.dpToPx
+                    appBar.y = pinnedY
+                    appBar.updateAppBarAfterY(pageRecycler)
+                    pageRecycler.post {
+                        if (activeCategory == target.order) {
+                            appBar.updateAppBarAfterY(pageRecycler)
+                        }
+                    }
+                    setPageToolbarElevated(true)
+                }
             }
-            setPageToolbarElevated(false)
         }
     }
 

@@ -30,8 +30,8 @@ import yokai.presentation.component.Gap
 import yokai.presentation.component.preference.Preference
 import yokai.presentation.component.preference.PreferenceItem
 import yokai.presentation.component.preference.widget.PreferenceGroupHeader
-import yokai.presentation.core.JayAppBarScrollBehavior
 import yokai.presentation.core.drawVerticalScrollbar
+import yokai.presentation.core.AppBarScrollBehavior
 import yokai.presentation.core.enterAlwaysCollapsedAppBarScrollBehavior
 import cafe.adriel.voyager.navigator.LocalNavigator
 
@@ -41,7 +41,7 @@ fun SettingsScaffold(
     title: String,
     appBarType: AppBarType,
     appBarActions: @Composable RowScope.() -> Unit = {},
-    appBarScrollBehavior: JayAppBarScrollBehavior? = null,
+    appBarScrollBehavior: AppBarScrollBehavior? = null,
     snackbarHost: @Composable () -> Unit = {},
     textFieldState: TextFieldState? = null,
     searchResult: @Composable (ColumnScope.() -> Unit)? = null,

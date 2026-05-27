@@ -370,7 +370,9 @@
     <!-- Splash -->
     <style name="Theme.Tachiyomi.SplashScreen" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splashBackground</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/splashBackground</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_hayai_splash</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/ic_hayai_splash</item>
         <item name="postSplashScreenTheme">@style/Theme.Tachiyomi</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
