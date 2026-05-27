@@ -2,10 +2,8 @@ package exh.ui.pagepreview.components
 
 import yokai.util.koin.get
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -181,26 +179,20 @@ fun PagePreviewInlineSection(
                         }
                     }
                 }
-                AnimatedVisibility(
-                    visible = !hasScrolled,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically(),
+                TextButton(
+                    onClick = onOpenPagePreview,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                 ) {
-                    TextButton(
-                        onClick = onOpenPagePreview,
+                    Text(text = stringResource(MR.strings.view_all))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    ) {
-                        Text(text = stringResource(MR.strings.view_all))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .padding(start = 8.dp)
-                                .size(18.dp),
-                        )
-                    }
+                            .padding(start = 8.dp)
+                            .size(18.dp),
+                    )
                 }
             }
         }

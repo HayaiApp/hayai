@@ -1674,8 +1674,10 @@ class MangaDetailsController :
         ) {
             is BrowseSourceController -> {
                 if (presenter.source is HttpSource) {
-                    router.handleBack()
+                    // Set presenter.query before popping so POP_ENTER's onCreateOptionsMenu
+                    // rebuilds the search field with the query already populated.
                     previousController.searchWithGenre(text)
+                    router.handleBack()
                 }
             }
             else -> {
@@ -1701,7 +1703,12 @@ class MangaDetailsController :
         val isInSource = !isTag && previousController !is LibraryController &&
             previousController !is RecentsController
         if (!hasDifferentAuthors && isInSource) {
-            globalSearch(content ?: view.text.toString())
+            val query = content ?: view.text.toString()
+            if (previousController is BrowseSourceController) {
+                sourceSearch(query)
+            } else {
+                globalSearch(query)
+            }
             return
         }
         val actionModeCallback = if (content != null) {

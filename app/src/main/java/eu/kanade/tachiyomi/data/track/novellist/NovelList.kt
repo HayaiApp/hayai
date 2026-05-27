@@ -9,8 +9,10 @@ import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.data.track.model.TrackContentType
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.data.track.novellist.dto.NovelListSession
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -35,6 +37,13 @@ class NovelList(private val context: Context, id: Long) : TrackService(id) {
         const val PLAN_TO_READ = 5
 
         const val LOGIN_URL = "https://www.novellist.co/login"
+
+        // Supabase project that backs NovelList. URL + anon key are baked into the site's
+        // public JS bundle (yionrsulvvpfmzmbmami.supabase.co), so they're safe to embed here.
+        const val SUPABASE_URL = "https://yionrsulvvpfmzmbmami.supabase.co"
+        const val SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+            "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlpb25yc3VsdnZwZm16bWJtYW1pIiwicm9sZSI6ImFub24iL" +
+            "CJpYXQiOjE3MTk5ODg0MTMsImV4cCI6MjAzNTU2NDQxM30.EW3C9NhuFu6TvZuYJ8B29HqeW35hH3BujR0sGRa9Ej0"
     }
 
     override val supportedContentTypes: Set<TrackContentType> = setOf(TrackContentType.NOVEL)
@@ -152,9 +161,52 @@ class NovelList(private val context: Context, id: Long) : TrackService(id) {
         null
     }
 
+    /**
+     * `password` carries either:
+     *   - the full Supabase session JSON (preferred — emitted by [TrackerWebViewLoginActivity]
+     *     after decoding the `novellist[.N]` cookie chunks), so we can persist `refresh_token`,
+     *   - or a bare JWT access token (legacy callers / manual entry), in which case there is no
+     *     refresh path and the user will have to sign in again when the JWT lapses.
+     */
     override suspend fun login(username: String, password: String): Boolean {
         if (password.isBlank()) return false
-        saveCredentials(username.ifBlank { "NovelList User" }, password)
+        val session = parseSession(password)
+        val accessToken = session?.accessToken ?: password
+        saveCredentials(username.ifBlank { "NovelList User" }, accessToken)
+        saveSession(session)
         return true
+    }
+
+    private fun parseSession(payload: String): NovelListSession? = try {
+        if (payload.trimStart().startsWith("{")) json.decodeFromString<NovelListSession>(payload) else null
+    } catch (e: Exception) {
+        Logger.d(e) { "NovelList: payload is not a session JSON; treating as bare access token" }
+        null
+    }
+
+    internal fun saveSession(session: NovelListSession?) {
+        if (session == null) {
+            trackPreferences.trackToken(this).delete()
+        } else {
+            trackPreferences.trackToken(this).set(json.encodeToString(session))
+            // Keep the legacy password slot in sync so `isLogged` + any old code path still works.
+            trackPreferences.trackPassword(this).set(session.accessToken)
+        }
+    }
+
+    internal fun loadSession(): NovelListSession? {
+        val stored = trackPreferences.trackToken(this).get()
+        if (stored.isBlank()) return null
+        return try {
+            json.decodeFromString<NovelListSession>(stored)
+        } catch (e: Exception) {
+            Logger.w(e) { "NovelList: stored session JSON is unreadable" }
+            null
+        }
+    }
+
+    override fun logout() {
+        super.logout()
+        trackPreferences.trackToken(this).delete()
     }
 }

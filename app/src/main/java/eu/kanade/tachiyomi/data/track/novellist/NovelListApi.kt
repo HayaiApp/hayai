@@ -3,9 +3,12 @@ package eu.kanade.tachiyomi.data.track.novellist
 import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.data.track.novellist.dto.NovelListSession
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.parseAs
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -31,8 +34,27 @@ class NovelListApi(
 
     private val baseUrl = "https://novellist-be-960019704910.asia-east1.run.app"
 
-    private fun authBuilder(url: String): Request.Builder {
-        val token = tracker.run { trackPreferences.trackPassword(this).get() }
+    /** Serialises concurrent refresh attempts so we don't burn the refresh_token twice in a row. */
+    private val refreshMutex = Mutex()
+
+    private suspend fun currentAccessToken(): String {
+        val session = tracker.loadSession()
+        if (session != null && session.isExpired()) {
+            refreshMutex.withLock {
+                // Re-read under the lock — another coroutine may have refreshed while we waited.
+                val current = tracker.loadSession()
+                if (current != null && current.isExpired()) {
+                    refreshAccessToken(current)
+                }
+            }
+            return tracker.loadSession()?.accessToken
+                ?: tracker.run { trackPreferences.trackPassword(this).get() }
+        }
+        return session?.accessToken ?: tracker.run { trackPreferences.trackPassword(this).get() }
+    }
+
+    private suspend fun authBuilder(url: String): Request.Builder {
+        val token = currentAccessToken()
         return Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $token")
@@ -44,6 +66,46 @@ class NovelListApi(
             .addHeader("Sec-Fetch-Dest", "empty")
             .addHeader("Sec-Fetch-Mode", "cors")
             .addHeader("Sec-Fetch-Site", "cross-site")
+    }
+
+    /**
+     * Exchange the stored refresh_token for a new Supabase session. Mirrors what `@supabase/ssr`
+     * does in the browser on near-expiry: POST `/auth/v1/token?grant_type=refresh_token` with the
+     * `apikey` header set to the project anon key. On success we persist the new session so
+     * subsequent requests pick up the fresh access_token + the rotated refresh_token.
+     */
+    private suspend fun refreshAccessToken(current: NovelListSession) {
+        val url = "${eu.kanade.tachiyomi.data.track.novellist.NovelList.SUPABASE_URL}" +
+            "/auth/v1/token?grant_type=refresh_token"
+        val body = buildJsonObject {
+            put("refresh_token", current.refreshToken)
+        }.toString().toRequestBody("application/json".toMediaType())
+
+        val anonKey = eu.kanade.tachiyomi.data.track.novellist.NovelList.SUPABASE_ANON_KEY
+        val request = Request.Builder()
+            .url(url)
+            .post(body)
+            .addHeader("apikey", anonKey)
+            .addHeader("Authorization", "Bearer ${current.accessToken}")
+            .addHeader("Content-Type", "application/json;charset=UTF-8")
+            .addHeader("Accept", "*/*")
+            .addHeader("Origin", "https://www.novellist.co")
+            .addHeader("Referer", "https://www.novellist.co/")
+            .build()
+
+        try {
+            val response = client.newCall(request).awaitSuccess()
+            val refreshed = response.parseAs<NovelListSession>()
+            tracker.saveSession(refreshed)
+            Logger.d { "NovelList: refreshed access token (expires_at=${refreshed.expiresAt})" }
+        } catch (e: HttpException) {
+            if (e.code == 400 || e.code == 401) {
+                // Refresh token has been revoked / rotated past us — force a re-login.
+                Logger.w(e) { "NovelList: refresh token rejected (${e.code}); clearing session" }
+                tracker.run { trackPreferences.trackAuthExpired(this).set(true) }
+            }
+            throw e
+        }
     }
 
     /** Best-effort CORS preflight; some Cloud Run setups require it. */

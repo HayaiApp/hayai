@@ -465,7 +465,7 @@ class MangaHeaderHolder(
             // charged for Compose runtime startup + first-composition cost. Layout space is
             // reserved by android:minHeight=56dp on the ComposeView so no shift on landing.
             binding?.buttonGroupCompose?.apply {
-                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 postOnAnimation {
                     setContent {
                         yokai.presentation.theme.YokaiTheme {
@@ -486,7 +486,7 @@ class MangaHeaderHolder(
         // nothing, so the ComposeView stays 0-height permanently. Either way, defer
         // setContent so it doesn't charge the push frame.
         binding?.metadataCompose?.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             postOnAnimation {
                 setContent {
                     yokai.presentation.theme.YokaiTheme {
@@ -512,7 +512,7 @@ class MangaHeaderHolder(
                 isVisible = false
             } else {
                 isVisible = true
-                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 postOnAnimation {
                     setContent {
                         yokai.presentation.theme.YokaiTheme {
@@ -614,7 +614,7 @@ class MangaHeaderHolder(
             ),
         )
         val isNamespaceSource = adapter.delegate.mangaPresenter().source.getMainSource<NamespaceSource>() != null
-        binding.mangaGenresTags.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+        binding.mangaGenresTags.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         // Defer like buttonGroupCompose / metadataCompose so first composition doesn't stall
         // the push animation frame. minHeight on the ComposeView reserves space.
         binding.mangaGenresTags.postOnAnimation {

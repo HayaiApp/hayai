@@ -305,8 +305,8 @@ private suspend fun extractTokenFromCookies(trackerId: Long, currentUrl: String)
                 // `novellist.1`, … with the literal `base64-` prefix on chunk 0 only.
                 // Older sessions that still fit come back as a single `novellist=` cookie.
                 // Match both shapes, sort by chunk index, then concatenate before decoding.
-                // Verified live via Playwright on novellist.co (chunkOrder [0,1], joined
-                // length 4662, decoded JSON contains `access_token`).
+                // Pass the decoded JSON through verbatim — `NovelList.login` reads the
+                // `refresh_token` out of it so we can renew the access token in-app.
                 val chunkRegex = Regex("(?:^|;\\s*)novellist(?:\\.(\\d+))?=([^;]+)")
                 val joined = chunkRegex.findAll(cookies)
                     .map { (it.groupValues[1].toIntOrNull() ?: -1) to it.groupValues[2] }
@@ -318,7 +318,7 @@ private suspend fun extractTokenFromCookies(trackerId: Long, currentUrl: String)
                     return@withContext null
                 }
 
-                val decoded = try {
+                try {
                     if (joined.startsWith("base64-")) {
                         val base64Part = joined.removePrefix("base64-")
                         val decodedBytes = android.util.Base64.decode(base64Part, android.util.Base64.DEFAULT)
@@ -329,13 +329,6 @@ private suspend fun extractTokenFromCookies(trackerId: Long, currentUrl: String)
                 } catch (e: Exception) {
                     Logger.e(e) { "Failed to decode NovelList session payload" }
                     joined
-                }
-
-                try {
-                    val jsonRegex = Regex("\"access_token\"\\s*:\\s*\"([^\"]+)\"")
-                    jsonRegex.find(decoded)?.groupValues?.get(1) ?: decoded
-                } catch (e: Exception) {
-                    decoded
                 }
             }
             else -> null
