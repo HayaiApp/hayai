@@ -193,18 +193,19 @@ class Downloader(
         if (isRunning) return
 
         downloaderJob = scope.launch {
-            val activeDownloadsFlow = queueState.transformLatest { queue ->
+            val activeDownloadsFlow = combine(
+                queueState,
+                downloadPreferences.parallelSourceLimit().changes(),
+            ) { queue, sourceLimit -> queue to sourceLimit }.transformLatest { (queue, sourceLimit) ->
                 while (true) {
                     val activeDownloads = queue.asSequence()
-                        // Ignore completed downloads, leave them in the queue
                         .filter {
                             val statusValue = it.status.value
                             Download.State.NOT_DOWNLOADED.value <= statusValue && statusValue <= Download.State.DOWNLOADING.value
                         }
                         .groupBy { it.source }
                         .toList()
-                        // Concurrently download from 5 different sources
-                        .take(5)
+                        .take(sourceLimit)
                         .map { (_, downloads) -> downloads.first() }
                     emit(activeDownloads)
 
@@ -340,12 +341,8 @@ class Downloader(
 
         try {
             when (val source = download.source) {
-                // NOVEL -->
                 is NovelSource -> downloadNovelChapter(download, tmpDir, chapterDirname, mangaDir)
-                // NOVEL <--
                 is HttpSource -> downloadImageChapter(download, tmpDir, chapterDirname, mangaDir)
-                // Defensive fallthrough: an unknown source type would otherwise leave the
-                // download stuck at DOWNLOADING forever and block the queue.
                 else -> error("Cannot download from unsupported source type: ${source::class.simpleName}")
             }
         } catch (error: Throwable) {
@@ -423,20 +420,17 @@ class Downloader(
 
         download.status = Download.State.DOWNLOADING
 
-        // Get all the URLs to the source images, fetch pages if necessary
-        pageList.filter { it.imageUrl.isNullOrEmpty() }.forEach { page ->
-            page.status = Page.State.LoadPage
-            try {
-                page.imageUrl = httpSource.getImageUrl(page)
-            } catch (e: Throwable) {
-                page.status = Page.State.Error(e)
-            }
-        }
-
-        // Start downloading images, concurrently do 2 pages at a time
         pageList.asFlow()
-            .flatMapMerge(concurrency = 2) { page ->
+            .flatMapMerge(concurrency = downloadPreferences.parallelPageLimit().get()) { page ->
                 flow {
+                    if (page.imageUrl.isNullOrEmpty()) {
+                        page.status = Page.State.LoadPage
+                        try {
+                            page.imageUrl = httpSource.getImageUrl(page)
+                        } catch (e: Throwable) {
+                            page.status = Page.State.Error(e)
+                        }
+                    }
                     withIOContext { getOrDownloadImage(page, download, tmpDir) }
                     emit(page)
                 }.flowOn(Dispatchers.IO)

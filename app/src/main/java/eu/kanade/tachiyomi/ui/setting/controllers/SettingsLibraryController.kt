@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.ui.setting.onChange
 import eu.kanade.tachiyomi.ui.setting.onClick
 import eu.kanade.tachiyomi.ui.setting.preference
 import eu.kanade.tachiyomi.ui.setting.preferenceCategory
+import eu.kanade.tachiyomi.ui.setting.seekBarPreference
 import eu.kanade.tachiyomi.ui.setting.switchPreference
 import eu.kanade.tachiyomi.ui.setting.triStateListPreference
 import eu.kanade.tachiyomi.util.system.launchIO
@@ -243,6 +244,26 @@ class SettingsLibraryController : SettingsLegacyController() {
                 entriesRes = entries.keys.toTypedArray()
                 entryValues = entries.values.toList()
                 noSelectionRes = MR.strings.none
+            }
+        }
+
+        preferenceCategory {
+            titleRes = MR.strings.migration
+
+            seekBarPreference {
+                bindTo(preferences.migrationParallelism())
+                titleRes = MR.strings.pref_migration_parallel
+                min = 1
+                max = 10
+                showSeekBarValue = true
+                summary = context.getString(
+                    MR.strings.pref_migration_parallel_summary,
+                    preferences.migrationParallelism().get(),
+                )
+                onChange { newValue ->
+                    summary = context.getString(MR.strings.pref_migration_parallel_summary, newValue as Int)
+                    true
+                }
             }
         }
     }

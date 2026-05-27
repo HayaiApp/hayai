@@ -8,8 +8,13 @@ import co.touchlab.kermit.Logger
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.domain.manga.models.Manga
+import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
+import hayai.novel.plugin.NovelPluginManager
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import eu.kanade.tachiyomi.util.system.extension
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchNonCancellableIO
@@ -64,6 +69,8 @@ class DownloadCache(
     private val provider: DownloadProvider = get(),
     private val sourceManager: SourceManager = get(),
     private val storageManager: StorageManager = get(),
+    private val extensionManager: ExtensionManager = get(),
+    private val novelPluginManager: NovelPluginManager = get(),
 ) {
 
     val scope = CoroutineScope(Dispatchers.IO)
@@ -97,7 +104,7 @@ class DownloadCache(
     private var rootDownloadsDir = RootDirectory(storageManager.getDownloadsDirectory())
 
     init {
-        // Attempt to read cache file
+        // Leave lastRenew at 0L so first access validates against the filesystem.
         scope.launch {
             rootDownloadsDirLock.withLock {
                 try {
@@ -106,7 +113,6 @@ class DownloadCache(
                             ProtoBuf.decodeFromByteArray<RootDirectory>(it.readBytes())
                         }
                         rootDownloadsDir = diskCache
-                        lastRenew = System.currentTimeMillis()
                     }
                 } catch (e: Throwable) {
                     Logger.e(e) { "Failed to initialize disk cache" }
@@ -198,15 +204,20 @@ class DownloadCache(
                 _isInitializing.emit(true)
             }
 
-            // FIXME: Wait for SourceManager to be initialized
-            val sources = getSources()
+            // Wait for sources before walking, else novels (QuickJS plugins) get dropped.
+            var sources = emptyList<Source>()
+            withTimeoutOrNull(30.seconds) {
+                extensionManager.isInitialized.first { it }
+                novelPluginManager.loadedFlow.first { it }
+                sources = getSources()
+            }
 
             val sourceMap = sources.associate { provider.getSourceDirName(it).lowercase() to it.id }
 
             rootDownloadsDirLock.withLock {
-                rootDownloadsDir = RootDirectory(storageManager.getDownloadsDirectory())
+                val updatedRootDir = RootDirectory(storageManager.getDownloadsDirectory())
 
-                val sourceDirs = rootDownloadsDir.dir?.listFiles().orEmpty()
+                updatedRootDir.sourceDirs = updatedRootDir.dir?.listFiles().orEmpty()
                     .filter { it.isDirectory && !it.name.isNullOrBlank() }
                     .mapNotNull { dir ->
                         val sourceId = sourceMap[dir.name!!.lowercase()]
@@ -214,9 +225,7 @@ class DownloadCache(
                     }
                     .toMap()
 
-                rootDownloadsDir.sourceDirs = sourceDirs
-
-                sourceDirs.values
+                updatedRootDir.sourceDirs.values
                     .map { sourceDir ->
                         async {
                             sourceDir.mangaDirs = sourceDir.dir?.listFiles().orEmpty()
@@ -245,6 +254,7 @@ class DownloadCache(
                     }
                     .awaitAll()
 
+                rootDownloadsDir = updatedRootDir
                 _isInitializing.emit(false)
             }
         }.also {
@@ -262,7 +272,8 @@ class DownloadCache(
     }
 
     private fun getSources(): List<Source> {
-        return sourceManager.getOnlineSources()
+        // CatalogueSources covers NovelSource too; HttpSource alone drops novel folders.
+        return sourceManager.getCatalogueSources()
     }
 
     private fun notifyChanges() {

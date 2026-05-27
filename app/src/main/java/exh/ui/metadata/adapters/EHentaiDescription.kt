@@ -119,12 +119,12 @@ fun EHentaiDescription(
             }
         }
 
-        // Row 3: labeled stats (pages · size · favorites · posted · language)
         val hasAnyStats = meta.length != null ||
             (meta.size != null && meta.size!! > 0) ||
             meta.favorites != null ||
             meta.datePosted != null ||
-            meta.language != null
+            meta.language != null ||
+            meta.visible != null
         if (hasAnyStats) {
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -143,7 +143,10 @@ fun EHentaiDescription(
                 meta.datePosted?.let {
                     StatItem(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)))
                 }
-                meta.language?.let {
+                meta.language?.let { lang ->
+                    StatItem(if (meta.translated == true) "$lang (TL)" else lang)
+                }
+                meta.visible?.let {
                     StatItem(it)
                 }
             }

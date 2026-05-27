@@ -78,6 +78,9 @@ class ExtensionManager(
     private val _installedExtensionsFlow = MutableStateFlow(emptyList<Extension.Installed>())
     val installedExtensionsFlow = _installedExtensionsFlow.asStateFlow()
 
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized = _isInitialized.asStateFlow()
+
     private var subLanguagesEnabledOnFirstRun = preferences.enabledLanguages().isSet()
 
     private val initScope = CoroutineScope(Job() + Dispatchers.IO)
@@ -146,15 +149,19 @@ class ExtensionManager(
      * Loads and registers the installed extensions.
      */
     private suspend fun initExtensions() {
-        val extensions = ExtensionLoader.loadExtensionAsync(context)
+        try {
+            val extensions = ExtensionLoader.loadExtensionAsync(context)
 
-        _installedExtensionsFlow.value = extensions
-            .filterIsInstance<LoadResult.Success>()
-            .map { it.extension }
+            _installedExtensionsFlow.value = extensions
+                .filterIsInstance<LoadResult.Success>()
+                .map { it.extension }
 
-        _untrustedExtensionsFlow.value = extensions
-            .filterIsInstance<LoadResult.Untrusted>()
-            .map { it.extension }
+            _untrustedExtensionsFlow.value = extensions
+                .filterIsInstance<LoadResult.Untrusted>()
+                .map { it.extension }
+        } finally {
+            _isInitialized.value = true
+        }
     }
 
     fun isInstalledByApp(extension: Extension.Available): Boolean {

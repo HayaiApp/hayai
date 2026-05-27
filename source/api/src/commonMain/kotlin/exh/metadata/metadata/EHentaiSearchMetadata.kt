@@ -51,7 +51,8 @@ class EHentaiSearchMetadata : RaisedSearchMetadata() {
         val cover = thumbnailUrl
 
         // No title bug?
-        val title = altTitle ?: title
+        val delegateSourcePreferences = org.koin.core.context.GlobalContext.get().get<exh.pref.DelegateSourcePreferences>()
+        val title = altTitle?.takeIf { delegateSourcePreferences.useJapaneseTitle.get() } ?: title
 
         // Set artist (if we can find one)
         val artist = tags.ofNamespace(EH_ARTIST_NAMESPACE)

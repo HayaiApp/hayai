@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.ui.setting.multiSelectListPreferenceMat
 import eu.kanade.tachiyomi.ui.setting.onClick
 import eu.kanade.tachiyomi.ui.setting.preference
 import eu.kanade.tachiyomi.ui.setting.preferenceCategory
+import eu.kanade.tachiyomi.ui.setting.seekBarPreference
 import eu.kanade.tachiyomi.ui.setting.summaryMRes as summaryRes
 import eu.kanade.tachiyomi.ui.setting.switchPreference
 import eu.kanade.tachiyomi.ui.setting.titleMRes as titleRes
@@ -55,6 +56,21 @@ class SettingsDownloadController : SettingsLegacyController() {
             bindTo(downloadPreferences.downloadWithId())
             title = context.getString(MR.strings.download_with_id).addBetaTag(context)
             summaryRes = MR.strings.download_with_id_details
+        }
+        seekBarPreference {
+            bindTo(downloadPreferences.parallelSourceLimit())
+            titleRes = MR.strings.pref_download_concurrent_sources
+            min = 1
+            max = 10
+            showSeekBarValue = true
+        }
+        seekBarPreference {
+            bindTo(downloadPreferences.parallelPageLimit())
+            titleRes = MR.strings.pref_download_concurrent_pages
+            summaryRes = MR.strings.pref_download_concurrent_pages_summary
+            min = 1
+            max = 15
+            showSeekBarValue = true
         }
 
         // FIXME: Don't do blocking

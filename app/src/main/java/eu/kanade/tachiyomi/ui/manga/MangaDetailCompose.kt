@@ -23,9 +23,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
 import exh.metadata.metadata.EHentaiSearchMetadata
+import exh.metadata.metadata.EightMusesSearchMetadata
+import exh.metadata.metadata.HBrowseSearchMetadata
+import exh.metadata.metadata.LanraragiSearchMetadata
+import exh.metadata.metadata.MangaDexSearchMetadata
+import exh.metadata.metadata.NHentaiSearchMetadata
+import exh.metadata.metadata.PururinSearchMetadata
 import exh.metadata.metadata.RaisedSearchMetadata
+import exh.metadata.metadata.TsuminoSearchMetadata
 import exh.metadata.metadata.base.FlatMetadata
 import exh.ui.metadata.adapters.EHentaiDescription
+import exh.ui.metadata.adapters.EightMusesDescription
+import exh.ui.metadata.adapters.HBrowseDescription
+import exh.ui.metadata.adapters.LanraragiDescription
+import exh.ui.metadata.adapters.MangaDexDescription
+import exh.ui.metadata.adapters.NHentaiDescription
+import exh.ui.metadata.adapters.PururinDescription
+import exh.ui.metadata.adapters.TsuminoDescription
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import yokai.domain.manga.metadata.MangaMetadataRepository
@@ -114,6 +128,48 @@ fun MangaMetadataSection(
                 isExpanded = isExpanded,
                 openMetadataViewer = openMetadataViewer,
                 onSearch = onSearch,
+            )
+        }
+        is NHentaiSearchMetadata -> {
+            NHentaiDescription(
+                meta = meta,
+                openMetadataViewer = openMetadataViewer,
+            )
+        }
+        is MangaDexSearchMetadata -> {
+            MangaDexDescription(
+                meta = meta,
+                openMetadataViewer = openMetadataViewer,
+            )
+        }
+        is EightMusesSearchMetadata -> {
+            EightMusesDescription(
+                meta = meta,
+                openMetadataViewer = openMetadataViewer,
+            )
+        }
+        is HBrowseSearchMetadata -> {
+            HBrowseDescription(
+                meta = meta,
+                openMetadataViewer = openMetadataViewer,
+            )
+        }
+        is PururinSearchMetadata -> {
+            PururinDescription(
+                meta = meta,
+                openMetadataViewer = openMetadataViewer,
+            )
+        }
+        is TsuminoSearchMetadata -> {
+            TsuminoDescription(
+                meta = meta,
+                openMetadataViewer = openMetadataViewer,
+            )
+        }
+        is LanraragiSearchMetadata -> {
+            LanraragiDescription(
+                meta = meta,
+                openMetadataViewer = openMetadataViewer,
             )
         }
         else -> {

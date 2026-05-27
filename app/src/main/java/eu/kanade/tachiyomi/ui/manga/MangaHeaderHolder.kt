@@ -78,8 +78,7 @@ import yokai.i18n.MR
 import yokai.util.coil.loadManga
 import yokai.util.lang.getString
 import eu.kanade.tachiyomi.source.PagePreviewSource
-import exh.source.EH_SOURCE_ID
-import exh.source.EXH_SOURCE_ID
+import eu.kanade.tachiyomi.source.online.NamespaceSource
 import exh.source.getMainSource
 import android.R as AR
 
@@ -614,14 +613,14 @@ class MangaHeaderHolder(
                 if (dark) 0.945f else 0.175f,
             ),
         )
-        val isEH = manga.source == EH_SOURCE_ID || manga.source == EXH_SOURCE_ID
+        val isNamespaceSource = adapter.delegate.mangaPresenter().source.getMainSource<NamespaceSource>() != null
         binding.mangaGenresTags.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         // Defer like buttonGroupCompose / metadataCompose so first composition doesn't stall
         // the push animation frame. minHeight on the ComposeView reserves space.
         binding.mangaGenresTags.postOnAnimation {
             binding.mangaGenresTags.setContent {
                 yokai.presentation.theme.YokaiTheme {
-                    if (isEH) {
+                    if (isNamespaceSource) {
                         NamespaceGenreTagsSection(
                             genres = genres,
                             containerColor = ComposeColor(containerColorInt),
