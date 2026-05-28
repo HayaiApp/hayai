@@ -1826,6 +1826,10 @@
     <string name="novel_tap_action_define_selected">Define selected word</string>
     <string name="novel_define">Define</string>
     <string name="novel_define_no_handler">No app installed to handle Define</string>
+    <string name="novel_translate">Translate</string>
+    <string name="novel_translate_no_handler">No app installed to handle Translate</string>
+    <string name="novel_web_search">Search Web</string>
+    <string name="novel_web_search_no_handler">No app installed to handle Web Search</string>
     <string name="novel_content">Content</string>
     <string name="novel_enable_epub_styles">Apply EPUB styles</string>
     <string name="novel_enable_epub_js">Run EPUB JavaScript</string>

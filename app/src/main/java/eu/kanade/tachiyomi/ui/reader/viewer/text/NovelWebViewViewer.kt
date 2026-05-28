@@ -398,6 +398,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 // present (depends on the WebView/Google Search build), so add an explicit
                 // entry that fires ACTION_PROCESS_TEXT with the current selection.
                 val defineLabel = activity.getString(MR.strings.novel_define)
+                val translateLabel = activity.getString(MR.strings.novel_translate)
+                val searchWebLabel = activity.getString(MR.strings.novel_web_search)
                 val wrapped = if (callback is ActionMode.Callback2) {
                     object : ActionMode.Callback2() {
                         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
@@ -418,6 +420,22 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                             )
                                 .setIcon(android.R.drawable.ic_menu_search)
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                            menu.add(
+                                Menu.NONE,
+                                TRANSLATE_MENU_ITEM_ID,
+                                2,
+                                translateLabel,
+                            )
+                                .setIcon(android.R.drawable.ic_menu_send)
+                                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                            menu.add(
+                                Menu.NONE,
+                                WEB_SEARCH_MENU_ITEM_ID,
+                                3,
+                                searchWebLabel,
+                            )
+                                .setIcon(android.R.drawable.ic_menu_search)
+                                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                             return result
                         }
                         override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
@@ -432,6 +450,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                                     .setIcon(android.R.drawable.ic_menu_search)
                                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                             }
+                            if (menu.findItem(TRANSLATE_MENU_ITEM_ID) == null) {
+                                menu.add(Menu.NONE, TRANSLATE_MENU_ITEM_ID, 2, translateLabel)
+                                    .setIcon(android.R.drawable.ic_menu_send)
+                                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                            }
+                            if (menu.findItem(WEB_SEARCH_MENU_ITEM_ID) == null) {
+                                menu.add(Menu.NONE, WEB_SEARCH_MENU_ITEM_ID, 3, searchWebLabel)
+                                    .setIcon(android.R.drawable.ic_menu_search)
+                                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                            }
                             return callback.onPrepareActionMode(mode, menu)
                         }
                         override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
@@ -441,6 +469,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                             }
                             if (item.itemId == DEFINE_MENU_ITEM_ID) {
                                 triggerDefineFromSelection()
+                                mode.finish()
+                                return true
+                            }
+                            if (item.itemId == TRANSLATE_MENU_ITEM_ID) {
+                                triggerTranslateFromSelection()
+                                mode.finish()
+                                return true
+                            }
+                            if (item.itemId == WEB_SEARCH_MENU_ITEM_ID) {
+                                triggerWebSearchFromSelection()
                                 mode.finish()
                                 return true
                             }
@@ -473,6 +511,22 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                             )
                                 .setIcon(android.R.drawable.ic_menu_search)
                                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                            menu.add(
+                                Menu.NONE,
+                                TRANSLATE_MENU_ITEM_ID,
+                                2,
+                                translateLabel,
+                            )
+                                .setIcon(android.R.drawable.ic_menu_send)
+                                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                            menu.add(
+                                Menu.NONE,
+                                WEB_SEARCH_MENU_ITEM_ID,
+                                3,
+                                searchWebLabel,
+                            )
+                                .setIcon(android.R.drawable.ic_menu_search)
+                                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                             return result
                         }
                         override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
@@ -486,6 +540,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                                     .setIcon(android.R.drawable.ic_menu_search)
                                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                             }
+                            if (menu.findItem(TRANSLATE_MENU_ITEM_ID) == null) {
+                                menu.add(Menu.NONE, TRANSLATE_MENU_ITEM_ID, 2, translateLabel)
+                                    .setIcon(android.R.drawable.ic_menu_send)
+                                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                            }
+                            if (menu.findItem(WEB_SEARCH_MENU_ITEM_ID) == null) {
+                                menu.add(Menu.NONE, WEB_SEARCH_MENU_ITEM_ID, 3, searchWebLabel)
+                                    .setIcon(android.R.drawable.ic_menu_search)
+                                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                            }
                             return callback.onPrepareActionMode(mode, menu)
                         }
                         override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
@@ -496,6 +560,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                             }
                             if (item.itemId == DEFINE_MENU_ITEM_ID) {
                                 triggerDefineFromSelection()
+                                mode.finish()
+                                return true
+                            }
+                            if (item.itemId == TRANSLATE_MENU_ITEM_ID) {
+                                triggerTranslateFromSelection()
+                                mode.finish()
+                                return true
+                            }
+                            if (item.itemId == WEB_SEARCH_MENU_ITEM_ID) {
+                                triggerWebSearchFromSelection()
                                 mode.finish()
                                 return true
                             }
@@ -520,6 +594,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         }.apply {
             isFocusable = true
             isFocusableInTouchMode = true
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                setTextClassifier(android.view.textclassifier.TextClassifier.NO_OP)
+            }
             applyWebViewScrollbarSettings(this)
             settings.apply {
                 javaScriptEnabled = true
@@ -1469,6 +1546,103 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         } catch (t: Throwable) {
             Logger.w { "NovelWebViewViewer: Define intent failed: ${t.message}" }
             activity.toast(activity.getString(MR.strings.novel_define_no_handler))
+        }
+    }
+
+    private fun triggerTranslateFromSelection() {
+        webView.evaluateJavascript(
+            "(function(){var s=window.getSelection();return s?s.toString():'';})();",
+        ) { result ->
+            val raw = result ?: ""
+            val selected = raw.trim('"')
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .replace("\\n", "\n")
+                .replace("\\r", "")
+                .replace("\\t", "\t")
+                .trim()
+            if (selected.isEmpty()) {
+                activity.runOnUiThread {
+                    activity.toast(activity.getString(MR.strings.novel_quote_no_selection))
+                }
+                return@evaluateJavascript
+            }
+            activity.runOnUiThread { launchTranslateIntent(selected) }
+        }
+    }
+
+    private fun launchTranslateIntent(selected: String) {
+        val intent = Intent(Intent.ACTION_PROCESS_TEXT).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_PROCESS_TEXT, selected)
+            putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
+        }
+        val pm = activity.packageManager
+        val resolved = pm.queryIntentActivities(intent, 0)
+        if (resolved.isEmpty()) {
+            activity.toast(activity.getString(MR.strings.novel_translate_no_handler))
+            return
+        }
+        val googleTranslatePkg = "com.google.android.apps.translate"
+        val deeplPkg = "com.deepl.mobiletranslator"
+        val preferredHandler = resolved.firstOrNull {
+            val pkg = it.activityInfo?.packageName ?: ""
+            pkg == googleTranslatePkg || pkg == deeplPkg || pkg.contains("translate", ignoreCase = true)
+        }
+        try {
+            if (preferredHandler != null) {
+                val info = preferredHandler.activityInfo
+                intent.setClassName(info.packageName, info.name)
+                activity.startActivity(intent)
+            } else {
+                activity.startActivity(
+                    Intent.createChooser(intent, activity.getString(MR.strings.novel_translate)),
+                )
+            }
+        } catch (t: Throwable) {
+            Logger.w { "NovelWebViewViewer: Translate intent failed: ${t.message}" }
+            activity.toast(activity.getString(MR.strings.novel_translate_no_handler))
+        }
+    }
+
+    private fun triggerWebSearchFromSelection() {
+        webView.evaluateJavascript(
+            "(function(){var s=window.getSelection();return s?s.toString():'';})();",
+        ) { result ->
+            val raw = result ?: ""
+            val selected = raw.trim('"')
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .replace("\\n", "\n")
+                .replace("\\r", "")
+                .replace("\\t", "\t")
+                .trim()
+            if (selected.isEmpty()) {
+                activity.runOnUiThread {
+                    activity.toast(activity.getString(MR.strings.novel_quote_no_selection))
+                }
+                return@evaluateJavascript
+            }
+            activity.runOnUiThread { launchWebSearchIntent(selected) }
+        }
+    }
+
+    private fun launchWebSearchIntent(selected: String) {
+        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+            putExtra(android.app.SearchManager.QUERY, selected)
+        }
+        try {
+            activity.startActivity(intent)
+        } catch (t: Throwable) {
+            Logger.w { "NovelWebViewViewer: Web search intent failed: ${t.message}" }
+            // Fallback: Open in Web Browser via Google Search URL
+            try {
+                val queryUrl = "https://www.google.com/search?q=" + android.net.Uri.encode(selected)
+                val browserIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(queryUrl))
+                activity.startActivity(browserIntent)
+            } catch (t2: Throwable) {
+                activity.toast(activity.getString(MR.strings.novel_web_search_no_handler))
+            }
         }
     }
 
@@ -3629,6 +3803,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         // Phase B #15 — second action-mode menu item we own (Define). Must not collide
         // with REMEMBER_MENU_ITEM_ID or any default Android selection IDs.
         private const val DEFINE_MENU_ITEM_ID = 0xBEF0
+        private const val TRANSLATE_MENU_ITEM_ID = 0xBEF1
+        private const val WEB_SEARCH_MENU_ITEM_ID = 0xBEF2
         // Auto-load the next chapter once the user has scrolled past this fraction of the current one.
         private const val AUTO_LOAD_NEXT_THRESHOLD = 0.95
         // Force-dismiss the loading overlay after this long; protects against onPageFinished
