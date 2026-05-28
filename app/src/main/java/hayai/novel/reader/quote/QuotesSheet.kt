@@ -194,6 +194,7 @@ fun QuotesSheet(
         // Drop the default drag handle and trim the top padding so the sheet starts flush
         // with the screen edge instead of leaving a chunk of empty surface.
         dragHandle = null,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(

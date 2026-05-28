@@ -422,8 +422,14 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             fromUrl = handleIntentAction(intent)
             if (!fromUrl) {
                 val manga = intent.extras?.getLong("manga", -1L) ?: -1L
-                val chapter = intent.extras?.getLong("chapter", -1L) ?: -1L
+                var chapter = intent.extras?.getLong("chapter", -1L) ?: -1L
                 val page = intent.extras?.getInt("page", -1) ?: -1
+                if (savedInstanceState != null) {
+                    val savedChapter = savedInstanceState.getLong("saved_chapter_id", -1L)
+                    if (savedChapter != -1L) {
+                        chapter = savedChapter
+                    }
+                }
                 if (manga == -1L || chapter == -1L) {
                     finish()
                     return
@@ -526,6 +532,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                         showTrackingError(event.errors)
                     }
                     is ReaderViewModel.Event.NovelVisibleChapterChanged -> {
+                        val chapterId = event.chapter.chapter.id
+                        if (chapterId != null) {
+                            intent.putExtra("chapter", chapterId)
+                        }
                         updateNovelChapterUi(event.chapter)
                     }
                     is ReaderViewModel.Event.SourceNotReady -> {
@@ -686,6 +696,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      */
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(::menuVisible.name, menuVisible)
+        viewModel.state.value.viewerChapters?.currChapter?.chapter?.id?.let { currChapterId ->
+            outState.putLong("saved_chapter_id", currChapterId)
+        }
         (viewer as? PagerViewer)?.let { pViewer ->
             val config = pViewer.config
             if (config.doublePages) {
@@ -2238,7 +2251,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      * Updates the progress slider in real-time.
      */
     fun onNovelProgressChanged(progress: Float) {
-        val percentage = (progress * 100).toInt().coerceIn(0, 100)
+        val percentage = kotlin.math.round(progress * 100).toInt().coerceIn(0, 100)
         updateNovelProgressUi(percentage)
     }
 

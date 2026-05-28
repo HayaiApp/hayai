@@ -1079,9 +1079,7 @@ class RecentsController(bundle: Bundle? = null) :
 
     override fun showSheet() {
         if (!isBindingInitialized) return
-        if (binding.downloadBottomSheet.dlBottomSheet.sheetBehavior?.isHideable == false || hasQueue()) {
-            binding.downloadBottomSheet.dlBottomSheet.sheetBehavior?.expand()
-        }
+        binding.downloadBottomSheet.dlBottomSheet.sheetBehavior?.expand()
     }
 
     override fun hideSheet() {

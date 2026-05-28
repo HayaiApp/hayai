@@ -94,7 +94,7 @@ ON C._id = H.history_chapter_id
 JOIN (
     SELECT
         C2.manga_id AS manga_id,
-        C2._id AS history_chapter_id,
+        H2.history_chapter_id AS history_chapter_id,
         MAX(H2.history_last_read) AS history_last_read
     FROM chapters AS C2 JOIN history AS H2
     ON C2._id = H2.history_chapter_id
@@ -148,7 +148,7 @@ ON C._id = history.history_chapter_id
 JOIN (
     SELECT
         C2.manga_id AS manga_id,
-        C2._id AS history_chapter_id,
+        H2.history_chapter_id AS history_chapter_id,
         MAX(H2.history_last_read) AS history_last_read
     FROM chapters AS C2 JOIN history AS H2
     ON C2._id = H2.history_chapter_id

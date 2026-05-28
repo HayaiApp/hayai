@@ -114,6 +114,7 @@ fun NovelReaderSettingsSheet(
     ModalBottomSheet(
         sheetState = sheetState,
         onDismissRequest = onDismissRequest,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Sheet header — matches the manga reader's titled tab sheet.

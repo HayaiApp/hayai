@@ -37,6 +37,7 @@ fun NovelFindReplaceSheet(
         // RegexReplacementSection already provides its own header row; suppress the
         // drag handle and any default top padding so the title sits flush with the top.
         dragHandle = null,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
     ) {
         // The inner section uses a plain Column (it has to — the Advanced tab caller already
         // wraps it in a verticalScroll, and nesting two would crash on unbounded height).

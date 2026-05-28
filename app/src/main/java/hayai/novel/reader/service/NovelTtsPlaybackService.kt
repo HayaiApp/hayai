@@ -67,17 +67,17 @@ class NovelTtsPlaybackService : Service() {
                 this.chapterTitle = chapterTitle
                 this.mangaId = mangaId
                 this.chapterId = chapterId
-                startForegroundWithNotification()
                 if (state is hayai.novel.reader.tts.TtsState.Idle ||
                     state is hayai.novel.reader.tts.TtsState.Error
                 ) {
                     // Drop the foreground status when playback ends so the notification
                     // doesn't sit there saying "Paused" with no underlying engine.
                     stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    startForegroundWithNotification()
                 }
             },
         )
-        startForegroundWithNotification()
     }
 
     private fun computeProgressPercent(state: hayai.novel.reader.tts.TtsState): Int = when (state) {

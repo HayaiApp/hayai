@@ -141,7 +141,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
      * paragraphs are available to speak.
      */
     private val chapterParagraphReadyFlow = kotlinx.coroutines.flow.MutableSharedFlow<Long>(
-        replay = 0,
+        replay = 1,
         extraBufferCapacity = 16,
     )
 
@@ -913,6 +913,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         val css = """
             $fontFaceDeclaration
             body {
+                display: block !important;
                 font-size: ${fontSize}px;
                 $fontFamilyCss
                 line-height: $lineHeight;
@@ -1184,6 +1185,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                                 var chapterScrollY = scrollTop - boundary.startOffset;
                                 var effectiveHeight = Math.max(boundary.height - window.innerHeight, 1);
                                 currentChapterProgress = Math.min(chapterScrollY / effectiveHeight, 1.0);
+                                if (currentChapterProgress >= 0.98) currentChapterProgress = 1.0;
                                 break;
                             }
                         }
@@ -1569,7 +1571,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         // Stop TTS when loading a new chapter. The controller's chapter-advance path
         // re-issues the appropriate `StartAt` once the new chapter is Ready; any
         // user-initiated chapter change goes through here and silences playback.
-        activity.ttsController?.dispatch(hayai.novel.reader.tts.TtsCommand.Stop)
+        val ttsState = activity.ttsController?.state?.value
+        if (ttsState != null && ttsState != hayai.novel.reader.tts.TtsState.AdvancingChapter) {
+            activity.ttsController?.dispatch(hayai.novel.reader.tts.TtsCommand.Stop)
+        }
         // Phase B #6: tear the auto-scroll loop down whenever a fresh chapter renders.
         // The next document's installAutoScrollScript() call will set up a fresh loop;
         // not stopping here would leave isAutoScrolling=true while the JS state object on
@@ -1589,7 +1594,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
         // Check if chapter is already loaded
         if (loadedChapterIds.contains(chapterId)) {
-            Logger.d { "NovelWebViewViewer: Chapter $chapterId already loaded, skipping" }
+            Logger.d { "NovelWebViewViewer: Chapter $chapterId already loaded, updating active references and skipping reload" }
+            currentPage = page
+            currentChapters = chapters
             return
         }
 
@@ -1793,6 +1800,11 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             }
 
             withContext(Dispatchers.Main) {
+                if (isDestroyed) return@withContext
+                if (isAppendOrPrepend && loadedChapterIds.contains(chapterId)) {
+                    Logger.d { "NovelWebViewViewer: Chapter $chapterId already loaded during suspension, skipping displayContent" }
+                    return@withContext
+                }
                 if (isAppendOrPrepend) {
                     // Capture the existing edge chapter BEFORE mutating loadedChapters so the
                     // transition card binds the right "from" → "to" pair. Without this snapshot
@@ -1868,7 +1880,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
         // Visible Prev/Current card. `from` is the previously-top chapter (the one the user
         // is scrolling up from); `to` is the chapter being prepended above it.
-        val transitionHtml = buildTransitionCardHtml(from = fromChapter, to = chapter, isNext = false)
+        val transitionHtml = buildTransitionCardHtml(from = chapter, to = fromChapter, isNext = false)
         val escapedTransition = JSONObject.quote(transitionHtml)
 
         val js = """
@@ -1999,7 +2011,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
      * cards use a 1px outline at 40% opacity to stay visible on every theme without
      * needing a per-theme palette.
      */
-    private fun buildTransitionCardHtml(from: ReaderChapter?, to: ReaderChapter, isNext: Boolean): String {
+    private fun buildTransitionCardHtml(from: ReaderChapter?, to: ReaderChapter?, isNext: Boolean): String {
         val topLabelStr: String
         val topChapter: ReaderChapter?
         val bottomLabelStr: String
@@ -2013,13 +2025,13 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             fallbackLabelStr = activity.getString(MR.strings.theres_no_next_chapter)
         } else {
             topLabelStr = activity.getString(MR.strings.previous_title)
-            topChapter = to
+            topChapter = from
             bottomLabelStr = activity.getString(MR.strings.current_chapter)
-            bottomChapter = from
+            bottomChapter = to
             fallbackLabelStr = activity.getString(MR.strings.theres_no_previous_chapter)
         }
 
-        val gap = if (from != null) {
+        val gap = if (from != null && to != null) {
             val higher = if (isNext) to else from
             val lower = if (isNext) from else to
             calculateChapterDifference(higher, lower).toInt().coerceAtLeast(0)
@@ -2232,6 +2244,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
+                    body {
+                        display: block !important;
+                    }
                     /* Boundary marker without the transition card (used by the first chapter
                        and as a JS scroll-position anchor). Kept invisible. */
                     .chapter-divider:not(.chapter-transition) {
@@ -3032,6 +3047,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
         withContext(Dispatchers.Main) {
             if (isDestroyed) return@withContext
+            if (isAppendOrPrepend && loadedChapterIds.contains(chapterId)) {
+                Logger.d { "NovelWebViewViewer: Chapter $chapterId already loaded during suspension, skipping displayContentImmediate" }
+                return@withContext
+            }
 
             if (isAppendOrPrepend) {
                 if (isPrepend) {
@@ -3442,13 +3461,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     override fun currentVisibleChapterId(): Long? = currentPage?.chapter?.chapter?.id
 
     override suspend fun currentVisibleParagraphIndex(): Int? {
+        val chapterId = currentPage?.chapter?.chapter?.id ?: return null
         val deferred = kotlinx.coroutines.CompletableDeferred<Int?>()
         activity.runOnUiThread {
             evaluateJavascriptSafe(
                 """
                 (function() {
                     var selectors = 'p, li, blockquote, h1, h2, h3, h4, h5, h6, pre';
-                    var elements = Array.from(document.querySelectorAll(selectors)).filter(function(el) {
+                    var container = document.querySelector('.chapter-content[data-chapter-id="' + $chapterId + '"]');
+                    if (!container) return 0;
+                    var elements = Array.from(container.querySelectorAll(selectors)).filter(function(el) {
                         return !!el && el.hasAttribute('data-paragraph-index') && !!el.innerText && el.innerText.trim().length > 0;
                     });
                     var viewportHeight = window.innerHeight || document.documentElement.clientHeight;

@@ -878,31 +878,24 @@ class ReaderViewModel(
                 readerChapter.chapter.pages_left = (100 - progressPercent).coerceIn(0, 100)
 
                 val chapterId = readerChapter.chapter.id ?: -1L
-                // Threshold-based mark-read is now a fallback for the final chapter only —
-                // earlier chapters flip to read on forward transition (see
-                // [setNovelVisibleChapter]). Without this fallback the very last chapter
-                // could never auto-mark, because there is nothing to transition into.
-                val isLastChapter = chapterList.lastOrNull()?.chapter?.id == chapterId
                 if (
-                    isLastChapter &&
                     sessionScrollAdvance &&
-                    progressPercent >= NOVEL_LAST_CHAPTER_READ_THRESHOLD_PERCENT
+                    progressPercent >= 98
                 ) {
                     sessionReachedThreshold[chapterId] = true
                 }
                 val reachedThisSession = sessionReachedThreshold[chapterId] == true
                 Logger.d {
                     "saveChapterProgress text gate chapter=$chapterId reachedThisSession=$reachedThisSession " +
-                        "sessionAdvance=$sessionScrollAdvance progress=$progressPercent isLast=$isLastChapter"
+                        "sessionAdvance=$sessionScrollAdvance progress=$progressPercent"
                 }
                 if (
                     !readerChapter.chapter.read &&
-                    isLastChapter &&
                     sessionScrollAdvance &&
                     reachedThisSession &&
-                    progressPercent >= NOVEL_LAST_CHAPTER_READ_THRESHOLD_PERCENT
+                    progressPercent >= 98
                 ) {
-                    Logger.d { "saveChapterProgress onChapterReadComplete fired chapter=$chapterId (last-chapter fallback)" }
+                    Logger.d { "saveChapterProgress onChapterReadComplete fired chapter=$chapterId" }
                     onChapterReadComplete(readerChapter)
                 }
             } else {
