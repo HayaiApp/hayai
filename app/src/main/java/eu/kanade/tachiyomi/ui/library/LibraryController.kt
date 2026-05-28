@@ -116,6 +116,7 @@ import eu.kanade.tachiyomi.util.view.activityBinding
 import eu.kanade.tachiyomi.util.view.appBar
 import eu.kanade.tachiyomi.util.view.collapse
 import eu.kanade.tachiyomi.util.view.compatToolTipText
+import eu.kanade.tachiyomi.util.view.dismissSafely
 import eu.kanade.tachiyomi.util.view.expand
 import eu.kanade.tachiyomi.util.view.fullAppBarHeight
 import eu.kanade.tachiyomi.util.view.getItemView
@@ -1633,7 +1634,7 @@ open class LibraryController(
             binding.libraryPager.adapter = null
         }
         pagerAdapter = null
-        displaySheet?.dismiss()
+        displaySheet?.dismissSafely()
         displaySheet = null
         mAdapter = null
         saveStaggeredState()

@@ -128,6 +128,7 @@ import eu.kanade.tachiyomi.util.system.withUIContext
 import eu.kanade.tachiyomi.util.view.BackHandlerControllerInterface
 import eu.kanade.tachiyomi.util.view.backgroundColor
 import eu.kanade.tachiyomi.util.view.canStillGoBack
+import eu.kanade.tachiyomi.util.view.dismissSafely
 import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
 import eu.kanade.tachiyomi.util.view.findChild
 import eu.kanade.tachiyomi.util.view.getItemView
@@ -234,6 +235,16 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     private var searchBarAnimation: ValueAnimator? = null
     private var searchTBLongClickSet = false
     private var overflowDialog: Dialog? = null
+
+    /**
+     * True from the start of any controller change until one frame after it ends. The shared
+     * search action view is collapsed as a side effect of navigation (the outgoing screen's menu
+     * teardown), and that collapse is dispatched to whoever is now top. Acting on it clears the
+     * incoming controller's search (e.g. wiping Browse's query + results on back). We suppress the
+     * controller-level collapse dispatch while this is set so only genuine user collapses act.
+     */
+    private var controllerChangeInProgress = false
+    private val clearControllerChangeFlag = Runnable { controllerChangeInProgress = false }
     var currentToolbar: Toolbar? = null
     var ogWidth: Int = Int.MAX_VALUE
     var hingeGapSize = 0
@@ -668,12 +679,18 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
                 override fun onMenuItemActionCollapse(item: MenuItem): Boolean {
                     val controller = router.backstack.lastOrNull()?.controller
+                    // A collapse during a controller change is the outgoing screen's menu being
+                    // torn down, not the user clearing search — don't dispatch it to the incoming
+                    // controller, or it wipes that controller's active query/results.
+                    val isNavigationArtifact = controllerChangeInProgress
                     binding.appBar.compactSearchMode = false
                     controller?.mainRecyclerView?.requestApplyInsets()
                     setupSearchTBMenu(binding.toolbar.menu, true)
                     lifecycleScope.launchUI {
-                        (controller as? BaseLegacyController<*>)?.onActionViewCollapse(item)
-                        (controller as? SettingsLegacyController)?.onActionViewCollapse(item)
+                        if (!isNavigationArtifact) {
+                            (controller as? BaseLegacyController<*>)?.onActionViewCollapse(item)
+                            (controller as? SettingsLegacyController)?.onActionViewCollapse(item)
+                        }
                         reEnableBackPressedCallBack()
                     }
                     return true
@@ -1316,7 +1333,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
     override fun onDestroy() {
         super.onDestroy()
-        overflowDialog?.dismiss()
+        overflowDialog?.dismissSafely()
         overflowDialog = null
         if (isBindingInitialized) {
             binding.toolbar.setNavigationOnClickListener(null)
@@ -1456,6 +1473,9 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                 handler: ControllerChangeHandler,
             ) {
                 Trace.beginSection("Hayai/MainActivity.onChangeStarted")
+                // Hold the collapse-suppression flag up for the whole change (see field doc).
+                controllerChangeInProgress = true
+                binding.root.removeCallbacks(clearControllerChangeFlag)
                 // Per-controller view tweak — scoped to its own view, safe across tabs.
                 to?.view?.alpha = 1f
                 if (to is RootTabsController) {
@@ -1503,6 +1523,10 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                 container: ViewGroup,
                 handler: ControllerChangeHandler,
             ) {
+                // Clear the collapse-suppression flag one frame after the change settles, so a
+                // menu-teardown collapse posted during the change is still treated as an artifact.
+                binding.root.removeCallbacks(clearControllerChangeFlag)
+                binding.root.post(clearControllerChangeFlag)
                 // Per-controller view tweaks — scoped to the controllers' own views,
                 // safe across tabs. (The from-alpha=0 is the Tachiyomi legacy hack that
                 // hides the outgoing controller behind the incoming one once the change

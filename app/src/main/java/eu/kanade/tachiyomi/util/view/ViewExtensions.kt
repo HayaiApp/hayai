@@ -510,6 +510,13 @@ fun AlertDialog.Builder.setNegativeButton(id: StringResource, listener: DialogIn
 fun AlertDialog.Builder.setPositiveButton(id: StringResource, listener: DialogInterface.OnClickListener?) =
     setPositiveButton(context.getString(id), listener)
 
+/** Dismiss only while still attached; config-change teardown can detach the window first and crash dismiss(). */
+fun Dialog.dismissSafely() {
+    if (window?.decorView?.isAttachedToWindow == true) {
+        dismiss()
+    }
+}
+
 fun Dialog.blurBehindWindow(
     window: Window?,
     blurAmount: Float = 20f,

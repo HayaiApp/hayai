@@ -77,6 +77,7 @@ import eu.kanade.tachiyomi.util.system.toInt
 import eu.kanade.tachiyomi.util.view.activityBinding
 import eu.kanade.tachiyomi.util.view.appBar
 import eu.kanade.tachiyomi.util.view.collapse
+import eu.kanade.tachiyomi.util.view.dismissSafely
 import eu.kanade.tachiyomi.util.view.expand
 import eu.kanade.tachiyomi.util.view.fullAppBarHeight
 import eu.kanade.tachiyomi.util.view.hide
@@ -652,7 +653,7 @@ class RecentsController(bundle: Bundle? = null) :
         // Drop the action mode before the underlying view is torn down so we
         // don't leak the activity reference.
         destroyActionModeIfNeeded()
-        displaySheet?.dismiss()
+        displaySheet?.dismissSafely()
         displaySheet = null
     }
 

@@ -468,18 +468,15 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                                 return true
                             }
                             if (item.itemId == DEFINE_MENU_ITEM_ID) {
-                                triggerDefineFromSelection()
-                                mode.finish()
+                                triggerDefineFromSelection(mode)
                                 return true
                             }
                             if (item.itemId == TRANSLATE_MENU_ITEM_ID) {
-                                triggerTranslateFromSelection()
-                                mode.finish()
+                                triggerTranslateFromSelection(mode)
                                 return true
                             }
                             if (item.itemId == WEB_SEARCH_MENU_ITEM_ID) {
-                                triggerWebSearchFromSelection()
-                                mode.finish()
+                                triggerWebSearchFromSelection(mode)
                                 return true
                             }
                             return callback.onActionItemClicked(mode, item)
@@ -554,23 +551,19 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                         }
                         override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
                             if (item.itemId == REMEMBER_MENU_ITEM_ID) {
-                                onRememberSelectedText()
-                                mode.finish()
+                                onRememberSelectedText(mode)
                                 return true
                             }
                             if (item.itemId == DEFINE_MENU_ITEM_ID) {
-                                triggerDefineFromSelection()
-                                mode.finish()
+                                triggerDefineFromSelection(mode)
                                 return true
                             }
                             if (item.itemId == TRANSLATE_MENU_ITEM_ID) {
-                                triggerTranslateFromSelection()
-                                mode.finish()
+                                triggerTranslateFromSelection(mode)
                                 return true
                             }
                             if (item.itemId == WEB_SEARCH_MENU_ITEM_ID) {
-                                triggerWebSearchFromSelection()
-                                mode.finish()
+                                triggerWebSearchFromSelection(mode)
                                 return true
                             }
                             return callback.onActionItemClicked(mode, item)
@@ -1495,7 +1488,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
      * the intent. The selection is pulled out of the WebView asynchronously via
      * `window.getSelection().toString()`.
      */
-    private fun triggerDefineFromSelection() {
+    private fun triggerDefineFromSelection(actionMode: ActionMode? = null) {
         webView.evaluateJavascript(
             "(function(){var s=window.getSelection();return s?s.toString():'';})();",
         ) { result ->
@@ -1509,13 +1502,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 .replace("\\r", "")
                 .replace("\\t", "\t")
                 .trim()
-            if (selected.isEmpty()) {
-                activity.runOnUiThread {
+            activity.runOnUiThread {
+                // Finish the action mode only AFTER the selection has been read — finishing it
+                // first clears window.getSelection(), leaving Define with no text.
+                actionMode?.finish()
+                if (selected.isEmpty()) {
                     activity.toast(activity.getString(MR.strings.novel_quote_no_selection))
+                    return@runOnUiThread
                 }
-                return@evaluateJavascript
+                launchDefineIntent(selected)
             }
-            activity.runOnUiThread { launchDefineIntent(selected) }
         }
     }
 
@@ -1549,7 +1545,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         }
     }
 
-    private fun triggerTranslateFromSelection() {
+    private fun triggerTranslateFromSelection(actionMode: ActionMode? = null) {
         webView.evaluateJavascript(
             "(function(){var s=window.getSelection();return s?s.toString():'';})();",
         ) { result ->
@@ -1561,13 +1557,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 .replace("\\r", "")
                 .replace("\\t", "\t")
                 .trim()
-            if (selected.isEmpty()) {
-                activity.runOnUiThread {
+            activity.runOnUiThread {
+                // Finish the action mode only AFTER the selection has been read — finishing it
+                // first clears window.getSelection(), leaving Translate with no text.
+                actionMode?.finish()
+                if (selected.isEmpty()) {
                     activity.toast(activity.getString(MR.strings.novel_quote_no_selection))
+                    return@runOnUiThread
                 }
-                return@evaluateJavascript
+                launchTranslateIntent(selected)
             }
-            activity.runOnUiThread { launchTranslateIntent(selected) }
         }
     }
 
@@ -1605,7 +1604,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         }
     }
 
-    private fun triggerWebSearchFromSelection() {
+    private fun triggerWebSearchFromSelection(actionMode: ActionMode? = null) {
         webView.evaluateJavascript(
             "(function(){var s=window.getSelection();return s?s.toString():'';})();",
         ) { result ->
@@ -1617,13 +1616,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 .replace("\\r", "")
                 .replace("\\t", "\t")
                 .trim()
-            if (selected.isEmpty()) {
-                activity.runOnUiThread {
+            activity.runOnUiThread {
+                // Finish the action mode only AFTER the selection has been read — finishing it
+                // first clears window.getSelection(), leaving Web Search with no text.
+                actionMode?.finish()
+                if (selected.isEmpty()) {
                     activity.toast(activity.getString(MR.strings.novel_quote_no_selection))
+                    return@runOnUiThread
                 }
-                return@evaluateJavascript
+                launchWebSearchIntent(selected)
             }
-            activity.runOnUiThread { launchWebSearchIntent(selected) }
         }
     }
 

@@ -145,6 +145,7 @@ import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.withUIContext
 import eu.kanade.tachiyomi.util.view.collapse
 import eu.kanade.tachiyomi.util.view.compatToolTipText
+import eu.kanade.tachiyomi.util.view.dismissSafely
 import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
 import eu.kanade.tachiyomi.util.view.hide
 import eu.kanade.tachiyomi.util.view.isCollapsed
@@ -600,7 +601,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         binding.chaptersSheet.chaptersBottomSheet.adapter = null
         viewer = null
         config = null
-        bottomSheet?.dismiss()
+        bottomSheet?.dismissSafely()
         bottomSheet = null
         snackbar?.dismiss()
         snackbar = null

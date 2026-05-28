@@ -9,6 +9,7 @@ import com.bluelinelabs.conductor.Controller
 import com.bluelinelabs.conductor.Router
 import com.bluelinelabs.conductor.RouterTransaction
 import com.bluelinelabs.conductor.changehandler.SimpleSwapChangeHandler
+import eu.kanade.tachiyomi.util.view.dismissSafely
 import eu.kanade.tachiyomi.util.view.previousController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
@@ -75,8 +76,8 @@ abstract class DialogController : Controller {
 
     override fun onDestroyView(view: View) {
         super.onDestroyView(view)
-        dialog!!.setOnDismissListener(null)
-        dialog!!.dismiss()
+        dialog?.setOnDismissListener(null)
+        dialog?.dismissSafely()
         dialog = null
     }
 
