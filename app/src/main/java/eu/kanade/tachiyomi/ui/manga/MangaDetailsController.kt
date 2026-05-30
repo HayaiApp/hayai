@@ -683,6 +683,10 @@ class MangaDetailsController :
         val fabPadding = 72.dpToPx // FAB height (56dp) + margin (16dp)
         binding.recycler.updatePaddingRelative(bottom = systemInsets.bottom + fabPadding)
         binding.tabletRecycler.updatePaddingRelative(bottom = systemInsets.bottom)
+        // Nav-bar inset is applied ONCE here as static padding instead of via windowInsetsPadding
+        // inside the animated bottom-bar Compose subtree (which formed the recompose/relayout ANR
+        // loop). The host's own inset listener consumes insets so this is never re-fired.
+        binding.actionBarCompose.updatePaddingRelative(bottom = systemInsets.bottom)
         val tHeight = toolbarHeight.takeIf { it ?: 0 > 0 } ?: appbarHeight
         headerHeight = tHeight + systemInsets.top
         binding.swipeRefresh.setProgressViewOffset(false, (-40).dpToPx, headerHeight + offset)
@@ -1077,11 +1081,15 @@ class MangaDetailsController :
         val chapterItem = (adapter?.getItem(position) as? ChapterItem) ?: return false
         val chapter = chapterItem.chapter
         // mihon-style multi-select: a tap toggles this chapter's selection (no range anchor).
-        if (isSelectionMode) {
+        // Single source of truth — also catch a lingering selection so a stale ActionMode can't
+        // desync into the legacy range branch and hijack a normal tap.
+        if (isSelectionMode || selectedChapters().isNotEmpty()) {
             toggleChapterSelection(position)
             return false
         }
-        if (actionMode != null) {
+        // Legacy download-range gesture: startDownloadRange sets rangeMode before routing the tap
+        // here. Gate on rangeMode (not actionMode) so a stale ActionMode never swallows the tap.
+        if (!isSelectionMode && rangeMode != null) {
             if (startingRangeChapterPos == null) {
                 adapter?.addSelection(position)
                 (binding.recycler.findViewHolderForAdapterPosition(position) as? BaseFlexibleViewHolder)
@@ -1236,6 +1244,11 @@ class MangaDetailsController :
     }
 
     private fun openChapter(chapter: Chapter, sharedElement: View? = null) {
+        // Single funnel for tap/FAB/swipe: tear down any live selection before launching the
+        // reader so the opened row isn't left CHECKED/collapsed on the shared-element return.
+        if (isSelectionMode || actionMode != null) {
+            destroyActionModeIfNeeded()
+        }
         (activity as? AppCompatActivity)?.apply {
             // Only use shared-element transition if the view has a transitionName;
             // ComposeView buttons (e.g. buttonGroupCompose) don't set one and
@@ -2025,9 +2038,22 @@ class MangaDetailsController :
     //endregion
 
     //region Action mode methods
+    // Clear selection on back instead of leaning solely on ActionMode.finish()'s exit animation,
+    // which could ignite the bottom-bar inset/relayout loop during teardown (mihon BackHandler parity).
+    override fun handleBack(): Boolean {
+        if (isSelectionMode && selectedChapters().isNotEmpty()) {
+            destroyActionModeIfNeeded()
+            return true
+        }
+        return super.handleBack()
+    }
+
     private fun createActionModeIfNeeded() {
         if (actionMode == null) {
             actionMode = (activity as AppCompatActivity).startSupportActionMode(this)
+            // Re-run MainActivity's inset listener now the action_mode_bar exists so it gets its
+            // topMargin (else it lays out under the status bar/cutout).
+            activityBinding?.root?.requestApplyInsets()
             val view = activity?.window?.currentFocus ?: return
             val imm = activity?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
                 ?: return
@@ -2046,13 +2072,33 @@ class MangaDetailsController :
     }
 
     override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-        // In selection mode all actions live in the bottom bar; the top ActionMode only shows
-        // the count title. The legacy range path still routes through here when not selecting.
+        // Top-bar Select All / Invert (selection mode only); per-chapter ops live in the bottom bar.
+        when (item?.itemId) {
+            R.id.action_select_all -> {
+                selectAllChapters()
+                return true
+            }
+            R.id.action_select_inverse -> {
+                invertChapterSelection()
+                return true
+            }
+        }
+        // The legacy range path still routes through here when not selecting.
         return !isSelectionMode
     }
 
     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-        // No top-bar action items in selection mode; the bottom action bar owns the actions.
+        // Selection mode surfaces Select All + Invert in the top bar (mihon parity); the bottom
+        // action bar owns the per-chapter ops. The legacy range path adds nothing here.
+        if (isSelectionMode && menu != null) {
+            val context = view?.context
+            menu.add(Menu.NONE, R.id.action_select_all, 1, context?.getString(MR.strings.select_all))
+                .setIcon(R.drawable.ic_select_all_24dp)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(Menu.NONE, R.id.action_select_inverse, 2, context?.getString(MR.strings.select_inverse))
+                .setIcon(R.drawable.ic_flip_to_back_24dp)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
         return true
     }
 
@@ -2064,6 +2110,8 @@ class MangaDetailsController :
                 return false
             }
             mode?.title = view?.context?.getString(MR.strings.selected_, selected.size)
+            // Keep the status bar transparent while the contextual bar is up.
+            setStatusBarAndToolbar()
             refreshActionBar()
             return false
         }
@@ -2238,9 +2286,14 @@ class MangaDetailsController :
                 massDeleteChapters(selectedChapters().filter { it.isDownloaded }, false)
                 destroyActionModeIfNeeded()
             },
-            onSelectAll = { selectAllChapters() },
-            onInvertSelection = { invertChapterSelection() },
         )
+        // Consume insets at the host so the CoordinatorLayout can't re-dispatch them into the
+        // Compose subtree on every relayout. This overrides Compose's own WindowInsetsHolder
+        // listener, breaking the inset -> recompose -> relayout -> inset ANR loop. The nav-bar
+        // bottom inset is instead applied as static padding in setInsets().
+        ViewCompat.setOnApplyWindowInsetsListener(binding.actionBarCompose) { _, _ ->
+            WindowInsetsCompat.CONSUMED
+        }
         binding.actionBarCompose.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
         )
@@ -2254,20 +2307,23 @@ class MangaDetailsController :
     /** Recomputes the bottom-bar contextual visibility from the current selection. */
     private fun refreshActionBar() {
         val selected = selectedChapters()
-        if (!isSelectionMode || selected.isEmpty()) {
-            actionBarState = ChapterActionBarState(visible = false)
-            return
+        val newState = if (!isSelectionMode || selected.isEmpty()) {
+            ChapterActionBarState(visible = false)
+        } else {
+            ChapterActionBarState(
+                visible = true,
+                showBookmark = selected.any { !it.bookmark },
+                showRemoveBookmark = selected.any { it.bookmark },
+                showMarkAsRead = selected.any { !it.read },
+                showMarkAsUnread = selected.any { it.read },
+                showMarkPreviousAsRead = selected.size == 1,
+                showDownload = !presenter.manga.isLocal() && selected.any { !it.isDownloaded },
+                showDelete = !presenter.manga.isLocal() && selected.any { it.isDownloaded },
+            )
         }
-        actionBarState = ChapterActionBarState(
-            visible = true,
-            showBookmark = selected.any { !it.bookmark },
-            showRemoveBookmark = selected.any { it.bookmark },
-            showMarkAsRead = selected.any { !it.read },
-            showMarkAsUnread = selected.any { it.read },
-            showMarkPreviousAsRead = selected.size == 1,
-            showDownload = !presenter.manga.isLocal() && selected.any { !it.isDownloaded },
-            showDelete = !presenter.manga.isLocal() && selected.any { it.isDownloaded },
-        )
+        // Idempotent: skip the reassignment when nothing changed (data-class equality) so redundant
+        // invalidates don't allocate a fresh instance and force a needless recomposition.
+        if (newState != actionBarState) actionBarState = newState
     }
 
     /** Mark every chapter before the single selected one as read (mihon mark-previous semantics). */

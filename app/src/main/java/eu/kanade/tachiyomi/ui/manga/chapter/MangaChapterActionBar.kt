@@ -8,14 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmark
@@ -24,21 +19,13 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RemoveDone
-import androidx.compose.material.icons.outlined.SelectAll
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,8 +58,6 @@ class ChapterActionBarHandlers(
     val onMarkPreviousRead: () -> Unit,
     val onDownload: () -> Unit,
     val onDelete: () -> Unit,
-    val onSelectAll: () -> Unit,
-    val onInvertSelection: () -> Unit,
 )
 
 @Composable
@@ -89,13 +74,17 @@ fun MangaChapterActionBar(
         Surface(
             modifier = modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large.copy(bottomEnd = ZeroCornerSize, bottomStart = ZeroCornerSize),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 3.dp,
+            // surfaceContainer == the theme's colorSurfaceContainer (?colorPrimaryVariant), the
+            // identical flat color the BottomNavigationView uses across all themes/AMOLED.
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            tonalElevation = 0.dp,
             shadowElevation = 8.dp,
         ) {
+            // Nav-bar bottom inset is applied once as static padding on the host ComposeView
+            // (MangaDetailsController.setInsets); keeping it out of this animated subtree avoids
+            // the CoordinatorLayout<->Compose inset re-dispatch + AnimatedVisibility relayout loop.
             Row(
                 modifier = Modifier
-                    .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
@@ -120,7 +109,6 @@ fun MangaChapterActionBar(
                 if (state.showDelete) {
                     ActionButton(MR.strings.remove_downloads, Icons.Outlined.Delete, handlers.onDelete)
                 }
-                OverflowButton(handlers.onSelectAll, handlers.onInvertSelection)
             }
         }
     }
@@ -145,45 +133,5 @@ private fun RowScope.ActionButton(
         contentAlignment = Alignment.Center,
     ) {
         Icon(imageVector = icon, contentDescription = label)
-    }
-}
-
-@Composable
-private fun RowScope.OverflowButton(
-    onSelectAll: () -> Unit,
-    onInvertSelection: () -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val label = stringResource(MR.strings.action_menu_overflow_description)
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .weight(1f)
-            .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                indication = ripple(bounded = false),
-                onClick = { expanded = true },
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(imageVector = Icons.Outlined.MoreVert, contentDescription = label)
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(MR.strings.select_all)) },
-                leadingIcon = { Icon(Icons.Outlined.SelectAll, null) },
-                onClick = {
-                    expanded = false
-                    onSelectAll()
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(MR.strings.select_inverse)) },
-                leadingIcon = { Icon(Icons.Outlined.RemoveDone, null) },
-                onClick = {
-                    expanded = false
-                    onInvertSelection()
-                },
-            )
-        }
     }
 }
