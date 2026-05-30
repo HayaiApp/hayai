@@ -206,6 +206,23 @@ class SettingsLibraryController : SettingsLegacyController() {
                 noSelectionRes = MR.strings.none
             }
 
+            // Categories that always update even when the release-period skip is on. Only relevant
+            // (and only shown) while MANGA_OUTSIDE_RELEASE_PERIOD is enabled.
+            multiSelectListPreferenceMat(activity) {
+                bindTo(preferences.libraryUpdateSmartUpdateCategoriesExclude())
+                titleRes = MR.strings.pref_smart_update_always_update_categories
+
+                val categories = listOf(Category.createDefault(context)) + dbCategories
+                entries = categories.map { it.name }
+                entryValues = categories.mapNotNull { it.id }.map { it.toString() }
+                preSummaryRes = MR.strings.always_updated_categories_
+                noSelectionRes = MR.strings.none
+
+                preferences.libraryUpdateMangaRestriction().changesIn(viewScope) {
+                    isVisible = MANGA_OUTSIDE_RELEASE_PERIOD in it
+                }
+            }
+
             triStateListPreference(activity) {
                 preferences.apply {
                     bindTo(libraryUpdateCategories(), libraryUpdateCategoriesExclude())
