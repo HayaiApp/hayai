@@ -89,6 +89,20 @@ open class GlobalSearchController(
     private fun wireSearchToolbar() {
         val search = binding.appBar.searchToolbar ?: return
         search.setQueryHint(view?.context?.getString(MR.strings.global_search), false)
+        // Collapsing the local pill's search dismisses this screen — mirror upstream, where the
+        // activity-global pill drove onActionViewCollapse. As a LocalAppBarOwner we own this pill,
+        // so wire the dismiss here (the activity-global dispatch no longer reaches us). Set before
+        // expandActionView so the listener is in place; gate on visible+attached so navigation
+        // teardown collapses don't self-pop.
+        search.searchItem?.setOnActionExpandListener(
+            object : MenuItem.OnActionExpandListener {
+                override fun onMenuItemActionExpand(item: MenuItem): Boolean = true
+                override fun onMenuItemActionCollapse(item: MenuItem): Boolean {
+                    if (isControllerVisible && isAttached) onActionViewCollapse(item)
+                    return true
+                }
+            },
+        )
         search.searchItem?.expandActionView()
         search.searchView?.setQuery(presenter.query, false)
         if (presenter.query.isBlank()) {

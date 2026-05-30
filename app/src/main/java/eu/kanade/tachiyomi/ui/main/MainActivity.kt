@@ -670,8 +670,13 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                     }
                     binding.searchToolbar.menu.forEach { it.isVisible = false }
                     lifecycleScope.launchUI {
-                        (controller as? BaseLegacyController<*>)?.onActionViewExpand(item)
-                        (controller as? SettingsLegacyController)?.onActionViewExpand(item)
+                        // A pushed LocalAppBarOwner (e.g. GlobalSearchController) drives its OWN
+                        // local pill; this activity-global pill's events are not its events. Root
+                        // tabs (backstackSize 1) are left as-is to preserve their existing dispatch.
+                        if (!controller.isPushedLocalAppBarOwner()) {
+                            (controller as? BaseLegacyController<*>)?.onActionViewExpand(item)
+                            (controller as? SettingsLegacyController)?.onActionViewExpand(item)
+                        }
                         reEnableBackPressedCallBack()
                     }
                     return true
@@ -687,7 +692,13 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                     controller?.mainRecyclerView?.requestApplyInsets()
                     setupSearchTBMenu(binding.toolbar.menu, true)
                     lifecycleScope.launchUI {
-                        if (!isNavigationArtifact) {
+                        // A pushed LocalAppBarOwner (e.g. GlobalSearchController launched from a
+                        // manga title) expands/collapses its OWN local pill, not this activity-global
+                        // one. Dispatching this collapse to it fires its onActionViewCollapse →
+                        // popCurrentController, tearing the just-pushed search controller off the
+                        // stack and dropping the user back toward the root. Root tabs keep their
+                        // existing dispatch.
+                        if (!isNavigationArtifact && !controller.isPushedLocalAppBarOwner()) {
                             (controller as? BaseLegacyController<*>)?.onActionViewCollapse(item)
                             (controller as? SettingsLegacyController)?.onActionViewCollapse(item)
                         }
@@ -1821,6 +1832,15 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
     protected fun canShowFloatingToolbar(controller: Controller?) =
         (controller is FloatingSearchInterface && controller.showFloatingBar())
+
+    /**
+     * True for a [LocalAppBarOwner] that was pushed on top of a root tab (its own pill, not the
+     * activity-global one, hosts its search). Root tabs (backstackSize 1) return false so their
+     * existing activity-global search dispatch is untouched. Used to stop the activity-global
+     * pill's collapse/expand from cross-firing onto a pushed search controller.
+     */
+    private fun Controller?.isPushedLocalAppBarOwner(): Boolean =
+        this is eu.kanade.tachiyomi.ui.base.LocalAppBarOwner && this.router.backstackSize > 1
 
     protected open fun syncActivityViewWithController(
         to: Controller?,
