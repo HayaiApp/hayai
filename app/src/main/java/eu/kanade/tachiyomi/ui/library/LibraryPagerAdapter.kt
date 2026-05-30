@@ -58,6 +58,7 @@ class LibraryPagerAdapter(
         super.destroyView(container, position, view)
         pageAdapters.remove(position)
         pageRecyclers.remove(position)
+        pageSearchItems.remove(position)
     }
 
     override fun getCount(): Int = categories.size
@@ -100,7 +101,7 @@ class LibraryPagerAdapter(
             override fun getSpanSize(position: Int): Int {
                 if (isList) return recycler.managerSpanCount
                 val item = (recycler.adapter as? LibraryCategoryAdapter)?.getItem(position)
-                return if (item is LibraryHeaderItem || item is LibraryPlaceholderItem) {
+                return if (item is LibraryHeaderItem || item is SearchGlobalItem || item is LibraryPlaceholderItem) {
                     recycler.managerSpanCount
                 } else {
                     1
@@ -108,6 +109,10 @@ class LibraryPagerAdapter(
             }
         }
     }
+
+    // One "Search globally" affordance per page so the entry point is reachable in tabbed mode
+    // too (continuous mode hosts a single shared one on mAdapter). Keyed by page position.
+    private val pageSearchItems = mutableMapOf<Int, SearchGlobalItem>()
 
     private fun bindCategoryItems(position: Int, adapter: LibraryCategoryAdapter) {
         val category = categories.getOrNull(position) ?: return
@@ -123,13 +128,33 @@ class LibraryPagerAdapter(
         // Seed the filter BEFORE setItems so its internal launchFilter picks it up — without
         // this, a page created (or recreated by the ViewPager when swiped past the offscreen
         // limit) while a search is active would render unfiltered.
-        adapter.setFilter(controller.currentQuery.takeIf { it.isNotEmpty() })
+        val query = controller.currentQuery
+        adapter.setFilter(query.takeIf { it.isNotEmpty() })
         adapter.setItems(items)
+        updateSearchGloballyHeader(position, adapter, query)
         controller.applySelectionStateTo(adapter)
+    }
+
+    /** Show/hide the per-page "Search globally" scrollable header to match the active query. */
+    private fun updateSearchGloballyHeader(position: Int, adapter: LibraryCategoryAdapter, query: String) {
+        if (query.isNotEmpty()) {
+            val item = pageSearchItems.getOrPut(position) { SearchGlobalItem() }
+            item.string = query
+            if (adapter.scrollableHeaders.isEmpty()) {
+                adapter.addScrollableHeader(item)
+            }
+        } else if (adapter.scrollableHeaders.isNotEmpty()) {
+            adapter.removeAllScrollableHeaders()
+        }
     }
 
     fun refreshAll() {
         pageAdapters.forEach { (idx, adapter) -> bindCategoryItems(idx, adapter) }
+    }
+
+    /** Sync each live page's "Search globally" header with the current query without re-binding items. */
+    fun refreshSearchGloballyHeaders(query: String) {
+        pageAdapters.forEach { (idx, adapter) -> updateSearchGloballyHeader(idx, adapter, query) }
     }
 
     fun reattachAll() {

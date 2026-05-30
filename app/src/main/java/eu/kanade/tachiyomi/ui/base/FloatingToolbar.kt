@@ -84,6 +84,9 @@ class FloatingToolbar @JvmOverloads constructor(context: Context, attrs: Attribu
         toolbarsubTitle.isVisible = false
 
         cardIncogImage = findViewById(R.id.card_incog_image)
+        // Derive the incog glyph visibility from the (default-false) incognito flag on inflate so
+        // it never lingers visible from the XML default before setIncognitoMode is first applied.
+        setIcons()
 
         setNavigationIconTint(actionColorAlpha)
         collapseIcon = context.contextCompatDrawable(R.drawable.ic_arrow_back_24dp)?.apply {

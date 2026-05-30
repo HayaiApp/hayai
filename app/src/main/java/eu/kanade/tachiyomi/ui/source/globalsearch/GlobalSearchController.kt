@@ -64,13 +64,14 @@ open class GlobalSearchController(
     override fun localAppBar(): ExpandedAppBarLayout? = if (isAttached) binding.appBar else null
 
     override fun onSetupLocalChrome() {
-        // appBarVisible=true, useSmallToolbar=false, no tabs — same intent as the
-        // Configure the layout-local appBar.
+        // Search-only screen: no big expanded title. Force the big view hidden so the search
+        // pill (card_frame) is the first visible appBar child and sits at the top, instead of
+        // being pushed below a large title.
         val appBar = binding.appBar
         appBar.alpha = 1f
         appBar.isInvisible = false
         appBar.lockYPos = false
-        appBar.hideBigView(useSmall = false)
+        appBar.hideBigView(useSmall = true, force = true)
         appBar.setToolbarModeBy(this)
         appBar.clearTabs()
         // Scroll-source sync — snap appBar Y to current recycler offset on each enter.
@@ -88,6 +89,9 @@ open class GlobalSearchController(
 
     private fun wireSearchToolbar() {
         val search = binding.appBar.searchToolbar ?: return
+        // Gate the incognito glyph on the real preference — the pill's incog ImageView is hidden
+        // by default and only shown when incognito mode is actually on.
+        search.setIncognitoMode(preferences.incognitoMode().get())
         search.setQueryHint(view?.context?.getString(MR.strings.global_search), false)
         // Collapsing the local pill's search dismisses this screen — mirror upstream, where the
         // activity-global pill drove onActionViewCollapse. As a LocalAppBarOwner we own this pill,
