@@ -5,6 +5,7 @@ import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.isVisible
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
@@ -12,7 +13,9 @@ import eu.kanade.tachiyomi.databinding.ReaderNovelAppearanceBinding
 import eu.kanade.tachiyomi.util.bindToPreference
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.widget.BaseReaderSettingsView
+import hayai.novel.reader.settings.NovelStylePresetSection
 import yokai.i18n.MR
+import yokai.presentation.theme.YokaiTheme
 import yokai.util.lang.getString
 
 class NovelAppearanceView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
@@ -98,6 +101,17 @@ class NovelAppearanceView @JvmOverloads constructor(context: Context, attrs: Att
 
             bindIntSlider(brightnessValue, MR.strings.novel_brightness_value, -75, 100, readerPreferences.novelCustomBrightnessValue.get()) {
                 readerPreferences.novelCustomBrightnessValue.set(it)
+            }
+
+            // Saved global style presets — Compose section hosted in the Appearance tab. Applying a
+            // preset writes back to the real style prefs so NovelWebViewPreferenceObserver re-styles live.
+            stylePresetsCompose.setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool,
+            )
+            stylePresetsCompose.setContent {
+                YokaiTheme {
+                    NovelStylePresetSection(readerPreferences)
+                }
             }
         }
     }

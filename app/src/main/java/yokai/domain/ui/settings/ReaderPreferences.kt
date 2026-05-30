@@ -176,6 +176,11 @@ class ReaderPreferences(private val preferenceStore: PreferenceStore) {
     // Applied to chapter HTML content before rendering in both WebView and TextView modes
     val novelRegexReplacements: Preference<String> = preferenceStore.getString("pref_novel_regex_replacements", DEFAULT_NOVEL_REGEX_RULES)
 
+    // Saved global STYLE presets: JSON array of {name, values:{prefKey:stringValue}} where values
+    // only hold purely-visual style prefs (see NovelStylePresetManager.STYLE_KEYS). Applying a preset
+    // writes each value back to its real pref so NovelWebViewPreferenceObserver re-styles live.
+    val novelStylePresets: Preference<String> = preferenceStore.getString("pref_novel_style_presets", "[]")
+
     // NFKC + combining-mark + zero-width strip applied before regex rules. Catches stylised
     // Unicode obfuscation (𝒇𝓻𝓮𝓮 → free, ｆｒｅｅ → free) so a plain `freewebnovel\.com` rule matches.
     val novelTextNormalize: Preference<Boolean> = preferenceStore.getBoolean("pref_novel_text_normalize", true)

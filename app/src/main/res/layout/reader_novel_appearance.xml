@@ -177,5 +177,11 @@
             android:layout_marginTop="16dp"
             android:text="@string/novel_text_aggressive_cleanup"
             android:textColor="?attr/colorOnBackground" />
+
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/style_presets_compose"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
     </LinearLayout>
 </eu.kanade.tachiyomi.ui.reader.settings.NovelAppearanceView>
