@@ -86,10 +86,10 @@ class ChapterRepositoryImpl(private val handler: DatabaseHandler) : ChapterRepos
         }
 
     private suspend fun partialDelete(vararg chapterIds: Long) {
-        handler.await(inTransaction = true) {
-            chapterIds.forEach { chapterId ->
-                chaptersQueries.delete(chapterId)
-            }
+        if (chapterIds.isEmpty()) return
+        // Single set-based DELETE instead of one statement per id.
+        handler.await {
+            chaptersQueries.deleteBulk(chapterIds.toList())
         }
     }
 

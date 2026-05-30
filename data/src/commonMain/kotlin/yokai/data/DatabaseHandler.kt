@@ -1,5 +1,6 @@
 package yokai.data
 
+import app.cash.paging.PagingSource
 import app.cash.sqldelight.ExecutableQuery
 import app.cash.sqldelight.Query
 import kotlinx.coroutines.flow.Flow
@@ -45,11 +46,8 @@ interface DatabaseHandler {
 
     fun <T : Any> subscribeToFirstOrNull(block: Database.() -> Query<T>): Flow<T?>
 
-    /*
     fun <T : Any> subscribeToPagingSource(
         countQuery: Database.() -> Query<Long>,
-        transacter: Database.() -> Transacter,
         queryProvider: Database.(Long, Long) -> Query<T>
-    ): PagingSource<Long, T>
-     */
+    ): PagingSource<Int, T>
 }

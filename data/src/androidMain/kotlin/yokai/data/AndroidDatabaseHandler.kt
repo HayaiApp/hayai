@@ -1,5 +1,6 @@
 package yokai.data
 
+import app.cash.paging.PagingSource
 import app.cash.sqldelight.ExecutableQuery
 import app.cash.sqldelight.Query
 import app.cash.sqldelight.coroutines.asFlow
@@ -7,6 +8,7 @@ import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOne
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.cash.sqldelight.db.SqlDriver
+import app.cash.sqldelight.paging3.QueryPagingSource
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -85,22 +87,19 @@ class AndroidDatabaseHandler(
         return block(db).asFlow().mapToFirstOrNull(queryDispatcher)
     }
 
-    /*
     override fun <T : Any> subscribeToPagingSource(
         countQuery: Database.() -> Query<Long>,
-        transacter: Database.() -> Transacter,
         queryProvider: Database.(Long, Long) -> Query<T>
-    ): PagingSource<Long, T> {
+    ): PagingSource<Int, T> {
         return QueryPagingSource(
             countQuery = countQuery(db),
-            transacter = transacter(db),
-            dispatcher = queryDispatcher,
+            transacter = db,
+            context = queryDispatcher,
             queryProvider = { limit, offset ->
                 queryProvider.invoke(db, limit, offset)
-            }
+            },
         )
     }
-     */
 
     private suspend fun <T> dispatch(inTransaction: Boolean, block: suspend Database.() -> T): T {
         // Create a transaction if needed and run the calling block inside it.
