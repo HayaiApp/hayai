@@ -121,6 +121,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     // True while a text-selection ActionMode is open; keeps auto-scroll paused even after the
     // finger lifts (ACTION_UP would otherwise resume mid-selection).
     private var isTextSelectionActive = false
+    // Last non-empty selection (pushed from JS selectionchange). Toolbar actions that overflow the
+    // floating menu lose the live selection when the overflow opens, so they read this instead.
+    @Volatile private var lastSelectionText: String = ""
 
     // Phase B #2: was DisabledNavigation() — its regions list is empty, so navigator.getAction
     // always resolved to MENU and the NEXT/PREV/LEFT/RIGHT branches in onSingleTapConfirmed
@@ -1629,11 +1632,12 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 // Finish the action mode only AFTER the selection has been read — finishing it
                 // first clears window.getSelection(), leaving Define with no text.
                 actionMode?.finish()
-                if (selected.isEmpty()) {
+                val text = selected.ifBlank { if (actionMode != null) lastSelectionText else "" }
+                if (text.isBlank()) {
                     activity.toast(activity.getString(MR.strings.novel_quote_no_selection))
                     return@runOnUiThread
                 }
-                launchDefineIntent(selected)
+                launchDefineIntent(text)
             }
         }
     }
@@ -1684,11 +1688,12 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 // Finish the action mode only AFTER the selection has been read — finishing it
                 // first clears window.getSelection(), leaving Translate with no text.
                 actionMode?.finish()
-                if (selected.isEmpty()) {
+                val text = selected.ifBlank { if (actionMode != null) lastSelectionText else "" }
+                if (text.isBlank()) {
                     activity.toast(activity.getString(MR.strings.novel_quote_no_selection))
                     return@runOnUiThread
                 }
-                launchTranslateIntent(selected)
+                launchTranslateIntent(text)
             }
         }
     }
@@ -1717,11 +1722,12 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 // Finish the action mode only AFTER the selection has been read — finishing it
                 // first clears window.getSelection(), leaving Web Search with no text.
                 actionMode?.finish()
-                if (selected.isEmpty()) {
+                val text = selected.ifBlank { if (actionMode != null) lastSelectionText else "" }
+                if (text.isBlank()) {
                     activity.toast(activity.getString(MR.strings.novel_quote_no_selection))
                     return@runOnUiThread
                 }
-                launchWebSearchIntent(selected)
+                launchWebSearchIntent(text)
             }
         }
     }
@@ -3142,6 +3148,12 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         }
 
         @JavascriptInterface
+        fun onSelectionChanged(text: String?) {
+            val t = text?.trim().orEmpty()
+            if (t.isNotEmpty()) lastSelectionText = t
+        }
+
+        @JavascriptInterface
         fun onSaveEditedContent(json: String) {
             Logger.d { "NovelWebViewViewer: onSaveEditedContent(length=${json.length})" }
             activity.viewModel.saveEditedChapterContent(json)
@@ -3629,6 +3641,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 // resets timing on selection end so the next stepped frame starts cleanly.
                 if (!window.__hayaiSelListener) {
                     window.__hayaiSelListener = function(){
+                        try { if (window.Android && Android.onSelectionChanged) { Android.onSelectionChanged(window.getSelection().toString()); } } catch(e){}
                         var s = window.__hayaiAutoScroll;
                         if (!s) return;
                         var has = window.__hayaiHasSelection();
