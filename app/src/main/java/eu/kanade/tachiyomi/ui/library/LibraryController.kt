@@ -323,7 +323,9 @@ open class LibraryController(
     private var pagerAdapter: LibraryPagerAdapter? = null
 
     private val isTabbedMode: Boolean
-        get() = preferences.libraryDisplayMode().get() == LibraryItem.DISPLAY_MODE_TABBED
+        // FilteredLibraryController (sub-class) has no tab strip and renders a flat filtered list;
+        // it must always use the continuous mAdapter surface that receives the title-search filter.
+        get() = !isSubClass && preferences.libraryDisplayMode().get() == LibraryItem.DISPLAY_MODE_TABBED
 
     private val isInSingleCategoryMode: Boolean
         get() = isTabbedMode || !preferences.showAllCategories().get()
@@ -438,6 +440,11 @@ open class LibraryController(
     // elevateAppBar() (a colorToolbar callback that cancels/restarts a ValueAnimator) when the
     // elevated state actually flips — same gating recents uses, instead of firing every frame.
     private var isPageToolbarElevated = false
+
+    // Dead-zone (px) absorbed before a tabbed page's large toolbar starts collapsing, so a tiny
+    // scroll doesn't slide/recolor it. Matches scrollViewWith's threshold for the continuous mode.
+    private val collapseDeadZone = 12.dpToPx
+    private var pageScrollAccum = 0
 
     /** Render surface for the library body: the per-category pager vs. the single continuous recycler. */
     private enum class DisplaySurface { TABBED, CONTINUOUS }
@@ -857,8 +864,20 @@ open class LibraryController(
         if (!recycler.canScrollVertically(-1)) {
             appBar.y = 0f
             appBar.updateAppBarAfterY(recycler)
+            pageScrollAccum = 0
             setPageToolbarElevated(false)
         } else {
+            // Dead-zone before the large toolbar begins collapsing — mirrors scrollViewWith so a
+            // 1px scroll on a tabbed page doesn't slide/recolor the header. See collapseDeadZone.
+            if (appBar.useLargeToolbar && appBar.y >= 0f && dy > 0 && pageScrollAccum < collapseDeadZone) {
+                pageScrollAccum += dy
+                if (pageScrollAccum < collapseDeadZone) {
+                    appBar.y = 0f
+                    appBar.updateAppBarAfterY(recycler)
+                    return
+                }
+            }
+            if (appBar.y >= 0f && dy < 0) pageScrollAccum = 0
             appBar.y -= dy
             // Pin the small toolbar + search card + tabs strip when scrolled. updateAppBarAfterY's
             // own clamp on phones is [-realHeight, smallHeight] — wide enough that a fast dy or a
@@ -2104,6 +2123,9 @@ open class LibraryController(
         } else if (adapter.scrollableHeaders.isNotEmpty()) {
             adapter.removeAllScrollableHeaders()
         }
+        // In tabbed mode the visible surface is the pager pages, not mAdapter — give each page its
+        // own "Search globally" header so the affordance is reachable while searching tabs too.
+        if (isTabbedMode) pagerAdapter?.refreshSearchGloballyHeaders(q)
         showAllCategoriesView?.isGone =
             isTabbedMode || preferences.showAllCategories().get() || presenter.groupType != BY_DEFAULT || q.isBlank()
         showAllCategoriesView?.isSelected = presenter.forceShowAllCategories

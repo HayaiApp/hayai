@@ -366,6 +366,12 @@ fun Controller.scrollViewWith(
 
     val randomTag = Random.nextLong()
     var lastY = 0f
+    // Small dead-zone before the large toolbar starts collapsing/translating. Recents
+    // (liftAppbarWith) only reacts on real offset; the large-toolbar pipeline used to move
+    // appBar.y from the very first pixel, so a 1px scroll visibly slid + recolored the bar.
+    // Accumulate scroll while pinned at the top and only begin collapsing past this threshold.
+    val collapseThreshold = 12.dpToPx
+    var pinnedScrollAccum = 0
     var fakeToolbarView: View? = null
     val preferences: PreferencesHelper by injectLazy()
     var fakeBottomNavView: View? = null
@@ -564,8 +570,27 @@ fun Controller.scrollViewWith(
                     }
                 }
                 lastY = 0f
+                pinnedScrollAccum = 0
                 if (isToolbarColor) colorToolbar(false)
             } else {
+                // Dead-zone: while the large toolbar is still fully expanded, absorb the first few
+                // pixels of a downward scroll instead of immediately sliding/recoloring it. Once
+                // accumulated scroll crosses the threshold, collapse normally. Compact / small-
+                // toolbar screens have no big view to slide, so they're unaffected.
+                val useThreshold = this@scrollViewWith !is SmallToolbarInterface &&
+                    appBar.useLargeToolbar && appBar.y >= 0f
+                if (useThreshold && dy > 0 && pinnedScrollAccum < collapseThreshold) {
+                    pinnedScrollAccum += dy
+                    if (pinnedScrollAccum < collapseThreshold) {
+                        appBar.y = 0f
+                        appBar.updateAppBarAfterY(recycler)
+                        appBar.let {
+                            swipeCircle?.translationY = max(it.y, -it.height + it.paddingTop.toFloat())
+                        }
+                        return
+                    }
+                }
+                if (appBar.y >= 0f) pinnedScrollAccum = collapseThreshold
                 appBar.y -= dy
                 appBar.updateAppBarAfterY(recycler)
                 activityBinding?.bottomNav?.let { bottomNav ->
@@ -585,6 +610,8 @@ fun Controller.scrollViewWith(
                     }
                 }
 
+                // Re-arm the dead-zone once the bar scrolls back to fully expanded.
+                if (appBar.y >= 0f && dy < 0) pinnedScrollAccum = 0
                 if (!isToolbarColor && appBar.y <= -appBar.height.toFloat()) {
                     colorToolbar(true)
                 }
