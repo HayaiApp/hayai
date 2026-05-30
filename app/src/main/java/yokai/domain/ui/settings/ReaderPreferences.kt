@@ -139,6 +139,32 @@ class ReaderPreferences(private val preferenceStore: PreferenceStore) {
     // EPUB specific toggles
     val enableEpubStyles: Preference<Boolean> = preferenceStore.getBoolean("pref_novel_enable_epub_css", true)
     val enableEpubJs: Preference<Boolean> = preferenceStore.getBoolean("pref_novel_enable_epub_js", false)
+    // Let source/EPUB CSS win — when on, skip the `!important` overrides and don't force the font.
+    val novelSourceCssPriority: Preference<Boolean> = preferenceStore.getBoolean("pref_novel_source_css_priority", false)
+
+    // Infinite scroll - automatically load next/previous chapters. Hayai's continuous-scroll
+    // is core (always-on in the viewer); the key is ported verbatim for tsundoku migration
+    // compat and is honored only as an explicit user override of continuous loading.
+    val novelInfiniteScroll: Preference<Boolean> = preferenceStore.getBoolean("pref_novel_infinite_scroll", false)
+
+    // Keep chapters loaded in DOM during continuous scroll (0 = unlimited; >0 caps the window).
+    val novelKeepChaptersLoaded: Preference<Int> = preferenceStore.getInt("pref_novel_keep_chapters_loaded", 0)
+
+    // Custom brightness for novel reader
+    val novelCustomBrightness: Preference<Boolean> = preferenceStore.getBoolean("pref_novel_custom_brightness", false)
+
+    // Brightness value for novel reader (-75 to 100, 0 = system)
+    val novelCustomBrightnessValue: Preference<Int> = preferenceStore.getInt("pref_novel_custom_brightness_value", 0)
+
+    // Auto-load next chapter at percentage (legacy 0 may exist; treated as default)
+    val novelAutoLoadNextChapterAt: Preference<Int> = preferenceStore.getInt("pref_novel_auto_load_next_at", 95)
+
+    // Mark chapter as read when progress reaches this percentage
+    val novelMarkAsReadThreshold: Preference<Int> = preferenceStore.getInt("pref_novel_mark_read_threshold", 95)
+
+    // If enabled, chapters that fully fit in the viewport are marked read immediately.
+    val novelMarkShortChapterAsRead: Preference<Boolean> =
+        preferenceStore.getBoolean("pref_novel_mark_short_chapter_read", true)
 
     // Custom CSS/JS stored as JSON array of {title, code} objects
     val novelCustomCss: Preference<String> = preferenceStore.getString("pref_novel_custom_css", "")

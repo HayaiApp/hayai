@@ -941,22 +941,26 @@ class ReaderViewModel(
                 readerChapter.chapter.pages_left = (100 - progressPercent).coerceIn(0, 100)
 
                 val chapterId = readerChapter.chapter.id ?: -1L
+                // Mark-read threshold is the user's novelMarkAsReadThreshold pref (a 0..100
+                // percentage; ported verbatim from tsundoku). A legacy 0 falls back to 98.
+                val markReadThreshold = readerPreferences.novelMarkAsReadThreshold.get()
+                    .let { if (it <= 0) 98 else it }
                 if (
                     sessionScrollAdvance &&
-                    progressPercent >= 98
+                    progressPercent >= markReadThreshold
                 ) {
                     sessionReachedThreshold[chapterId] = true
                 }
                 val reachedThisSession = sessionReachedThreshold[chapterId] == true
                 Logger.d {
                     "saveChapterProgress text gate chapter=$chapterId reachedThisSession=$reachedThisSession " +
-                        "sessionAdvance=$sessionScrollAdvance progress=$progressPercent"
+                        "sessionAdvance=$sessionScrollAdvance progress=$progressPercent threshold=$markReadThreshold"
                 }
                 if (
                     !readerChapter.chapter.read &&
                     sessionScrollAdvance &&
                     reachedThisSession &&
-                    progressPercent >= 98
+                    progressPercent >= markReadThreshold
                 ) {
                     Logger.d { "saveChapterProgress onChapterReadComplete fired chapter=$chapterId" }
                     onChapterReadComplete(readerChapter)

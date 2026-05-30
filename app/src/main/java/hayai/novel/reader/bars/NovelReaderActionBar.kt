@@ -16,6 +16,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -24,6 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ManageSearch
+import androidx.compose.material.icons.outlined.FastForward
+import androidx.compose.material.icons.outlined.FastRewind
 import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -98,6 +101,9 @@ fun NovelReaderActionBar(
     onScrollToTop: () -> Unit,
     onClickFindReplace: () -> Unit,
     onClickQuotes: (() -> Unit)? = null,
+    onTtsPreviousParagraph: () -> Unit = {},
+    onTtsNextParagraph: () -> Unit = {},
+    onStopTts: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -127,6 +133,24 @@ fun NovelReaderActionBar(
         ) + fadeOut(animationSpec = actionBarFadeAnimationSpec),
         modifier = modifier,
     ) {
+      Column(modifier = Modifier.fillMaxWidth()) {
+        // Inline TTS controls row: shown only while TTS is active so the user gets explicit
+        // prev/next-paragraph + an explicit Stop that fully halts playback and dismisses the
+        // row (Speaking → Stopped). Modeled on tsundoku's NovelTtsControlsOverlay but built
+        // from Hayai's own M3 components.
+        NovelTtsControlsRow(
+            visible = isTtsActive,
+            isTtsPaused = isTtsPaused,
+            onPreviousParagraph = onTtsPreviousParagraph,
+            onPauseResume = onToggleTts,
+            onNextParagraph = onTtsNextParagraph,
+            onStop = onStopTts,
+            iconTint = iconTint,
+            activeTint = activeTint,
+            rippleColor = rippleColor,
+            backgroundColor = backgroundColor,
+        )
+
         Surface(
             color = backgroundColor,
             shape = RoundedCornerShape(50.dp),
@@ -212,6 +236,79 @@ fun NovelReaderActionBar(
                     rippleColor = rippleColor,
                     iconSize = iconSize,
                     buttonSize = buttonSize,
+                )
+            }
+        }
+      }
+    }
+}
+
+/**
+ * Inline TTS transport row shown while TTS is active. Prev-paragraph / play-pause /
+ * next-paragraph mirror tsundoku's NovelTtsControlsOverlay; the trailing Stop is the
+ * explicit affordance the old single-button bar lacked — tapping it dispatches a full
+ * stop so playback halts and this row animates away (Speaking → Stopped).
+ */
+@Composable
+private fun NovelTtsControlsRow(
+    visible: Boolean,
+    isTtsPaused: Boolean,
+    onPreviousParagraph: () -> Unit,
+    onPauseResume: () -> Unit,
+    onNextParagraph: () -> Unit,
+    onStop: () -> Unit,
+    iconTint: Color,
+    activeTint: Color,
+    rippleColor: Color,
+    backgroundColor: Color,
+) {
+    val reducedMotion = isReducedMotion
+    AnimatedVisibility(
+        visible = visible,
+        enter = if (reducedMotion) EnterTransition.None else fadeIn(animationSpec = actionBarFadeAnimationSpec),
+        exit = if (reducedMotion) ExitTransition.None else fadeOut(animationSpec = actionBarFadeAnimationSpec),
+    ) {
+        Surface(
+            color = backgroundColor,
+            shape = RoundedCornerShape(50.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 4.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ActionBarButton(
+                    icon = Icons.Outlined.FastRewind,
+                    contentDescription = stringResource(MR.strings.novel_tts_prev_paragraph),
+                    onClick = onPreviousParagraph,
+                    tint = iconTint,
+                    rippleColor = rippleColor,
+                )
+                ActionBarButton(
+                    icon = if (isTtsPaused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+                    contentDescription = stringResource(MR.strings.text_to_speech),
+                    onClick = onPauseResume,
+                    tint = activeTint,
+                    rippleColor = rippleColor,
+                )
+                ActionBarButton(
+                    icon = Icons.Outlined.FastForward,
+                    contentDescription = stringResource(MR.strings.novel_tts_next_paragraph),
+                    onClick = onNextParagraph,
+                    tint = iconTint,
+                    rippleColor = rippleColor,
+                )
+                ActionBarButton(
+                    icon = Icons.Outlined.Stop,
+                    contentDescription = stringResource(MR.strings.novel_tts_stop),
+                    onClick = onStop,
+                    tint = iconTint,
+                    rippleColor = rippleColor,
                 )
             }
         }

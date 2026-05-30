@@ -11,7 +11,8 @@ import yokai.domain.ui.settings.ReaderPreferences
  * each preference applies live without a chapter reopen. Ported from Tsundoku's
  * NovelWebViewPreferenceObserver; the bucket structure is verbatim, the pref set is Hayai's.
  *
- * - [onStyleChanged]: re-applies CSS in place (font, theme, margins, colors, custom CSS, …).
+ * - [onStyleChanged]: re-applies CSS in place (font, theme, margins, colors, custom CSS,
+ *   source-CSS-priority …).
  * - [onScriptChanged]: re-injects custom JS.
  * - [onChapterReloadRequested]: prefs that change the parsed CONTENT (EPUB toggles, regex,
  *   lowercase, normalize, auto-split, raw HTML, hide-title strip) — caller must clear the
@@ -19,6 +20,8 @@ import yokai.domain.ui.settings.ReaderPreferences
  * - [onBlockMediaChanged]: image/media blocking toggle.
  * - [onTtsSettingsChanged]: TTS voice/speed/pitch.
  * - [onKeepScreenOnChanged]: the novel-specific keep-screen-on window flag.
+ * - [onBrightnessChanged]: re-applies the novel custom brightness (toggle + value).
+ * - [onChapterWindowChanged]: trims the loaded-chapter DOM window when the cap changes.
  */
 internal class NovelWebViewPreferenceObserver(
     private val preferences: ReaderPreferences,
@@ -29,6 +32,8 @@ internal class NovelWebViewPreferenceObserver(
     private val onBlockMediaChanged: (Boolean) -> Unit,
     private val onTtsSettingsChanged: () -> Unit,
     private val onKeepScreenOnChanged: (Boolean) -> Unit,
+    private val onBrightnessChanged: () -> Unit,
+    private val onChapterWindowChanged: () -> Unit,
 ) {
 
     fun observe() {
@@ -52,6 +57,7 @@ internal class NovelWebViewPreferenceObserver(
                 preferences.novelCustomCssSnippets.changes().drop(1),
                 preferences.novelUseOriginalFonts.changes().drop(1),
                 preferences.novelTextSelectable.changes().drop(1),
+                preferences.novelSourceCssPriority.changes().drop(1),
             ).collect { onStyleChanged() }
         }
 
@@ -97,6 +103,19 @@ internal class NovelWebViewPreferenceObserver(
             preferences.novelKeepScreenOn.changes()
                 .drop(1)
                 .collect { keepOn -> onKeepScreenOnChanged(keepOn) }
+        }
+
+        scope.launch {
+            merge(
+                preferences.novelCustomBrightness.changes().drop(1),
+                preferences.novelCustomBrightnessValue.changes().drop(1),
+            ).collect { onBrightnessChanged() }
+        }
+
+        scope.launch {
+            preferences.novelKeepChaptersLoaded.changes()
+                .drop(1)
+                .collect { onChapterWindowChanged() }
         }
     }
 

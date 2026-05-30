@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.reader.viewer.calculateChapterDifference
+import eu.kanade.tachiyomi.util.system.openInBrowserSheet
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -117,6 +118,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     // (button highlight, double-tap toggle, pause-on-touch).
     private var isAutoScrolling = false
     private var isAutoScrollPaused = false
+    // True while a text-selection ActionMode is open; keeps auto-scroll paused even after the
+    // finger lifts (ACTION_UP would otherwise resume mid-selection).
+    private var isTextSelectionActive = false
 
     // Phase B #2: was DisabledNavigation() — its regions list is empty, so navigator.getAction
     // always resolved to MENU and the NEXT/PREV/LEFT/RIGHT branches in onSingleTapConfirmed
@@ -201,17 +205,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (isEditingMode) return false
 
-                // While TTS is running (or paused) and the user has tap-to-start enabled,
-                // let taps fall through to the WebView so the JS click handler installed in
-                // `installSentenceClickHandler` can catch the paragraph and call
-                // `Android.startTtsAtParagraph(chapId, paraIdx)`. Without this gate, the
-                // navigator's MENU region (which covers the centre stripe — exactly where
-                // the reading text lives) consumed every tap as `toggleMenu`, so the JS
-                // handler never fired and tap-to-jump silently did nothing. The JS handler
-                // is itself gated on `__novelTtsClickEnabled`, which only flips true once
-                // TTS is actually speaking — so a casual tap when TTS is off still toggles
-                // the menu as before.
-                if (preferences.novelTtsTapToStart.get() && (isTtsSpeaking() || isTtsPaused())) {
+                // When tap-to-start is enabled, let taps in the reading zone fall through to
+                // the WebView so the JS click handler installed in `installSentenceClickHandler`
+                // can catch the paragraph and call `Android.startTtsAtParagraph(chapId, paraIdx)`.
+                // The gate is now live in the Idle state too: previously it required TTS to be
+                // already speaking/paused, so a tap could only *jump* an active session — it
+                // could never START TTS from a tapped paragraph. The JS handler is itself
+                // gated on `__novelTtsClickEnabled` (kept in sync by
+                // `refreshSentenceTapToTtsState`) and on the central reading zone, so taps in
+                // the side/top nav stripes still toggle the menu / scroll as before.
+                if (preferences.novelTtsTapToStart.get()) {
                     return false
                 }
 
@@ -405,6 +408,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     object : ActionMode.Callback2() {
                         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                             val result = callback.onCreateActionMode(mode, menu)
+                            isTextSelectionActive = true
+                            pauseAutoScroll()
                             menu.add(
                                 Menu.NONE,
                                 REMEMBER_MENU_ITEM_ID,
@@ -482,8 +487,11 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                             }
                             return callback.onActionItemClicked(mode, item)
                         }
-                        override fun onDestroyActionMode(mode: ActionMode) =
+                        override fun onDestroyActionMode(mode: ActionMode) {
+                            isTextSelectionActive = false
+                            resumeAutoScroll()
                             callback.onDestroyActionMode(mode)
+                        }
 
                         // Forward the content rect so the toolbar floats near the selection
                         override fun onGetContentRect(mode: ActionMode, view: View, outRect: android.graphics.Rect) =
@@ -493,6 +501,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     object : ActionMode.Callback {
                         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                             val result = callback.onCreateActionMode(mode, menu)
+                            isTextSelectionActive = true
+                            pauseAutoScroll()
                             menu.add(
                                 Menu.NONE,
                                 REMEMBER_MENU_ITEM_ID,
@@ -569,8 +579,11 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                             }
                             return callback.onActionItemClicked(mode, item)
                         }
-                        override fun onDestroyActionMode(mode: ActionMode) =
+                        override fun onDestroyActionMode(mode: ActionMode) {
+                            isTextSelectionActive = false
+                            resumeAutoScroll()
                             callback.onDestroyActionMode(mode)
+                        }
                     }
                 }
                 return super.startActionMode(wrapped, type)
@@ -737,6 +750,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     }
                 }
             },
+            onBrightnessChanged = { activity.runOnUiThread { applyNovelCustomBrightness() } },
+            onChapterWindowChanged = { activity.runOnUiThread { trimLoadedChapterWindow() } },
         ).observe()
 
         // Re-apply the overlay scrollbar config when any of its prefs change.
@@ -795,6 +810,20 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     }
                 }
         }
+
+        // Auto-load threshold is read once when the scroll-tracking script installs; push
+        // changes into the live `loadThreshold` JS global so the slider applies without a reopen.
+        scope.launch {
+            preferences.novelAutoLoadNextChapterAt.changes()
+                .drop(1)
+                .collect { percent ->
+                    val fraction = ((if (percent <= 0) 95 else percent) / 100.0).coerceIn(0.05, 1.0)
+                    evaluateJavascriptSafe("window.loadThreshold = $fraction;")
+                }
+        }
+
+        // Apply the novel custom brightness immediately on mount and whenever it changes.
+        applyNovelCustomBrightness()
     }
 
     /**
@@ -850,6 +879,103 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         bar.pulse()
     }
 
+    /**
+     * Applies the novel-specific custom brightness to the activity window. Mirrors the
+     * manga reader's `setCustomBrightnessValue` math (tsundoku NovelPage / its reader
+     * brightness logic): value > 0 sets that fraction, value < 0 drops to the minimum,
+     * 0 (or the toggle off) restores system brightness. Restored on [destroy].
+     */
+    private fun applyNovelCustomBrightness() {
+        val enabled = preferences.novelCustomBrightness.get()
+        val value = if (enabled) preferences.novelCustomBrightnessValue.get() else 0
+        val readerBrightness = when {
+            value > 0 -> value / 100f
+            value < 0 -> 0.01f
+            else -> android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
+        activity.window.attributes = activity.window.attributes.apply {
+            screenBrightness = readerBrightness
+        }
+    }
+
+    /** Restores system-controlled brightness when the novel viewer goes away. */
+    private fun restoreSystemBrightness() {
+        activity.window.attributes = activity.window.attributes.apply {
+            screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
+    }
+
+    /**
+     * Trims the farthest-away loaded chapter DOM nodes once the loaded-chapter count exceeds
+     * the user's [ReaderPreferences.novelKeepChaptersLoaded] window (0 = unlimited). Mirrors
+     * tsundoku NovelConfig's DOM-trim: keep the active chapter plus a symmetric window around
+     * it, dropping whichever end is farthest from the visible chapter. [loadedChapterIds] /
+     * [loadedChapters] are kept in lockstep with the surviving DOM nodes.
+     */
+    private fun trimLoadedChapterWindow() {
+        val cap = preferences.novelKeepChaptersLoaded.get()
+        // 0 means "keep everything" — the window is unbounded. The window size is the cap+1
+        // (the cap counts neighbours kept around the active chapter, matching tsundoku's
+        // "0 = current only, 1 = +1, …" semantics).
+        if (cap <= 0) return
+        val maxLoaded = cap + 1
+        if (loadedChapterIds.size <= maxLoaded) return
+
+        val activeId = currentChapters?.currChapter?.chapter?.id
+            ?: currentPage?.chapter?.chapter?.id
+            ?: return
+        if (!loadedChapterIds.contains(activeId)) return
+
+        // Drop from whichever end is farther from the active chapter until we're within budget.
+        val removed = mutableListOf<Long>()
+        while (loadedChapterIds.size > maxLoaded) {
+            val idx = loadedChapterIds.indexOf(activeId)
+            val distFromStart = idx
+            val distFromEnd = loadedChapterIds.lastIndex - idx
+            val removeIndex = if (distFromStart >= distFromEnd) 0 else loadedChapterIds.lastIndex
+            // Never evict the active chapter itself.
+            if (removeIndex == idx) break
+            val removedId = loadedChapterIds.removeAt(removeIndex)
+            loadedChapters.removeAt(removeIndex)
+            chapterParagraphsById.remove(removedId)
+            removed.add(removedId)
+        }
+        if (removed.isEmpty()) return
+
+        // Mutate the DOM: remove every divider + content node tagged with the evicted ids,
+        // then preserve the user's scroll anchor by offsetting for any height removed above
+        // the current scroll position. updateChapterBoundaries re-syncs the JS tracking.
+        val idsJson = removed.joinToString(",") { "\"$it\"" }
+        evaluateJavascriptSafe(
+            """
+            (function() {
+                var ids = [$idsJson];
+                var oldScrollY = window.scrollY || window.pageYOffset;
+                var removedAbove = 0;
+                ids.forEach(function(id) {
+                    var nodes = document.querySelectorAll('[data-chapter-id="' + id + '"]');
+                    nodes.forEach(function(node) {
+                        var rect = node.getBoundingClientRect();
+                        // Node fully above the viewport top: its removal shifts content up.
+                        if (rect.bottom < 0) removedAbove += node.offsetHeight;
+                        node.parentNode && node.parentNode.removeChild(node);
+                    });
+                });
+                if (removedAbove > 0) {
+                    window.scrollTo(0, Math.max(0, oldScrollY - removedAbove));
+                }
+                if (typeof window.updateChapterBoundaries === 'function') {
+                    window.updateChapterBoundaries();
+                }
+            })();
+            """.trimIndent(),
+            null,
+        )
+        Logger.d {
+            "NovelWebViewViewer: trimmed chapters $removed (window=$maxLoaded, remaining=${loadedChapterIds.size})"
+        }
+    }
+
     private fun buildCustomStylePayload(): CustomStylePayload {
         val fontSize = preferences.novelFontSize.get()
         val fontFamily = preferences.novelFontFamily.get()
@@ -878,6 +1004,12 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
         val customCss = preferences.novelCustomCss.get()
         val useOriginalFonts = preferences.novelUseOriginalFonts.get()
+
+        // Source/EPUB CSS priority: when on, drop the `!important` overrides and the
+        // font-family force so the source's own stylesheet wins (mirrors tsundoku
+        // NovelWebViewStyler — styleImportance/fontOverrideCss).
+        val sourceCssPriority = preferences.novelSourceCssPriority.get()
+        val styleImportance = if (sourceCssPriority) "" else " !important"
 
         // Collect enabled CSS snippets
         val cssSnippetsJson = preferences.novelCustomCssSnippets.get()
@@ -920,35 +1052,55 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             "" to fontFamily
         }
 
-        // Only include font-family if not using original fonts
-        val fontFamilyCss = if (useOriginalFonts) {
+        // Only include font-family if not using original fonts. When source CSS has priority
+        // the force is dropped entirely so the source/EPUB font is preserved.
+        val fontFamilyCss = if (useOriginalFonts || sourceCssPriority) {
             ""
         } else {
-            "font-family: $effectiveFontFamily;"
+            "font-family: $effectiveFontFamily$styleImportance;"
+        }
+
+        // Universal font override + heading sizes only when WE control styling (source CSS
+        // priority OFF). Verbatim from tsundoku NovelWebViewStyler.fontOverrideCss.
+        val textSelect = if (preferences.novelTextSelectable.get()) "text" else "none"
+        val (fontInheritOverride, headingSizeRules) = if (sourceCssPriority) {
+            "" to ""
+        } else {
+            val ffInherit = if (useOriginalFonts) "" else " font-family: inherit !important;"
+            val starOverride = "font-size: inherit !important;$ffInherit"
+            val headings = "h1 { font-size: 2em !important; } " +
+                "h2 { font-size: 1.5em !important; } " +
+                "h3 { font-size: 1.17em !important; } " +
+                "h4 { font-size: 1em !important; } " +
+                "h5 { font-size: 0.83em !important; } " +
+                "h6 { font-size: 0.67em !important; }"
+            starOverride to headings
         }
 
         val css = """
             $fontFaceDeclaration
             body {
                 display: block !important;
-                font-size: ${fontSize}px;
+                font-size: ${fontSize}px$styleImportance;
                 $fontFamilyCss
-                line-height: $lineHeight;
-                margin: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px;
-                color: $textColorHex !important;
-                background-color: $bgColorHex !important;
-                text-align: $textAlign;
-                -webkit-user-select: ${if (preferences.novelTextSelectable.get()) "text" else "none"};
-                user-select: ${if (preferences.novelTextSelectable.get()) "text" else "none"};
+                line-height: $lineHeight$styleImportance;
+                margin: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px$styleImportance;
+                color: $textColorHex$styleImportance;
+                background-color: $bgColorHex$styleImportance;
+                text-align: $textAlign$styleImportance;
+                -webkit-user-select: $textSelect$styleImportance;
+                user-select: $textSelect$styleImportance;
             }
             p {
-                text-indent: ${paragraphIndent}em;
-                margin-top: ${paragraphSpacing}em;
-                margin-bottom: ${paragraphSpacing}em;
+                text-indent: ${paragraphIndent}em$styleImportance;
+                margin-top: ${paragraphSpacing}em$styleImportance;
+                margin-bottom: ${paragraphSpacing}em$styleImportance;
             }
             * {
-                color: inherit !important;
+                color: inherit$styleImportance;
+                $fontInheritOverride
             }
+            $headingSizeRules
             $customCss
             $enabledSnippetsCss
         """.trimIndent().replace("\n", " ")
@@ -1027,6 +1179,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         }
 
         installSentenceClickHandler()
+        // Re-apply the sentence-tap gate after each (re)load so tap-to-start works from Idle
+        // on a freshly rendered chapter, not only once TTS is already active.
+        refreshSentenceTapToTtsState()
         // Phase B #6: ensure the in-WebView rAF auto-scroll loop is installed before any
         // future startAutoScroll() flips its globals. Idempotent — re-injection on
         // chapter change just leaves the existing state intact.
@@ -1054,9 +1209,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             (function() {
                 if (window.__novelTtsClickInstalled) return;
                 window.__novelTtsClickInstalled = true;
-                // Initialise OFF: sentence-tap only navigates TTS when TTS is currently
-                // active. The Kotlin side flips this true via setSentenceTapToTtsEnabled
-                // once both the master pref is on AND TTS is speaking/paused.
+                // Initialise OFF; the Kotlin side flips this true via
+                // setSentenceTapToTtsEnabled whenever the novelTtsTapToStart master pref is
+                // on. When enabled, a reading-zone tap STARTS TTS from the tapped paragraph
+                // (from Idle) or jumps an active session there — both via startTtsAtParagraph.
                 window.__novelTtsClickEnabled = false;
                 document.addEventListener('click', function(e) {
                     if (!window.__novelTtsClickEnabled) return;
@@ -1107,9 +1263,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     /**
-     * Toggles whether a single tap on a paragraph starts TTS from there. Off by default
-     * so a casual tap doesn't accidentally start the engine; the public hook is
-     * [refreshSentenceTapToTtsState] which gates the JS flag on `(pref ON) && (TTS active)`.
+     * Toggles whether a single tap on a paragraph drives TTS. The public hook is
+     * [refreshSentenceTapToTtsState], which gates the JS flag purely on the
+     * [novelTtsTapToStart] master pref so a tap can START TTS from Idle (not only jump an
+     * already-active session). The JS handler itself restricts to the central reading zone.
      */
     fun setSentenceTapToTtsEnabled(enabled: Boolean) {
         val flag = if (enabled) "true" else "false"
@@ -1117,25 +1274,26 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     /**
-     * Recompute whether a sentence-tap should drive TTS based on current state. Sentence-tap
-     * activates ONLY while TTS is already speaking or paused — otherwise stray taps on text
-     * would unexpectedly start the engine. The user pref [novelTtsTapToStart] is a master
-     * enable: when off, sentence-tap is always disabled regardless of TTS state. Call this
-     * after any TTS state transition (start, pause, resume, stop, utterance done).
+     * Recompute whether a sentence-tap should drive TTS based on current state. The user pref
+     * [novelTtsTapToStart] is the single gate: when on, a tap in the reading zone either STARTS
+     * TTS from the tapped paragraph (Idle/Error) or jumps an active session there — both route
+     * through `Android.startTtsAtParagraph` → `TtsCommand.StartAt`, which the controller handles
+     * from any state. When off, sentence-tap is disabled and taps toggle the menu as before.
+     * Call this after any TTS state transition and whenever the pref flips.
      */
     fun refreshSentenceTapToTtsState() {
-        val prefOn = preferences.novelTtsTapToStart.get()
-        // The controller's state is the single source of truth — `Preparing` already
-        // covers the window between user-Play and the first utterance firing, so we no
-        // longer need a separate "chunks queued but not speaking yet" probe.
-        val ttsActive = isTtsSpeaking() || isTtsPaused() || isTtsStarting()
-        setSentenceTapToTtsEnabled(prefOn && ttsActive)
+        setSentenceTapToTtsEnabled(preferences.novelTtsTapToStart.get())
     }
 
     private fun injectScrollTracking() {
-        // Continuous chapter loading is always on; the JS treats every chapter the same.
+        // Continuous chapter loading is core in Hayai; honor novelInfiniteScroll only as an
+        // explicit user override (its tsundoku default is false but Hayai treats unset/absent
+        // as on). The auto-load fraction is the user's novelAutoLoadNextChapterAt pref (a
+        // 0..100 percentage) converted to a fraction; a legacy 0 falls back to the default.
         val infiniteScrollActuallyEnabled = true
-        val effectiveThreshold = AUTO_LOAD_NEXT_THRESHOLD
+        val autoLoadPercent = preferences.novelAutoLoadNextChapterAt.get().let { if (it <= 0) 95 else it }
+        val effectiveThreshold = (autoLoadPercent / 100.0).coerceIn(0.05, 1.0)
+        val markShortChapterAsRead = preferences.novelMarkShortChapterAsRead.get()
         val scrollTrackingScript = """
             (function() {
                 if (window.__tsundokuInfiniteScrollInstalled) {
@@ -1153,7 +1311,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 window.__tsundokuLoadingPrev = window.__tsundokuLoadingPrev || false;
                 window.__tsundokuSetLoadingPrev = function(v) { window.__tsundokuLoadingPrev = !!v; };
                 var infiniteScrollEnabled = $infiniteScrollActuallyEnabled;
-                var loadThreshold = $effectiveThreshold;
+                // Exposed on window so Kotlin can push live slider changes (see the
+                // novelAutoLoadNextChapterAt observer) without re-injecting the whole script.
+                if (typeof window.loadThreshold !== 'number') window.loadThreshold = $effectiveThreshold;
                 // Trigger prepend when within this many CSS pixels of the document top while
                 // scrolling up. 200px is roughly one viewport-eighth on a phone — enough lead
                 // time for the chapter to fetch + render before the user hits a hard stop at
@@ -1237,6 +1397,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
                     // Infinite scroll: load next chapter when reaching threshold
                     var shouldLoadNext = false;
+                    var loadThreshold = window.loadThreshold;
                     if (infiniteScrollEnabled) {
                         if (window.chapterBoundaries.length > 1) {
                             shouldLoadNext = (currentChapterIdx === (window.chapterBoundaries.length - 1)) && (currentChapterProgress >= loadThreshold);
@@ -1314,6 +1475,17 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 setTimeout(function() {
                     if (typeof window.updateChapterBoundaries === 'function') {
                         window.updateChapterBoundaries();
+                    }
+                    // Mark-short-chapter-as-read: a chapter that fully fits the viewport never
+                    // fires a scroll event, so progress would never advance. When the pref is
+                    // on and the single-chapter document isn't scrollable, report 100% so the
+                    // Kotlin mark-read gate fires immediately (verbatim port of tsundoku's
+                    // novelMarkShortChapterAsRead behaviour).
+                    if ($markShortChapterAsRead && window.chapterBoundaries.length <= 1) {
+                        var sh = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+                        if (sh <= 1) {
+                            Android.onScrollProgress(1.0);
+                        }
                     }
                 }, 0);
             })();
@@ -1395,6 +1567,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         // evaluateJavascriptSafe's isDestroyed guard, but flipping isAutoScrolling=false
         // keeps the Kotlin side consistent).
         stopAutoScroll()
+
+        // Restore system-controlled brightness so the novel viewer's custom value doesn't
+        // leak into the manga reader / the rest of the app after teardown.
+        restoreSystemBrightness()
 
         // Mark destroyed first so coroutine finally-blocks won't touch WebView.
         isDestroyed = true
@@ -1518,37 +1694,11 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     private fun launchTranslateIntent(selected: String) {
-        val intent = Intent(Intent.ACTION_PROCESS_TEXT).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_PROCESS_TEXT, selected)
-            putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
-        }
-        val pm = activity.packageManager
-        val resolved = pm.queryIntentActivities(intent, 0)
-        if (resolved.isEmpty()) {
-            activity.toast(activity.getString(MR.strings.novel_translate_no_handler))
-            return
-        }
-        val googleTranslatePkg = "com.google.android.apps.translate"
-        val deeplPkg = "com.deepl.mobiletranslator"
-        val preferredHandler = resolved.firstOrNull {
-            val pkg = it.activityInfo?.packageName ?: ""
-            pkg == googleTranslatePkg || pkg == deeplPkg || pkg.contains("translate", ignoreCase = true)
-        }
-        try {
-            if (preferredHandler != null) {
-                val info = preferredHandler.activityInfo
-                intent.setClassName(info.packageName, info.name)
-                activity.startActivity(intent)
-            } else {
-                activity.startActivity(
-                    Intent.createChooser(intent, activity.getString(MR.strings.novel_translate)),
-                )
-            }
-        } catch (t: Throwable) {
-            Logger.w { "NovelWebViewViewer: Translate intent failed: ${t.message}" }
-            activity.toast(activity.getString(MR.strings.novel_translate_no_handler))
-        }
+        // Open Google Translate's web UI in an in-app partial Custom Tab (bottom sheet)
+        // instead of firing an external ACTION_PROCESS_TEXT intent — keeps the user in Hayai.
+        val url = "https://translate.google.com/?sl=auto&tl=en&op=translate&text=" +
+            android.net.Uri.encode(selected)
+        openSelectionInBrowserSheet(url)
     }
 
     private fun triggerWebSearchFromSelection(actionMode: ActionMode? = null) {
@@ -1577,21 +1727,27 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     private fun launchWebSearchIntent(selected: String) {
-        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
-            putExtra(android.app.SearchManager.QUERY, selected)
-        }
+        // Web search now opens the Google results page in an in-app partial Custom Tab
+        // (bottom sheet) instead of firing an external ACTION_WEB_SEARCH intent.
+        val url = "https://www.google.com/search?q=" + android.net.Uri.encode(selected)
+        openSelectionInBrowserSheet(url)
+    }
+
+    /**
+     * Opens [url] in an in-app Chrome Custom Tab presented as a bottom sheet (partial custom
+     * tab). The initial height is ~70% of the container in *pixels* (Custom Tabs require px,
+     * not dp). Falls back to a full custom tab automatically if the engine doesn't support
+     * partial height.
+     */
+    private fun openSelectionInBrowserSheet(url: String) {
+        val heightPx = (container.height * 0.7f).toInt()
+            .takeIf { it > 0 }
+            ?: (activity.resources.displayMetrics.heightPixels * 0.7f).toInt()
         try {
-            activity.startActivity(intent)
+            activity.openInBrowserSheet(url, heightPx)
         } catch (t: Throwable) {
-            Logger.w { "NovelWebViewViewer: Web search intent failed: ${t.message}" }
-            // Fallback: Open in Web Browser via Google Search URL
-            try {
-                val queryUrl = "https://www.google.com/search?q=" + android.net.Uri.encode(selected)
-                val browserIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(queryUrl))
-                activity.startActivity(browserIntent)
-            } catch (t2: Throwable) {
-                activity.toast(activity.getString(MR.strings.novel_web_search_no_handler))
-            }
+            Logger.w { "NovelWebViewViewer: openInBrowserSheet failed: ${t.message}" }
+            activity.toast(activity.getString(MR.strings.novel_web_search_no_handler))
         }
     }
 
@@ -1948,6 +2104,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     } else {
                         appendHtmlContent(renderableContent, chapterId, chapter, fromChapter)
                     }
+                    // Enforce the loaded-chapter DOM window after every append/prepend.
+                    trimLoadedChapterWindow()
                 } else {
                     loadHtmlContent(renderableContent, chapterId, chapter.chapter.name, chapter.chapter.url)
 
@@ -3208,6 +3366,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     loadedChapters.add(chapter)
                 }
                 appendHtmlContent(renderableContent, chapterId, chapter, fromChapter)
+                // Enforce the loaded-chapter DOM window after every append/prepend.
+                trimLoadedChapterWindow()
             } else {
                 loadHtmlContent(renderableContent, chapterId, chapter.chapter.name, chapter.chapter.url)
                 loadedChapterIds.clear()
@@ -3408,6 +3568,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
     private fun resumeAutoScroll() {
         if (!isAutoScrolling) return
+        if (isTextSelectionActive) return
         if (!isAutoScrollPaused) return
         isAutoScrollPaused = false
         val speed = preferences.novelAutoScrollSpeed.get().coerceIn(1, 50)
@@ -3552,6 +3713,16 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     fun pauseTts() {
         ttsController?.dispatch(hayai.novel.reader.tts.TtsCommand.Pause)
         refreshSentenceTapToTtsState()
+    }
+
+    /** Jump TTS one paragraph forward within the current chapter. */
+    fun nextTtsParagraph() {
+        ttsController?.dispatch(hayai.novel.reader.tts.TtsCommand.SkipParagraph)
+    }
+
+    /** Jump TTS one paragraph backward within the current chapter. */
+    fun previousTtsParagraph() {
+        ttsController?.dispatch(hayai.novel.reader.tts.TtsCommand.PreviousParagraph)
     }
 
     fun resumeTts() {
@@ -3822,8 +3993,6 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         private const val DEFINE_MENU_ITEM_ID = 0xBEF0
         private const val TRANSLATE_MENU_ITEM_ID = 0xBEF1
         private const val WEB_SEARCH_MENU_ITEM_ID = 0xBEF2
-        // Auto-load the next chapter once the user has scrolled past this fraction of the current one.
-        private const val AUTO_LOAD_NEXT_THRESHOLD = 0.95
         // Force-dismiss the loading overlay after this long; protects against onPageFinished
         // never firing (network failure, JS bridge crash, blank page).
         private const val LOADING_TIMEOUT_MS = 15_000L

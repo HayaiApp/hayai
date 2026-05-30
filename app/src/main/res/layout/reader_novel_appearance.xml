@@ -153,5 +153,13 @@
             android:layout_marginTop="16dp"
             android:text="@string/novel_enable_epub_js"
             android:textColor="?attr/colorOnBackground" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/source_css_priority"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/novel_source_css_priority"
+            android:textColor="?attr/colorOnBackground" />
     </LinearLayout>
 </eu.kanade.tachiyomi.ui.reader.settings.NovelAppearanceView>
