@@ -1965,6 +1965,8 @@
     <string name="manga_interval_mode_automatic">Automatic</string>
     <string name="pref_update_only_in_release_period">Outside their expected update period</string>
     <string name="skipped_reason_not_in_release_period">Skipped because no new chapter is expected yet</string>
+    <string name="pref_smart_update_always_update_categories">Always update these categories</string>
+    <string name="always_updated_categories_">Always updated: %1$s</string>
 
     <!-- Novel reader: continuous-scroll + TTS controls -->
     <string name="novel_continuous_scroll_section">Continuous scroll</string>

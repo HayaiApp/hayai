@@ -219,6 +219,9 @@ class PreferencesHelper(val context: Context, val preferenceStore: PreferenceSto
     fun libraryUpdateCategories() = preferenceStore.getStringSet("library_update_categories", emptySet())
     fun libraryUpdateCategoriesExclude() = preferenceStore.getStringSet("library_update_categories_exclude", emptySet())
 
+    // Category IDs whose manga always update, never skipped by MANGA_OUTSIDE_RELEASE_PERIOD.
+    fun libraryUpdateSmartUpdateCategoriesExclude() = preferenceStore.getStringSet("library_update_smart_update_categories_exclude", emptySet())
+
     fun libraryLayout() = preferenceStore.getInt(Keys.libraryLayout, LibraryItem.LAYOUT_COMFORTABLE_GRID)
 
     fun libraryDisplayMode() = preferenceStore.getInt(Keys.libraryDisplayMode, LibraryItem.DISPLAY_MODE_CONTINUOUS)

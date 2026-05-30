@@ -485,6 +485,9 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
 
     private fun filterMangaToUpdate(mangaToAdd: List<LibraryManga>): List<LibraryManga> {
         val restrictions = preferences.libraryUpdateMangaRestriction().get()
+        // Categories whose manga always update, bypassing the release-period skip.
+        val smartUpdateExcludedCategories =
+            preferences.libraryUpdateSmartUpdateCategoriesExclude().get().mapNotNull { it.toIntOrNull() }.toSet()
         // Ensure a valid release-prediction window for queue paths that run before doWork().
         if (fetchWindow.first == 0L && fetchWindow.second == 0L) {
             fetchWindow = fetchInterval.getWindow(ZonedDateTime.now())
@@ -519,7 +522,9 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 MANGA_NON_READ in restrictions && manga.totalChapters > 0 && !manga.hasRead -> {
                     skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_started)
                 }
-                MANGA_OUTSIDE_RELEASE_PERIOD in restrictions && manga.manga.next_update > fetchWindow.second -> {
+                MANGA_OUTSIDE_RELEASE_PERIOD in restrictions &&
+                    manga.category !in smartUpdateExcludedCategories &&
+                    manga.manga.next_update > fetchWindow.second -> {
                     skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_in_release_period)
                 }
                 manga.manga.update_strategy != UpdateStrategy.ALWAYS_UPDATE -> {
