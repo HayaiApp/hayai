@@ -87,6 +87,7 @@ import yokai.domain.manga.interactor.GetManga
 import yokai.domain.manga.interactor.InsertManga
 import yokai.domain.manga.interactor.UpdateManga
 import yokai.domain.manga.models.MangaUpdate
+import yokai.domain.stats.interactor.SetChapterWordCount
 import yokai.domain.storage.StorageManager
 import yokai.domain.track.interactor.GetTrack
 import yokai.i18n.MR
@@ -115,6 +116,8 @@ class ReaderViewModel(
     private val updateManga: UpdateManga by injectLazy()
     private val getHistory: GetHistory by injectLazy()
     private val upsertHistory: UpsertHistory by injectLazy()
+    // Lazy: only used on the novel mark-read path to record per-chapter word counts for stats.
+    private val setChapterWordCount: SetChapterWordCount by injectLazy()
     private val getTrack: GetTrack by injectLazy()
     // Lazy because we only need it for novel-specific paths (orientation default, etc.).
     private val readerPreferences: yokai.domain.ui.settings.ReaderPreferences by injectLazy()
@@ -991,6 +994,7 @@ class ReaderViewModel(
 
     private suspend fun onChapterReadComplete(readerChapter: ReaderChapter) {
         readerChapter.chapter.read = true
+        recordNovelWordCount(readerChapter)
         updateTrackChapterAfterReading(readerChapter)
         deleteChapterIfNeeded(readerChapter)
 
@@ -1011,6 +1015,39 @@ class ReaderViewModel(
                 }
             }
         updateChapter.awaitAll(duplicateUnreadChapters)
+    }
+
+    /**
+     * Persists the word count of a just-read novel chapter for reading stats. Counted once here,
+     * off-main-thread, from the already-loaded chapter text (no re-fetch, no re-read on render);
+     * stats later SUM the recorded values via SQL. No-op for image sources or unloaded text.
+     */
+    private suspend fun recordNovelWordCount(readerChapter: ReaderChapter) {
+        if (source !is TextSource) return
+        val chapterId = readerChapter.chapter.id ?: return
+        val html = readerChapter.pages?.firstOrNull()?.text ?: return
+        if (html.isBlank()) return
+        val wordCount = countWords(html)
+        if (wordCount <= 0) return
+        setChapterWordCount.await(chapterId, wordCount.toLong())
+    }
+
+    /** Strips HTML tags/entities then counts whitespace-delimited tokens. */
+    private fun countWords(html: String): Int {
+        val text = html
+            .replace(Regex("<[^>]+>"), " ")
+            .replace(Regex("&[a-zA-Z]+;|&#\\d+;"), " ")
+        var count = 0
+        var inWord = false
+        for (ch in text) {
+            if (ch.isWhitespace()) {
+                inWord = false
+            } else if (!inWord) {
+                inWord = true
+                count++
+            }
+        }
+        return count
     }
 
     fun restartReadTimer() {

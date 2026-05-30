@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS novel_chapter_stats(
+    chapter_id INTEGER NOT NULL PRIMARY KEY,
+    word_count INTEGER NOT NULL,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);

@@ -7,6 +7,7 @@ import yokai.data.extension.repo.ExtensionRepoRepositoryImpl
 import yokai.data.history.HistoryRepositoryImpl
 import yokai.data.library.custom.CustomMangaRepositoryImpl
 import yokai.data.recents.RecentsHiddenRepositoryImpl
+import yokai.data.stats.NovelStatsRepositoryImpl
 import yokai.data.manga.EhFavoritesRepositoryImpl
 import yokai.data.manga.MangaRepositoryImpl
 import yokai.data.manga.MergedMangaRepositoryImpl
@@ -55,6 +56,9 @@ import yokai.domain.recents.interactor.GetRecents
 import yokai.domain.recents.interactor.HideRecents
 import yokai.domain.recents.interactor.UnhideRecents
 import yokai.domain.source.browse.filter.FilterSerializer
+import yokai.domain.stats.NovelStatsRepository
+import yokai.domain.stats.interactor.GetNovelStats
+import yokai.domain.stats.interactor.SetChapterWordCount
 import yokai.domain.source.browse.filter.SavedSearchRepository
 import yokai.domain.source.browse.filter.interactor.DeleteSavedSearch
 import yokai.domain.source.browse.filter.interactor.GetSavedSearch
@@ -111,6 +115,10 @@ fun domainModule() = module {
     single<HistoryRepository> { HistoryRepositoryImpl(get()) }
     factory { GetHistory(get()) }
     factory { UpsertHistory(get()) }
+
+    single<NovelStatsRepository> { NovelStatsRepositoryImpl(get()) }
+    factory { GetNovelStats(get()) }
+    factory { SetChapterWordCount(get()) }
 
     factory { GetRecents(get(), get()) }
 

@@ -20,6 +20,14 @@
         android:paddingBottom="@dimen/marginSmall">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/novel_stats_layout"
+            style="@style/Widget.Tachiyomi.Button.OutlinedButton.Icon"
+            android:backgroundTint="?background"
+            android:layout_gravity="end"
+            android:text="@string/novel_statistics"
+            app:icon="@drawable/ic_book_24dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/view_detail_layout"
             style="@style/Widget.Tachiyomi.Button.OutlinedButton.Icon"
             android:backgroundTint="?background"

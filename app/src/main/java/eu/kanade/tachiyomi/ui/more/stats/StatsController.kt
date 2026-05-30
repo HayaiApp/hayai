@@ -56,6 +56,9 @@ class StatsController :
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
         scrollViewWith(binding.statsScrollView, true)
+        binding.novelStatsLayout.setOnClickListener {
+            router.pushController(NovelStatsController().withFadeTransaction())
+        }
         viewScope.launchUI {
             presenter.load()
             handleGeneralStats()

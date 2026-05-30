@@ -1,0 +1,108 @@
+-- Per-chapter word count, populated incrementally by the novel reader the first time a chapter
+-- is marked read. Kept in a side table (not a `chapters` column) so the existing positional
+-- `chapters` SELECT */mappers keep their arity. Stats SUM over this via a single aggregate query
+-- rather than re-reading any chapter body.
+CREATE TABLE novel_chapter_stats(
+    chapter_id INTEGER NOT NULL PRIMARY KEY,
+    word_count INTEGER NOT NULL,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id)
+    ON DELETE CASCADE
+);
+
+upsertWordCount:
+INSERT INTO novel_chapter_stats(chapter_id, word_count)
+VALUES (:chapterId, :wordCount)
+ON CONFLICT(chapter_id)
+DO UPDATE SET word_count = :wordCount
+WHERE chapter_id = :chapterId;
+
+-- All aggregates below are scoped to a caller-supplied set of novel source ids
+-- (`mangas.source IN :sourceIds`) so they never count manga. They run as plain SQL
+-- COUNT/SUM/GROUP BY — no row materialization on the caller side.
+
+-- Novels in the library (favorites only).
+libraryNovelCount:
+SELECT count(*) AS count
+FROM mangas
+WHERE favorite = 1 AND source IN :sourceIds;
+
+-- Novels with at least one read chapter (i.e. "started").
+startedNovelCount:
+SELECT count(DISTINCT M._id) AS count
+FROM mangas AS M
+JOIN chapters AS C ON C.manga_id = M._id
+WHERE M.favorite = 1 AND M.source IN :sourceIds AND C.read = 1;
+
+-- Library novels whose every chapter is read (and that have at least one chapter): "completed".
+completedNovelCount:
+SELECT count(*) AS count
+FROM mangas AS M
+JOIN (
+    SELECT manga_id, count(*) AS total, sum(read) AS read_count
+    FROM chapters
+    GROUP BY manga_id
+) AS C ON C.manga_id = M._id
+WHERE M.favorite = 1 AND M.source IN :sourceIds
+AND C.total > 0 AND C.read_count = C.total;
+
+-- Total read chapters across all novels (library + any read-but-unfavorited novel).
+chaptersReadCount:
+SELECT count(*) AS count
+FROM chapters AS C
+JOIN mangas AS M ON M._id = C.manga_id
+WHERE M.source IN :sourceIds AND C.read = 1;
+
+-- Total chapters belonging to library novels.
+totalChaptersCount:
+SELECT count(*) AS count
+FROM chapters AS C
+JOIN mangas AS M ON M._id = C.manga_id
+WHERE M.favorite = 1 AND M.source IN :sourceIds;
+
+-- Total reading time (ms) accumulated by history rows for novel chapters.
+totalReadDuration:
+SELECT coalesce(sum(H.history_time_read), 0) AS sum
+FROM history AS H
+JOIN chapters AS C ON C._id = H.history_chapter_id
+JOIN mangas AS M ON M._id = C.manga_id
+WHERE M.source IN :sourceIds;
+
+-- Total words read across novels (sum of recorded per-chapter word counts for read chapters).
+totalWordsRead:
+SELECT coalesce(sum(S.word_count), 0) AS sum
+FROM novel_chapter_stats AS S
+JOIN chapters AS C ON C._id = S.chapter_id
+JOIN mangas AS M ON M._id = C.manga_id
+WHERE M.source IN :sourceIds AND C.read = 1;
+
+-- The novel with the most read chapters, with its read count. Drives "most-read novel".
+mostReadNovel:
+SELECT M.title AS title, count(*) AS readCount
+FROM chapters AS C
+JOIN mangas AS M ON M._id = C.manga_id
+WHERE M.source IN :sourceIds AND C.read = 1
+GROUP BY M._id
+ORDER BY readCount DESC
+LIMIT 1;
+
+-- Distinct UTC-day buckets on which any novel chapter was read, newest first. The streak and
+-- average-per-day stats are derived from this small list (one row per active day) rather than
+-- from every history row.
+readDays:
+SELECT DISTINCT H.history_last_read / 86400000 AS day
+FROM history AS H
+JOIN chapters AS C ON C._id = H.history_chapter_id
+JOIN mangas AS M ON M._id = C.manga_id
+WHERE M.source IN :sourceIds AND H.history_last_read > 0
+ORDER BY day DESC;
+
+-- Read-chapter events bucketed by UTC day, oldest first. Powers average chapters/day over the
+-- active span and the per-day count series.
+readsPerDay:
+SELECT H.history_last_read / 86400000 AS day, count(*) AS readCount
+FROM history AS H
+JOIN chapters AS C ON C._id = H.history_chapter_id
+JOIN mangas AS M ON M._id = C.manga_id
+WHERE M.source IN :sourceIds AND H.history_last_read > 0
+GROUP BY day
+ORDER BY day ASC;

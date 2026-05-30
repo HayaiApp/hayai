@@ -1980,4 +1980,30 @@
     <string name="novel_tts_stop">Stop</string>
     <string name="novel_text_normalize">Normalize text (fix styled Unicode)</string>
     <string name="novel_text_aggressive_cleanup">Aggressive ad &amp; link removal</string>
+
+    <!-- Novel reading stats -->
+    <string name="novel_statistics">Novel statistics</string>
+    <string name="novels_in_library">Novels in library</string>
+    <string name="novels_started">Novels started</string>
+    <string name="novels_completed">Novels completed</string>
+    <string name="novel_chapters_read">Chapters read</string>
+    <string name="novel_total_read_duration">Reading time</string>
+    <string name="novel_reading_streak">Current streak</string>
+    <string name="novel_longest_streak">Longest streak</string>
+    <string name="novel_average_chapters_per_day">Avg chapters/day</string>
+    <string name="novel_reading_days">Reading days</string>
+    <string name="novel_words_read">Words read</string>
+    <string name="novel_most_read">Most read novel</string>
+    <string name="novel_chapters_read_count">%1$s chapters read</string>
+    <string name="novel_day_count">%1$s days</string>
+    <string name="novel_zero_days">0 days</string>
+
+    <!-- Novel style presets -->
+    <string name="novel_style_presets">Style presets</string>
+    <string name="novel_save_style_preset">Save current as preset</string>
+    <string name="novel_rename_style_preset">Rename preset</string>
+    <string name="novel_style_preset_tap_to_apply">Tap to apply</string>
+    <string name="novel_no_style_presets">No saved presets yet</string>
+    <string name="novel_style_preset_name">Preset name</string>
+    <string name="novel_style_preset_name_taken">A preset with this name already exists</string>
 </resources>
