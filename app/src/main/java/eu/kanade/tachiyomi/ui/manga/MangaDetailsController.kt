@@ -81,7 +81,6 @@ import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.icon
 import eu.kanade.tachiyomi.source.online.HttpSource
-import eu.kanade.tachiyomi.ui.base.MaterialMenuSheet
 import eu.kanade.tachiyomi.ui.base.SmallToolbarInterface
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.base.controller.DialogController
@@ -129,7 +128,6 @@ import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
 import eu.kanade.tachiyomi.util.system.setCustomTitleAndMessage
-import eu.kanade.tachiyomi.util.system.timeSpanFromNow
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.withUIContext
 import eu.kanade.tachiyomi.util.view.activityBinding
@@ -517,7 +515,12 @@ class MangaDetailsController :
             setCoverColorValue()
             resetItemColorsToDefault()
         }
-        colorToolbar(binding.recycler.canScrollVertically(-1), animate = false)
+        // colorToolbar early-returns when the colored state is unchanged, so toggling while
+        // scrolled-down keeps the stale tint. Preserve the colored/transparent decision but
+        // repaint unconditionally with the new headerColor.
+        toolbarIsColored = !isTablet && binding.recycler.canScrollVertically(-1)
+        setStatusBarAndToolbar()
+        if (isControllerVisible) setTitle()
     }
 
     /** Clears accent-tinted FAB/header/chapter colors back to M3 defaults (OFF path). */
@@ -529,7 +532,9 @@ class MangaDetailsController :
         binding.fab.setTextColor(ColorStateList.valueOf(onPrimary))
         binding.fab.iconTint = ColorStateList.valueOf(onPrimary)
         getHeader()?.setBackDrop(context.getResourceColor(android.R.attr.colorBackground))
-        getHeader()?.bind(presenter.headerItem)
+        // Lightweight default-color reset on the header sub-views instead of a full bind(),
+        // which would re-load the cover and re-run the deferred ComposeViews (flash/relayout).
+        getHeader()?.resetColorsToDefault()
         if ((adapter?.itemCount ?: 0) > 1) {
             presenter.chapters.forEach { chapter ->
                 val chapterHolder =
@@ -1101,8 +1106,6 @@ class MangaDetailsController :
                         chapterList.filter { it.status != Download.State.NOT_DOWNLOADED },
                         false,
                     )
-                    RangeMode.Read -> markAsRead(chapterList)
-                    RangeMode.Unread -> markAsUnread(chapterList)
                 }
                 presenter.fetchChapters(false)
                 adapter?.removeSelection(startingPosition)
@@ -1125,64 +1128,6 @@ class MangaDetailsController :
         // Long-press is the entry point to mihon-style multi-select. The first long-press starts
         // selection mode; a later long-press range-selects from the previous anchor.
         enterSelectionMode(position)
-    }
-
-    /**
-     * Legacy long-press menu sheet (mark previous/range read-unread, open in webview). Preserved
-     * for coexistence with the new multi-select; no longer bound to chapter-row long-press but kept
-     * reachable so the range/RangeMode path stays intact.
-     */
-    fun showChapterMenuSheet(position: Int) {
-        val adapter = adapter ?: return
-        val item = (adapter.getItem(position) as? ChapterItem) ?: return
-        val descending = presenter.sortDescending()
-        val items = mutableListOf(
-            MaterialMenuSheet.MenuSheetItem(
-                0,
-                if (descending) R.drawable.ic_eye_down_24dp else R.drawable.ic_eye_up_24dp,
-                MR.strings.mark_previous_as_read,
-            ),
-            MaterialMenuSheet.MenuSheetItem(
-                1,
-                if (descending) R.drawable.ic_eye_off_down_24dp else R.drawable.ic_eye_off_up_24dp,
-                MR.strings.mark_previous_as_unread,
-            ),
-            MaterialMenuSheet.MenuSheetItem(
-                2,
-                R.drawable.ic_eye_range_24dp,
-                MR.strings.mark_range_as_read,
-            ),
-            MaterialMenuSheet.MenuSheetItem(
-                3,
-                R.drawable.ic_eye_off_range_24dp,
-                MR.strings.mark_range_as_unread,
-            ),
-        )
-        if (presenter.getChapterUrl(item.chapter) != null) {
-            items.add(
-                0,
-                MaterialMenuSheet.MenuSheetItem(
-                    4,
-                    R.drawable.ic_open_in_webview_24dp,
-                    MR.strings.open_in_webview,
-                ),
-            )
-        }
-        val lastRead = presenter.allHistory.find { it.chapter_id == item.id }?.let {
-            activity?.timeSpanFromNow(MR.strings.read_, it.last_read) + "\n"
-        }
-        val menuSheet =
-            MaterialMenuSheet(activity!!, items, item.name, subtitle = lastRead) { _, itemPos ->
-                when (itemPos) {
-                    0 -> markPreviousAs(item, true)
-                    1 -> markPreviousAs(item, false)
-                    2 -> startReadRange(position, RangeMode.Read)
-                    3 -> startReadRange(position, RangeMode.Unread)
-                    4 -> openChapterInWebView(item)
-                }
-                true
-            }
-        menuSheet.show()
     }
 
     override fun onActionStateChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
@@ -1734,12 +1679,6 @@ class MangaDetailsController :
         onItemClick(null, position)
     }
 
-    private fun startReadRange(position: Int, mode: RangeMode) {
-        createActionModeIfNeeded()
-        rangeMode = mode
-        onItemClick(null, position)
-    }
-
     override fun readNextChapter(readingButton: View) {
         if (activity is SearchActivity && presenter.isLockedFromSearch) {
             SecureActivityDelegate.promptLockIfNeeded(activity)
@@ -2168,6 +2107,17 @@ class MangaDetailsController :
     // range-selects from the previous anchor (toggleSelection fromLongPress semantics).
     private fun enterSelectionMode(position: Int) {
         val firstEntry = !isSelectionMode
+        // A legacy download-range gesture may be mid-flight (startDownloadRange set rangeMode +
+        // anchor with isSelectionMode=false). Clear it before selecting so the two modes don't
+        // coexist and silently swallow the range gesture. Symmetric to startDownloadRange's guard.
+        if (firstEntry && startingRangeChapterPos != null) {
+            val anchor = startingRangeChapterPos!!
+            val item = adapter?.getItem(anchor) as? ChapterItem
+            (binding.recycler.findViewHolderForAdapterPosition(anchor) as? ChapterHolder)
+                ?.notifyStatus(item?.status ?: Download.State.NOT_DOWNLOADED, isLocked(), item?.progress ?: 0)
+            rangeMode = null
+            startingRangeChapterPos = null
+        }
         isSelectionMode = true
         // Put the adapter in MULTI mode and select before starting the ActionMode so the very
         // first onPrepareActionMode already sees a non-empty selection (otherwise it self-destructs).
@@ -2388,8 +2338,6 @@ class MangaDetailsController :
         private enum class RangeMode {
             Download,
             RemoveDownload,
-            Read,
-            Unread,
         }
 
         fun bundle(

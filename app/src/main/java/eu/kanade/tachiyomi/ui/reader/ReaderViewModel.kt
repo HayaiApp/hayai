@@ -280,6 +280,9 @@ class ReaderViewModel(
                     loader = ChapterLoader(context, downloadManager, downloadProvider, manga, resolvedSource)
 
                     chapterList = getChapterList()
+                    // Warm the lazy unfiltered list off-main so adjacentChapterResult()'s first
+                    // touch (which runs on Main) never blocks the UI thread on a SQLDelight read.
+                    unfilteredChapterList
                     loadChapter(loader!!, chapterList!!.first { chapterId == it.chapter.id }, page)
                     Result.success(true)
                 } else {

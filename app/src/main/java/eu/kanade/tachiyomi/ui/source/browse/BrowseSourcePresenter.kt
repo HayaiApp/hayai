@@ -183,7 +183,7 @@ open class BrowseSourcePresenter(
         val sourceId = source.id
 
         val browseAsList = preferences.browseAsList()
-        val sourceListType = preferences.libraryLayout()
+        val sourceListType = preferences.sourceGridLayout()
         val outlineCovers = uiPreferences.outlineOnCovers()
 
         view?.unsubscribe()

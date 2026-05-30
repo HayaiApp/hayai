@@ -151,6 +151,9 @@ object PreferenceKeys {
 
     const val libraryLayout = "pref_display_library_layout"
 
+    // Browse-scoped grid density so the source display picker no longer mutates the Library grid.
+    const val sourceGridLayout = "pref_display_source_grid_layout"
+
     const val libraryDisplayMode = "library_display_mode"
 
     const val librarySearchAcrossTabs = "library_search_across_tabs"

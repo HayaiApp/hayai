@@ -488,6 +488,18 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         // Categories whose manga always update, bypassing the release-period skip.
         val smartUpdateExcludedCategories =
             preferences.libraryUpdateSmartUpdateCategoriesExclude().get().mapNotNull { it.toIntOrNull() }.toSet()
+        // LibraryManga.category is a single id after the per-category library_view rows are
+        // collapsed by distinctBy, so checking manga.category alone is nondeterministic for
+        // multi-category manga. Resolve the carve-out BY MANGA ID from the full pre-dedup rows,
+        // mirroring getMangaToUpdate's listToExclude pattern.
+        val smartUpdateExcludedMangaIds = if (smartUpdateExcludedCategories.isEmpty()) {
+            emptySet()
+        } else {
+            runBlocking { getLibraryManga.await() }
+                .filter { it.category in smartUpdateExcludedCategories }
+                .map { it.manga.id }
+                .toSet()
+        }
         // Ensure a valid release-prediction window for queue paths that run before doWork().
         if (fetchWindow.first == 0L && fetchWindow.second == 0L) {
             fetchWindow = fetchInterval.getWindow(ZonedDateTime.now())
@@ -523,7 +535,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                     skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_started)
                 }
                 MANGA_OUTSIDE_RELEASE_PERIOD in restrictions &&
-                    manga.category !in smartUpdateExcludedCategories &&
+                    manga.manga.id !in smartUpdateExcludedMangaIds &&
                     manga.manga.next_update > fetchWindow.second -> {
                     skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_in_release_period)
                 }

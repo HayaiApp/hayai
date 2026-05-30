@@ -224,6 +224,10 @@ class PreferencesHelper(val context: Context, val preferenceStore: PreferenceSto
 
     fun libraryLayout() = preferenceStore.getInt(Keys.libraryLayout, LibraryItem.LAYOUT_COMFORTABLE_GRID)
 
+    // Browse-scoped grid density. Defaults to the existing library layout so users keep their
+    // look on first read, but the source display picker writes only this key (not libraryLayout).
+    fun sourceGridLayout() = preferenceStore.getInt(Keys.sourceGridLayout, libraryLayout().get())
+
     fun libraryDisplayMode() = preferenceStore.getInt(Keys.libraryDisplayMode, LibraryItem.DISPLAY_MODE_CONTINUOUS)
 
     fun librarySearchAcrossTabs() = preferenceStore.getBoolean(Keys.librarySearchAcrossTabs, false)

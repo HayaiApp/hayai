@@ -744,15 +744,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             onTtsSettingsChanged = {
                 activity.ttsController?.dispatch(hayai.novel.reader.tts.TtsCommand.ReapplySettings)
             },
-            onKeepScreenOnChanged = { keepOn ->
-                activity.runOnUiThread {
-                    if (keepOn) {
-                        activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    } else {
-                        activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    }
-                }
-            },
+            onKeepScreenOnChanged = { activity.runOnUiThread { applyNovelKeepScreenOn() } },
             onBrightnessChanged = { activity.runOnUiThread { applyNovelCustomBrightness() } },
             onChapterWindowChanged = { activity.runOnUiThread { trimLoadedChapterWindow() } },
         ).observe()
@@ -827,6 +819,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
         // Apply the novel custom brightness immediately on mount and whenever it changes.
         applyNovelCustomBrightness()
+        // Apply the novel keep-screen-on flag on mount so the switch isn't inert on first open.
+        applyNovelKeepScreenOn()
     }
 
     /**
@@ -905,6 +899,20 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     private fun restoreSystemBrightness() {
         activity.window.attributes = activity.window.attributes.apply {
             screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
+    }
+
+    /**
+     * Applies the novel-specific keep-screen-on flag to the activity window. The shared manga
+     * observer also writes this flag, so the novel viewer must (re)assert its own value on mount
+     * and clear it on [destroy] — otherwise the switch is inert on first open and a mid-session
+     * toggle leaks into the rest of the app. Mirrors tsundoku's apply-on-enter / clear-on-leave.
+     */
+    private fun applyNovelKeepScreenOn() {
+        if (preferences.novelKeepScreenOn.get()) {
+            activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
@@ -1574,6 +1582,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         // Restore system-controlled brightness so the novel viewer's custom value doesn't
         // leak into the manga reader / the rest of the app after teardown.
         restoreSystemBrightness()
+
+        // Clear the novel keep-screen-on flag so a novel-only value doesn't leak into the
+        // rest of the app (the shared manga observer reasserts its own value on its own enter).
+        activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // Mark destroyed first so coroutine finally-blocks won't touch WebView.
         isDestroyed = true

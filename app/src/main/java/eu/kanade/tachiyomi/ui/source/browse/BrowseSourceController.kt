@@ -355,7 +355,7 @@ open class BrowseSourceController(bundle: Bundle) :
 
     private fun currentDisplayMode(): DisplayMode = when {
         presenter.preferences.browseAsList().get() -> DisplayMode.LIST
-        presenter.preferences.libraryLayout().get() == LibraryItem.LAYOUT_COMPACT_GRID -> DisplayMode.COMPACT_GRID
+        presenter.preferences.sourceGridLayout().get() == LibraryItem.LAYOUT_COMPACT_GRID -> DisplayMode.COMPACT_GRID
         else -> DisplayMode.COMFORTABLE_GRID
     }
 
@@ -764,7 +764,7 @@ open class BrowseSourceController(bundle: Bundle) :
 
     /**
      * Applies the chosen display mode by writing the backing prefs (`browseAsList` toggles
-     * list↔grid, `libraryLayout` selects comfortable↔compact) then rebinding the recycler so the
+     * list↔grid, `sourceGridLayout` selects comfortable↔compact) then rebinding the recycler so the
      * adapter inflates the matching holder/layout.
      */
     private fun setDisplayMode(mode: DisplayMode) {
@@ -774,7 +774,8 @@ open class BrowseSourceController(bundle: Bundle) :
 
         presenter.preferences.browseAsList().set(mode == DisplayMode.LIST)
         if (mode != DisplayMode.LIST) {
-            presenter.preferences.libraryLayout().set(
+            // Browse-scoped density pref so this no longer mutates the Library tab grid.
+            presenter.preferences.sourceGridLayout().set(
                 if (mode == DisplayMode.COMPACT_GRID) {
                     LibraryItem.LAYOUT_COMPACT_GRID
                 } else {

@@ -547,6 +547,25 @@ fun Controller.scrollViewWith(
         }
     }
 
+    fun updateBottomNavOnScroll(dy: Int) {
+        activityBinding?.bottomNav?.let { bottomNav ->
+            if (bottomNav.isVisible && isInView) {
+                if (preferences.hideBottomNavOnScroll().get()) {
+                    bottomNav.translationY += dy
+                    bottomNav.translationY = MathUtils.clamp(
+                        bottomNav.translationY,
+                        0f,
+                        bottomNav.height.toFloat(),
+                    )
+                    updateViewsNearBottom()
+                } else if (bottomNav.translationY != 0f) {
+                    bottomNav.translationY = 0f
+                    activityBinding!!.bottomView?.translationY = 0f
+                }
+            }
+        }
+    }
+
     fun onScrolled(dy: Int) {
         if (isControllerVisible && statusBarHeight > -1 &&
             (this@scrollViewWith as? BaseLegacyController<*>)?.isDragging != true &&
@@ -584,6 +603,9 @@ fun Controller.scrollViewWith(
                     if (pinnedScrollAccum < collapseThreshold) {
                         appBar.y = 0f
                         appBar.updateAppBarAfterY(recycler)
+                        // Track the bottom nav from the first pixel: the dead-zone only pins the
+                        // appbar, it must not delay hide-on-scroll for the bottom nav.
+                        updateBottomNavOnScroll(dy)
                         appBar.let {
                             swipeCircle?.translationY = max(it.y, -it.height + it.paddingTop.toFloat())
                         }
@@ -593,22 +615,7 @@ fun Controller.scrollViewWith(
                 if (appBar.y >= 0f) pinnedScrollAccum = collapseThreshold
                 appBar.y -= dy
                 appBar.updateAppBarAfterY(recycler)
-                activityBinding?.bottomNav?.let { bottomNav ->
-                    if (bottomNav.isVisible && isInView) {
-                        if (preferences.hideBottomNavOnScroll().get()) {
-                            bottomNav.translationY += dy
-                            bottomNav.translationY = MathUtils.clamp(
-                                bottomNav.translationY,
-                                0f,
-                                bottomNav.height.toFloat(),
-                            )
-                            updateViewsNearBottom()
-                        } else if (bottomNav.translationY != 0f) {
-                            bottomNav.translationY = 0f
-                            activityBinding!!.bottomView?.translationY = 0f
-                        }
-                    }
-                }
+                updateBottomNavOnScroll(dy)
 
                 // Re-arm the dead-zone once the bar scrolls back to fully expanded.
                 if (appBar.y >= 0f && dy < 0) pinnedScrollAccum = 0

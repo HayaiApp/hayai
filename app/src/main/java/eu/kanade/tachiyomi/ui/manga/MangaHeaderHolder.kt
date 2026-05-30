@@ -739,6 +739,37 @@ class MangaHeaderHolder(
         }
     }
 
+    /**
+     * Reverts the sub-views [updateColors] tinted back to M3 defaults (cover-theming OFF path)
+     * WITHOUT a full bind()/cover reload. updateColors() early-returns when accentColor is null,
+     * so the default reset can't route through it — replicate just the default-color assignments.
+     */
+    fun resetColorsToDefault() {
+        accentColorState.value = null
+        if (binding == null) {
+            chapterBinding?.filterButton?.imageTintList =
+                ColorStateList.valueOf(itemView.context.getResourceColor(materialR.attr.colorSecondary))
+            return
+        }
+        val default = itemView.context.getResourceColor(materialR.attr.colorSecondary)
+        val defaultTint = ColorStateList.valueOf(default)
+        with(binding) {
+            trueBackdrop.setBackgroundColor(itemView.context.getResourceColor(android.R.attr.colorBackground))
+            TextViewCompat.setCompoundDrawableTintList(moreButton, defaultTint)
+            moreButton.setTextColor(default)
+            TextViewCompat.setCompoundDrawableTintList(lessButton, defaultTint)
+            lessButton.setTextColor(default)
+            shareButton.imageTintList = defaultTint
+            webviewButton.imageTintList = defaultTint
+            recsButton?.imageTintList = defaultTint
+            filterButton.imageTintList = defaultTint
+            trackButton.iconTint = defaultTint
+            favoriteButton.iconTint = defaultTint
+            trackButton.checked(trackButton.stateListAnimator != null)
+            favoriteButton.checked(favoriteButton.stateListAnimator != null)
+        }
+    }
+
     fun updateTracking() {
         binding ?: return
         val presenter = adapter.delegate.mangaPresenter()

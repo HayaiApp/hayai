@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.source.browse
 import android.app.Activity
 import android.graphics.Color
 import android.view.View
+import android.widget.ImageView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import coil3.dispose
@@ -98,6 +99,11 @@ class BrowseSourceGridHolder(
     override fun setImage(manga: Manga) {
         if ((view.context as? Activity)?.isDestroyed == true) return
         binding.coverThumbnail.dispose()
+        // dispose() leaves the prior drawable in place; CoverViewTarget.onError swaps in a
+        // CENTER-scaled broken-image vector, so a recycled cell would briefly flash that stale
+        // glyph before the new request lands. Reset scale + clear the drawable to the placeholder.
+        binding.coverThumbnail.scaleType = ImageView.ScaleType.CENTER_CROP
+        binding.coverThumbnail.setImageDrawable(null)
         // loadManga applies the singleton's maxBitmapSize(2048) + precision(INEXACT) defaults, so
         // covers decode at view bounds instead of over-decoding. Coil shows the XML placeholder
         // background until the cover (or error) lands; matches the Compose cell behaviour.
