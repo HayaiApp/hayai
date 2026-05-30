@@ -317,7 +317,7 @@ private fun QuoteCard(
 
 /**
  * Mounts a [QuotesSheet] backed by a [QuoteManager] for the active novel and removes itself
- * from the view hierarchy on dismissal. Mirrors `showNovelReaderSettingsSheet`.
+ * from the view hierarchy on dismissal.
  */
 fun showQuotesSheet(
     activity: ReaderActivity,
