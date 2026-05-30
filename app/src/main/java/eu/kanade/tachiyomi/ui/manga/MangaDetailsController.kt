@@ -42,6 +42,10 @@ import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePaddingRelative
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.palette.graphics.Palette
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -88,9 +92,12 @@ import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
 import eu.kanade.tachiyomi.ui.main.HingeSupportedController
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.main.SearchActivity
+import eu.kanade.tachiyomi.ui.manga.chapter.ChapterActionBarHandlers
+import eu.kanade.tachiyomi.ui.manga.chapter.ChapterActionBarState
 import eu.kanade.tachiyomi.ui.manga.chapter.ChapterHolder
 import eu.kanade.tachiyomi.ui.manga.chapter.ChapterItem
 import eu.kanade.tachiyomi.ui.manga.chapter.ChaptersSortBottomSheet
+import eu.kanade.tachiyomi.ui.manga.chapter.MangaChapterActionBar
 import eu.kanade.tachiyomi.ui.manga.track.TrackItem
 import eu.kanade.tachiyomi.ui.manga.track.TrackingBottomSheet
 import eu.kanade.tachiyomi.ui.migration.manga.design.PreMigrationController
@@ -223,6 +230,9 @@ class MangaDetailsController :
     // Adapter position of the last chapter touched in selection mode; used as the shift-style
     // range anchor for the next long-press (mihon toggleSelection fromLongPress semantics).
     private var lastSelectionPosition: Int? = null
+
+    // Drives the mihon-style bottom action bar (ComposeView island). Recomposes on assignment.
+    private var actionBarState by mutableStateOf(ChapterActionBarState())
     private var editMangaDialog: EditMangaDialog? = null
     var refreshTracker: Int? = null
     private var chapterPopupMenu: Pair<Int, PopupMenu>? = null
@@ -315,6 +325,7 @@ class MangaDetailsController :
         })
         binding.fab.transitionName = "details start reading transition"
         binding.fab.setOnClickListener { readNextChapter(it) }
+        setupChapterActionBar()
 
         if (presenter.isMangaLateInitInitialized()) {
             presenter.onCreateLate()
@@ -575,6 +586,7 @@ class MangaDetailsController :
         actionMode = null
         isSelectionMode = false
         lastSelectionPosition = null
+        actionBarState = ChapterActionBarState(visible = false)
         rangeMode = null
         startingRangeChapterPos = null
         adapter = null
@@ -2098,43 +2110,13 @@ class MangaDetailsController :
     }
 
     override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-        if (!isSelectionMode) return true
-        when (item?.itemId) {
-            R.id.action_select_all -> selectAllChapters()
-            R.id.action_select_inverse -> invertChapterSelection()
-            R.id.action_mark_as_read -> {
-                markAsRead(selectedChapters())
-                destroyActionModeIfNeeded()
-            }
-            R.id.action_mark_as_unread -> {
-                markAsUnread(selectedChapters())
-                destroyActionModeIfNeeded()
-            }
-            R.id.action_bookmark -> {
-                bookmarkChapters(selectedChapters(), true)
-                destroyActionModeIfNeeded()
-            }
-            R.id.action_remove_bookmark -> {
-                bookmarkChapters(selectedChapters(), false)
-                destroyActionModeIfNeeded()
-            }
-            R.id.action_download -> {
-                downloadChapters(selectedChapters().filter { !it.isDownloaded })
-                destroyActionModeIfNeeded()
-            }
-            R.id.action_remove_downloads -> {
-                massDeleteChapters(selectedChapters().filter { it.isDownloaded }, false)
-                destroyActionModeIfNeeded()
-            }
-            else -> return false
-        }
-        return true
+        // In selection mode all actions live in the bottom bar; the top ActionMode only shows
+        // the count title. The legacy range path still routes through here when not selecting.
+        return !isSelectionMode
     }
 
     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-        if (isSelectionMode) {
-            mode?.menuInflater?.inflate(R.menu.chapter_selection, menu)
-        }
+        // No top-bar action items in selection mode; the bottom action bar owns the actions.
         return true
     }
 
@@ -2146,16 +2128,8 @@ class MangaDetailsController :
                 return false
             }
             mode?.title = view?.context?.getString(MR.strings.selected_, selected.size)
-            // Show only the bookmark/read toggles that make sense for the current selection.
-            menu?.findItem(R.id.action_mark_as_read)?.isVisible = selected.any { !it.read }
-            menu?.findItem(R.id.action_mark_as_unread)?.isVisible = selected.any { it.read }
-            menu?.findItem(R.id.action_bookmark)?.isVisible = selected.any { !it.bookmark }
-            menu?.findItem(R.id.action_remove_bookmark)?.isVisible = selected.any { it.bookmark }
-            menu?.findItem(R.id.action_download)?.isVisible =
-                !presenter.manga.isLocal() && selected.any { !it.isDownloaded }
-            menu?.findItem(R.id.action_remove_downloads)?.isVisible =
-                !presenter.manga.isLocal() && selected.any { it.isDownloaded }
-            return true
+            refreshActionBar()
+            return false
         }
         mode?.title = view?.context?.getString(
             if (startingRangeChapterPos == null) {
@@ -2171,6 +2145,7 @@ class MangaDetailsController :
         actionMode = null
         isSelectionMode = false
         lastSelectionPosition = null
+        actionBarState = ChapterActionBarState(visible = false)
         setStatusBarAndToolbar()
         if (startingRangeChapterPos != null && rangeMode in setOf(RangeMode.Download, RangeMode.RemoveDownload)) {
             val item = adapter?.getItem(startingRangeChapterPos!!) as? ChapterItem
@@ -2215,6 +2190,7 @@ class MangaDetailsController :
         } else {
             actionMode?.invalidate()
         }
+        refreshActionBar()
     }
 
     private fun toggleChapterSelection(position: Int) {
@@ -2226,6 +2202,7 @@ class MangaDetailsController :
             destroyActionModeIfNeeded()
         } else {
             actionMode?.invalidate()
+            refreshActionBar()
         }
     }
 
@@ -2251,6 +2228,7 @@ class MangaDetailsController :
             if (adapter.getItem(i) is ChapterItem) setChapterSelected(i, true)
         }
         actionMode?.invalidate()
+        refreshActionBar()
     }
 
     private fun invertChapterSelection() {
@@ -2263,6 +2241,7 @@ class MangaDetailsController :
             destroyActionModeIfNeeded()
         } else {
             actionMode?.invalidate()
+            refreshActionBar()
         }
     }
 
@@ -2279,6 +2258,75 @@ class MangaDetailsController :
                 ?: return@forEach
             holder.notifyStatus(chapter.status, isLocked(), chapter.progress)
         }
+    }
+
+    /** Hosts the mihon-style bottom action bar in a ComposeView island wrapped in YokaiTheme. */
+    private fun setupChapterActionBar() {
+        val handlers = ChapterActionBarHandlers(
+            onBookmark = {
+                bookmarkChapters(selectedChapters(), true)
+                destroyActionModeIfNeeded()
+            },
+            onRemoveBookmark = {
+                bookmarkChapters(selectedChapters(), false)
+                destroyActionModeIfNeeded()
+            },
+            onMarkRead = {
+                markAsRead(selectedChapters())
+                destroyActionModeIfNeeded()
+            },
+            onMarkUnread = {
+                markAsUnread(selectedChapters())
+                destroyActionModeIfNeeded()
+            },
+            onMarkPreviousRead = {
+                markPreviousFromSelection()
+                destroyActionModeIfNeeded()
+            },
+            onDownload = {
+                downloadChapters(selectedChapters().filter { !it.isDownloaded })
+                destroyActionModeIfNeeded()
+            },
+            onDelete = {
+                massDeleteChapters(selectedChapters().filter { it.isDownloaded }, false)
+                destroyActionModeIfNeeded()
+            },
+            onSelectAll = { selectAllChapters() },
+            onInvertSelection = { invertChapterSelection() },
+        )
+        binding.actionBarCompose.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+        )
+        binding.actionBarCompose.setContent {
+            yokai.presentation.theme.YokaiTheme {
+                MangaChapterActionBar(state = actionBarState, handlers = handlers)
+            }
+        }
+    }
+
+    /** Recomputes the bottom-bar contextual visibility from the current selection. */
+    private fun refreshActionBar() {
+        val selected = selectedChapters()
+        if (!isSelectionMode || selected.isEmpty()) {
+            actionBarState = ChapterActionBarState(visible = false)
+            return
+        }
+        actionBarState = ChapterActionBarState(
+            visible = true,
+            showBookmark = selected.any { !it.bookmark },
+            showRemoveBookmark = selected.any { it.bookmark },
+            showMarkAsRead = selected.any { !it.read },
+            showMarkAsUnread = selected.any { it.read },
+            showMarkPreviousAsRead = selected.size == 1,
+            showDownload = !presenter.manga.isLocal() && selected.any { !it.isDownloaded },
+            showDelete = !presenter.manga.isLocal() && selected.any { it.isDownloaded },
+        )
+    }
+
+    /** Mark every chapter before the single selected one as read (mihon mark-previous semantics). */
+    private fun markPreviousFromSelection() {
+        val item = selectedChapters().singleOrNull() ?: return
+        markPreviousAs(item, true)
     }
     //endregion
 

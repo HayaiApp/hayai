@@ -22,6 +22,7 @@
         android:id="@+id/track_search_constraint_layout"
         android:layout_width="match_parent"
         android:visibility="gone"
+        android:background="@drawable/bottom_sheet_rounded_background"
         tools:visibility="visible"
         android:layout_height="match_parent">
 
@@ -30,23 +31,34 @@
             android:layout_width="match_parent"
             android:layout_height="?actionBarSize"
             android:layout_gravity="top"
-            android:background="@drawable/bottom_sheet_rounded_background"
-            android:backgroundTint="?attr/colorSurface"
             android:clickable="true"
             android:elevation="0dp"
             android:focusable="true"
-            app:layout_constraintHorizontal_chainStyle="spread"
             android:orientation="horizontal"
-            app:layout_constraintBottom_toTopOf="@id/search_frame_layout"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
+            <ImageButton
+                android:id="@+id/search_close_button"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="4dp"
+                android:background="?selectableItemBackgroundBorderless"
+                android:contentDescription="@string/cancel"
+                android:tooltipText="@string/cancel"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_arrow_back_24dp"
+                app:tint="?actionBarTintColor" />
+
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/search_toolbar_title"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="16dp"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="@string/select_an_entry"
@@ -58,55 +70,71 @@
                 app:layout_constraintTop_toTopOf="parent" />
 
             <ImageButton
-                android:id="@+id/search_close_button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                app:layout_constraintWidth_max="wrap"
-                android:background="?selectableItemBackgroundBorderless"
-                android:contentDescription="@string/next_title"
-                android:padding="@dimen/material_layout_keylines_screen_edge_margin"
-                android:tooltipText="@string/cancel"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_close_24dp"
-                app:tint="?actionBarTintColor" />
-
-            <ImageButton
                 android:id="@+id/guide_button"
                 android:visibility="invisible"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                app:layout_constraintWidth_max="wrap"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="4dp"
                 android:background="?selectableItemBackgroundBorderless"
-                android:contentDescription="@string/next_title"
-                android:padding="@dimen/material_layout_keylines_screen_edge_margin"
+                android:contentDescription="@string/cancel"
                 android:tooltipText="@string/cancel"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_close_24dp"
                 app:tint="?actionBarTintColor" />
-
-            <View
-                android:id="@+id/divider"
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                android:background="@color/divider"/>
         </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/text_input_layout"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="4dp"
+            android:hint="@string/search_chapters"
+            app:boxStrokeColor="@color/text_box_stroke_selector"
+            app:endIconMode="clear_text"
+            app:hintEnabled="true"
+            app:hintTextColor="?colorPrimary"
+            app:startIconDrawable="@drawable/ic_search_24dp"
+            app:startIconTint="?actionBarTintColor"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/title_layout">
+
+            <eu.kanade.tachiyomi.widget.TachiyomiTextInputEditText
+                android:id="@+id/track_search"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/title"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <View
+            android:id="@+id/divider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:background="@color/divider"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/text_input_layout" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/search_frame_layout"
             android:layout_width="match_parent"
+            android:layout_height="0dp"
+            app:layout_constrainedHeight="true"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constrainedHeight="true"
-            app:layout_constraintTop_toBottomOf="@id/title_layout"
-            app:layout_constraintBottom_toTopOf="@id/text_input_layout"
-            android:layout_height="wrap_content">
+            app:layout_constraintTop_toBottomOf="@id/divider"
+            app:layout_constraintBottom_toBottomOf="parent">
+
             <com.google.android.material.progressindicator.CircularProgressIndicator
                 android:id="@+id/search_progress"
                 android:indeterminate="true"
@@ -125,12 +153,11 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/track_search_recycler"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                app:layout_constraintHeight_max="1500dp"
-                android:nestedScrollingEnabled="false"
+                android:layout_height="0dp"
+                android:nestedScrollingEnabled="true"
                 android:clipToPadding="false"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="4dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="8dp"
                 android:scrollbars="none"
                 android:visibility="invisible"
                 tools:itemCount="50"
@@ -153,32 +180,5 @@
                 android:visibility="gone" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/text_input_layout"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
-            android:layout_width="match_parent"
-            app:boxStrokeColor="@color/text_box_stroke_selector"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/search_frame_layout"
-            android:hint="@string/title"
-            app:endIconMode="clear_text"
-            app:hintEnabled="false"
-            app:hintTextColor="?colorSecondary">
-
-            <eu.kanade.tachiyomi.widget.TachiyomiTextInputEditText
-                android:id="@+id/track_search"
-                android:layout_width="match_parent"
-                android:imeOptions="actionSearch"
-                android:layout_height="wrap_content"
-                android:hint="@string/title"
-                android:inputType="text" />
-
-        </com.google.android.material.textfield.TextInputLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

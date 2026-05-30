@@ -101,4 +101,12 @@
         android:elevation="10dp"
         android:translationZ="20dp"
         android:visibility="invisible" />
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/action_bar_compose"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:elevation="12dp"
+        android:translationZ="22dp" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

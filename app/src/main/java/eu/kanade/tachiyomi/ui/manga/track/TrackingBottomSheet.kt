@@ -171,7 +171,8 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
         binding.trackRecycler.layoutManager = LinearLayoutManager(context)
         binding.trackRecycler.adapter = adapter
         binding.trackRecycler.setOnApplyWindowInsetsListener(RecyclerWindowInsetsListener)
-        binding.textInputLayout.setOnApplyWindowInsetsListener(RecyclerWindowInsetsListener)
+        // Search results are the bottom-most scroll area now, so they carry the nav-bar inset.
+        binding.trackSearchRecycler.setOnApplyWindowInsetsListener(RecyclerWindowInsetsListener)
 
         binding.trackSearchRecycler.layoutManager = LinearLayoutManager(activity)
         binding.trackSearchRecycler.adapter = searchAdapter
@@ -289,19 +290,9 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
         startTransition()
         binding.searchProgress.visibility = View.VISIBLE
         binding.trackSearchRecycler.visibility = View.GONE
-        setMiddleTrackView(binding.searchProgress.id)
         binding.searchEmptyView.hide()
         val searchingItem = searchingItem ?: return
         presenter.trackSearch(query, searchingItem.service)
-    }
-
-    private fun setMiddleTrackView(id: Int) {
-        binding.titleLayout.updateLayoutParams<ConstraintLayout.LayoutParams> {
-            bottomToTop = id
-        }
-        binding.textInputLayout.updateLayoutParams<ConstraintLayout.LayoutParams> {
-            topToBottom = id
-        }
     }
 
     fun onSearchResults(results: List<TrackSearch>) {
@@ -316,13 +307,11 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
             },
         )
         if (results.isEmpty()) {
-            setMiddleTrackView(binding.searchEmptyView.id)
             binding.searchEmptyView.show(
                 Icons.Filled.SearchOff,
                 MR.strings.no_results_found,
             )
         } else {
-            setMiddleTrackView(binding.trackSearchRecycler.id)
             binding.searchEmptyView.hide()
             if (results.size == 1 && searchingItem?.track == null) {
                 trackItem(0)
@@ -334,7 +323,6 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
     fun onSearchResultsError(error: Throwable) {
         Logger.e(error)
         startTransition()
-        setMiddleTrackView(binding.searchEmptyView.id)
         binding.searchProgress.isVisible = false
         binding.trackSearchRecycler.isVisible = false
         searchItemAdapter.clear()
