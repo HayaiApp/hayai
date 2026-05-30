@@ -122,4 +122,19 @@
         <item quantity="one">%1$d item unhidden</item>
         <item quantity="other">%1$d items unhidden</item>
     </plurals>
+
+    <plurals name="skipped_read_chapters">
+        <item quantity="one">Skipped %d already-read chapter</item>
+        <item quantity="other">Skipped %d already-read chapters</item>
+    </plurals>
+
+    <plurals name="skipped_filtered_chapters">
+        <item quantity="one">Skipped %d filtered chapter</item>
+        <item quantity="other">Skipped %d filtered chapters</item>
+    </plurals>
+
+    <plurals name="day_plural">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
 </resources>

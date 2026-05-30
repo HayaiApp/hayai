@@ -82,6 +82,8 @@
     <string name="marked_as_read">Marked as read</string>
     <string name="marked_as_unread">Marked as unread</string>
     <string name="removed_bookmark">Removed bookmark</string>
+    <string name="action_bookmark">Bookmark</string>
+    <string name="action_remove_bookmark">Remove bookmark</string>
     <string name="chapters_removed">Chapters removed.</string>
     <string name="chapter_not_found">Chapter not found</string>
     <string name="local_invalid_format">Invalid chapter format</string>
@@ -786,6 +788,8 @@
     <string name="pure_black_dark_mode">Pure black dark mode</string>
     <string name="details_page">Details page</string>
     <string name="theme_buttons_based_on_cover">Theme buttons based on cover</string>
+    <string name="color_details_from_cover">Color details from cover</string>
+    <string name="color_details_from_cover_summary">Tint the manga page accent, header and chapter colors using the cover\'s palette</string>
     <string name="expanded_toolbar">Expanded toolbar</string>
     <string name="show_larger_toolbar">Show a larger, expanded toolbar at the top of most pages (does not show on smaller devices regardless of setting)</string>
     <string name="motion">Motion</string>
@@ -1953,4 +1957,12 @@
     <!-- Misc novel reader -->
     <string name="novel_brightness_value">Brightness value</string>
     <string name="novel_tts_tab">TTS</string>
+    <string name="novel_no_more_chapters">No more chapters</string>
+
+    <!-- Smart updater (fetch-interval prediction) -->
+    <string name="manga_next_update_">Next: %1$s</string>
+    <string name="manga_interval_custom_amount">Predicted update interval</string>
+    <string name="manga_interval_mode_automatic">Automatic</string>
+    <string name="pref_update_only_in_release_period">Outside their expected update period</string>
+    <string name="skipped_reason_not_in_release_period">Skipped because no new chapter is expected yet</string>
 </resources>
