@@ -220,6 +220,11 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     private var extraViewForUndo: View? = null
     private var canDismissSnackBar = false
 
+    // Search query handed off from another screen (e.g. manga-details "Search library") to be
+    // applied to the Library tab's search bar once it becomes the active controller. Consumed
+    // exactly once by LibraryController.consumePendingLibrarySearch(), which clears it.
+    var pendingLibrarySearch: String? = null
+
     private var animationSet: AnimatorSet? = null
     private val downloadManager: DownloadManager by injectLazy()
     private val mangaShortcutManager: MangaShortcutManager by injectLazy()
@@ -1422,6 +1427,21 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
     fun goToTab(@IdRes id: Int) {
         nav.selectedItemId = id
+    }
+
+    /**
+     * Route a query into the existing Library tab's search bar (used by manga-details
+     * "Search library"). Pops the current router to root so any pushed manga-details
+     * controller is gone, switches to the Library tab, then drains the pending query.
+     * Works from Library, Recents, or Browse: when the switch lands on a freshly-activated
+     * Library tab, [LibraryController.consumePendingLibrarySearch] runs via onTabActivated;
+     * when we were already on Library (no tab change fires), the direct call below drains it.
+     */
+    fun goToLibraryAndSearch(query: String) {
+        pendingLibrarySearch = query
+        router.popToRoot()
+        nav.selectedItemId = R.id.nav_library
+        (activeRootController as? LibraryController)?.consumePendingLibrarySearch()
     }
 
     private fun setRoot(controller: Controller, id: Int) {

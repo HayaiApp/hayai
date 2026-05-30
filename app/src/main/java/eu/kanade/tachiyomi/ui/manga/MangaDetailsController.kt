@@ -1722,13 +1722,10 @@ class MangaDetailsController :
     }
 
     fun localSearch(text: String, isTag: Boolean) {
-        router.pushController(
-            FilteredLibraryController(
-                text,
-                queryText = text.takeIf { !isTag },
-                filterTags = arrayOf(text).takeIf { isTag } ?: emptyArray(),
-            ).withFadeTransaction(),
-        )
+        // Route into the real Library tab's search bar instead of a one-off filtered list.
+        // The library's fuzzy search already matches title/author/genre, so tag and plain
+        // text both land as a single search query.
+        (activity as? MainActivity)?.goToLibraryAndSearch(text)
     }
 
     fun sourceSearch(text: String) {

@@ -287,6 +287,30 @@ open class LibraryController(
     }
 
     /**
+     * Drain a query handed off via [MainActivity.pendingLibrarySearch] (e.g. manga-details
+     * "Search library") into the live search bar. Read-and-clear so it applies exactly once
+     * even though several activation hooks (onTabActivated, onChangeEnded, onActivityResumed)
+     * may all fire it during a single hand-off. Expands the pill and routes through [search]
+     * so the query reaches the visible adapters (continuous mAdapter or per-tab pages).
+     */
+    fun consumePendingLibrarySearch() {
+        if (!isBindingInitialized) return
+        val main = activity as? MainActivity ?: return
+        val pending = main.pendingLibrarySearch ?: return
+        main.pendingLibrarySearch = null
+        val pill = searchToolbar() ?: return
+        if (pill.isSearchExpanded != true) pill.searchItem?.expandActionView()
+        val searchView = pill.searchView
+        if (searchView != null) {
+            // setQuery drives onQueryTextChange → search(); clearFocus avoids popping the keyboard.
+            searchView.setQuery(pending, false)
+            searchView.clearFocus()
+        } else {
+            search(pending)
+        }
+    }
+
+    /**
      * Library only owns the activity tab bar when the user picked tabbed display mode
      * AND the strip is actually rendered right now. fullAppBarHeight (via this flag)
      * decides whether to reserve 48dp for the strip in the recycler's top padding;
@@ -913,14 +937,22 @@ open class LibraryController(
         presenter.categories.filter { !it.isHidden }
 
     /**
-     * Flatten-on-search transition: with `forceShowAllCategories` enabled, a non-blank
-     * query merges every category into one flat result list, so the tab strip needs to
-     * disappear. Routed through the same reconcile so the flatten↔unflatten flip can't
-     * race the other surface callers.
+     * Flatten-on-search transition. With `forceShowAllCategories` ON a non-blank query merges
+     * every category into one flat continuous list (tab strip hidden); with it OFF the surface
+     * stays TABBED and each tab filters in place. Routed through the same reconcile so the
+     * flatten↔unflatten flip can't race the other surface callers.
      */
     private fun applyTabbedSearchVisibility() {
         if (!isTabbedMode) return
         reconcileDisplaySurface()
+        // Flatten OFF: the per-tab pages own the visible data, so the continuous mAdapter must
+        // stay empty — otherwise its (hidden) recycler holds the full category list + section
+        // headers ready to leak under the tab strip if it's ever briefly measured. reconcile
+        // already emptied it on the TABBED transition, but reassert here since search can run
+        // without a fresh surface flip (flag unchanged → no reconcile rebuild).
+        if (targetDisplaySurface == DisplaySurface.TABBED) {
+            if (mAdapter?.itemCount != 0) mAdapter?.setItems(emptyList())
+        }
     }
 
     fun showMiniBar() {
@@ -1617,6 +1649,9 @@ open class LibraryController(
             tempItems?.let { onNextLibraryUpdate(it) }
             tempItems = null
         }
+        // Pop-back from manga-details while already on the Library tab: no tab swap fires, so
+        // drain any handed-off "Search library" query here once chrome is wired.
+        if (changeType.isEnter) consumePendingLibrarySearch()
     }
 
     /**
@@ -1640,6 +1675,8 @@ open class LibraryController(
         // swaps go through RootTabsController.selectTab → onTabActivated and bypass
         // Conductor's lifecycle. Wire chrome explicitly here.
         onSetupLocalChrome()
+        // Drain a query handed off from another screen now that the menu/search bar exist.
+        consumePendingLibrarySearch()
     }
 
     /**
@@ -1707,6 +1744,7 @@ open class LibraryController(
             presenter.updateLibrary()
         }
         reconcileDisplaySurface()
+        consumePendingLibrarySearch()
     }
 
     override fun onActivityPaused(activity: Activity) {
@@ -2092,21 +2130,27 @@ open class LibraryController(
         val previous = this.query
         this.query = q
 
-        // forceShowAllCategories transitions only fire on the blank ↔ non-blank edge.
+        // forceShowAllCategories transitions only fire on the blank ↔ non-blank edge. Only rebuild
+        // the library when the flag actually flips: in tabbed mode with flatten OFF it stays false,
+        // so an unconditional updateLibrary() would needlessly re-section the whole library (and risk
+        // momentarily exposing the continuous surface) on every first keystroke — the per-tab filter
+        // below is all that's needed there.
         if (q.isNotBlank() && previous.isBlank() && singleMode) {
+            val wasForced = presenter.forceShowAllCategories
             presenter.forceShowAllCategories = if (isTabbedMode) {
                 preferences.librarySearchAcrossTabs().get()
             } else {
                 preferences.showAllCategoriesWhenSearchingSingleCategory().get()
             }
-            presenter.updateLibrary()
+            if (presenter.forceShowAllCategories != wasForced) presenter.updateLibrary()
         } else if (q.isBlank() && previous.isNotBlank() && singleMode) {
             if (!isSubClass && !isTabbedMode) {
                 preferences.showAllCategoriesWhenSearchingSingleCategory()
                     .set(presenter.forceShowAllCategories)
             }
+            val wasForced = presenter.forceShowAllCategories
             presenter.forceShowAllCategories = false
-            presenter.updateLibrary()
+            if (wasForced) presenter.updateLibrary()
         }
 
         // Set the filter on every live adapter BEFORE any code path that can launch a
