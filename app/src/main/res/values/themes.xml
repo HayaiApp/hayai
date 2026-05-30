@@ -7,6 +7,9 @@
     <style name="Theme"/>
 
     <style name="Theme.Base" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- App-wide UI font; reader content/reading-font settings are unaffected. -->
+        <item name="fontFamily">@font/outfit</item>
+        <item name="android:fontFamily">@font/outfit</item>
         <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
         <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>

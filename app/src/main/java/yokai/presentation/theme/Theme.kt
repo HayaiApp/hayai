@@ -2,7 +2,8 @@ package yokai.presentation.theme
 
 import android.content.Context
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -32,6 +33,7 @@ private fun cachedColourScheme(context: Context): ColorScheme {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun YokaiTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
@@ -42,7 +44,7 @@ fun YokaiTheme(content: @Composable () -> Unit) {
     // Observe via the central accessor so toggling reduced motion recomposes the tree.
     val reducedMotion by ReducedMotion.changes().collectAsState(initial = ReducedMotion.isEnabled())
 
-    MaterialTheme(colorScheme = colourScheme) {
+    MaterialExpressiveTheme(colorScheme = colourScheme, typography = AppTypography) {
         CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
             content()
         }
