@@ -22,6 +22,7 @@ import co.touchlab.kermit.Logger
 import eu.kanade.presentation.reader.settings.CodeSnippet
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
 import eu.kanade.tachiyomi.ui.reader.loader.PageLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
@@ -706,32 +707,37 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
     private fun observePreferences() {
 
-        scope.launch {
-            merge(
-                preferences.novelFontSize.changes().drop(1),
-                preferences.novelFontFamily.changes().drop(1),
-                preferences.novelTheme.changes().drop(1),
-                preferences.novelLineHeight.changes().drop(1),
-                preferences.novelTextAlign.changes().drop(1),
-                preferences.novelMarginLeft.changes().drop(1),
-                preferences.novelMarginRight.changes().drop(1),
-                preferences.novelMarginTop.changes().drop(1),
-                preferences.novelMarginBottom.changes().drop(1),
-                preferences.novelMarginsCropped.changes().drop(1),
-                preferences.novelFontColor.changes().drop(1),
-                preferences.novelBackgroundColor.changes().drop(1),
-                preferences.novelParagraphIndent.changes().drop(1),
-                preferences.novelParagraphSpacing.changes().drop(1),
-                preferences.novelCustomCss.changes().drop(1),
-                preferences.novelCustomCssSnippets.changes().drop(1),
-                preferences.novelUseOriginalFonts.changes().drop(1),
-                preferences.novelHideChapterTitle.changes().drop(1),
-                preferences.novelTextSelectable.changes().drop(1),
-            )
-                .collect {
-                    injectCustomStyles()
+        // Every novel pref the settings sheet exposes routes through this merged observer
+        // (ported from Tsundoku's NovelWebViewPreferenceObserver) so changes apply live
+        // instead of needing a chapter reopen. The callbacks below are wired to Hayai's
+        // existing apply paths.
+        NovelWebViewPreferenceObserver(
+            preferences = preferences,
+            scope = scope,
+            onStyleChanged = { injectCustomStyles() },
+            onScriptChanged = { injectCustomScript() },
+            onChapterReloadRequested = { reloadCurrentChaptersFromScratch() },
+            onBlockMediaChanged = { blockMedia ->
+                webView.settings.apply {
+                    blockNetworkImage = blockMedia
+                    loadsImagesAutomatically = !blockMedia
                 }
-        }
+                // Reload from scratch so the content re-renders with media stripped/restored.
+                reloadCurrentChaptersFromScratch()
+            },
+            onTtsSettingsChanged = {
+                activity.ttsController?.dispatch(hayai.novel.reader.tts.TtsCommand.ReapplySettings)
+            },
+            onKeepScreenOnChanged = { keepOn ->
+                activity.runOnUiThread {
+                    if (keepOn) {
+                        activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    } else {
+                        activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            },
+        ).observe()
 
         // Re-apply the overlay scrollbar config when any of its prefs change.
         scope.launch {
@@ -754,45 +760,6 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             }
         }
 
-        // Observe JS changes separately to re-inject scripts
-        scope.launch {
-            merge(
-                preferences.novelCustomJs.changes().drop(1),
-                preferences.novelCustomJsSnippets.changes().drop(1),
-            )
-                .collect {
-                    injectCustomScript()
-                }
-        }
-
-        scope.launch {
-            preferences.novelForceTextLowercase.changes()
-                .drop(1)
-                .collect {
-                    currentChapters?.let {
-                        // Reload the current chapter to reapply string transformations
-                        setChapters(it)
-                    }
-                }
-        }
-
-        // Phase A #14: hide-chapter-title only updated CSS before, so the actual stripping
-        // (which happens at displayContent time) was bypassed on live toggle. Mirror
-        // novelForceTextLowercase's setChapters call so the strip is re-applied.
-        scope.launch {
-            preferences.novelHideChapterTitle.changes()
-                .drop(1)
-                .collect {
-                    currentChapters?.let {
-                        // Clear loaded chapters so setChapters re-renders from scratch with
-                        // the new strip state (otherwise the in-DOM content is stale).
-                        loadedChapterIds.clear()
-                        loadedChapters.clear()
-                        setChapters(it)
-                    }
-                }
-        }
-
         // Phase A #14: novelChapterTitleDisplay only affects the toolbar subtitle (per
         // Tsundoku — it does NOT synthesize a title into chapter content). The activity
         // owns the subtitle, so route the change through there.
@@ -801,40 +768,6 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 .drop(1)
                 .collect {
                     activity.runOnUiThread { activity.refreshNovelToolbarSubtitle() }
-                }
-        }
-
-        // Observe block media preference
-        scope.launch {
-            preferences.novelBlockMedia.changes()
-                .drop(1)
-                .collect { blockMedia ->
-                    webView.settings.apply {
-                        blockNetworkImage = blockMedia
-                        loadsImagesAutomatically = !blockMedia
-                    }
-                    // Reload the page to apply media blocking
-                    webView.reload()
-                }
-        }
-
-        // Observe regex replacements — requires full content reload
-        scope.launch {
-            preferences.novelRegexReplacements.changes()
-                .drop(1)
-                .collect {
-                    currentChapters?.let { setChapters(it) }
-                }
-        }
-
-        scope.launch {
-            merge(
-                preferences.novelTtsVoice.changes(),
-                preferences.novelTtsSpeed.changes(),
-                preferences.novelTtsPitch.changes(),
-            ).drop(3)
-                .collect {
-                    activity.ttsController?.dispatch(hayai.novel.reader.tts.TtsCommand.ReapplySettings)
                 }
         }
 
@@ -862,6 +795,20 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     }
                 }
         }
+    }
+
+    /**
+     * Re-renders the current chapter(s) from scratch for prefs that change parsed CONTENT
+     * (regex, lowercase, normalize, EPUB toggles, auto-split, raw HTML, hide-title strip,
+     * media blocking). setChapters() early-returns when the chapter is already in
+     * loadedChapterIds, so the cache MUST be cleared first or the stale DOM survives — this
+     * restores the invariant the lone hideChapterTitle path previously special-cased.
+     */
+    private fun reloadCurrentChaptersFromScratch() {
+        val chapters = currentChapters ?: return
+        loadedChapterIds.clear()
+        loadedChapters.clear()
+        setChapters(chapters)
     }
 
     private fun applyWebViewScrollbarSettings(target: WebView = webView) {
@@ -2055,9 +2002,17 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         val escapedContent = JSONObject.quote(cleanContent)
 
         // Visible Prev/Current card. `from` is the previously-top chapter (the one the user
-        // is scrolling up from); `to` is the chapter being prepended above it.
-        val transitionHtml = buildTransitionCardHtml(from = chapter, to = fromChapter, isNext = false)
+        // is scrolling up from); `to` is the chapter being prepended above it. Gated on
+        // alwaysShowChapterTransition (mirrors the manga viewers); when off, the card is
+        // suppressed but the invisible boundary marker below still keeps tracking intact.
+        val showTransition = activity.preferences.alwaysShowChapterTransition().get()
+        val transitionHtml = if (showTransition) {
+            buildTransitionCardHtml(from = chapter, to = fromChapter, isNext = false)
+        } else {
+            ""
+        }
         val escapedTransition = JSONObject.quote(transitionHtml)
+        val transitionClass = if (showTransition) "chapter-divider chapter-transition" else "chapter-divider"
 
         val js = """
             (function() {
@@ -2076,7 +2031,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 // Visible transition card sits between the prepended content and the
                 // previously-first content (which already has its own boundary marker).
                 var transition = document.createElement('div');
-                transition.className = 'chapter-divider chapter-transition';
+                transition.className = '$transitionClass';
                 transition.setAttribute('data-chapter-id', '$chapterId');
                 transition.innerHTML = $escapedTransition;
 
@@ -2143,13 +2098,22 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         // handler reports an index that lines up exactly with chapterParagraphsById.
         cleanContent = tagAndStashViaHelper(chapterId, cleanContent, plainTextMode, chapterUrl)
         val escapedContent = JSONObject.quote(cleanContent)
-        val transitionHtml = buildTransitionCardHtml(from = fromChapter, to = chapter, isNext = true)
+        // Gate the visible transition card on alwaysShowChapterTransition (mirrors the manga
+        // pager/webtoon viewers). When off, still emit the invisible boundary divider so
+        // chapter tracking/scroll math keep working — only the card UI is suppressed.
+        val showTransition = activity.preferences.alwaysShowChapterTransition().get()
+        val transitionHtml = if (showTransition) {
+            buildTransitionCardHtml(from = fromChapter, to = chapter, isNext = true)
+        } else {
+            ""
+        }
         val escapedTransition = JSONObject.quote(transitionHtml)
+        val dividerClass = if (showTransition) "chapter-divider chapter-transition" else "chapter-divider"
 
         val js = """
             (function() {
                 var divider = document.createElement('div');
-                divider.className = 'chapter-divider chapter-transition';
+                divider.className = '$dividerClass';
                 divider.setAttribute('data-chapter-id', '$chapterId');
                 divider.innerHTML = $escapedTransition;
                 document.body.appendChild(divider);
@@ -2326,6 +2290,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         val prevChapterForCard: ReaderChapter? = currentChapters?.prevChapter
         val normalizedChapterUrl = normalizeUrl(chapterUrl)
         val blockMedia = preferences.novelBlockMedia.get()
+        // Gate the initial top transition card on alwaysShowChapterTransition (mirrors the
+        // manga viewers). Read here so it's available inside the Default-dispatcher block.
+        val showTransition = activity.preferences.alwaysShowChapterTransition().get()
         val stylePayload = buildCustomStylePayload()
 
         val prepared = withContext(Dispatchers.Default) {
@@ -2382,7 +2349,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             }
             val chapterDividerEnd = if (chapterId != null) "</div>" else ""
 
-            val topCardHtml = if (currChapterForCard != null) {
+            val topCardHtml = if (currChapterForCard != null && showTransition) {
                 val cardInner = buildTransitionCardHtml(
                     from = prevChapterForCard,
                     to = currChapterForCard,
@@ -3251,6 +3218,22 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         }
     }
 
+    /**
+     * Reason-aware boundary message for the infinite-scroll inline notice. Resolves WHY the
+     * next/prev chapter is absent relative to [anchor] (read-skipped vs filtered-skipped vs
+     * genuine end) so the user isn't told "no next chapter" when chapters were merely skipped.
+     */
+    private fun messageForSkippedAdjacent(next: Boolean, anchor: ReaderChapter): String {
+        return when (val result = activity.viewModel.adjacentChapterResult(next, anchor.chapter.id)) {
+            is ReaderViewModel.AdjacentChapterResult.SkippedRead ->
+                activity.getString(MR.plurals.skipped_read_chapters, result.count, result.count)
+            is ReaderViewModel.AdjacentChapterResult.SkippedFiltered ->
+                activity.getString(MR.plurals.skipped_filtered_chapters, result.count, result.count)
+            // Found (race) and EndOfList both mean nothing more to splice here.
+            else -> activity.getString(MR.strings.novel_no_more_chapters)
+        }
+    }
+
     private suspend fun appendNextChapterIfAvailable() {
         val anchor = loadedChapters.lastOrNull() ?: currentChapters?.currChapter ?: run {
             Logger.e {
@@ -3265,7 +3248,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
         val preparedChapter = activity.viewModel.prepareNextChapterForInfiniteScroll(anchor) ?: run {
             Logger.w { "NovelWebViewViewer: No next chapter available after ${anchor.chapter.name}" }
-            showInlineError("No next chapter available", isPrepend = false)
+            showInlineError(messageForSkippedAdjacent(next = true, anchor = anchor), isPrepend = false)
             return
         }
         val nextId = preparedChapter.chapter.id ?: return
@@ -3322,7 +3305,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
     private suspend fun prependPreviousChapterIfAvailable() {
         val anchor = loadedChapters.firstOrNull() ?: currentChapters?.currChapter ?: return
-        val preparedChapter = activity.viewModel.preparePreviousChapterForInfiniteScroll(anchor) ?: return
+        val preparedChapter = activity.viewModel.preparePreviousChapterForInfiniteScroll(anchor) ?: run {
+            showInlineError(messageForSkippedAdjacent(next = false, anchor = anchor), isPrepend = true)
+            return
+        }
         val prevId = preparedChapter.chapter.id ?: return
         if (loadedChapterIds.contains(prevId)) return
 
@@ -3440,11 +3426,27 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         evaluateJavascriptSafe(
             """
             (function(){
-                window.__hayaiAutoScroll = window.__hayaiAutoScroll || { running:false, speed:15 };
+                window.__hayaiAutoScroll = window.__hayaiAutoScroll || { running:false, speed:15, selPaused:false };
                 if (window.__hayaiAutoStep) return;
+                // True while a non-collapsed selection exists: the WebView re-lays out the
+                // selection handles + highlight rect on every scrolled frame, so stepping
+                // during a selection is the source of the reported lag.
+                window.__hayaiHasSelection = function(){
+                    var sel = window.getSelection();
+                    return !!(sel && sel.rangeCount > 0 && !sel.isCollapsed && sel.toString().length > 0);
+                };
                 window.__hayaiAutoStep = function(ts){
                     var s = window.__hayaiAutoScroll;
                     if (!s || !s.running) return;
+                    // Gate on selection state, not just touch state: a finished selection
+                    // leaves no finger down, so without this the loop runs concurrently with
+                    // an active selection. Keep the rAF alive (reset timing) so scrolling
+                    // resumes seamlessly once the selection clears.
+                    if (window.__hayaiHasSelection()) {
+                        s.last = 0;
+                        requestAnimationFrame(window.__hayaiAutoStep);
+                        return;
+                    }
                     if (!s.last) s.last = ts;
                     var dt = Math.min(0.05, (ts - s.last) / 1000);
                     s.last = ts;
@@ -3461,6 +3463,19 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     }
                     if (!on) { s.running = false; }
                 };
+                // selectionchange drives selPaused so selection state (not only touch state)
+                // controls the loop. The step's own guard already early-returns; this listener
+                // resets timing on selection end so the next stepped frame starts cleanly.
+                if (!window.__hayaiSelListener) {
+                    window.__hayaiSelListener = function(){
+                        var s = window.__hayaiAutoScroll;
+                        if (!s) return;
+                        var has = window.__hayaiHasSelection();
+                        s.selPaused = has;
+                        if (!has) s.last = 0;
+                    };
+                    document.addEventListener('selectionchange', window.__hayaiSelListener);
+                }
             })();
             """.trimIndent(),
         )

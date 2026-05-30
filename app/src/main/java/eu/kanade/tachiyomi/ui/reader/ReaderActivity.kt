@@ -1271,24 +1271,29 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         isScrollingThroughPagesOrChapters = true
         lifecycleScope.launch {
             val getNextChapter = (viewer is R2LPagerViewer).xor(rightButton)
-            val adjChapter = viewModel.adjacentChapter(getNextChapter)
-            if (adjChapter != null) {
-                if (rightButton) {
-                    binding.readerNav.rightChapter.isInvisible = true
-                    binding.readerNav.rightProgress.isVisible = true
-                } else {
-                    binding.readerNav.leftChapter.isInvisible = true
-                    binding.readerNav.leftProgress.isVisible = true
-                }
-                loadChapter(adjChapter)
-            } else {
-                toast(
-                    if (getNextChapter) {
-                        MR.strings.theres_no_next_chapter
+            when (val result = viewModel.adjacentChapterResult(getNextChapter)) {
+                is ReaderViewModel.AdjacentChapterResult.Found -> {
+                    if (rightButton) {
+                        binding.readerNav.rightChapter.isInvisible = true
+                        binding.readerNav.rightProgress.isVisible = true
                     } else {
-                        MR.strings.theres_no_previous_chapter
-                    },
-                )
+                        binding.readerNav.leftChapter.isInvisible = true
+                        binding.readerNav.leftProgress.isVisible = true
+                    }
+                    loadChapter(result.chapter)
+                }
+                is ReaderViewModel.AdjacentChapterResult.SkippedRead ->
+                    toast(getString(MR.plurals.skipped_read_chapters, result.count, result.count))
+                is ReaderViewModel.AdjacentChapterResult.SkippedFiltered ->
+                    toast(getString(MR.plurals.skipped_filtered_chapters, result.count, result.count))
+                ReaderViewModel.AdjacentChapterResult.EndOfList ->
+                    toast(
+                        if (getNextChapter) {
+                            MR.strings.theres_no_next_chapter
+                        } else {
+                            MR.strings.theres_no_previous_chapter
+                        },
+                    )
             }
         }
     }

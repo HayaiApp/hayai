@@ -563,6 +563,69 @@ class ReaderViewModel(
     }
 
     /**
+     * Why a chapter is (or isn't) available in the given direction. The reader needs the
+     * reason — not just presence — so a boundary toast can say "skipped N read chapters"
+     * vs. "no more chapters" instead of collapsing every case into one wrong message.
+     */
+    sealed interface AdjacentChapterResult {
+        data class Found(val chapter: ReaderChapter) : AdjacentChapterResult
+        /** [count] consecutive chapters were skipped by the skip-read filter. */
+        data class SkippedRead(val count: Int) : AdjacentChapterResult
+        /** [count] consecutive chapters were removed by skip-filtered / skip-dupe. */
+        data class SkippedFiltered(val count: Int) : AdjacentChapterResult
+        /** No chapter exists in this direction at all. */
+        data object EndOfList : AdjacentChapterResult
+    }
+
+    /**
+     * Resolves adjacency against BOTH the filtered [chapterList] and the full unfiltered
+     * chapter list so a boundary can be explained. When the filtered list has a neighbour we
+     * return it ([AdjacentChapterResult.Found]); otherwise we walk the unfiltered list in the
+     * same sort order and classify the gap by the dominant skip reason.
+     */
+    fun adjacentChapterResult(next: Boolean, fromChapterId: Long? = null): AdjacentChapterResult {
+        if (!::chapterList.isInitialized) return AdjacentChapterResult.EndOfList
+        val manga = manga ?: return AdjacentChapterResult.EndOfList
+
+        val currentId = fromChapterId ?: getCurrentChapter()?.chapter?.id ?: chapterId
+        // When anchored to an explicit chapter (infinite-scroll append/prepend), resolve the
+        // filtered neighbour relative to that chapter rather than the active one.
+        val filteredIndex = chapterList.indexOfFirst { it.chapter.id == currentId }
+        if (filteredIndex != -1) {
+            val neighbour = chapterList.getOrNull(if (next) filteredIndex + 1 else filteredIndex - 1)
+            if (neighbour != null) return AdjacentChapterResult.Found(neighbour)
+        } else {
+            val found = adjacentChapter(next)
+            if (found != null) return AdjacentChapterResult.Found(found)
+        }
+        // Sort the unfiltered chapters identically to chapterList (ascending, ignoreAsc=true).
+        val sortComparator = ChapterSort(manga, chapterFilter, preferences).sortComparator<Chapter>(true)
+        val fullSorted = unfilteredChapterList.sortedWith(sortComparator)
+        val currentIndex = fullSorted.indexOfFirst { it.id == currentId }
+        if (currentIndex == -1) return AdjacentChapterResult.EndOfList
+
+        val filteredIds = chapterList.mapNotNull { it.chapter.id }.toHashSet()
+        val skipReadOn = preferences.skipRead().get()
+        var skippedRead = 0
+        var skippedFiltered = 0
+        var idx = if (next) currentIndex + 1 else currentIndex - 1
+        val step = if (next) 1 else -1
+        // Walk until we either reach a chapter the reader would actually show (would have
+        // been Found above, so this only guards against races) or run off the list end.
+        while (idx in fullSorted.indices) {
+            val candidate = fullSorted[idx]
+            if (candidate.id != null && filteredIds.contains(candidate.id)) break
+            if (skipReadOn && candidate.read) skippedRead++ else skippedFiltered++
+            idx += step
+        }
+        return when {
+            skippedRead == 0 && skippedFiltered == 0 -> AdjacentChapterResult.EndOfList
+            skippedRead >= skippedFiltered -> AdjacentChapterResult.SkippedRead(skippedRead + skippedFiltered)
+            else -> AdjacentChapterResult.SkippedFiltered(skippedRead + skippedFiltered)
+        }
+    }
+
+    /**
      * Called every time a page changes on the reader. Used to mark the flag of chapters being
      * read, update tracking services, enqueue downloaded chapter deletion, and updating the active chapter if this
      * [page]'s chapter is different from the currently active.
