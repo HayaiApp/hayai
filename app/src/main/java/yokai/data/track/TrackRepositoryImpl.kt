@@ -8,6 +8,11 @@ class TrackRepositoryImpl(private val handler: DatabaseHandler) : TrackRepositor
     override suspend fun getAllByMangaId(mangaId: Long): List<Track> =
         handler.awaitList { manga_syncQueries.getAllByMangaId(mangaId, Track::mapper) }
 
+    // Single query for every track row, grouped client-side — replaces the per-manga N+1
+    // the library build pass otherwise issues for filtering/grouping by tracking state.
+    override suspend fun getAllGroupedByMangaId(): Map<Long, List<Track>> =
+        handler.awaitList { manga_syncQueries.getAll(Track::mapper) }.groupBy { it.manga_id }
+
     override suspend fun deleteForManga(mangaId: Long, syncId: Long) {
         handler.await { manga_syncQueries.deleteForManga(mangaId, syncId) }
     }

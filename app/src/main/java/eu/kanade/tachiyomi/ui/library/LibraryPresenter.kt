@@ -120,6 +120,22 @@ class LibraryPresenter(
 
     private val loggedServices by lazy { trackManager.services.filter { it.isLogged } }
 
+    /**
+     * All tracks for the whole library, grouped by mangaId. Refreshed once per filter/group
+     * pass via [refreshTrackMap] so the per-manga track lookups during filtering, custom
+     * filtering, and BY_TRACK_STATUS grouping read from memory instead of issuing one DB
+     * query per manga (the N+1).
+     */
+    private var trackMap: Map<Long, List<Track>> = emptyMap()
+
+    private suspend fun refreshTrackMap() {
+        trackMap = getTrack.awaitAllGroupedByMangaId()
+    }
+
+    /** Per-manga track list backed by the batched [trackMap]. Identical result to the old per-manga query. */
+    private fun tracksForManga(mangaId: Long?): List<Track> =
+        mangaId?.let { trackMap[it] }.orEmpty()
+
     var groupType = preferences.groupLibraryBy().get()
 
     val isLoggedIntoTracking
@@ -382,6 +398,8 @@ class LibraryPresenter(
     private suspend fun LibraryMap.applyFilters(): LibraryMap {
         val filterPrefs = getPreferencesFlow().first()
         val showEmptyCategoriesWhileFiltering = preferences.showEmptyCategoriesWhileFiltering().get()
+        // Batch every track once so the per-manga matchers below hit memory, not the DB.
+        refreshTrackMap()
 
         val filterTrackers = FilterBottomSheet.FILTER_TRACKER
 
@@ -530,7 +548,7 @@ class LibraryPresenter(
         }
         val trackingScore = customFilters.filterTrackingScore
         if (trackingScore > 0 || trackingScore == -1) {
-            val tracks = getTrack.awaitAllByMangaId(item.manga.manga.id!!)
+            val tracks = tracksForManga(item.manga.manga.id)
 
             val hasTrack = loggedServices.any { service ->
                 tracks.any { it.sync_id == service.id }
@@ -595,7 +613,7 @@ class LibraryPresenter(
     ): Boolean {
         // Filter for tracked (or per tracked service)
         if (filterTracked != STATE_IGNORE) {
-            val tracks = getTrack.awaitAllByMangaId(item.manga.manga.id!!)
+            val tracks = tracksForManga(item.manga.manga.id)
 
             val hasTrack = loggedServices.any { service ->
                 tracks.any { it.sync_id == service.id }
@@ -1052,6 +1070,9 @@ class LibraryPresenter(
         val tagItems: MutableMap<String, LibraryHeaderItem> = mutableMapOf()
         val hiddenItems = mutableListOf<LibraryItem>()
 
+        // Batch every track once for BY_TRACK_STATUS grouping (the only path here that needs them).
+        if (groupType == BY_TRACK_STATUS) refreshTrackMap()
+
         // internal function to make headers
         fun makeOrGetHeader(name: String, checkNameSwap: Boolean = false): LibraryHeaderItem {
             tagItems[name]?.let { return it }
@@ -1089,7 +1110,7 @@ class LibraryPresenter(
                     }
                 }
                 BY_TRACK_STATUS -> {
-                    val tracks = getTrack.awaitAllByMangaId(manga.manga.id!!)
+                    val tracks = tracksForManga(manga.manga.id)
                     val track = tracks.find { track ->
                         loggedServices.any { it.id == track.sync_id }
                     }
