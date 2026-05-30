@@ -1976,4 +1976,6 @@
     <string name="novel_tts_prev_paragraph">Previous paragraph</string>
     <string name="novel_tts_next_paragraph">Next paragraph</string>
     <string name="novel_tts_stop">Stop</string>
+    <string name="novel_text_normalize">Normalize text (fix styled Unicode)</string>
+    <string name="novel_text_aggressive_cleanup">Aggressive ad &amp; link removal</string>
 </resources>

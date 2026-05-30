@@ -92,6 +92,9 @@ class NovelAppearanceView @JvmOverloads constructor(context: Context, attrs: Att
             enableEpubJs.bindToPreference(readerPreferences.enableEpubJs)
             // Let source/EPUB CSS win — skips Hayai's !important overrides + font force.
             sourceCssPriority.bindToPreference(readerPreferences.novelSourceCssPriority)
+            // Content cleanup: normalize fancy/fullwidth Unicode + strip ads/links.
+            textNormalize.bindToPreference(readerPreferences.novelTextNormalize)
+            textAggressiveCleanup.bindToPreference(readerPreferences.novelTextAggressiveCleanup)
 
             bindIntSlider(brightnessValue, MR.strings.novel_brightness_value, -75, 100, readerPreferences.novelCustomBrightnessValue.get()) {
                 readerPreferences.novelCustomBrightnessValue.set(it)

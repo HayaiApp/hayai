@@ -161,5 +161,21 @@
             android:layout_marginTop="16dp"
             android:text="@string/novel_source_css_priority"
             android:textColor="?attr/colorOnBackground" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/text_normalize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/novel_text_normalize"
+            android:textColor="?attr/colorOnBackground" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/text_aggressive_cleanup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/novel_text_aggressive_cleanup"
+            android:textColor="?attr/colorOnBackground" />
     </LinearLayout>
 </eu.kanade.tachiyomi.ui.reader.settings.NovelAppearanceView>

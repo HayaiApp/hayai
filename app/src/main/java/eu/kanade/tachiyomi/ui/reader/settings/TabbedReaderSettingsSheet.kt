@@ -21,8 +21,8 @@ import eu.kanade.tachiyomi.util.view.expand
 import eu.kanade.tachiyomi.util.view.isCollapsed
 import eu.kanade.tachiyomi.widget.TabbedBottomSheetDialog
 
-// MANGA-ONLY: do not add novel options here. The novel reader uses the Compose bottom
-// sheet at hayai.novel.reader.settings.NovelReaderSettingsSheet instead.
+// MANGA-ONLY: do not add novel options here. The novel reader uses the View-based
+// TabbedNovelReaderSettingsSheet instead.
 class TabbedReaderSettingsSheet(
     val readerActivity: ReaderActivity,
     showColorFilterSettings: Boolean = false,
