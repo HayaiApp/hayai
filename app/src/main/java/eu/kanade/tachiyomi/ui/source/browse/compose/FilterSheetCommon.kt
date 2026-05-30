@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.source.model.Filter
@@ -50,9 +51,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  */
 
 // region Style tokens — mirror PreferenceCommon so the sheet reads as part of the same family.
+// One 8/12/16 scale shared by every row and screen so vertical rhythm stays consistent.
 
 internal val FilterRowHorizontalPadding = 16.dp
-internal val FilterRowMinHeight = 40.dp
+internal val FilterRowVerticalPadding = 8.dp
+// 48 dp is the M3 minimum touch target — every interactive row honours it.
+internal val FilterRowMinHeight = 48.dp
 internal val ValueChipMaxWidth = 160.dp
 
 // endregion
@@ -62,7 +66,7 @@ internal val ValueChipMaxWidth = 160.dp
 /**
  * The canonical filter row layout used by every per-type composable in the sheet. Modelled on
  * `yokai.presentation.component.preference.widget.SwitchPreferenceWidget`: full-width tap target,
- * title `bodyMedium` on the left, control on the right. No card background; sections separate via
+ * title `bodyLarge` on the left, control on the right. No card background; sections separate via
  * the [FilterHeaderRow] label instead.
  */
 @Composable
@@ -75,11 +79,11 @@ internal fun FilterPreferenceRow(
         .fillMaxWidth()
         .heightIn(min = FilterRowMinHeight)
         .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-        .padding(horizontal = FilterRowHorizontalPadding, vertical = 2.dp)
+        .padding(horizontal = FilterRowHorizontalPadding, vertical = FilterRowVerticalPadding)
     Row(modifier = rowMod, verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             maxLines = 2,
@@ -148,23 +152,24 @@ internal fun FilterSheetEmptyState(icon: ImageVector, message: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(horizontal = 32.dp, vertical = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(40.dp),
             )
             Text(
                 text = message,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
             )
         }
     }

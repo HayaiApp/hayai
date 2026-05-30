@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.source.browse.compose
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.North
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.South
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -28,7 +30,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,13 +70,11 @@ internal fun FilterCheckBoxRow(filter: Filter.CheckBox) {
             checked = filter.state
         },
         trailing = {
+            // Plain Switch (no colour override) so it matches Hayai's SwitchPreferenceWidget and
+            // every other toggle in the app — the Expressive theme supplies the colours.
             Switch(
                 checked = checked,
                 onCheckedChange = null,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primary,
-                ),
             )
         },
     )
@@ -106,11 +105,12 @@ internal fun FilterTriStateRow(filter: Filter.TriState) {
 @Composable
 private fun TriStateSegments(state: Int, onChange: (Int) -> Unit) {
     // Connected button-group shape pattern: outer corners fully rounded, inner edges square so
-    // the three segments read as one piece. Colour alone communicates state (no outer border).
+    // the three segments read as one piece. Colour + icon communicate state — neutral (—),
+    // include (+), exclude (⊘) — so the three states are unmistakable.
     Row(verticalAlignment = Alignment.CenterVertically) {
         TriStateSegment(
             selected = state == Filter.TriState.STATE_IGNORE,
-            label = "•",
+            icon = Icons.Outlined.Remove,
             activeContainer = MaterialTheme.colorScheme.secondaryContainer,
             activeContent = MaterialTheme.colorScheme.onSecondaryContainer,
             shape = SegmentShapeStart,
@@ -146,8 +146,7 @@ private fun TriStateSegment(
     shape: Shape,
     contentDescription: String,
     onClick: () -> Unit,
-    icon: ImageVector? = null,
-    label: String? = null,
+    icon: ImageVector,
 ) {
     val container by animateColorAsState(
         targetValue = if (selected) activeContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -162,21 +161,17 @@ private fun TriStateSegment(
         shape = shape,
         color = container,
         contentColor = content,
-        modifier = Modifier.size(width = 38.dp, height = 30.dp),
+        // Selected segment is bordered with its own tone so the active state reads even for
+        // colour-blind users; idle segments stay borderless.
+        border = if (selected) BorderStroke(1.dp, activeContent.copy(alpha = 0.35f)) else null,
+        modifier = Modifier.size(width = 42.dp, height = 36.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            when {
-                icon != null -> Icon(
-                    imageVector = icon,
-                    contentDescription = contentDescription,
-                    modifier = Modifier.size(16.dp),
-                )
-                label != null -> Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
@@ -452,13 +447,14 @@ private fun GroupActivePillsRow(
 internal fun FilterHeaderRow(filter: Filter.Header) {
     // Mirrors yokai.presentation.component.preference.widget.PreferenceGroupHeader so source-
     // provided notices (e-hentai's "WILL IGNORE OTHER PARAMETERS!") read as a subdued group
-    // label introducing the next item.
+    // label introducing the next item. labelLarge + SemiBold + secondary makes it clearly a
+    // section header rather than another filter title.
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                top = 10.dp,
-                bottom = 4.dp,
+                top = 16.dp,
+                bottom = 8.dp,
                 start = FilterRowHorizontalPadding,
                 end = FilterRowHorizontalPadding,
             ),
@@ -467,7 +463,8 @@ internal fun FilterHeaderRow(filter: Filter.Header) {
         Text(
             text = filter.name,
             color = MaterialTheme.colorScheme.secondary,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 2,
         )
     }
@@ -475,8 +472,10 @@ internal fun FilterHeaderRow(filter: Filter.Header) {
 
 @Composable
 internal fun FilterSeparatorRow(@Suppress("UNUSED_PARAMETER") filter: Filter.Separator) {
+    // Inset to align with the row content padding so the divider reads as a grouping rule rather
+    // than a full-bleed sheet edge.
     HorizontalDivider(
-        modifier = Modifier.padding(vertical = 4.dp),
+        modifier = Modifier.padding(horizontal = FilterRowHorizontalPadding, vertical = 8.dp),
         color = MaterialTheme.colorScheme.outlineVariant,
     )
 }
@@ -492,28 +491,31 @@ internal fun FilterTextRow(filter: Filter.Text) {
     OutlinedTextField(
         value = value,
         onValueChange = { value = it },
-        placeholder = {
+        // Label (not placeholder) so the field name stays visible once the user types — the field
+        // keeps its identity in a list of several text filters.
+        label = {
             Text(
                 text = filter.name,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
         singleLine = true,
         shape = RoundedCornerShape(14.dp),
-        textStyle = MaterialTheme.typography.bodyMedium,
+        textStyle = MaterialTheme.typography.bodyLarge,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             // Faded primary instead of the default `outline` gray so the border picks up the
             // theme accent even when the field isn't focused.
             unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             focusedContainerColor = Color.Transparent,
             unfocusedContainerColor = Color.Transparent,
             cursorColor = MaterialTheme.colorScheme.primary,
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = FilterRowHorizontalPadding, vertical = 4.dp),
+            .padding(horizontal = FilterRowHorizontalPadding, vertical = FilterRowVerticalPadding),
     )
 }
 
