@@ -49,12 +49,14 @@ class ComposeSourceFilterSheet(
 
     init {
         // The sheet content sizes itself (wrap_content): the body LazyColumn is bounded by a
-        // heightIn(max) in Compose that leaves room for the tabs and the action bar, so the
-        // whole Column always fits inside the peek window and the bottom buttons are visible
-        // without dragging. The peek is a touch taller than strictly needed (tabs ~48dp + body
-        // ~400dp + divider ~1dp + action bar ~80dp ≈ 530dp) to give the rows visual breathing
-        // room rather than packing them edge-to-edge.
-        sheetBehavior.peekHeight = 560.dpToPx
+        // responsive heightIn(max) in Compose that leaves room for the tabs and the action bar,
+        // so the whole Column always fits inside the peek window and the bottom buttons are
+        // visible without dragging. Derive the peek from screen height (matching the body's
+        // ~55% rule plus chrome) so it adapts to device size and landscape, clamped to stay
+        // usable on tiny screens and bounded on tablets.
+        val screenHeightPx = activity.resources.displayMetrics.heightPixels
+        sheetBehavior.peekHeight = (screenHeightPx * 0.7f).toInt()
+            .coerceIn(380.dpToPx, 700.dpToPx)
 
         binding.filterComposeView.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool,

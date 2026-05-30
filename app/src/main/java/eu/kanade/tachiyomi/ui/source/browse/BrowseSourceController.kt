@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.pkgName
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
+import eu.kanade.tachiyomi.ui.library.LibraryItem
 import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.main.SearchActivity
@@ -341,19 +342,21 @@ open class BrowseSourceController(bundle: Bundle) :
             searchWithQuery(it ?: "")
             true
         }
-        // Show next display mode
         updateDisplayMenuItem(menu)
     }
 
-    private fun updateDisplayMenuItem(menu: Menu?, isListMode: Boolean? = null) {
+    /** Reflects the active display mode onto the overflow action icon and its checkable submenu. */
+    private fun updateDisplayMenuItem(menu: Menu?, mode: DisplayMode = currentDisplayMode()) {
         menu?.findItem(R.id.action_display_mode)?.apply {
-            val icon = if (isListMode ?: presenter.preferences.browseAsList().get()) {
-                R.drawable.ic_view_module_24dp
-            } else {
-                R.drawable.ic_view_list_24dp
-            }
-            setIcon(icon)
+            setIcon(if (mode == DisplayMode.LIST) R.drawable.ic_view_list_24dp else R.drawable.ic_view_module_24dp)
         }
+        menu?.findItem(mode.menuItemId)?.isChecked = true
+    }
+
+    private fun currentDisplayMode(): DisplayMode = when {
+        presenter.preferences.browseAsList().get() -> DisplayMode.LIST
+        presenter.preferences.libraryLayout().get() == LibraryItem.LAYOUT_COMPACT_GRID -> DisplayMode.COMPACT_GRID
+        else -> DisplayMode.COMFORTABLE_GRID
     }
 
     override fun onActionViewCollapse(item: MenuItem?) {
@@ -373,12 +376,16 @@ open class BrowseSourceController(bundle: Bundle) :
 
         val isLocalSource = presenter.source is LocalSource
         menu.findItem(R.id.action_local_source_help).isVisible = isLocalSource
+
+        updateDisplayMenuItem(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.action_search -> expandActionViewFromInteraction = true
-            R.id.action_display_mode -> swapDisplayMode()
+            R.id.action_display_comfortable_grid -> setDisplayMode(DisplayMode.COMFORTABLE_GRID)
+            R.id.action_display_compact_grid -> setDisplayMode(DisplayMode.COMPACT_GRID)
+            R.id.action_display_list -> setDisplayMode(DisplayMode.LIST)
             R.id.action_open_in_web_view -> openInWebView()
             R.id.action_local_source_help -> openLocalSourceHelpGuide()
             R.id.action_source_settings -> openSourceSettings()
@@ -748,17 +755,35 @@ open class BrowseSourceController(bundle: Bundle) :
         getHolder(manga.id!!)?.setImage(manga)
     }
 
+    /** The three browse display modes surfaced in the overflow submenu. */
+    private enum class DisplayMode(val menuItemId: Int) {
+        COMFORTABLE_GRID(R.id.action_display_comfortable_grid),
+        COMPACT_GRID(R.id.action_display_compact_grid),
+        LIST(R.id.action_display_list),
+    }
+
     /**
-     * Swaps the current display mode.
+     * Applies the chosen display mode by writing the backing prefs (`browseAsList` toggles
+     * list↔grid, `libraryLayout` selects comfortable↔compact) then rebinding the recycler so the
+     * adapter inflates the matching holder/layout.
      */
-    private fun swapDisplayMode() {
+    private fun setDisplayMode(mode: DisplayMode) {
+        if (mode == currentDisplayMode()) return
         val view = view ?: return
         val adapter = adapter ?: return
 
-        val isListMode = !presenter.preferences.browseAsList().get()
-        presenter.preferences.browseAsList().set(isListMode)
+        presenter.preferences.browseAsList().set(mode == DisplayMode.LIST)
+        if (mode != DisplayMode.LIST) {
+            presenter.preferences.libraryLayout().set(
+                if (mode == DisplayMode.COMPACT_GRID) {
+                    LibraryItem.LAYOUT_COMPACT_GRID
+                } else {
+                    LibraryItem.LAYOUT_COMFORTABLE_GRID
+                },
+            )
+        }
         listOf(activityBinding?.toolbar?.menu, activityBinding?.searchToolbar?.menu).forEach {
-            updateDisplayMenuItem(it, isListMode)
+            updateDisplayMenuItem(it, mode)
         }
         setupRecycler(view)
         // Initialize mangas if not on a metered connection

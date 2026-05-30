@@ -56,6 +56,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.icerock.moko.resources.compose.stringResource
@@ -78,8 +79,9 @@ import yokai.util.search.FuzzyMatcher
  *
  * Layout invariants that keep the action bar sticky inside the peek window:
  *  - XML container is `wrap_content` so the Column sizes to its content.
- *  - The body LazyColumn is bounded by [BodyMaxHeight]. With tabs (~48 dp) and action bar
- *    (~80 dp) added, the Column's natural height stays under the configured `peekHeight`.
+ *  - The body Box is bounded by a screen-height-derived max (see [BodyMaxClamp]). With tabs
+ *    (~48 dp) and action bar (~80 dp) added, the Column's natural height stays under the
+ *    `peekHeight` (also derived from screen height in [ComposeSourceFilterSheet]).
  *  - The body scrolls internally when filters overflow — the action bar never moves.
  *
  * The composition mutates filter state IN PLACE on the [FilterList] passed in — matching the
@@ -118,6 +120,12 @@ internal fun SourceFilterSheetContent(
 
     BackHandler(enabled = drillTarget != null) { drillTarget = null }
 
+    // Derive body bounds from the live screen height so the sheet adapts to device size and
+    // landscape; the top bar (~48dp) + action bar (~80dp) + dividers live outside this Box.
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp
+    val bodyMaxHeight = (screenHeightDp * 0.55f).dp.coerceIn(BodyMinClamp, BodyMaxClamp)
+    val bodyMinHeight = (screenHeightDp * 0.25f).dp.coerceIn(160.dp, bodyMaxHeight)
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
@@ -137,7 +145,7 @@ internal fun SourceFilterSheetContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 200.dp, max = BodyMaxHeight),
+                    .heightIn(min = bodyMinHeight, max = bodyMaxHeight),
             ) {
                 AnimatedContent(
                     targetState = drillTarget,
@@ -181,7 +189,10 @@ internal fun SourceFilterSheetContent(
 
 internal enum class FilterSheetTab { Filters, Saved }
 
-private val BodyMaxHeight = 400.dp
+// Clamp bounds for the responsive body height — keep the sheet usable on tiny screens and from
+// swallowing the whole display on tablets / unfolded foldables.
+private val BodyMinClamp = 240.dp
+private val BodyMaxClamp = 520.dp
 
 /**
  * Where the user has drilled to inside the sheet body. Sub-screens swap the main filter list out
@@ -340,7 +351,9 @@ private fun SheetBody(
         is FilterDrillTarget.Group -> GroupChildrenScreen(
             group = drillTarget.filter,
             filterVersion = filterVersion,
+            outerSelectionVersion = outerSelectionVersion,
             query = drillQuery,
+            onDrillGroup = { onDrillTarget(FilterDrillTarget.Group(it)) },
             onListScrollChange = onListScrollChange,
         )
         is FilterDrillTarget.TagList -> AutoCompleteScreen(
@@ -434,7 +447,9 @@ private fun FilterRow(
 private fun GroupChildrenScreen(
     group: Filter.Group<*>,
     filterVersion: Int,
+    outerSelectionVersion: Int,
     query: String,
+    onDrillGroup: (Filter.Group<*>) -> Unit,
     onListScrollChange: ((canScrollUp: Boolean) -> Unit)?,
 ) {
     val listState = rememberLazyListState()
@@ -476,20 +491,28 @@ private fun GroupChildrenScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 12.dp),
     ) {
-        items(
+        itemsIndexed(
             items = visibleChildren,
-            // Stable key (child name) keeps rows in place across selection / query changes
-            // — flipping a checkbox doesn't tear down and re-create the row.
-            key = { (it as Filter<*>).name },
-        ) { child ->
-            // Group children mirror top-level rendering for the subset of filter types groups
-            // actually contain in practice (Tachiyomi source extensions only nest checkboxes,
-            // tri-states, selects and text inside groups).
+            // Stable key (index + child name) keeps rows in place across selection / query changes
+            // — flipping a checkbox doesn't tear down the row, and the index disambiguates
+            // empty-named structural children (Separator) that would otherwise collide.
+            key = { index, child -> "$index-${(child as Filter<*>).name}" },
+        ) { _, child ->
+            // Group children mirror top-level rendering. Nested Group/Sort children drill or sort
+            // in place instead of being dropped; structural Header/Separator render as-is.
             when (child) {
+                is Filter.Header -> FilterHeaderRow(child)
+                is Filter.Separator -> FilterSeparatorRow(child)
                 is Filter.CheckBox -> FilterCheckBoxRow(child)
                 is Filter.TriState -> FilterTriStateRow(child)
                 is Filter.Select<*> -> FilterSelectRow(child)
+                is Filter.Sort -> FilterSortRow(child)
                 is Filter.Text -> FilterTextRow(child)
+                is Filter.Group<*> -> FilterGroupRow(
+                    filter = child,
+                    outerSelectionVersion = outerSelectionVersion,
+                    onDrill = onDrillGroup,
+                )
                 else -> Unit
             }
         }

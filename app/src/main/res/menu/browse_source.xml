@@ -20,7 +20,23 @@
     <item
         android:id="@+id/action_display_mode"
         android:title="@string/display_as"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="ifRoom">
+        <menu>
+            <group
+                android:id="@+id/group_display_mode"
+                android:checkableBehavior="single">
+                <item
+                    android:id="@+id/action_display_comfortable_grid"
+                    android:title="@string/comfortable_grid" />
+                <item
+                    android:id="@+id/action_display_compact_grid"
+                    android:title="@string/compact_grid" />
+                <item
+                    android:id="@+id/action_display_list"
+                    android:title="@string/list" />
+            </group>
+        </menu>
+    </item>
 
     <item
         android:id="@+id/action_open_in_web_view"
