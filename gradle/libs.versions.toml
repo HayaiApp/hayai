@@ -94,6 +94,7 @@ slice = { module = "com.github.mthli:Slice", version = "v1.2" }
 sqlite-ktx = { module = "androidx.sqlite:sqlite-ktx", version.ref = "sqlite" }
 sqlite-android = { module = "com.github.requery:sqlite-android", version = "3.49.0" }
 
+paging-common = { module = "app.cash.paging:paging-common", version = "3.1.1-0.3.1" }
 sqldelight-coroutines = { module = "app.cash.sqldelight:coroutines-extensions", version.ref = "sqldelight" }
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
 sqldelight-android-paging = { module = "app.cash.sqldelight:androidx-paging3-extensions", version.ref = "sqldelight" }
@@ -122,7 +123,7 @@ moko = { id = "dev.icerock.mobile.multiplatform-resources", version.ref = "moko"
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 
 [bundles]
-db = [ "sqldelight-coroutines" ]
+db = [ "sqldelight-coroutines", "paging-common" ]
 db-android = [ "sqldelight-android-driver", "sqldelight-android-paging" ]
 coil = [ "coil3", "coil3-compose", "coil3-svg", "coil3-gif", "coil3-okhttp" ]
 logging = [ "kermit" ]

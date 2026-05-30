@@ -101,6 +101,10 @@ delete:
 DELETE FROM chapters
 WHERE _id = :chapterId;
 
+deleteBulk:
+DELETE FROM chapters
+WHERE _id IN :chapterIds;
+
 update:
 UPDATE chapters SET
     manga_id = coalesce(:mangaId, manga_id),
