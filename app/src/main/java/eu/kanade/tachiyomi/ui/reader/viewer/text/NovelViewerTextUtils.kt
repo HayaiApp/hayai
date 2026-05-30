@@ -183,6 +183,17 @@ object NovelViewerTextUtils {
     private val zeroWidthRegex = Regex("[\\u200B-\\u200D\\u2060\\uFEFF]")
     private val nonAsciiRegex = Regex("[^\\u0000-\\u007F]")
 
+    // Promo/link strippers. Lookbehinds keep them out of HTML attributes (href="…"/src="…")
+    // and emails, so only visible-text URLs/domains are removed. Run AFTER NFKC so de-obfuscated
+    // domains (𝙧𝙚𝙚𝔀… -> reewebnovel.com) are caught.
+    private val urlTextRegex = Regex("(?i)(?<![\"'=/])\\bhttps?://[^\\s\"'<>]+")
+    private val wwwTextRegex = Regex("(?i)(?<![\"'=/.\\w])www\\.[^\\s\"'<>]+")
+    private val bareDomainRegex = Regex(
+        "(?i)(?<![\"'=/@.\\w])[a-z0-9][a-z0-9-]{0,62}(?:\\.[a-z0-9-]{1,63})*" +
+            "\\.(?:com|net|org|co|io|xyz|info|me|tv|site|online|app|cc|vip|club|fun|biz|live|top|icu|shop|store|blog|ru|in)" +
+            "\\b(?:/[^\\s\"'<>]*)?",
+    )
+
     // Hand-curated homoglyph table — only the look-alikes scrapers actually weaponise
     // in promo obfuscation (Cyrillic + Greek lowercase letters that share a glyph with
     // a Latin letter). NFKC does not fold these because they are distinct Unicode chars,
@@ -230,6 +241,13 @@ object NovelViewerTextUtils {
         return foldHomoglyphs(cleaned)
     }
 
+    /** Remove visible-text promo URLs / www / bare domains (HTML-attribute-safe). */
+    private fun stripPromoArtifacts(text: String): String {
+        var r = urlTextRegex.replace(text, "")
+        r = wwwTextRegex.replace(r, "")
+        return bareDomainRegex.replace(r, "")
+    }
+
     /**
      * Apply user-configured find & replace rules to [content].
      *
@@ -240,10 +258,13 @@ object NovelViewerTextUtils {
      */
     fun applyRegexReplacements(content: String, preferences: ReaderPreferences): String {
         var result = content
-        if (preferences.novelTextNormalize.get()) {
+        val aggressive = preferences.novelTextAggressiveCleanup.get()
+        // Aggressive link removal needs de-obfuscated text, so normalise when either is on.
+        if (preferences.novelTextNormalize.get() || aggressive) {
             result = normalizeForRegex(result)
         }
-        if (preferences.novelTextAggressiveCleanup.get()) {
+        if (aggressive) {
+            result = stripPromoArtifacts(result)
             result = nonAsciiRegex.replace(result, "")
         }
 
