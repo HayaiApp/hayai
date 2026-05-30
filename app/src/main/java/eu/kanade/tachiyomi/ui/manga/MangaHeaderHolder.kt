@@ -309,6 +309,9 @@ class MangaHeaderHolder(
 
     private fun setDescription() {
         if (binding != null) {
+            // The holder can be created before the presenter's manga is set (a layout pass races the
+            // async load — e.g. the action-bar ComposeView measuring); bind() re-runs this once ready.
+            if (!adapter.controller.mangaPresenter().isMangaLateInitInitialized()) return
             val desc = adapter.controller.mangaPresenter().manga.description?.replace("<", "&lt;")?.replace(">", "&gt;")?.replace(Regex("""(?m)^\s*-\s*$"""), "\\-")?.replace(Regex("""(?m)^\s*\*\s*$"""), "\\*")
             binding.mangaSummary.movementMethod = LinkMovementMethod.getInstance()
             binding.mangaSummary.text = when {
