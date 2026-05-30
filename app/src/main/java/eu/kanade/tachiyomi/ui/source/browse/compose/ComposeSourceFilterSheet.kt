@@ -11,7 +11,7 @@ import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.widget.E2EBottomSheetDialog
 import kotlinx.coroutines.flow.MutableStateFlow
 import yokai.domain.source.browse.filter.models.SavedSearch
-import yokai.presentation.theme.ExpressiveYokaiTheme
+import yokai.presentation.theme.YokaiTheme
 
 /**
  * M3 Expressive replacement for [eu.kanade.tachiyomi.ui.source.browse.SourceFilterSheet].
@@ -62,7 +62,7 @@ class ComposeSourceFilterSheet(
         binding.filterComposeView.setContent {
             val filterVer by filterVersion.collectAsState()
             val savedVer by savedSearchesVersion.collectAsState()
-            ExpressiveYokaiTheme {
+            YokaiTheme {
                 SourceFilterSheetContent(
                     filters = getFilters(),
                     savedSearches = getSavedSearches(),
