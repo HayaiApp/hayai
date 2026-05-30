@@ -40,6 +40,8 @@ data class LibraryManga(
             filteredScanlators: String?,
             updateStrategy: Long,
             coverLastModified: Long,
+            nextUpdate: Long,
+            fetchInterval: Long,
             // libraryManga
             total: Long,
             readCount: Double,
@@ -70,6 +72,8 @@ data class LibraryManga(
                 filteredScanlators = filteredScanlators,
                 updateStrategy = updateStrategy,
                 coverLastModified = coverLastModified,
+                nextUpdate = nextUpdate,
+                fetchInterval = fetchInterval,
             ),
             read = readCount.roundToInt(),
             unread = maxOf((total - readCount).roundToInt(), 0),

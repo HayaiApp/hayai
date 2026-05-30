@@ -35,6 +35,7 @@ import eu.kanade.tachiyomi.data.preference.DEVICE_ONLY_ON_WIFI
 import eu.kanade.tachiyomi.data.preference.MANGA_HAS_UNREAD
 import eu.kanade.tachiyomi.data.preference.MANGA_NON_COMPLETED
 import eu.kanade.tachiyomi.data.preference.MANGA_NON_READ
+import eu.kanade.tachiyomi.data.preference.MANGA_OUTSIDE_RELEASE_PERIOD
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.domain.manga.models.Manga
@@ -62,6 +63,7 @@ import eu.kanade.tachiyomi.util.system.tryToSetForeground
 import eu.kanade.tachiyomi.util.system.withIOContext
 import java.io.File
 import java.lang.ref.WeakReference
+import java.time.ZonedDateTime
 import java.util.Date
 import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeUnit
@@ -87,6 +89,7 @@ import kotlinx.coroutines.sync.withPermit
 import yokai.util.koin.injectLazy
 import yokai.domain.category.interactor.GetCategories
 import yokai.domain.chapter.interactor.GetChapter
+import yokai.domain.manga.interactor.FetchInterval
 import yokai.domain.manga.interactor.GetLibraryManga
 import yokai.domain.manga.interactor.UpdateManga
 import yokai.domain.manga.models.cover
@@ -109,8 +112,12 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     private val mangaShortcutManager: MangaShortcutManager = get()
     private val getLibraryManga: GetLibraryManga = get()
     private val updateManga: UpdateManga = get()
+    private val fetchInterval: FetchInterval = get()
     private val getTrack: GetTrack = get()
     private val insertTrack: InsertTrack by injectLazy()
+
+    // Release-prediction window for this update run; recomputed when an update starts.
+    private var fetchWindow: Pair<Long, Long> = Pair(0, 0)
 
     private var extraDeferredJobs = mutableListOf<Deferred<Any>>()
 
@@ -173,6 +180,8 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         if (target == Target.CHAPTERS) {
             preferences.libraryUpdateLastTimestamp().set(Date().time)
         }
+
+        fetchWindow = fetchInterval.getWindow(ZonedDateTime.now())
 
         val savedMangasList = inputData.getLongArray(KEY_MANGAS)?.asList()?.plus(extraManga)
         extraManga = emptyList()
@@ -431,7 +440,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
             val fetchedChapters = source.getChapterList(manga.manga.copy())
 
             if (fetchedChapters.isNotEmpty()) {
-                val newChapters = syncChaptersWithSource(fetchedChapters, manga.manga, source)
+                val newChapters = syncChaptersWithSource(fetchedChapters, manga.manga, source, fetchWindow = fetchWindow)
                 if (newChapters.first.isNotEmpty()) {
                     if (shouldDownload) {
                         downloadChapters(
@@ -476,6 +485,10 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
 
     private fun filterMangaToUpdate(mangaToAdd: List<LibraryManga>): List<LibraryManga> {
         val restrictions = preferences.libraryUpdateMangaRestriction().get()
+        // Ensure a valid release-prediction window for queue paths that run before doWork().
+        if (fetchWindow.first == 0L && fetchWindow.second == 0L) {
+            fetchWindow = fetchInterval.getWindow(ZonedDateTime.now())
+        }
         return mangaToAdd.filter { manga ->
 
             // EXH -->
@@ -505,6 +518,9 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 }
                 MANGA_NON_READ in restrictions && manga.totalChapters > 0 && !manga.hasRead -> {
                     skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_started)
+                }
+                MANGA_OUTSIDE_RELEASE_PERIOD in restrictions && manga.manga.next_update > fetchWindow.second -> {
+                    skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_in_release_period)
                 }
                 manga.manga.update_strategy != UpdateStrategy.ALWAYS_UPDATE -> {
                     skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_always_update)

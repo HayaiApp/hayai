@@ -70,9 +70,20 @@
         </menu>
     </item>
     <item
+        android:id="@+id/action_color_from_cover"
+        android:checkable="true"
+        android:title="@string/color_details_from_cover"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_edit"
         android:icon="@drawable/ic_edit_24dp"
         android:title="@string/edit"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_set_fetch_interval"
+        android:title="@string/manga_interval_custom_amount"
         app:showAsAction="never" />
 
     <item

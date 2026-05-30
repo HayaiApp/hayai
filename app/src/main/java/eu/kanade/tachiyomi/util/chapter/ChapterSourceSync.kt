@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.online.HttpSource
+import java.time.ZonedDateTime
 import java.util.*
 import yokai.util.koin.injectLazy
 import yokai.data.DatabaseHandler
@@ -33,6 +34,8 @@ suspend fun syncChaptersWithSource(
     rawSourceChapters: List<SChapter>,
     manga: Manga,
     source: Source,
+    manualFetch: Boolean = false,
+    fetchWindow: Pair<Long, Long> = Pair(0, 0),
     deleteChapter: DeleteChapter = get(),
     getChapter: GetChapter = get(),
     insertChapter: InsertChapter = get(),
@@ -119,7 +122,9 @@ suspend fun syncChaptersWithSource(
 
     // Return if there's nothing to add, delete or change, avoid unnecessary db transactions.
     if (toAdd.isEmpty() && toDelete.isEmpty() && toChange.isEmpty()) {
-        // TODO: Predict when the next chapter gonna release
+        if (manualFetch || manga.fetch_interval == 0 || manga.next_update < fetchWindow.first) {
+            updateManga.awaitUpdateFetchInterval(manga, ZonedDateTime.now(), fetchWindow)
+        }
         return Pair(emptyList(), emptyList())
     }
 
@@ -199,14 +204,17 @@ suspend fun syncChaptersWithSource(
             )
         }
 
-        // TODO: Predict when the next chapter gonna release
-
-        // Set this manga as updated since chapters were changed
-        // Note that last_update actually represents last time the chapter list changed at all
-        // Those changes already checked beforehand, so we can proceed to updating the manga
-        manga.last_update = Date().time
-        updateManga.await(MangaUpdate(manga.id!!, lastUpdate = manga.last_update))
     }
+
+    // Recompute the predicted next-release window now that the chapter list changed.
+    // Computed against the manga's pre-update lastUpdate, mirroring mihon's call ordering.
+    updateManga.awaitUpdateFetchInterval(manga, ZonedDateTime.now(), fetchWindow)
+
+    // Set this manga as updated since chapters were changed
+    // Note that last_update actually represents last time the chapter list changed at all
+    // Those changes already checked beforehand, so we can proceed to updating the manga
+    manga.last_update = Date().time
+    updateManga.await(MangaUpdate(manga.id!!, lastUpdate = manga.last_update))
 
     val filteredScanlators = ChapterUtil.getScanlators(manga.filtered_scanlators).toHashSet()
 

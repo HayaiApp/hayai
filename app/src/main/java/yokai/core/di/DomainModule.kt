@@ -46,6 +46,7 @@ import yokai.domain.manga.MergedMangaRepository
 import yokai.domain.manga.interactor.GetLibraryManga
 import yokai.domain.manga.interactor.GetManga
 import yokai.domain.manga.interactor.GetMergedReferencesById
+import yokai.domain.manga.interactor.FetchInterval
 import yokai.domain.manga.interactor.InsertManga
 import yokai.domain.manga.interactor.UpdateManga
 import yokai.domain.recents.RecentsHiddenRepository
@@ -90,7 +91,8 @@ fun domainModule() = module {
     factory { GetManga(get()) }
     factory { GetLibraryManga(get()) }
     factory { InsertManga(get()) }
-    factory { UpdateManga(get()) }
+    factory { FetchInterval(get()) }
+    factory { UpdateManga(get(), get()) }
 
     single<MergedMangaRepository> { MergedMangaRepositoryImpl(get()) }
     factory { GetMergedReferencesById(get()) }

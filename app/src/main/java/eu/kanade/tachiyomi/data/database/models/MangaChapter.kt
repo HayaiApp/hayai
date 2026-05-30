@@ -26,6 +26,8 @@ class MangaChapter(val manga: Manga, val chapter: Chapter) {
             filteredScanlators: String?,
             updateStrategy: Long,
             coverLastModified: Long,
+            nextUpdate: Long,
+            fetchInterval: Long,
             // chapter
             chapterId: Long,
             _mangaId: Long,
@@ -62,6 +64,8 @@ class MangaChapter(val manga: Manga, val chapter: Chapter) {
                 filteredScanlators = filteredScanlators,
                 updateStrategy = updateStrategy,
                 coverLastModified = coverLastModified,
+                nextUpdate = nextUpdate,
+                fetchInterval = fetchInterval,
             ),
             Chapter.mapper(
                 id = chapterId,

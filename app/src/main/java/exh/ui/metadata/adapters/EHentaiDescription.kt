@@ -47,8 +47,8 @@ fun EHentaiDescription(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Row 1: Genre chip on left, single-line rating on right.
         // Previous version stacked stars over "%.2f" as a 2-line right column, which made
@@ -78,13 +78,13 @@ fun EHentaiDescription(
                 }
                 Text(
                     text = starText,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     color = ratingColor,
                     maxLines = 1,
                 )
                 Text(
                     text = "%.2f".format(ratingFloat),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
@@ -95,17 +95,19 @@ fun EHentaiDescription(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = meta.uploader ?: "Unknown",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.combinedClickable(
-                    onClick = { meta.uploader?.let { onSearch("uploader:\"$it\"") } },
-                    onLongClick = { clipboardManager.setText(AnnotatedString(meta.uploader ?: "")) },
-                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .combinedClickable(
+                        onClick = { meta.uploader?.let { onSearch("uploader:\"$it\"") } },
+                        onLongClick = { clipboardManager.setText(AnnotatedString(meta.uploader ?: "")) },
+                    ),
             )
-            Spacer(Modifier.weight(1f))
             IconButton(
                 onClick = openMetadataViewer,
                 modifier = Modifier.size(32.dp),
@@ -113,8 +115,8 @@ fun EHentaiDescription(
                 Icon(
                     imageVector = Icons.Default.Info,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -128,8 +130,8 @@ fun EHentaiDescription(
         if (hasAnyStats) {
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 meta.length?.let {
                     StatItem("$it pages")
@@ -158,7 +160,7 @@ fun EHentaiDescription(
 private fun StatItem(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelSmall,
+        style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }

@@ -40,6 +40,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.nameBasedOnEnabledLanguages
 import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
 import eu.kanade.tachiyomi.util.isLocal
+import eu.kanade.tachiyomi.util.system.timeSpanFromNow
 import eu.kanade.tachiyomi.util.lang.toNormalized
 import eu.kanade.tachiyomi.util.system.getResourceColor
 import eu.kanade.tachiyomi.util.system.isInNightMode
@@ -535,20 +536,32 @@ class MangaHeaderHolder(
             height = adapter.delegate.topCoverHeight()
         }
 
-        binding.mangaStatus.isVisible = manga.status != 0
-        binding.mangaStatus.text = (
+        val statusText = itemView.context.getString(
+            when (manga.status) {
+                SManga.ONGOING -> MR.strings.ongoing
+                SManga.COMPLETED -> MR.strings.completed
+                SManga.LICENSED -> MR.strings.licensed
+                SManga.PUBLISHING_FINISHED -> MR.strings.publishing_finished
+                SManga.CANCELLED -> MR.strings.cancelled
+                SManga.ON_HIATUS -> MR.strings.on_hiatus
+                else -> MR.strings.unknown_status
+            },
+        )
+        // Surface the predicted next chapter release for favorited, ongoing-ish series.
+        val showNextUpdate = manga.favorite && manga.next_update > 0L &&
+            manga.status != SManga.COMPLETED && manga.status != SManga.CANCELLED &&
+            manga.status != SManga.PUBLISHING_FINISHED
+        binding.mangaStatus.isVisible = manga.status != 0 || showNextUpdate
+        binding.mangaStatus.text = if (showNextUpdate) {
             itemView.context.getString(
-                when (manga.status) {
-                    SManga.ONGOING -> MR.strings.ongoing
-                    SManga.COMPLETED -> MR.strings.completed
-                    SManga.LICENSED -> MR.strings.licensed
-                    SManga.PUBLISHING_FINISHED -> MR.strings.publishing_finished
-                    SManga.CANCELLED -> MR.strings.cancelled
-                    SManga.ON_HIATUS -> MR.strings.on_hiatus
-                    else -> MR.strings.unknown_status
-                },
-            )
-            )
+                MR.strings.manga_next_update_,
+                manga.next_update.timeSpanFromNow(itemView.context),
+            ).let { nextText ->
+                if (manga.status != 0) "$statusText • $nextText" else nextText
+            }
+        } else {
+            statusText
+        }
         with(binding.mangaSource) {
             val enabledLanguages = presenter.preferences.enabledLanguages().get()
 

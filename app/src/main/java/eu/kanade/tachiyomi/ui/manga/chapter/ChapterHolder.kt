@@ -8,6 +8,7 @@ import androidx.core.animation.doOnEnd
 import androidx.core.animation.doOnStart
 import androidx.core.view.isVisible
 import androidx.core.widget.TextViewCompat
+import com.google.android.material.R as materialR
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.isNovel
 import eu.kanade.tachiyomi.data.database.models.seriesType
@@ -157,16 +158,26 @@ class ChapterHolder(
     }
 
     fun notifyStatus(status: Download.State, locked: Boolean, progress: Int, animated: Boolean = false) = with(binding.downloadButton.downloadButton) {
-        adapter.delegate.accentColor()?.let {
-            binding.startView.backgroundTintList = ColorStateList.valueOf(it)
+        val delegateAccent = adapter.delegate.accentColor()
+        if (delegateAccent != null) {
+            binding.startView.backgroundTintList = ColorStateList.valueOf(delegateAccent)
             binding.bookmark.imageTintList = ColorStateList.valueOf(
                 context.getResourceColor(AR.attr.textColorPrimaryInverse),
             )
             TextViewCompat.setCompoundDrawableTintList(
                 binding.chapterTitle,
-                ColorStateList.valueOf(it),
+                ColorStateList.valueOf(delegateAccent),
             )
-            accentColor = it
+            accentColor = delegateAccent
+        } else {
+            // Cover-color theming off: fall back to plain M3 defaults, no leftover accent tint.
+            val defaultAccent = context.getResourceColor(materialR.attr.colorSecondary)
+            binding.startView.backgroundTintList = ColorStateList.valueOf(defaultAccent)
+            binding.bookmark.imageTintList = ColorStateList.valueOf(
+                context.getResourceColor(AR.attr.textColorPrimaryInverse),
+            )
+            TextViewCompat.setCompoundDrawableTintList(binding.chapterTitle, null)
+            accentColor = defaultAccent
         }
         if (locked) {
             isVisible = false

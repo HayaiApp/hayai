@@ -40,6 +40,8 @@ data class MangaChapterHistory(val manga: Manga, val chapter: Chapter, val histo
             filteredScanlators: String?,
             updateStrategy: Long,
             coverLastModified: Long,
+            nextUpdate: Long,
+            fetchInterval: Long,
             // chapter
             chapterId: Long?,
             chapterMangaId: Long?,
@@ -81,6 +83,8 @@ data class MangaChapterHistory(val manga: Manga, val chapter: Chapter, val histo
                 filteredScanlators = filteredScanlators,
                 updateStrategy = updateStrategy,
                 coverLastModified = coverLastModified,
+                nextUpdate = nextUpdate,
+                fetchInterval = fetchInterval,
             )
 
             val chapter = try {
