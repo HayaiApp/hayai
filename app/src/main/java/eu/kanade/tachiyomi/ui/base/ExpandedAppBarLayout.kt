@@ -94,10 +94,15 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         get() = preferences.useLargeToolbar().get() && !isExtraSmall
 
     var compactSearchMode = false
+        set(value) {
+            if (field != value) invalidatePreLayoutHeight()
+            field = value
+        }
 
     /** Defines how the toolbar layout should be */
     private var toolbarMode = ToolbarState.EXPANDED
         set(value) {
+            if (field != value) invalidatePreLayoutHeight()
             field = value
             if (value == ToolbarState.SEARCH_ONLY) {
                 mainToolbar?.isGone = true
@@ -111,6 +116,10 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
             }
         }
     var useTabsInPreLayout = false
+        set(value) {
+            if (field != value) invalidatePreLayoutHeight()
+            field = value
+        }
     var yAnimator: ViewPropertyAnimator? = null
 
     /**
@@ -369,6 +378,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
 
     fun setTitle(title: CharSequence?, setBigTitle: Boolean) {
         if (setBigTitle) {
+            if (bigTitleView?.text != title) invalidatePreLayoutHeight()
             bigTitleView?.text = title
         }
         mainToolbar?.title = title
@@ -389,21 +399,47 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         super.setTranslationY(newY)
     }
 
-    fun getEstimatedLayout(includeSearchToolbar: Boolean, includeTabs: Boolean, includeLargeToolbar: Boolean, ignoreSearch: Boolean = false): Int {
-        val hasLargeToolbar = includeLargeToolbar && useLargeToolbar && (!compactSearchMode || ignoreSearch)
-        val appBarHeight = attrToolbarHeight * (if (includeSearchToolbar && hasLargeToolbar) 2 else 1)
+    // Cached big-title height. getEstimatedLayout runs on every scroll frame (via
+    // preLayoutHeightWhileSearching in updateAppBarAfterY/setTranslationY); measuring the
+    // bigTitleView there is per-frame jank. Cache the measure and invalidate only when an
+    // input to it changes (layout pass, config change, title text, tab/search-mode toggle).
+    private var cachedBigTitleHeight: Int = INVALID_TITLE_HEIGHT
+
+    /** Drop the cached [bigTitleView] height so the next [getEstimatedLayout] re-measures. */
+    fun invalidatePreLayoutHeight() {
+        cachedBigTitleHeight = INVALID_TITLE_HEIGHT
+    }
+
+    private fun bigTitleHeight(): Int {
+        cachedBigTitleHeight.takeIf { it != INVALID_TITLE_HEIGHT }?.let { return it }
         val widthMeasureSpec = MeasureSpec.makeMeasureSpec(resources.displayMetrics.widthPixels, MeasureSpec.AT_MOST)
         val heightMeasureSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         bigTitleView?.measure(widthMeasureSpec, heightMeasureSpec)
         val textHeight = max(bigTitleView?.height ?: 0, bigTitleView?.measuredHeight ?: 0) +
             (bigTitleView?.marginTop?.plus(bigView?.paddingBottom ?: 0) ?: 0)
-        return appBarHeight + (if (hasLargeToolbar) textHeight else 0) +
+        cachedBigTitleHeight = textHeight
+        return textHeight
+    }
+
+    fun getEstimatedLayout(includeSearchToolbar: Boolean, includeTabs: Boolean, includeLargeToolbar: Boolean, ignoreSearch: Boolean = false): Int {
+        val hasLargeToolbar = includeLargeToolbar && useLargeToolbar && (!compactSearchMode || ignoreSearch)
+        val appBarHeight = attrToolbarHeight * (if (includeSearchToolbar && hasLargeToolbar) 2 else 1)
+        return appBarHeight + (if (hasLargeToolbar) bigTitleHeight() else 0) +
             if (includeTabs) 48.dpToPx else 0
     }
 
     override fun onConfigurationChanged(newConfig: Configuration?) {
         super.onConfigurationChanged(newConfig)
+        // Config change alters big-title text appearance and the measure width.
+        invalidatePreLayoutHeight()
         shrinkAppBarIfNeeded(newConfig)
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        super.onLayout(changed, l, t, r, b)
+        // A real layout pass resolves the big-title's actual height; drop the estimate so the
+        // next read reflects it.
+        if (changed) invalidatePreLayoutHeight()
     }
 
     /**
@@ -678,6 +714,10 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
             i++
         }
         toRemove.forEach { menu.removeItem(it) }
+    }
+
+    companion object {
+        private const val INVALID_TITLE_HEIGHT = -1
     }
 }
 
