@@ -82,6 +82,10 @@ open class MangaImpl(
 
     override var cover_last_modified: Long = 0L
 
+    override var next_update: Long = 0L
+
+    override var fetch_interval: Int = 0
+
     override fun copyFrom(other: SManga) {
         val remoteTitle = try {
             if (other is Manga) other.ogTitle else other.title

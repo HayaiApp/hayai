@@ -223,6 +223,8 @@ fun Manga.Companion.mapper(
     filteredScanlators: String?,
     updateStrategy: Long,
     coverLastModified: Long,
+    nextUpdate: Long,
+    fetchInterval: Long,
 ) = create(url, title, source).apply {
     this.id = id
     this.artist = artist
@@ -241,6 +243,8 @@ fun Manga.Companion.mapper(
     this.filtered_scanlators = filteredScanlators
     this.update_strategy = updateStrategy.let(updateStrategyAdapter::decode)
     this.cover_last_modified = coverLastModified
+    this.next_update = nextUpdate
+    this.fetch_interval = fetchInterval.toInt()
 }
 
 fun Manga.hasCustomCover(coverCache: CoverCache = get()): Boolean {

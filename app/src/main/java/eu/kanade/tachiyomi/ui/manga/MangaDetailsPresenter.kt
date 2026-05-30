@@ -76,6 +76,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
 import java.util.Locale
+import kotlin.math.absoluteValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -447,6 +448,30 @@ class MangaDetailsPresenter(
         setCurrentManga(dbManga)
         return dbManga
     }
+
+    /**
+     * Override the predicted release interval for this manga, then recompute next_update.
+     * Port of mihon MangaScreenModel.setFetchInterval: a positive [interval] is stored as
+     * negative (a user-locked custom value); 0 resets to automatic prediction.
+     */
+    fun setFetchInterval(interval: Int) {
+        presenterScope.launchNonCancellableIO {
+            // Custom intervals are stored negative; 0 clears the lock back to auto.
+            manga.fetch_interval = -interval
+            if (updateManga.awaitUpdateFetchInterval(manga)) {
+                refreshMangaFromDb()
+                withUIContext { view?.updateHeader() }
+            }
+        }
+    }
+
+    /** Current effective interval in days (absolute value); 0 when not yet predicted. */
+    val fetchIntervalDays: Int
+        get() = manga.fetch_interval.absoluteValue
+
+    /** True when the interval was manually locked by the user (stored negative). */
+    val isUserIntervalMode: Boolean
+        get() = manga.fetch_interval < 0
 
     private suspend fun fetchMangaFromSource() {
         try {

@@ -139,6 +139,7 @@ import eu.kanade.tachiyomi.util.view.setOnQueryTextChangeListener
 import eu.kanade.tachiyomi.util.view.setPositiveButton
 import eu.kanade.tachiyomi.util.view.setStyle
 import eu.kanade.tachiyomi.util.view.setTextColorAlpha
+import eu.kanade.tachiyomi.util.view.setTitle
 import eu.kanade.tachiyomi.util.view.snack
 import eu.kanade.tachiyomi.util.view.toolbarHeight
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
@@ -150,6 +151,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import yokai.domain.manga.interactor.FetchInterval
 import yokai.domain.manga.models.cover
 import yokai.i18n.MR
 import yokai.presentation.core.Constants
@@ -213,6 +215,14 @@ class MangaDetailsController :
     private var trackingBottomSheet: TrackingBottomSheet? = null
     private var startingRangeChapterPos: Int? = null
     private var rangeMode: RangeMode? = null
+
+    // mihon-style multi-select: coexists with the legacy range/long-press-sheet path. When true,
+    // taps toggle selection instead of opening the chapter, and the ActionMode shows batch actions.
+    private var isSelectionMode = false
+
+    // Adapter position of the last chapter touched in selection mode; used as the shift-style
+    // range anchor for the next long-press (mihon toggleSelection fromLongPress semantics).
+    private var lastSelectionPosition: Int? = null
     private var editMangaDialog: EditMangaDialog? = null
     var refreshTracker: Int? = null
     private var chapterPopupMenu: Pair<Int, PopupMenu>? = null
@@ -364,28 +374,24 @@ class MangaDetailsController :
     private fun setCoverColorValue(colorToUse: Int? = null) {
         val context = view?.context ?: return
         val colorBack = context.getResourceColor(android.R.attr.colorBackground)
+        // When cover-color theming is off, leave coverColor null so consumers fall back to the
+        // plain M3 colorBackground; no half-tinted colorSecondary blend.
         coverColor =
-            (
-                if (presenter.preferences.themeMangaDetails().get()) {
-                    (colorToUse ?: manga?.vibrantCoverColor)
-                } else {
+            if (!presenter.preferences.themeMangaDetails().get()) {
+                null
+            } else {
+                (colorToUse ?: manga?.vibrantCoverColor)?.let {
+                    // this makes the color more consistent regardless of theme
+                    val dominant = it
+                    val domLum = ColorUtils.calculateLuminance(dominant)
+                    val lumWrongForTheme =
+                        (if (context.isInNightMode()) domLum > 0.8 else domLum <= 0.2)
                     ColorUtils.blendARGB(
-                        context.getResourceColor(materialR.attr.colorSecondary),
+                        it,
                         colorBack,
-                        0.5f,
+                        if (lumWrongForTheme) 0.9f else 0.7f,
                     )
                 }
-                )?.let {
-                // this makes the color more consistent regardless of theme
-                val dominant = it
-                val domLum = ColorUtils.calculateLuminance(dominant)
-                val lumWrongForTheme =
-                    (if (context.isInNightMode()) domLum > 0.8 else domLum <= 0.2)
-                ColorUtils.blendARGB(
-                    it,
-                    colorBack,
-                    if (lumWrongForTheme) 0.9f else 0.7f,
-                )
             }
     }
 
@@ -479,6 +485,50 @@ class MangaDetailsController :
         binding.fab.iconTint = ColorStateList(states, textColors)
     }
 
+    /** Re-applies or clears cover-derived theming after the toggle flips. */
+    private fun applyCoverColorTheming() {
+        val on = presenter.preferences.themeMangaDetails().get()
+        if (on) {
+            // Recompute from the cached vibrant color; falls back to a fresh Palette pass if
+            // the cover hasn't been decoded yet.
+            setAccentColorValue()
+            setHeaderColorValue()
+            if (accentColor == null) {
+                setPaletteColor()
+            } else {
+                setItemColors()
+            }
+        } else {
+            // Drop to plain M3: null color values, default FAB tints (style defaults), neutral
+            // backdrop, default swipe style, and recolored chapter rows.
+            setAccentColorValue()
+            setHeaderColorValue()
+            setCoverColorValue()
+            resetItemColorsToDefault()
+        }
+        colorToolbar(binding.recycler.canScrollVertically(-1), animate = false)
+    }
+
+    /** Clears accent-tinted FAB/header/chapter colors back to M3 defaults (OFF path). */
+    private fun resetItemColorsToDefault() {
+        val context = view?.context ?: return
+        val onPrimary = context.getResourceColor(materialR.attr.colorOnPrimary)
+        binding.fab.backgroundTintList =
+            ColorStateList.valueOf(context.getResourceColor(AR.attr.colorPrimary))
+        binding.fab.setTextColor(ColorStateList.valueOf(onPrimary))
+        binding.fab.iconTint = ColorStateList.valueOf(onPrimary)
+        getHeader()?.setBackDrop(context.getResourceColor(android.R.attr.colorBackground))
+        getHeader()?.bind(presenter.headerItem)
+        if ((adapter?.itemCount ?: 0) > 1) {
+            presenter.chapters.forEach { chapter ->
+                val chapterHolder =
+                    binding.recycler.findViewHolderForItemId(chapter.id!!) as? ChapterHolder
+                        ?: return@forEach
+                chapterHolder.notifyStatus(chapter.status, isLocked(), chapter.progress)
+            }
+        }
+    }
+
     /** Check if device is tablet, and use a second recycler to hold the details header if so */
     private fun setTabletMode(view: View) {
         isTablet = view.context.isTablet() && view.context.isLandscape()
@@ -520,6 +570,13 @@ class MangaDetailsController :
 
     override fun onDestroyView(view: View) {
         snack?.dismiss()
+        // Tear down any active selection/range ActionMode so it doesn't leak across view recreation.
+        actionMode?.finish()
+        actionMode = null
+        isSelectionMode = false
+        lastSelectionPosition = null
+        rangeMode = null
+        startingRangeChapterPos = null
         adapter = null
         finishFloatingActionMode()
         trackingBottomSheet = null
@@ -1002,6 +1059,11 @@ class MangaDetailsController :
     override fun onItemClick(view: View?, position: Int): Boolean {
         val chapterItem = (adapter?.getItem(position) as? ChapterItem) ?: return false
         val chapter = chapterItem.chapter
+        // mihon-style multi-select: a tap toggles this chapter's selection (no range anchor).
+        if (isSelectionMode) {
+            toggleChapterSelection(position)
+            return false
+        }
         if (actionMode != null) {
             if (startingRangeChapterPos == null) {
                 adapter?.addSelection(position)
@@ -1046,6 +1108,19 @@ class MangaDetailsController :
     }
 
     override fun onItemLongClick(position: Int) {
+        val adapter = adapter ?: return
+        if (adapter.getItem(position) !is ChapterItem) return
+        // Long-press is the entry point to mihon-style multi-select. The first long-press starts
+        // selection mode; a later long-press range-selects from the previous anchor.
+        enterSelectionMode(position)
+    }
+
+    /**
+     * Legacy long-press menu sheet (mark previous/range read-unread, open in webview). Preserved
+     * for coexistence with the new multi-select; no longer bound to chapter-row long-press but kept
+     * reachable so the range/RangeMode path stays intact.
+     */
+    fun showChapterMenuSheet(position: Int) {
         val adapter = adapter ?: return
         val item = (adapter.getItem(position) as? ChapterItem) ?: return
         val descending = presenter.sortDescending()
@@ -1293,6 +1368,10 @@ class MangaDetailsController :
             presenter.hasBookmark() && !presenter.isLockedFromSearch
         menu.findItem(R.id.action_migrate)?.isVisible = !presenter.isLockedFromSearch &&
             !presenter.manga.isLocal() && presenter.manga.favorite
+        menu.findItem(R.id.action_set_fetch_interval)?.isVisible = !presenter.isLockedFromSearch &&
+            !presenter.manga.isLocal() && presenter.manga.favorite
+        menu.findItem(R.id.action_color_from_cover)?.isChecked =
+            presenter.preferences.themeMangaDetails().get()
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -1303,6 +1382,12 @@ class MangaDetailsController :
                     presenter.manga,
                 )
                 editMangaDialog?.showDialog(router)
+            }
+            R.id.action_color_from_cover -> {
+                val newValue = !presenter.preferences.themeMangaDetails().get()
+                presenter.preferences.themeMangaDetails().set(newValue)
+                item.isChecked = newValue
+                applyCoverColorTheming()
             }
             R.id.action_open_in_web_view -> openInWebView()
             R.id.action_refresh_tracking -> presenter.refreshTracking(true)
@@ -1336,6 +1421,7 @@ class MangaDetailsController :
             R.id.download_next, R.id.download_next_5, R.id.download_custom, R.id.download_unread, R.id.download_all -> downloadChapters(
                 item.itemId,
             )
+            R.id.action_set_fetch_interval -> showFetchIntervalDialog()
             else -> return super.onOptionsItemSelected(item)
         }
         return true
@@ -1494,6 +1580,31 @@ class MangaDetailsController :
             .show()
     }
 
+    private fun showFetchIntervalDialog() {
+        val context = view?.context ?: return
+        // 0 = automatic prediction; the rest are user-locked overrides (in days).
+        val intervalDays = intArrayOf(0, 1, 2, 3, 7, 14, FetchInterval.MAX_INTERVAL)
+        val labels = intervalDays.map { days ->
+            if (days == 0) {
+                context.getString(MR.strings.manga_interval_mode_automatic)
+            } else {
+                context.getString(MR.plurals.day_plural, days, days)
+            }
+        }.toTypedArray()
+        // Pre-select the current override, or "Automatic" when unlocked.
+        val current = if (presenter.isUserIntervalMode) presenter.fetchIntervalDays else 0
+        val checked = intervalDays.indexOf(current).coerceAtLeast(0)
+
+        context.materialAlertDialog()
+            .setTitle(MR.strings.manga_interval_custom_amount)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                presenter.setFetchInterval(intervalDays[which])
+                dialog.dismiss()
+            }
+            .setNegativeButton(AR.string.cancel, null)
+            .show()
+    }
+
     private fun updateToolbarTitleAlpha(@FloatRange(from = 0.0, to = 1.0) alpha: Float? = null, isScrollingDown: Boolean = false) {
         if ((!isControllerVisible && alpha == null) || isScrollingDown) return
         val scrolledList = binding.recycler
@@ -1599,6 +1710,8 @@ class MangaDetailsController :
     }
 
     override fun startDownloadRange(position: Int) {
+        // Don't start the legacy download-range flow while a multi-select is active.
+        if (isSelectionMode) return
         createActionModeIfNeeded()
         val chapterItem = (adapter?.getItem(position) as? ChapterItem) ?: return
         rangeMode = if (chapterItem.status in listOf(Download.State.NOT_DOWNLOADED, Download.State.ERROR)) {
@@ -1985,14 +2098,65 @@ class MangaDetailsController :
     }
 
     override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
+        if (!isSelectionMode) return true
+        when (item?.itemId) {
+            R.id.action_select_all -> selectAllChapters()
+            R.id.action_select_inverse -> invertChapterSelection()
+            R.id.action_mark_as_read -> {
+                markAsRead(selectedChapters())
+                destroyActionModeIfNeeded()
+            }
+            R.id.action_mark_as_unread -> {
+                markAsUnread(selectedChapters())
+                destroyActionModeIfNeeded()
+            }
+            R.id.action_bookmark -> {
+                bookmarkChapters(selectedChapters(), true)
+                destroyActionModeIfNeeded()
+            }
+            R.id.action_remove_bookmark -> {
+                bookmarkChapters(selectedChapters(), false)
+                destroyActionModeIfNeeded()
+            }
+            R.id.action_download -> {
+                downloadChapters(selectedChapters().filter { !it.isDownloaded })
+                destroyActionModeIfNeeded()
+            }
+            R.id.action_remove_downloads -> {
+                massDeleteChapters(selectedChapters().filter { it.isDownloaded }, false)
+                destroyActionModeIfNeeded()
+            }
+            else -> return false
+        }
         return true
     }
 
     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+        if (isSelectionMode) {
+            mode?.menuInflater?.inflate(R.menu.chapter_selection, menu)
+        }
         return true
     }
 
     override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+        if (isSelectionMode) {
+            val selected = selectedChapters()
+            if (selected.isEmpty()) {
+                destroyActionModeIfNeeded()
+                return false
+            }
+            mode?.title = view?.context?.getString(MR.strings.selected_, selected.size)
+            // Show only the bookmark/read toggles that make sense for the current selection.
+            menu?.findItem(R.id.action_mark_as_read)?.isVisible = selected.any { !it.read }
+            menu?.findItem(R.id.action_mark_as_unread)?.isVisible = selected.any { it.read }
+            menu?.findItem(R.id.action_bookmark)?.isVisible = selected.any { !it.bookmark }
+            menu?.findItem(R.id.action_remove_bookmark)?.isVisible = selected.any { it.bookmark }
+            menu?.findItem(R.id.action_download)?.isVisible =
+                !presenter.manga.isLocal() && selected.any { !it.isDownloaded }
+            menu?.findItem(R.id.action_remove_downloads)?.isVisible =
+                !presenter.manga.isLocal() && selected.any { it.isDownloaded }
+            return true
+        }
         mode?.title = view?.context?.getString(
             if (startingRangeChapterPos == null) {
                 MR.strings.select_starting_chapter
@@ -2005,6 +2169,8 @@ class MangaDetailsController :
 
     override fun onDestroyActionMode(mode: ActionMode?) {
         actionMode = null
+        isSelectionMode = false
+        lastSelectionPosition = null
         setStatusBarAndToolbar()
         if (startingRangeChapterPos != null && rangeMode in setOf(RangeMode.Download, RangeMode.RemoveDownload)) {
             val item = adapter?.getItem(startingRangeChapterPos!!) as? ChapterItem
@@ -2018,7 +2184,101 @@ class MangaDetailsController :
         startingRangeChapterPos = null
         adapter?.mode = SelectableAdapter.Mode.IDLE
         adapter?.clearSelection()
+        // Repaint rows so the deselected highlight clears immediately.
+        refreshSelectionHighlights()
         return
+    }
+
+    // mihon-style multi-select: enter selection mode and select [position]. A later long-press
+    // range-selects from the previous anchor (toggleSelection fromLongPress semantics).
+    private fun enterSelectionMode(position: Int) {
+        val firstEntry = !isSelectionMode
+        isSelectionMode = true
+        // Put the adapter in MULTI mode and select before starting the ActionMode so the very
+        // first onPrepareActionMode already sees a non-empty selection (otherwise it self-destructs).
+        if (adapter?.mode != SelectableAdapter.Mode.MULTI) {
+            adapter?.mode = SelectableAdapter.Mode.MULTI
+        }
+        val previousAnchor = lastSelectionPosition
+        if (previousAnchor == null || previousAnchor == position) {
+            setChapterSelected(position, true)
+        } else {
+            // Select the inclusive range between the prior anchor and this long-press target.
+            val range = if (previousAnchor < position) previousAnchor..position else position..previousAnchor
+            for (pos in range) {
+                if (adapter?.getItem(pos) is ChapterItem) setChapterSelected(pos, true)
+            }
+        }
+        lastSelectionPosition = position
+        if (firstEntry) {
+            createActionModeIfNeeded()
+        } else {
+            actionMode?.invalidate()
+        }
+    }
+
+    private fun toggleChapterSelection(position: Int) {
+        if (adapter?.getItem(position) !is ChapterItem) return
+        val nowSelected = !(adapter?.isSelected(position) ?: false)
+        setChapterSelected(position, nowSelected)
+        lastSelectionPosition = if (nowSelected) position else null
+        if (selectedChapters().isEmpty()) {
+            destroyActionModeIfNeeded()
+        } else {
+            actionMode?.invalidate()
+        }
+    }
+
+    private fun setChapterSelected(position: Int, selected: Boolean) {
+        val adapter = adapter ?: return
+        val alreadySelected = adapter.isSelected(position)
+        if (selected == alreadySelected) return
+        if (selected) adapter.addSelection(position) else adapter.removeSelection(position)
+        (binding.recycler.findViewHolderForAdapterPosition(position) as? BaseFlexibleViewHolder)
+            ?.toggleActivation()
+        val item = adapter.getItem(position) as? ChapterItem
+        (binding.recycler.findViewHolderForAdapterPosition(position) as? ChapterHolder)
+            ?.notifyStatus(
+                if (selected) Download.State.CHECKED else item?.status ?: Download.State.NOT_DOWNLOADED,
+                false,
+                item?.progress ?: 0,
+            )
+    }
+
+    private fun selectAllChapters() {
+        val adapter = adapter ?: return
+        for (i in 0 until adapter.itemCount) {
+            if (adapter.getItem(i) is ChapterItem) setChapterSelected(i, true)
+        }
+        actionMode?.invalidate()
+    }
+
+    private fun invertChapterSelection() {
+        val adapter = adapter ?: return
+        for (i in 0 until adapter.itemCount) {
+            if (adapter.getItem(i) is ChapterItem) setChapterSelected(i, !adapter.isSelected(i))
+        }
+        lastSelectionPosition = null
+        if (selectedChapters().isEmpty()) {
+            destroyActionModeIfNeeded()
+        } else {
+            actionMode?.invalidate()
+        }
+    }
+
+    /** Selected chapters mapped from the adapter's current selection positions. */
+    private fun selectedChapters(): List<ChapterItem> {
+        val adapter = adapter ?: return emptyList()
+        return adapter.selectedPositions.mapNotNull { adapter.getItem(it) as? ChapterItem }
+    }
+
+    /** Repaints visible chapter rows to their non-selected status (clears CHECKED highlight). */
+    private fun refreshSelectionHighlights() {
+        presenter.chapters.forEach { chapter ->
+            val holder = binding.recycler.findViewHolderForItemId(chapter.id!!) as? ChapterHolder
+                ?: return@forEach
+            holder.notifyStatus(chapter.status, isLocked(), chapter.progress)
+        }
     }
     //endregion
 

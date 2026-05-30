@@ -85,6 +85,8 @@ class MangaRepositoryImpl(private val handler: DatabaseHandler) : MangaRepositor
                     filteredScanlators = update.filteredScanlators,
                     updateStrategy = update.updateStrategy?.let(updateStrategyAdapter::encode),
                     coverLastModified = update.coverLastModified,
+                    nextUpdate = update.nextUpdate,
+                    fetchInterval = update.fetchInterval?.toLong(),
                     mangaId = update.id,
                 )
             }
@@ -113,6 +115,8 @@ class MangaRepositoryImpl(private val handler: DatabaseHandler) : MangaRepositor
                 filteredScanlators = manga.filtered_scanlators,
                 updateStrategy = manga.update_strategy.let(updateStrategyAdapter::encode),
                 coverLastModified = manga.cover_last_modified,
+                nextUpdate = manga.next_update,
+                fetchInterval = manga.fetch_interval.toLong(),
             )
             mangasQueries.selectLastInsertedRowId()
         }

@@ -23,4 +23,6 @@ data class MangaUpdate(
     var hideTitle: Boolean? = null,
     var filteredScanlators: String? = null,
     var coverLastModified: Long? = null,
+    var nextUpdate: Long? = null,
+    var fetchInterval: Int? = null,
 )

@@ -35,6 +35,12 @@ interface Manga : SManga {
 
     var cover_last_modified: Long
 
+    // Predicted epoch-millis of the next chapter release; 0 when unknown.
+    var next_update: Long
+
+    // Predicted days between releases. Negative = user-locked override.
+    var fetch_interval: Int
+
     @Deprecated("Use ogTitle directly instead", ReplaceWith("ogTitle"))
     val originalTitle: String
         get() = ogTitle
@@ -219,6 +225,8 @@ interface Manga : SManga {
             dateAdded = date_added,
             filteredScanlators = filtered_scanlators,
             updateStrategy = update_strategy,
+            nextUpdate = next_update,
+            fetchInterval = fetch_interval,
         )
     }
 

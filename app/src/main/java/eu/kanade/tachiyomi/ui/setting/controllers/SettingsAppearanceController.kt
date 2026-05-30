@@ -173,7 +173,8 @@ class SettingsAppearanceController : SettingsLegacyController() {
             titleRes = MR.strings.details_page
             switchPreference {
                 key = Keys.themeMangaDetails
-                titleRes = MR.strings.theme_buttons_based_on_cover
+                titleRes = MR.strings.color_details_from_cover
+                summaryRes = MR.strings.color_details_from_cover_summary
                 defaultValue = true
             }
         }
