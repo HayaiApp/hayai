@@ -9,11 +9,12 @@ sealed class TabItem {
     data class Label(val text: String) : TabItem()
 
     /**
-     * Text tab decorated with a circular count badge — used by Library category
-     * pills. [ExpandedAppBarLayout.applyTabs] inflates `chrome_tab_with_count` as
-     * the tab's custom view and binds [text] + [count] into it.
+     * Text tab optionally decorated with a circular count badge — used by Library
+     * category pills. [ExpandedAppBarLayout.applyTabs] inflates `chrome_tab_with_count`
+     * as the tab's custom view and binds [text] into it; [count] is rendered only when
+     * non-null (null honors the "show number of items" pref being off, hiding the badge).
      */
-    data class Badged(val text: String, val count: Int) : TabItem()
+    data class Badged(val text: String, val count: Int?) : TabItem()
 }
 
 /** Maps to the corresponding [TabLayout] mode flag. */

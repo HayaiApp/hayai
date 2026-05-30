@@ -192,7 +192,7 @@ open class LibraryController(
         seedSearchFromState()
     }
 
-    // The only display-mode-dependent chunk of chrome. Extracted so applyDisplayMode can
+    // The only display-mode-dependent chunk of chrome. Extracted so reconcileDisplaySurface can
     // refresh just this without going through the full onSetupLocalChrome chain (which
     // used to drag setupToolbarMenu's now-removed seed block along — the recursion source).
     private fun refreshTabStrip() {
@@ -202,11 +202,13 @@ open class LibraryController(
         if (showStrip) {
             val selectedIdx = visibleCats.indexOfFirst { it.order == activeCategory }
                 .takeIf { it >= 0 } ?: 0
+            val showCounts = preferences.categoryNumberOfItems().get()
             appBar.applyTabs(
                 items = visibleCats.map { cat ->
                     TabItem.Badged(
                         text = cat.name,
-                        count = cat.id?.let { presenter.getItemCountInCategories(it) } ?: 0,
+                        // Null hides the badge when "show number of items" is off — honoring the pref in tabbed mode.
+                        count = if (showCounts) cat.id?.let { presenter.getItemCountInCategories(it) } ?: 0 else null,
                     )
                 },
                 selectedIndex = selectedIdx,
@@ -290,7 +292,7 @@ open class LibraryController(
      * decides whether to reserve 48dp for the strip in the recycler's top padding;
      * keeping it `true` while flatten-on-search has hidden the strip would leave a
      * dead 48dp gap above the results. Mirrors the `showStrip` condition in
-     * [applyDisplayMode] / [onSetupLocalChrome] so layout math and chrome agree.
+     * [reconcileDisplaySurface] / [onSetupLocalChrome] so layout math and chrome agree.
      */
     override val showActivityTabs: Boolean
         get() = isTabbedMode &&
@@ -436,6 +438,37 @@ open class LibraryController(
     // elevateAppBar() (a colorToolbar callback that cancels/restarts a ValueAnimator) when the
     // elevated state actually flips — same gating recents uses, instead of firing every frame.
     private var isPageToolbarElevated = false
+
+    /** Render surface for the library body: the per-category pager vs. the single continuous recycler. */
+    private enum class DisplaySurface { TABBED, CONTINUOUS }
+
+    /**
+     * The surface currently shown, as last applied by [reconcileDisplaySurface]. Null until the
+     * first reconcile. This is the single source of truth that prevents interleaved callers
+     * (resume + library-update + tab-activate within one frame) from flipping the view tree more
+     * than once: a reconcile only touches the recyclers when the target surface differs from this.
+     */
+    private var currentDisplaySurface: DisplaySurface? = null
+
+    /**
+     * The surface that SHOULD be shown right now, derived purely from the display-mode preference
+     * plus the category set and flatten-on-search flag — i.e. the same `showStrip` predicate
+     * [reconcileDisplaySurface] uses, hoisted so the data path ([onNextLibraryUpdate]) can gate on
+     * the PREFERENCE-derived target instead of a transient live view-visibility flag. TABBED only
+     * when the pref is tabbed, there's >1 visible category, and we're not flattened-on-search; every
+     * other case (single category, sub-class picker, flatten) is CONTINUOUS.
+     */
+    private val targetDisplaySurface: DisplaySurface
+        get() = if (
+            isTabbedMode &&
+            visibleTabCategories().size > 1 &&
+            !presenter.forceShowAllCategories
+        ) {
+            DisplaySurface.TABBED
+        } else {
+            DisplaySurface.CONTINUOUS
+        }
+
     private var hopperOffset = 0f
     private val maxHopperOffset: Float
         get() = if (activityBinding?.bottomNav != null && !isSubClass) {
@@ -652,16 +685,36 @@ open class LibraryController(
     /**
      * Library has two display modes: continuous (single scrolling RecyclerView for all
      * categories) and tabbed (a ViewPager with one RecyclerView per category and the
-     * activity tab strip as the pill bar). Switches the view tree between the two and
-     * refreshes only the display-mode-dependent chrome (tab strip). Full chrome wire-up
-     * lives in [onSetupLocalChrome] and only fires on real entry events.
+     * activity tab strip as the pill bar). The visible surface is a pure function of the
+     * display-mode PREFERENCE plus the category set / flatten-on-search flag — never of the
+     * live view-visibility flags, which transiently disagree while several callers
+     * (onActivityResumed, onNextLibraryUpdate, onTabActivated, POP_ENTER, search) fire in the
+     * same frame.
+     *
+     * Idempotent and the SINGLE entry point for surface changes: it tracks the shown surface in
+     * [currentDisplaySurface] and only flips the view tree when the computed target differs.
+     * Chrome that can change without a surface change (tab strip labels/counts, mini bar) is
+     * refreshed every call. Full chrome wire-up still lives in [onSetupLocalChrome].
+     *
+     * WHY this kills the flash: the continuous recycler is only ever made visible by
+     * [applyContinuousViewTree], and that runs only when the target is CONTINUOUS. An update
+     * arriving mid-transition while the pref is tabbed computes target TABBED, sees the surface
+     * is already TABBED, and is a no-op for the recyclers — so no caller can show-then-hide the
+     * continuous recycler within a frame.
      */
-    private fun applyDisplayMode() {
+    private fun reconcileDisplaySurface(forceRebuild: Boolean = false) {
         if (!isControllerVisible) return
-        val showStrip = isTabbedMode &&
-            visibleTabCategories().size > 1 &&
-            !presenter.forceShowAllCategories
-        if (showStrip) applyTabbedViewTree() else applyContinuousViewTree()
+        val target = targetDisplaySurface
+        // forceRebuild reapplies the tree even when the surface is unchanged — used by the
+        // onNextLibraryUpdate path when the category SET changed (reorder/add/remove) so the
+        // pager rebinds its pages, since the surface tracker alone wouldn't detect that.
+        if (target != currentDisplaySurface || forceRebuild) {
+            when (target) {
+                DisplaySurface.TABBED -> applyTabbedViewTree()
+                DisplaySurface.CONTINUOUS -> applyContinuousViewTree()
+            }
+            currentDisplaySurface = target
+        }
         refreshTabStrip()
         showMiniBar()
     }
@@ -673,6 +726,9 @@ open class LibraryController(
      * Library's own view subtree and the appbar Y position.
      */
     private fun applyTabbedViewTree() {
+        // Contract: never show the pager unless the pref is tabbed. Guards against a stray direct
+        // call ever revealing the pager in continuous mode.
+        if (!isTabbedMode) return
         val visibleCats = visibleTabCategories()
         binding.libraryGridRecycler.recycler.isVisible = false
         binding.libraryPager.isVisible = true
@@ -729,6 +785,11 @@ open class LibraryController(
      * through [refreshTabStrip].
      */
     private fun applyContinuousViewTree() {
+        // Contract: never reveal the continuous recycler while a multi-category tabbed surface is
+        // the real target (pref tabbed, >1 category, not flatten-on-search). Continuous is still
+        // the correct surface in tabbed mode for single-category and flatten-on-search, so the
+        // guard mirrors the showStrip target rather than the bare pref.
+        if (isTabbedMode && visibleTabCategories().size > 1 && !presenter.forceShowAllCategories) return
         binding.libraryPager.adapter = null
         binding.libraryPager.isVisible = false
         binding.libraryGridRecycler.recycler.isVisible = true
@@ -835,12 +896,12 @@ open class LibraryController(
     /**
      * Flatten-on-search transition: with `forceShowAllCategories` enabled, a non-blank
      * query merges every category into one flat result list, so the tab strip needs to
-     * disappear. Replays the full display-mode logic — [onSetupLocalChrome] handles
-     * the strip visibility declaratively.
+     * disappear. Routed through the same reconcile so the flatten↔unflatten flip can't
+     * race the other surface callers.
      */
     private fun applyTabbedSearchVisibility() {
         if (!isTabbedMode) return
-        applyDisplayMode()
+        reconcileDisplaySurface()
     }
 
     fun showMiniBar() {
@@ -1435,6 +1496,7 @@ open class LibraryController(
         }
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     private fun setPreferenceFlows() {
         listOf(
             preferences.libraryLayout(),
@@ -1452,7 +1514,7 @@ open class LibraryController(
         preferences.libraryDisplayMode().changes()
             .drop(1)
             .onEach {
-                applyDisplayMode()
+                reconcileDisplaySurface()
                 presenter.updateLibrary()
             }
             .launchIn(viewScope)
@@ -1462,7 +1524,16 @@ open class LibraryController(
             .launchIn(viewScope)
         preferences.hideStartReadingButton().register()
         uiPreferences.outlineOnCovers().register { adapter.showOutline = it }
-        preferences.categoryNumberOfItems().register { adapter.showNumber = it }
+        // Pushes to mAdapter (continuous) via register's notifyDataSetChanged; also fan out to every
+        // live pager page and refresh the tab strip so the badge honors the toggle in tabbed mode.
+        preferences.categoryNumberOfItems().register {
+            adapter.showNumber = it
+            pagerAdapter?.forEachPage { pageAdapter, _ ->
+                pageAdapter.showNumber = it
+                pageAdapter.notifyDataSetChanged()
+            }
+            if (isTabbedMode) refreshTabStrip()
+        }
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -1545,7 +1616,7 @@ open class LibraryController(
             binding.libraryGridRecycler.recycler.manager.onRestoreInstanceState(staggeredBundle)
             staggeredBundle = null
         }
-        applyDisplayMode()
+        reconcileDisplaySurface()
         // BaseController.onChangeStarted fires onSetupLocalChrome on push/pop, but tab
         // swaps go through RootTabsController.selectTab → onTabActivated and bypass
         // Conductor's lifecycle. Wire chrome explicitly here.
@@ -1616,7 +1687,7 @@ open class LibraryController(
         if (observeLater) {
             presenter.updateLibrary()
         }
-        applyDisplayMode()
+        reconcileDisplaySurface()
     }
 
     override fun onActivityPaused(activity: Activity) {
@@ -1637,6 +1708,9 @@ open class LibraryController(
         displaySheet?.dismissSafely()
         displaySheet = null
         mAdapter = null
+        // Force the next reconcile to reapply the tree: a recreated view resets the recyclers to
+        // their XML default visibility, so a stale tracker would skip the flip they now need.
+        currentDisplaySurface = null
         saveStaggeredState()
 
         showAllCategoriesView?.let {
@@ -1676,13 +1750,15 @@ open class LibraryController(
                 },
             )
         }
-        // When the pager is the active surface (tabbed mode with >1 category, not in sub-class
-        // picker mode where forceShowAllCategories falls back to continuous), the per-tab pager
-        // adapters own the data; mAdapter (continuous mode) stays empty so its hidden recycler
-        // can't leak categories+headers through during conductor's hardware-accelerated push
-        // animation. Using the runtime visibility flag rather than isTabbedMode directly handles
-        // sub-class mode where the preference is on but tabbed view is forcibly torn down.
-        adapter.setItems(if (binding.libraryPager.isVisible) emptyList() else mangaMap)
+        // When the tabbed pager is the target surface (pref tabbed, >1 category, not flattened or
+        // in sub-class picker), the per-tab pager adapters own the data; mAdapter (continuous) MUST
+        // stay empty so its hidden recycler can't leak categories+headers through during conductor's
+        // hardware-accelerated push animation. Gate on the PREFERENCE-derived target, not the live
+        // `libraryPager.isVisible` flag: an update interleaved with a resume/tab-activate could land
+        // while the pager's visibility is mid-flip, and the live flag would momentarily read false,
+        // populating + showing the continuous recycler in tabbed mode — that was the lib-flash.
+        // targetDisplaySurface already folds in single-category, flatten-on-search, and sub-class.
+        adapter.setItems(if (targetDisplaySurface == DisplaySurface.TABBED) emptyList() else mangaMap)
         if (binding.libraryGridRecycler.recycler.translationX != 0f) {
             val time = binding.root.resources.getInteger(
                 AR.integer.config_shortAnimTime,
@@ -1756,7 +1832,9 @@ open class LibraryController(
             val currentCats = pagerAdapter?.categories.orEmpty()
             val categoriesChanged = currentCats.map { it.id } != visibleCats.map { it.id }
             if (visibleCats.size <= 1 || presenter.forceShowAllCategories || categoriesChanged) {
-                applyDisplayMode()
+                // Force the tree to reapply: a category reorder/add/remove keeps the surface TABBED,
+                // so the surface tracker alone would skip the pager rebind it needs.
+                reconcileDisplaySurface(forceRebuild = true)
             } else {
                 pagerAdapter?.refreshAll()
                 // Refresh the tab strip so labels + count badges reflect the new data.

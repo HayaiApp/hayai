@@ -268,7 +268,10 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
                 is TabItem.Badged -> {
                     val view = inflater.inflate(R.layout.chrome_tab_with_count, tabLayout, false)
                     view.findViewById<TextView>(R.id.tab_label).text = item.text
-                    view.findViewById<TextView>(R.id.tab_count).text = item.count.toString()
+                    val countView = view.findViewById<TextView>(R.id.tab_count)
+                    // Null count = "show number of items" pref off; drop the badge entirely.
+                    countView.isGone = item.count == null
+                    item.count?.let { countView.text = it.toString() }
                     tab.customView = view
                 }
             }
