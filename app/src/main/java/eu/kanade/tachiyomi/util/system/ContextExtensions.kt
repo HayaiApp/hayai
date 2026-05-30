@@ -23,6 +23,7 @@ import androidx.annotation.AttrRes
 import androidx.annotation.ColorInt
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
+import androidx.annotation.Px
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
@@ -316,6 +317,30 @@ fun Context.openInBrowser(url: String, forceBrowser: Boolean, fullBrowser: Boole
     } catch (e: Exception) {
         toast(e.message)
         return false
+    }
+}
+
+/**
+ * Opens [url] in an in-app Chrome Custom Tab presented as a BOTTOM SHEET (partial custom
+ * tab). Uses the user's default browser engine and stays in-app via
+ * [CustomTabsIntent.Builder.setInitialActivityHeightPx]. [heightPx] is the initial sheet
+ * height in pixels (NOT dp). If the resolved engine doesn't support partial custom tabs the
+ * platform automatically falls back to a full-height custom tab, which is fine.
+ */
+fun Context.openInBrowserSheet(url: String, @Px heightPx: Int, @ColorInt toolbarColor: Int? = null) {
+    try {
+        val builder = CustomTabsIntent.Builder()
+            .setDefaultColorSchemeParams(
+                CustomTabColorSchemeParams.Builder()
+                    .setToolbarColor(toolbarColor ?: getResourceColor(materialR.attr.colorPrimaryVariant))
+                    .build(),
+            )
+        if (heightPx > 0) {
+            builder.setInitialActivityHeightPx(heightPx)
+        }
+        builder.build().launchUrl(this, url.toUri())
+    } catch (e: Exception) {
+        toast(e.message)
     }
 }
 

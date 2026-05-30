@@ -1500,6 +1500,21 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                             stopBackgroundTtsIfRunning()
                             novelActionBarTickState.value = novelActionBarTickState.value + 1
                         },
+                        onTtsPreviousParagraph = {
+                            novelWeb?.previousTtsParagraph()
+                            novelActionBarTickState.value = novelActionBarTickState.value + 1
+                        },
+                        onTtsNextParagraph = {
+                            novelWeb?.nextTtsParagraph()
+                            novelActionBarTickState.value = novelActionBarTickState.value + 1
+                        },
+                        onStopTts = {
+                            // Explicit Stop: fully halt playback (Speaking → Stopped/Idle) so
+                            // the inline controls row dismisses itself on the next tick.
+                            novelWeb?.stopTts()
+                            stopBackgroundTtsIfRunning()
+                            novelActionBarTickState.value = novelActionBarTickState.value + 1
+                        },
                         // onTtsStartFromViewport removed: the TTS_VIEWPORT button was
                         // consolidated into the main TTS toggle (which now starts from the
                         // top of the chapter on the first tap, then pauses/resumes).
@@ -2884,9 +2899,13 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         }
 
         /**
-         * Sets the custom brightness overlay according to [enabled].
+         * Sets the custom brightness overlay according to [enabled]. Skipped while a novel
+         * viewer is active — novels carry their own brightness prefs (novelCustomBrightness /
+         * novelCustomBrightnessValue) applied by the viewer, so the manga value must not fight
+         * it (mirrors tsundoku's setCustomBrightness novel-viewer guard).
          */
         private fun setCustomBrightness(enabled: Boolean) {
+            if (viewer is eu.kanade.tachiyomi.ui.reader.viewer.text.NovelWebViewViewer) return
             if (enabled) {
                 preferences.customBrightnessValue().changes()
                     .sample(100)

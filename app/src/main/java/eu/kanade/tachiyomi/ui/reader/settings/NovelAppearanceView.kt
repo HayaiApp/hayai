@@ -79,10 +79,9 @@ class NovelAppearanceView @JvmOverloads constructor(context: Context, attrs: Att
 
             hideChapterTitle.bindToPreference(readerPreferences.novelHideChapterTitle)
             forceLowercase.bindToPreference(readerPreferences.novelForceTextLowercase)
-            // Brightness shares the manga reader's prefs so the existing
-            // ReaderActivity.ReaderConfig observers drive the window brightness
-            // without any novel-specific wiring.
-            customBrightness.bindToPreference(preferences.customBrightness())
+            // Novel-specific brightness (verbatim tsundoku keys). The viewer applies the value
+            // to the activity window and restores system brightness on exit.
+            customBrightness.bindToPreference(readerPreferences.novelCustomBrightness)
             keepScreenOn.bindToPreference(readerPreferences.novelKeepScreenOn)
             blockMedia.bindToPreference(readerPreferences.novelBlockMedia)
             showRawHtml.bindToPreference(readerPreferences.novelShowRawHtml)
@@ -91,9 +90,11 @@ class NovelAppearanceView @JvmOverloads constructor(context: Context, attrs: Att
             // action bar so we don't need a tab just for those two switches.
             enableEpubStyles.bindToPreference(readerPreferences.enableEpubStyles)
             enableEpubJs.bindToPreference(readerPreferences.enableEpubJs)
+            // Let source/EPUB CSS win — skips Hayai's !important overrides + font force.
+            sourceCssPriority.bindToPreference(readerPreferences.novelSourceCssPriority)
 
-            bindIntSlider(brightnessValue, MR.strings.novel_brightness_value, -75, 100, preferences.customBrightnessValue().get()) {
-                preferences.customBrightnessValue().set(it)
+            bindIntSlider(brightnessValue, MR.strings.novel_brightness_value, -75, 100, readerPreferences.novelCustomBrightnessValue.get()) {
+                readerPreferences.novelCustomBrightnessValue.set(it)
             }
         }
     }

@@ -1965,4 +1965,15 @@
     <string name="manga_interval_mode_automatic">Automatic</string>
     <string name="pref_update_only_in_release_period">Outside their expected update period</string>
     <string name="skipped_reason_not_in_release_period">Skipped because no new chapter is expected yet</string>
+
+    <!-- Novel reader: continuous-scroll + TTS controls -->
+    <string name="novel_continuous_scroll_section">Continuous scroll</string>
+    <string name="novel_auto_load_next_at">Auto-load next chapter at</string>
+    <string name="novel_keep_chapters_loaded">Keep chapters loaded (0 = unlimited)</string>
+    <string name="novel_mark_read_threshold">Mark chapter read at</string>
+    <string name="novel_mark_short_chapter_read">Mark short chapters as read</string>
+    <string name="novel_source_css_priority">Prioritize source/EPUB CSS</string>
+    <string name="novel_tts_prev_paragraph">Previous paragraph</string>
+    <string name="novel_tts_next_paragraph">Next paragraph</string>
+    <string name="novel_tts_stop">Stop</string>
 </resources>

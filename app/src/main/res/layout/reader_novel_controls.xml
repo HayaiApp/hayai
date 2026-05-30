@@ -21,6 +21,36 @@
             android:id="@+id/auto_scroll_speed"
             layout="@layout/widget_novel_slider_int" />
 
+        <!-- Continuous-scroll group -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="4dp"
+            android:text="@string/novel_continuous_scroll_section"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="?attr/colorOnBackground" />
+
+        <include
+            android:id="@+id/auto_load_next_at"
+            layout="@layout/widget_novel_slider_int" />
+
+        <include
+            android:id="@+id/keep_chapters_loaded"
+            layout="@layout/widget_novel_slider_int" />
+
+        <include
+            android:id="@+id/mark_read_threshold"
+            layout="@layout/widget_novel_slider_int" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/mark_short_chapter_read"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/novel_mark_short_chapter_read"
+            android:textColor="?attr/colorOnBackground" />
+
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/volume_keys_scroll"
             android:layout_width="match_parent"

@@ -19,6 +19,19 @@ class NovelControlsView @JvmOverloads constructor(context: Context, attrs: Attri
                 readerPreferences.novelAutoScrollSpeed.set(it)
             }
 
+            // Continuous-scroll window + thresholds (verbatim tsundoku keys).
+            bindIntSlider(autoLoadNextAt, MR.strings.novel_auto_load_next_at, 50, 100, readerPreferences.novelAutoLoadNextChapterAt.get()) {
+                readerPreferences.novelAutoLoadNextChapterAt.set(it)
+            }
+            // 0 = keep every loaded chapter in the DOM; >0 caps the window around the active one.
+            bindIntSlider(keepChaptersLoaded, MR.strings.novel_keep_chapters_loaded, 0, 10, readerPreferences.novelKeepChaptersLoaded.get()) {
+                readerPreferences.novelKeepChaptersLoaded.set(it)
+            }
+            bindIntSlider(markReadThreshold, MR.strings.novel_mark_read_threshold, 50, 100, readerPreferences.novelMarkAsReadThreshold.get()) {
+                readerPreferences.novelMarkAsReadThreshold.set(it)
+            }
+            markShortChapterRead.bindToPreference(readerPreferences.novelMarkShortChapterAsRead)
+
             volumeKeysScroll.bindToPreference(readerPreferences.novelVolumeKeysScroll)
             tapToScroll.bindToPreference(readerPreferences.novelTapToScroll)
             swipeNavigation.bindToPreference(readerPreferences.novelSwipeNavigation)
