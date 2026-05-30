@@ -97,8 +97,12 @@ class ChapterHolder(
         )
         binding.chapterScanlator.text = statuses.joinToString(" • ")
 
+        val isSelected = adapter.isSelected(flexibleAdapterPosition)
+        // Data-drive the row highlight so it survives notifyDataSetChanged instead of relying on
+        // imperative toggleActivation push-only updates that desync from the selection.
+        itemView.isActivated = isSelected
         val status = when {
-            adapter.isSelected(flexibleAdapterPosition) -> Download.State.CHECKED
+            isSelected -> Download.State.CHECKED
             else -> item.status
         }
 

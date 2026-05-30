@@ -518,6 +518,9 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             contextView?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
                 leftMargin = systemInsets.left
                 rightMargin = systemInsets.right
+                // Edge-to-edge lays the contextual ActionMode bar from y=0; push it below the
+                // status bar/cutout so its solid background doesn't paint over the notch.
+                topMargin = systemInsets.top
             }
             // Consume any horizontal insets and pad all content in. There's not much we can do
             // with horizontal insets
