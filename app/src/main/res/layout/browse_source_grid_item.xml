@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/manga_layout"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/constraint_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:strokeColor="?attr/colorOutline"
+            app:strokeWidth="0dp"
+            app:layout_constraintDimensionRatio="H,2:3"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <ImageView
+                android:id="@+id/cover_thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/cover_placeholder"
+                android:scaleType="centerCrop"
+                tools:ignore="ContentDescription"
+                tools:src="@mipmap/ic_launcher" />
+
+            <View
+                android:id="@+id/gradient"
+                android:layout_width="match_parent"
+                android:layout_height="125sp"
+                android:layout_gravity="bottom"
+                android:alpha="0.75"
+                android:background="@drawable/gradient_shape" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/compact_title"
+                style="?textAppearanceLabelMedium"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginBottom="8dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:shadowColor="@android:color/black"
+                android:shadowRadius="4"
+                android:textColor="@android:color/white"
+                android:textSize="13sp"
+                tools:text="Sample name" />
+
+            <eu.kanade.tachiyomi.ui.source.browse.BrowseBadgeStrip
+                android:id="@+id/badge_strip"
+                android:layout_width="wrap_content"
+                android:layout_height="18dp"
+                android:layout_gravity="top|start"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/title"
+            style="?textAppearanceTitleSmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="4dp"
+            android:ellipsize="end"
+            android:lineSpacingExtra="0sp"
+            android:maxLines="2"
+            android:minLines="2"
+            android:textColor="?attr/colorOnBackground"
+            android:textSize="12sp"
+            app:layout_constraintTop_toBottomOf="@id/card"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:text="Sample name" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

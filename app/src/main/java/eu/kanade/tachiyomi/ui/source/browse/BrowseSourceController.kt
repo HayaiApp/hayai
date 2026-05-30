@@ -277,7 +277,7 @@ open class BrowseSourceController(bundle: Bundle) :
                 (layoutManager as androidx.recyclerview.widget.GridLayoutManager).spanSizeLookup = object : androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup() {
                     override fun getSpanSize(position: Int): Int {
                         return when (adapter?.getItemViewType(position)) {
-                            R.layout.manga_grid_item, R.layout.browse_source_compose_grid_item, null -> 1
+                            R.layout.manga_grid_item, R.layout.browse_source_grid_item, null -> 1
                             else -> spanCount
                         }
                     }

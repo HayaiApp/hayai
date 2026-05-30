@@ -158,13 +158,35 @@ state. None of the Compose grid code is in the tree.
 
 ## Future work
 
-### Option B — view-based grid holder
+### Option B — view-based grid holder (SHIPPED 2026-05-30)
 
-Mirror `LibraryGridHolder`: pure XML/ViewBinding + ImageView + Coil. Per-cell cost drops to
-the ~2–5 ms View-based range that the Library already runs at. The three badges
-(Novel / EH category / In Library) become overlay views. Scope: ~3–5 file changes,
-~1 hour. Lower architectural improvement than a full Compose port but matches "0
-regressions" easier and proven fast.
+Implemented. The per-cell `ComposeView` (which paid a 12–25 ms first-composition on the
+first-entry burst / fast scroll) is replaced by a pure XML/ViewBinding + ImageView + Coil
+holder mirroring `LibraryGridHolder`. Per-cell cost now sits in the ~2–5 ms View range.
+
+Files:
+- New `app/src/main/res/layout/browse_source_grid_item.xml` — `MaterialCardView` (12dp
+  corners, 2:3 `H,2:3` book-ratio cover ImageView) + bottom gradient + `compact_title`
+  overlay + `BrowseBadgeStrip` overlay + below-card `title`. Cover background uses the
+  existing `@color/cover_placeholder` (`#1F888888`, from `presentation/core`), which is the
+  same value as the Compose `MangaCover` placeholder.
+- New `app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseBadgeStrip.kt` — a
+  `LinearLayout` that builds the three-segment slanted badge strip programmatically (Novel /
+  EH category / In Library), using the existing `unread_angled_badge` wedge as the
+  forward-slant separator (mirrors Compose `Badge` / `ForwardSlantedShape`, slant 6dp,
+  height 18dp).
+- `BrowseSourceGridHolder.kt` — rewritten View-based. Compact vs comfortable handled by
+  toggling `compact_title`/`gradient` vs the below `title`. Favourite state dims the cover
+  to alpha 0.34 (matches Compose `isSelected`). Cover via `loadManga(manga.cover())`, which
+  applies the singleton `maxBitmapSize(2048)` + `precision(INEXACT)` defaults.
+- `BrowseSourceItem.kt` — `getLayoutRes()` returns `R.layout.browse_source_grid_item`;
+  `createViewHolder` builds the View holder directly (no ComposeView cast/strategy).
+- `BrowseSourceController.kt` — `spanSizeLookup` recognises `browse_source_grid_item` for
+  `spanSize = 1`.
+- Deleted the now-unused `browse_source_compose_grid_item.xml`.
+
+List mode, the display-mode overflow menu (comfortable/compact/list), and the
+data/presenter layer are unchanged.
 
 ## Recents tab switching — chain of fixes
 
@@ -248,6 +270,27 @@ each being the single layout pass that materialises the new tab's rows from
 
 Neither shipped — current state is acceptable (97.66 % non-jank, 99.22 %
 non-stutter). Flagged for follow-up if user revisits.
+
+### 4. Mark-read fade no longer animates the whole reorder (2026-05-30)
+
+User report: recents "lags a bit because it's trying to animate long updates and
+moving chapters around" (mark-as-read reorders, history refresh). Root cause:
+`markAsRead` ran `TransitionManager.beginDelayedTransition(binding.recycler, Fade)`
+scoped to the **entire recycler**. That delayed transition stays pending across the
+async `markChapterRead → getRecents() → showLists() → updateDataSet()` reorder, so
+when the list re-lays-out, every moved/changed row fades — the list-wide churn the
+user sees. (`itemAnimator = null` already kills RecyclerView's own move animations;
+`updateDataSet` already uses the non-animated `notifyDataSetChanged` path, so the
+churn came purely from this transition.)
+
+**Fix:** `RecentsController.markAsRead` — `addTarget(holder.itemView)` so the Fade
+only animates the marked row, and skip the delayed transition entirely when the
+holder isn't on-screen. The intended single-row mark-read fade is preserved; the
+bulk reorder swaps without per-row animation.
+
+The expand/collapse `ChangeBounds + Slide` transition in `RecentMangaHolder` (sub-
+chapter "show more") is a discrete user-tap animation, not a bulk-update path, and
+is left untouched.
 
 ## Library → MangaDetails push — chain of fixes
 

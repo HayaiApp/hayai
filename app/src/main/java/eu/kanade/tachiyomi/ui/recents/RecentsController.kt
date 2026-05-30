@@ -957,10 +957,17 @@ class RecentsController(bundle: Bundle? = null) :
         val holder = binding.recycler.findViewHolderForAdapterPosition(position)
         val holderId = (holder as? RecentMangaHolder)?.chapterId
         adapter.notifyItemChanged(position)
-        val transition = TransitionSet().addTransition(androidx.transition.Fade())
-        transition.duration = view!!.resources.getInteger(AR.integer.config_shortAnimTime)
-            .toLong()
-        androidx.transition.TransitionManager.beginDelayedTransition(binding.recycler, transition)
+        // Scope the mark-read fade to the marked row only. beginDelayedTransition on the whole
+        // recycler stays pending across the async getRecents() -> updateDataSet reorder, fading
+        // every moved row (the list-wide churn the user sees). Targeting just this itemView keeps
+        // the intended single-row fade and leaves the bulk reorder un-animated (itemAnimator=null).
+        holder?.itemView?.let { row ->
+            val transition = TransitionSet().addTransition(androidx.transition.Fade())
+            transition.addTarget(row)
+            transition.duration = view!!.resources.getInteger(AR.integer.config_shortAnimTime)
+                .toLong()
+            androidx.transition.TransitionManager.beginDelayedTransition(binding.recycler, transition)
+        }
         if (holderId == -1L) return
         val chapter = holderId?.let { item.mch.extraChapters.find { holderId == it.id } }
             ?: item.chapter

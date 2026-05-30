@@ -1,128 +1,106 @@
 package eu.kanade.tachiyomi.ui.source.browse
 
 import android.app.Activity
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ComposeView
+import android.graphics.Color
+import android.view.View
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
-import dev.icerock.moko.resources.StringResource
-import dev.icerock.moko.resources.compose.stringResource
-import eu.kanade.tachiyomi.data.database.models.isNovel
+import coil3.dispose
+import com.google.android.material.R as materialR
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
+import eu.kanade.tachiyomi.data.database.models.isNovel
+import eu.kanade.tachiyomi.databinding.BrowseSourceGridItemBinding
 import eu.kanade.tachiyomi.domain.manga.models.Manga
+import eu.kanade.tachiyomi.util.system.dpToPx
+import eu.kanade.tachiyomi.util.system.getResourceColor
 import exh.source.isEhBasedManga
 import exh.util.SourceTagsUtil
-import yokai.domain.manga.models.MangaCover
 import yokai.domain.manga.models.cover
 import yokai.i18n.MR
-import yokai.presentation.manga.components.BadgeSegment
-import yokai.presentation.manga.components.MangaComfortableGridItem
-import yokai.presentation.manga.components.MangaCompactGridItem
-import yokai.presentation.theme.YokaiTheme
+import yokai.util.coil.loadManga
+import yokai.util.lang.getString
 
 /**
- * Class used to hold the displayed data of a manga in the library, like the cover or the title.
- * All the elements from the layout file "item_catalogue_grid" are available in this class.
- *
- * @param view the inflated view for this holder.
- * @param adapter the adapter handling this holder.
- * @constructor creates a new library holder.
+ * View-based source-browse grid holder. Mirrors [eu.kanade.tachiyomi.ui.library.LibraryGridHolder]
+ * (pure XML/ViewBinding + ImageView + Coil) so each cell costs ~2-5 ms instead of the per-cell
+ * ComposeView first composition the previous holder paid. The three badges (Novel / EH category /
+ * In Library) are rendered as a single overlay strip; favourite state dims the cover.
  */
 class BrowseSourceGridHolder(
-    private val view: ComposeView,
-    private val adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
-    compact: Boolean,
+    private val view: View,
+    adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
+    private val compact: Boolean,
     showOutline: Boolean,
 ) : BrowseSourceHolder(view, adapter) {
 
-    var title by mutableStateOf("")
-    var cover by mutableStateOf(MangaCover(0L, 0L, "", 0L, false))
-    var isNovel by mutableStateOf(false)
-    var ehCategory by mutableStateOf<Pair<Color, StringResource>?>(null)
+    private val binding = BrowseSourceGridItemBinding.bind(view)
 
     init {
-        view.setContent {
-            YokaiTheme {
-                val badgeSegments = buildList {
-                    if (isNovel) {
-                        add(
-                            BadgeSegment.text(
-                                backgroundColor = MaterialTheme.colorScheme.tertiary,
-                                text = stringResource(MR.strings.novel),
-                                textColor = MaterialTheme.colorScheme.onTertiary,
-                            ),
-                        )
-                    }
-                    ehCategory?.let { (color, label) ->
-                        add(
-                            BadgeSegment.text(
-                                backgroundColor = color,
-                                text = stringResource(label),
-                                textColor = Color.White,
-                            ),
-                        )
-                    }
-                    if (cover.inLibrary)
-                        add(
-                            BadgeSegment.text(
-                                backgroundColor = MaterialTheme.colorScheme.secondary,
-                                text = stringResource(MR.strings.in_library),
-                                textColor = MaterialTheme.colorScheme.onSecondary,
-                            )
-                        )
-                }
-                if (compact) {
-                    MangaCompactGridItem(
-                        coverData = cover,
-                        title = title,
-                        isSelected = cover.inLibrary,
-                        showOutline = showOutline,
-                        badgeSegments = badgeSegments,
-                    )
-                } else {
-                    MangaComfortableGridItem(
-                        coverData = cover,
-                        title = title,
-                        isSelected = cover.inLibrary,
-                        showOutline = showOutline,
-                        badgeSegments = badgeSegments,
-                    )
-                }
-            }
+        binding.card.strokeWidth = if (showOutline) 1.dpToPx else 0
+        if (compact) {
+            binding.title.isVisible = false
+        } else {
+            binding.compactTitle.isVisible = false
+            binding.gradient.isVisible = false
         }
-//        setCards(showOutline, binding.card, binding.unreadDownloadBadge.badgeView)
     }
 
-    /**
-     * Method called from [LibraryCategoryAdapter.onBindViewHolder]. It updates the data for this
-     * holder with the given manga.
-     *
-     * @param manga the manga item to bind.
-     */
     override fun onSetValues(manga: Manga) {
-        // Update the title of the manga.
-        title = manga.title
-        cover = manga.cover()
-        isNovel = manga.isNovel()
-        ehCategory = if (manga.isEhBasedManga()) {
-            val token = manga.genre?.substringBefore(',')?.trim()?.lowercase()
-            SourceTagsUtil.getEhCategoryDisplay(token)?.let { (genreColor, label) ->
-                Color(genreColor.color) to label
-            }
+        val title = manga.title
+        if (compact) {
+            binding.compactTitle.text = title
         } else {
-            null
+            binding.title.text = title
         }
 
-        // Update the cover.
+        // Favourite/in-library state dims the cover (mirrors Compose isSelected alpha).
+        binding.coverThumbnail.alpha = if (manga.favorite) 0.34f else 1.0f
+
+        // Badge order matches the Compose cell: Novel, then EH category, then In Library.
+        val segments = buildList {
+            if (manga.isNovel()) {
+                add(
+                    BrowseBadgeStrip.Segment(
+                        text = view.context.getString(MR.strings.novel),
+                        backgroundColor = view.context.getResourceColor(materialR.attr.colorTertiary),
+                        textColor = view.context.getResourceColor(materialR.attr.colorOnTertiary),
+                    ),
+                )
+            }
+            if (manga.isEhBasedManga()) {
+                val token = manga.genre?.substringBefore(',')?.trim()?.lowercase()
+                SourceTagsUtil.getEhCategoryDisplay(token)?.let { (genreColor, label) ->
+                    add(
+                        BrowseBadgeStrip.Segment(
+                            text = view.context.getString(label),
+                            backgroundColor = genreColor.color,
+                            textColor = Color.WHITE,
+                        ),
+                    )
+                }
+            }
+            if (manga.favorite) {
+                add(
+                    BrowseBadgeStrip.Segment(
+                        text = view.context.getString(MR.strings.in_library),
+                        backgroundColor = view.context.getResourceColor(materialR.attr.colorSecondary),
+                        textColor = view.context.getResourceColor(materialR.attr.colorOnSecondary),
+                    ),
+                )
+            }
+        }
+        binding.badgeStrip.setSegments(segments)
+
         setImage(manga)
     }
 
     override fun setImage(manga: Manga) {
         if ((view.context as? Activity)?.isDestroyed == true) return
-        cover = manga.cover()
+        binding.coverThumbnail.dispose()
+        // loadManga applies the singleton's maxBitmapSize(2048) + precision(INEXACT) defaults, so
+        // covers decode at view bounds instead of over-decoding. Coil shows the XML placeholder
+        // background until the cover (or error) lands; matches the Compose cell behaviour.
+        binding.coverThumbnail.loadManga(manga.cover())
     }
 }
