@@ -1709,8 +1709,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             else -> R2LPagerViewer(this)
         }
 
-        if (noDefault && viewModel.manga?.readingModeType!! > 0 &&
-            viewModel.manga?.readingModeType!! != preferences.defaultReadingMode().get()
+        // Use the non-null parameter, not viewModel.manga: init() can null the state's manga
+        // (source-not-ready path) between the flow emit and this running on Main, NPE-ing the !!.
+        if (noDefault && manga.readingModeType > 0 &&
+            manga.readingModeType != preferences.defaultReadingMode().get()
         ) {
             snackbar = binding.readerLayout.snack(
                 getString(
