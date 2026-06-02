@@ -59,14 +59,6 @@
             android:textColor="?attr/colorOnBackground" />
 
         <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/tts_tap_to_start"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/novel_tts_tap_to_start"
-            android:textColor="?attr/colorOnBackground" />
-
-        <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/tts_enable_highlight"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

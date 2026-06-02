@@ -208,19 +208,6 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (isEditingMode) return false
 
-                // When tap-to-start is enabled, let taps in the reading zone fall through to
-                // the WebView so the JS click handler installed in `installSentenceClickHandler`
-                // can catch the paragraph and call `Android.startTtsAtParagraph(chapId, paraIdx)`.
-                // The gate is now live in the Idle state too: previously it required TTS to be
-                // already speaking/paused, so a tap could only *jump* an active session — it
-                // could never START TTS from a tapped paragraph. The JS handler is itself
-                // gated on `__novelTtsClickEnabled` (kept in sync by
-                // `refreshSentenceTapToTtsState`) and on the central reading zone, so taps in
-                // the side/top nav stripes still toggle the menu / scroll as before.
-                if (preferences.novelTtsTapToStart.get()) {
-                    return false
-                }
-
                 val pos = android.graphics.PointF(
                     e.x / container.width.toFloat(),
                     e.y / container.height.toFloat(),
@@ -1293,7 +1280,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
      * Call this after any TTS state transition and whenever the pref flips.
      */
     fun refreshSentenceTapToTtsState() {
-        setSentenceTapToTtsEnabled(preferences.novelTtsTapToStart.get())
+        // Disabled: tap-to-start/jump TTS hijacked the menu-toggle tap and the text-selection
+        // long-press. A tap now toggles the reader menu and long-press selects text; TTS is
+        // started from the voice button in the reader controls (or a double-tap bound to TTS).
+        setSentenceTapToTtsEnabled(false)
     }
 
     private fun injectScrollTracking() {
