@@ -1057,6 +1057,8 @@ class MangaDetailsController :
         addMangaHeader()
         adapter?.setChapters(presenter.chapters)
         updateFab()
+        // Phone scrollable header binds once while chapters are empty; refresh the read button now.
+        getHeader()?.refreshReadingButton()
         colorToolbar(binding.recycler.canScrollVertically(-1))
         updateMenuVisibility(activityBinding?.toolbar?.menu)
     }

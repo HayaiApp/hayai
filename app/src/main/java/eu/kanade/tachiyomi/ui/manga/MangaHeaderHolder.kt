@@ -105,6 +105,7 @@ class MangaHeaderHolder(
     private val markwon by lazy { Markwon.builder(itemView.context).usePlugin(SoftBreakAddsNewLinePlugin.create()).build() }
 
     private var showReadingButton = true
+    private var boundHeaderItem: MangaHeaderItem? = null
     private var showMoreButton = true
     var hadSelection = false
     private var canCollapse = true
@@ -437,54 +438,8 @@ class MangaHeaderHolder(
             checked(tracked)
         }
 
-        run {
-            val nextChapter = presenter.getNextUnreadChapter()
-            val showButtons = presenter.chapters.isNotEmpty() && !item.isLocked && !adapter.hasFilter()
-            showReadingButton = showButtons
-            val readEnabled = nextChapter != null
-            val readText = if (nextChapter != null) {
-                val number = adapter.decimalFormat.format(nextChapter.chapter_number.toDouble())
-                if (nextChapter.chapter_number > 0) {
-                    itemView.context.getString(
-                        if (nextChapter.last_page_read > 0) {
-                            MR.strings.continue_reading_chapter_
-                        } else {
-                            MR.strings.start_reading_chapter_
-                        },
-                        number,
-                    )
-                } else {
-                    itemView.context.getString(
-                        if (nextChapter.last_page_read > 0) {
-                            MR.strings.continue_reading
-                        } else {
-                            MR.strings.start_reading
-                        },
-                    )
-                }
-            } else {
-                itemView.context.getString(MR.strings.all_chapters_read)
-            }
-            // Defer first composition to the next animation frame so the push transition isn't
-            // charged for Compose runtime startup + first-composition cost. Layout space is
-            // reserved by android:minHeight=56dp on the ComposeView so no shift on landing.
-            binding?.buttonGroupCompose?.apply {
-                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-                postOnAnimation {
-                    setContent {
-                        yokai.presentation.theme.YokaiTheme {
-                            MangaContinueReadingButton(
-                                readButtonText = readText,
-                                readEnabled = readEnabled,
-                                showButton = showButtons,
-                                accentColorInt = accentColorState.value,
-                                onReadClick = { adapter.delegate.readNextChapter(binding?.buttonGroupCompose ?: itemView) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        boundHeaderItem = item
+        bindReadingButton(item)
 
         // Metadata section (EH info, etc.) — for non-EH sources MangaMetadataSection emits
         // nothing, so the ComposeView stays 0-height permanently. Either way, defer
@@ -796,6 +751,57 @@ class MangaHeaderHolder(
                 },
             )
             checked(tracked)
+        }
+    }
+
+    private fun bindReadingButton(item: MangaHeaderItem) {
+        val presenter = adapter.delegate.mangaPresenter()
+        val nextChapter = presenter.getNextUnreadChapter()
+        val showButtons = presenter.chapters.isNotEmpty() && !item.isLocked && !adapter.hasFilter()
+        showReadingButton = showButtons
+        val readEnabled = nextChapter != null
+        val readText = if (nextChapter != null) {
+            val number = adapter.decimalFormat.format(nextChapter.chapter_number.toDouble())
+            if (nextChapter.chapter_number > 0) {
+                itemView.context.getString(
+                    if (nextChapter.last_page_read > 0) MR.strings.continue_reading_chapter_ else MR.strings.start_reading_chapter_,
+                    number,
+                )
+            } else {
+                itemView.context.getString(
+                    if (nextChapter.last_page_read > 0) MR.strings.continue_reading else MR.strings.start_reading,
+                )
+            }
+        } else {
+            itemView.context.getString(MR.strings.all_chapters_read)
+        }
+        // Defer first composition to the next frame so the push transition isn't charged for
+        // Compose startup; minHeight=56dp reserves layout space so there's no shift on landing.
+        binding?.buttonGroupCompose?.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            postOnAnimation {
+                setContent {
+                    yokai.presentation.theme.YokaiTheme {
+                        MangaContinueReadingButton(
+                            readButtonText = readText,
+                            readEnabled = readEnabled,
+                            showButton = showButtons,
+                            accentColorInt = accentColorState.value,
+                            onReadClick = { adapter.delegate.readNextChapter(binding?.buttonGroupCompose ?: itemView) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** Re-render the continue-reading button after chapters load: the phone scrollable header is
+     *  bound once while chapters are still empty (showButtons false), so it must refresh on load. */
+    fun refreshReadingButton() {
+        val item = boundHeaderItem ?: return
+        bindReadingButton(item)
+        if (binding?.subItemGroup?.isVisible == true) {
+            binding?.buttonGroupCompose?.isVisible = showReadingButton
         }
     }
 
