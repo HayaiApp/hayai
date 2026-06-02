@@ -16,6 +16,7 @@ import android.widget.FrameLayout
 import android.widget.PopupMenu
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import co.touchlab.kermit.Logger
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import eu.kanade.tachiyomi.databinding.SelectionWebSheetBinding
@@ -42,18 +43,19 @@ class SelectionWebSheet(
 
     override fun createBinding(inflater: LayoutInflater) = SelectionWebSheetBinding.inflate(inflater)
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onStart() {
         super.onStart()
-        // ~70% of screen height, expandable to full — matches the "floating sheet over the reader"
-        // ask while leaving the reader peeking behind it.
+        // The content root is match_parent but the bottom sheet (design_bottom_sheet) is
+        // wrap_content — a match_parent child collapses there, so the 0dp WebView container
+        // measured to 0 height (sheet looked transparent below the header). Pin the sheet to a
+        // concrete height so the WebView actually fills it.
         val screenHeight = activity.window.decorView.height.takeIf { it > 0 }
             ?: activity.resources.displayMetrics.heightPixels
-        sheetBehavior.peekHeight = (screenHeight * 0.7f).toInt()
-        sheetBehavior.skipCollapsed = false
-        sheetBehavior.isFitToContents = false
-        sheetBehavior.halfExpandedRatio = 0.7f
-        sheetBehavior.state = BottomSheetBehavior.STATE_HALF_EXPANDED
+        val sheetHeight = (screenHeight * 0.85f).toInt()
+        (binding.root.parent as? ViewGroup)?.updateLayoutParams { height = sheetHeight }
+        sheetBehavior.peekHeight = sheetHeight
+        sheetBehavior.skipCollapsed = true
+        sheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
         webView?.onResume()
     }
 
