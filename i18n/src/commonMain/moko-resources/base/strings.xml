@@ -1980,6 +1980,7 @@
     <string name="novel_tts_stop">Stop</string>
     <string name="novel_text_normalize">Normalize text (fix styled Unicode)</string>
     <string name="novel_text_aggressive_cleanup">Aggressive ad &amp; link removal</string>
+    <string name="novel_selection_open_external">Open in browser</string>
 
     <!-- Novel reading stats -->
     <string name="novel_statistics">Novel statistics</string>
