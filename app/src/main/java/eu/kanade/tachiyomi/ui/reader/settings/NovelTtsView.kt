@@ -22,7 +22,6 @@ class NovelTtsView @JvmOverloads constructor(context: Context, attrs: AttributeS
     override fun initGeneralPreferences() {
         with(binding) {
             ttsAutoNext.bindToPreference(readerPreferences.novelTtsAutoNextChapter)
-            ttsTapToStart.bindToPreference(readerPreferences.novelTtsTapToStart)
             ttsEnableHighlight.bindToPreference(readerPreferences.novelTtsEnableHighlight)
             ttsKeepInView.bindToPreference(readerPreferences.novelTtsKeepHighlightInView)
             ttsBackgroundPlayback.bindToPreference(readerPreferences.novelTtsBackgroundPlayback)
