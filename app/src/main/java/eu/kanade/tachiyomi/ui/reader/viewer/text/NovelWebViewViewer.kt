@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.reader.viewer.calculateChapterDifference
+import eu.kanade.tachiyomi.util.system.openInBrowserSheet
 import hayai.novel.reader.showSelectionWebSheet
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CancellationException
@@ -1645,13 +1646,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     private fun launchDefineIntent(selected: String) {
-        // In-app WebView sheet (Circle-to-Search style): plain Google search — Google surfaces
-        // definitions / AI / lens. Never switches apps; the selected text is in the query.
-        showSelectionWebSheet(
-            activity,
-            "https://www.google.com/search?q=" + android.net.Uri.encode(selected),
-            selected,
-        )
+        // Plain Google search (Google surfaces definitions / AI / lens).
+        openSelectionResult("https://www.google.com/search?q=" + android.net.Uri.encode(selected), selected)
     }
 
     private fun triggerTranslateFromSelection(actionMode: ActionMode? = null) {
@@ -1681,11 +1677,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     private fun launchTranslateIntent(selected: String) {
-        // Open Google Translate's web UI in an in-app partial Custom Tab (bottom sheet)
-        // instead of firing an external ACTION_PROCESS_TEXT intent — keeps the user in Hayai.
         val url = "https://translate.google.com/?sl=auto&tl=en&op=translate&text=" +
             android.net.Uri.encode(selected)
-        showSelectionWebSheet(activity, url, selected)
+        openSelectionResult(url, selected)
     }
 
     private fun triggerWebSearchFromSelection(actionMode: ActionMode? = null) {
@@ -1715,10 +1709,21 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     private fun launchWebSearchIntent(selected: String) {
-        // Web search now opens the Google results page in an in-app partial Custom Tab
-        // (bottom sheet) instead of firing an external ACTION_WEB_SEARCH intent.
         val url = "https://www.google.com/search?q=" + android.net.Uri.encode(selected)
-        showSelectionWebSheet(activity, url, selected)
+        openSelectionResult(url, selected)
+    }
+
+    /**
+     * Open a selection result (Define / Translate / Web Search). Prefers the user's default
+     * browser as a partial Custom Tab (bottom sheet) so their LOGGED-IN session is used; falls
+     * back to the in-app WebView sheet if no Custom-Tabs browser is available.
+     */
+    private fun openSelectionResult(url: String, query: String) {
+        val heightPx = (container.height * 0.7f).toInt().takeIf { it > 0 }
+            ?: (activity.resources.displayMetrics.heightPixels * 0.7f).toInt()
+        if (!activity.openInBrowserSheet(url, heightPx)) {
+            showSelectionWebSheet(activity, url, query)
+        }
     }
 
     private fun evaluateJavascriptSafe(js: String, callback: ((String) -> Unit)? = null) {

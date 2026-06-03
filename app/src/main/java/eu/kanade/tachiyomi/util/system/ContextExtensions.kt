@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.util.system
 
 import yokai.util.koin.get
+import android.app.Activity
 import android.app.LocaleManager
 import android.app.Notification
 import android.app.NotificationManager
@@ -26,6 +27,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.Px
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.browser.customtabs.CustomTabColorSchemeParams
+import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.browser.customtabs.CustomTabsService.ACTION_CUSTOM_TABS_CONNECTION
 import androidx.core.app.NotificationCompat
@@ -327,22 +329,35 @@ fun Context.openInBrowser(url: String, forceBrowser: Boolean, fullBrowser: Boole
  * height in pixels (NOT dp). If the resolved engine doesn't support partial custom tabs the
  * platform automatically falls back to a full-height custom tab, which is fine.
  */
-fun Context.openInBrowserSheet(url: String, @Px heightPx: Int, @ColorInt toolbarColor: Int? = null) {
-    try {
-        val builder = CustomTabsIntent.Builder()
+fun Context.openInBrowserSheet(url: String, @Px heightPx: Int, @ColorInt toolbarColor: Int? = null): Boolean {
+    // Renders as a sheet only when the height is set AND launched via startActivityForResult;
+    // forcing the resolved browser package uses the user's logged-in session and stops another
+    // app (e.g. the Google Translate app) from intercepting the URL. Returns false (caller falls
+    // back) when no Custom-Tabs browser is available or the launch fails.
+    val activity = this as? Activity ?: return false
+    val pkg = CustomTabsClient.getPackageName(this, null) ?: return false
+    return try {
+        val customTabs = CustomTabsIntent.Builder()
             .setDefaultColorSchemeParams(
                 CustomTabColorSchemeParams.Builder()
                     .setToolbarColor(toolbarColor ?: getResourceColor(materialR.attr.colorPrimaryVariant))
                     .build(),
             )
-        if (heightPx > 0) {
-            builder.setInitialActivityHeightPx(heightPx)
-        }
-        builder.build().launchUrl(this, url.toUri())
+            .apply { if (heightPx > 0) setInitialActivityHeightPx(heightPx) }
+            .setToolbarCornerRadiusDp(16)
+            .build()
+        customTabs.intent.setPackage(pkg)
+        customTabs.intent.data = url.toUri()
+        @Suppress("DEPRECATION")
+        activity.startActivityForResult(customTabs.intent, REQUEST_CODE_CUSTOM_TAB_SHEET)
+        true
     } catch (e: Exception) {
-        toast(e.message)
+        Logger.w { "openInBrowserSheet failed: ${e.message}" }
+        false
     }
 }
+
+private const val REQUEST_CODE_CUSTOM_TAB_SHEET = 0xCAB5
 
 fun Context.defaultBrowserPackageName(): String? {
     val browserIntent = Intent(Intent.ACTION_VIEW, "http://".toUri())
