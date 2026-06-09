@@ -323,15 +323,20 @@ fun Context.openInBrowser(url: String, forceBrowser: Boolean, fullBrowser: Boole
 }
 
 /**
- * Opens [url] in an in-app Chrome Custom Tab presented as a BOTTOM SHEET (partial custom
- * tab). Uses the user's default browser engine and stays in-app via
- * [CustomTabsIntent.Builder.setInitialActivityHeightPx]. [heightPx] is the initial sheet
- * height in pixels (NOT dp). If the resolved engine doesn't support partial custom tabs the
- * platform automatically falls back to a full-height custom tab, which is fine.
+ * Opens [url] in an in-app Chrome Custom Tab presented as a partial Custom Tab. Uses
+ * the user's default browser engine and stays in-app via startActivityForResult(), which
+ * Chrome requires for partial tabs when no warmed Custom Tabs session is supplied.
+ * [heightPx] is the initial bottom-sheet height in pixels (NOT dp); [widthPx] is the
+ * optional side-sheet width for large/landscape screens. Unsupported browsers ignore these
+ * extras and fall back to a full-height custom tab.
  */
-fun Context.openInBrowserSheet(url: String, @Px heightPx: Int, @ColorInt toolbarColor: Int? = null): Boolean {
-    // Renders as a sheet only when the height is set AND launched via startActivityForResult;
-    // forcing the resolved browser package uses the user's logged-in session and stops another
+fun Context.openInBrowserSheet(
+    url: String,
+    @Px heightPx: Int,
+    @Px widthPx: Int? = null,
+    @ColorInt toolbarColor: Int? = null,
+): Boolean {
+    // Forcing the resolved browser package uses the user's logged-in session and stops another
     // app (e.g. the Google Translate app) from intercepting the URL. Returns false (caller falls
     // back) when no Custom-Tabs browser is available or the launch fails.
     val activity = this as? Activity ?: return false
@@ -344,6 +349,13 @@ fun Context.openInBrowserSheet(url: String, @Px heightPx: Int, @ColorInt toolbar
                     .build(),
             )
             .apply { if (heightPx > 0) setInitialActivityHeightPx(heightPx) }
+            .apply {
+                widthPx?.takeIf { it > 0 }?.let {
+                    setInitialActivityWidthPx(it)
+                    setActivitySideSheetBreakpointDp(PARTIAL_CUSTOM_TAB_SIDE_SHEET_BREAKPOINT_DP)
+                    setCloseButtonPosition(CustomTabsIntent.CLOSE_BUTTON_POSITION_END)
+                }
+            }
             .setToolbarCornerRadiusDp(16)
             .build()
         customTabs.intent.setPackage(pkg)
@@ -358,6 +370,7 @@ fun Context.openInBrowserSheet(url: String, @Px heightPx: Int, @ColorInt toolbar
 }
 
 private const val REQUEST_CODE_CUSTOM_TAB_SHEET = 0xCAB5
+private const val PARTIAL_CUSTOM_TAB_SIDE_SHEET_BREAKPOINT_DP = 800
 
 fun Context.defaultBrowserPackageName(): String? {
     val browserIntent = Intent(Intent.ACTION_VIEW, "http://".toUri())

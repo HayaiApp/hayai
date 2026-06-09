@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.ui.reader.viewer.text
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.view.ActionMode
 import android.view.GestureDetector
 import android.view.KeyEvent
@@ -52,6 +51,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlin.math.roundToInt
 import org.json.JSONObject
 import yokai.util.koin.injectLazy
 import yokai.domain.library.LibraryPreferences
@@ -389,9 +389,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 // so it's not hidden behind the overflow menu on the floating action mode
                 // toolbar that often only has room for 2-3 visible items.
                 val quoteLabel = activity.getString(MR.strings.novel_quote_add)
-                // Phase B #15: the floating-toolbar Google Define shortcut wasn't reliably
-                // present (depends on the WebView/Google Search build), so add an explicit
-                // entry that fires ACTION_PROCESS_TEXT with the current selection.
+                // The floating-toolbar Google Define shortcut is not reliably present across
+                // WebView/Google Search builds, so add explicit entries for the selection.
                 val defineLabel = activity.getString(MR.strings.novel_define)
                 val translateLabel = activity.getString(MR.strings.novel_translate)
                 val searchWebLabel = activity.getString(MR.strings.novel_web_search)
@@ -1611,10 +1610,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     /**
-     * Phase B #15 — fire `Intent.ACTION_PROCESS_TEXT` with the WebView's current text
-     * selection. Prefers Google's quick-search box when installed (deterministic Define
-     * dictionary handler), otherwise routes through a chooser. Toast if nothing handles
-     * the intent. The selection is pulled out of the WebView asynchronously via
+     * Open a Google definition/search result for the WebView's current text selection in a
+     * partial Custom Tab. The selection is pulled out asynchronously via
      * `window.getSelection().toString()`.
      */
     private fun triggerDefineFromSelection(actionMode: ActionMode? = null) {
@@ -1715,13 +1712,25 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
 
     /**
      * Open a selection result (Define / Translate / Web Search). Prefers the user's default
-     * browser as a partial Custom Tab (bottom sheet) so their LOGGED-IN session is used; falls
-     * back to the in-app WebView sheet if no Custom-Tabs browser is available.
+     * browser as a partial Custom Tab so their logged-in session is used; falls back to the
+     * in-app WebView sheet if no Custom-Tabs browser is available.
      */
     private fun openSelectionResult(url: String, query: String) {
-        val heightPx = (container.height * 0.7f).toInt().takeIf { it > 0 }
-            ?: (activity.resources.displayMetrics.heightPixels * 0.7f).toInt()
-        if (!activity.openInBrowserSheet(url, heightPx)) {
+        val displayMetrics = activity.resources.displayMetrics
+        val heightPx = (container.height * SELECTION_TAB_HEIGHT_FRACTION).roundToInt().takeIf { it > 0 }
+            ?: (displayMetrics.heightPixels * SELECTION_TAB_HEIGHT_FRACTION).roundToInt()
+        val maxWidthPx = minOf(
+            (SELECTION_TAB_MAX_SIDE_WIDTH_DP * displayMetrics.density).roundToInt(),
+            displayMetrics.widthPixels,
+        )
+        val minWidthPx = minOf(
+            (SELECTION_TAB_MIN_SIDE_WIDTH_DP * displayMetrics.density).roundToInt(),
+            maxWidthPx,
+        )
+        val widthPx = (displayMetrics.widthPixels * SELECTION_TAB_SIDE_WIDTH_FRACTION)
+            .roundToInt()
+            .coerceIn(minWidthPx, maxWidthPx)
+        if (!activity.openInBrowserSheet(url, heightPx, widthPx)) {
             showSelectionWebSheet(activity, url, query)
         }
     }
@@ -3975,6 +3984,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         private const val DEFINE_MENU_ITEM_ID = 0xBEF0
         private const val TRANSLATE_MENU_ITEM_ID = 0xBEF1
         private const val WEB_SEARCH_MENU_ITEM_ID = 0xBEF2
+        private const val SELECTION_TAB_HEIGHT_FRACTION = 0.7f
+        private const val SELECTION_TAB_SIDE_WIDTH_FRACTION = 0.42f
+        private const val SELECTION_TAB_MIN_SIDE_WIDTH_DP = 360
+        private const val SELECTION_TAB_MAX_SIDE_WIDTH_DP = 560
         // Force-dismiss the loading overlay after this long; protects against onPageFinished
         // never firing (network failure, JS bridge crash, blank page).
         private const val LOADING_TIMEOUT_MS = 15_000L

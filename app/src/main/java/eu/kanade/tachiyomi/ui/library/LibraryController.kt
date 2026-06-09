@@ -460,11 +460,6 @@ open class LibraryController(
         get() = preferences.showCategoryInTitle().get() && presenter.showAllCategories
     private lateinit var elevateAppBar: ((Boolean) -> Unit)
 
-    // Mirrors scrollViewWith's internal isToolbarColor so per-tab scroll only invokes
-    // elevateAppBar() (a colorToolbar callback that cancels/restarts a ValueAnimator) when the
-    // elevated state actually flips — same gating recents uses, instead of firing every frame.
-    private var isPageToolbarElevated = false
-
     // Dead-zone (px) absorbed before a tabbed page's large toolbar starts collapsing, so a tiny
     // scroll doesn't slide/recolor it. Matches scrollViewWith's threshold for the continuous mode.
     private val collapseDeadZone = 12.dpToPx
@@ -801,12 +796,7 @@ open class LibraryController(
             appBar.lockYPos = false
             appBar.updateAppBarAfterY(pageRecycler)
         }
-        // Direct bg apply bypasses the colorToolbar animator so there's no fade from a stale color.
-        val notAtTop = pageRecycler?.canScrollVertically(-1) == true
-        setAppBarBG(if (notAtTop) 1f else 0f, includeTabView = true)
-        // Seed the elevated gate to match what we just painted so the first scroll only
-        // fires the animator when the state genuinely flips.
-        isPageToolbarElevated = notAtTop
+        pageRecycler?.let(::syncPageToolbarBackground)
     }
 
     /**
@@ -843,8 +833,6 @@ open class LibraryController(
         if (::elevateAppBar.isInitialized) {
             elevateAppBar(binding.libraryGridRecycler.recycler.canScrollVertically(-1))
         }
-        // Reset the tabbed-mode gate; reseeded the next time tabs are enabled.
-        isPageToolbarElevated = false
     }
 
     fun pageRecyclerTopPadding(): Int {
@@ -866,20 +854,15 @@ open class LibraryController(
             0 - appBar()!!.paddingTop - ab.toolbar.height - 48.dpToPx
     }
 
-    /** Gated wrapper around [elevateAppBar] so the underlying ValueAnimator only restarts on flips. */
-    private fun setPageToolbarElevated(elevated: Boolean) {
-        if (isPageToolbarElevated == elevated) return
-        isPageToolbarElevated = elevated
-        if (::elevateAppBar.isInitialized) elevateAppBar(elevated)
+    private fun syncPageToolbarBackground(recycler: RecyclerView) {
+        val appBar = appBar() ?: return
+        setAppBarBG(appBar.backgroundProgressForScroll(!atTopOfPageRecycler(recycler)), includeTabView = true)
     }
 
     /**
-     * Mirrors [scrollViewWith]'s onScrolled for the per-tab recycler. Two things keep this stable
-     * vs. the previous version: (1) the appbar collapse/expand IS the visual cue, so we don't toggle
-     * the bg color in place on every dy (avoids flicker on small libraries that barely cross the
-     * elevated threshold); (2) [setPageToolbarElevated] is gated on the tracked state, mirroring
-     * recents' [scrollViewWith.colorToolbar] gating, so the bg ValueAnimator only restarts on actual
-     * flips instead of being cancelled-and-restarted every frame.
+     * Mirrors [scrollViewWith]'s onScrolled for the per-tab recycler. The appbar position is still
+     * driven by the page delta, while the background is derived from that position so color and
+     * collapse stay in phase.
      */
     fun onPageRecyclerScrolled(recycler: RecyclerView, dy: Int) {
         if (!isControllerVisible) return
@@ -889,7 +872,7 @@ open class LibraryController(
             appBar.y = 0f
             appBar.updateAppBarAfterY(recycler)
             pageScrollAccum = 0
-            setPageToolbarElevated(false)
+            syncPageToolbarBackground(recycler)
         } else {
             // Dead-zone before the large toolbar begins collapsing — mirrors scrollViewWith so a
             // 1px scroll on a tabbed page doesn't slide/recolor the header. See collapseDeadZone.
@@ -898,6 +881,7 @@ open class LibraryController(
                 if (pageScrollAccum < collapseDeadZone) {
                     appBar.y = 0f
                     appBar.updateAppBarAfterY(recycler)
+                    syncPageToolbarBackground(recycler)
                     return
                 }
             }
@@ -914,9 +898,7 @@ open class LibraryController(
                 appBar.attrToolbarHeight + appBar.paddingTop + 48.dpToPx
             if (appBar.y < pinnedY) appBar.y = pinnedY
             appBar.updateAppBarAfterY(recycler)
-            // Final reconcile against the large-toolbar offset threshold.
-            val notAtTop = !atTopOfPageRecycler(recycler)
-            if (notAtTop != isPageToolbarElevated) setPageToolbarElevated(notAtTop)
+            syncPageToolbarBackground(recycler)
         }
     }
 
@@ -924,8 +906,10 @@ open class LibraryController(
         if (!isControllerVisible) return
         val appBar = appBar() ?: return
         if (appBar.height <= 0) return
-        appBar.snapAppBarY(this, recycler, callback = null)
-        setPageToolbarElevated(!atTopOfPageRecycler(recycler))
+        appBar.snapAppBarY(this, recycler) {
+            syncPageToolbarBackground(recycler)
+        }
+        syncPageToolbarBackground(recycler)
     }
 
     /**
@@ -1717,9 +1701,10 @@ open class LibraryController(
                     pageRecycler.post {
                         if (activeCategory == target.order) {
                             appBar.updateAppBarAfterY(pageRecycler)
+                            syncPageToolbarBackground(pageRecycler)
                         }
                     }
-                    setPageToolbarElevated(false)
+                    syncPageToolbarBackground(pageRecycler)
                 } else {
                     val pinnedY = -appBar.height.toFloat() +
                         appBar.attrToolbarHeight + appBar.paddingTop + 48.dpToPx
@@ -1728,9 +1713,10 @@ open class LibraryController(
                     pageRecycler.post {
                         if (activeCategory == target.order) {
                             appBar.updateAppBarAfterY(pageRecycler)
+                            syncPageToolbarBackground(pageRecycler)
                         }
                     }
-                    setPageToolbarElevated(true)
+                    syncPageToolbarBackground(pageRecycler)
                 }
             }
         }

@@ -423,7 +423,7 @@ fun Controller.scrollViewWith(
             val floatingBar =
                 (this as? FloatingSearchInterface)?.showFloatingBar() == true && !includeTabView()
             if (floatingBar) {
-                setAppBarBG(isColored.toInt().toFloat(), false)
+                setAppBarBG(appBar.backgroundProgressForScroll(isColored), false)
                 return@f
             }
             val percent = ImageUtil.getPercentOfColor(
@@ -431,7 +431,7 @@ fun Controller.scrollViewWith(
                 activity!!.getResourceColor(materialR.attr.colorSurface),
                 activity!!.getResourceColor(materialR.attr.colorPrimaryVariant),
             )
-            toolbarColorAnim = ValueAnimator.ofFloat(percent, isColored.toInt().toFloat())
+            toolbarColorAnim = ValueAnimator.ofFloat(percent, appBar.backgroundProgressForScroll(isColored))
             toolbarColorAnim?.addUpdateListener { valueAnimator ->
                 setAppBarBG(valueAnimator.animatedValue as Float, includeTabView())
             }
@@ -441,6 +441,18 @@ fun Controller.scrollViewWith(
     if ((this as? FloatingSearchInterface)?.showFloatingBar() == true && !includeTabView()) {
         setAppBarBG(0f, false)
     }
+
+    fun syncToolbarColorToScroll() {
+        val notAtTop = !atTopOfRecyclerView()
+        if (liftOnScroll != null) {
+            if (notAtTop != isToolbarColor) colorToolbar(notAtTop)
+            return
+        }
+        toolbarColorAnim?.cancel()
+        isToolbarColor = notAtTop
+        setAppBarBG(appBar.backgroundProgressForScroll(notAtTop), includeTabView())
+    }
+
     addLifecycleListener(
         object : Controller.LifecycleListener() {
             override fun onChangeEnd(
@@ -543,7 +555,7 @@ fun Controller.scrollViewWith(
     recycler.post {
         if (isControllerVisible) {
             appBar.updateAppBarAfterY(recycler)
-            colorToolbar(!atTopOfRecyclerView())
+            syncToolbarColorToScroll()
         }
     }
 
@@ -590,7 +602,7 @@ fun Controller.scrollViewWith(
                 }
                 lastY = 0f
                 pinnedScrollAccum = 0
-                if (isToolbarColor) colorToolbar(false)
+                syncToolbarColorToScroll()
             } else {
                 // Dead-zone: while the large toolbar is still fully expanded, absorb the first few
                 // pixels of a downward scroll instead of immediately sliding/recoloring it. Once
@@ -619,11 +631,7 @@ fun Controller.scrollViewWith(
 
                 // Re-arm the dead-zone once the bar scrolls back to fully expanded.
                 if (appBar.y >= 0f && dy < 0) pinnedScrollAccum = 0
-                if (!isToolbarColor && appBar.y <= -appBar.height.toFloat()) {
-                    colorToolbar(true)
-                }
-                val notAtTop = !atTopOfRecyclerView()
-                if (notAtTop != isToolbarColor) colorToolbar(notAtTop)
+                syncToolbarColorToScroll()
                 lastY = appBar.y
             }
             appBar.let {
@@ -659,6 +667,7 @@ fun Controller.scrollViewWith(
                     appBar.y,
                     -appBar.height + appBar.paddingTop.toFloat(),
                 )
+                syncToolbarColorToScroll()
             }
             if (activityBinding.bottomNav?.isVisible == true &&
                 isInView && preferences.hideBottomNavOnScroll().get()
@@ -674,8 +683,7 @@ fun Controller.scrollViewWith(
                     animator?.start()
                 }
             }
-            val notAtTop = !atTopOfRecyclerView()
-            if (notAtTop != isToolbarColor) colorToolbar(notAtTop)
+            syncToolbarColorToScroll()
         }
     }
 

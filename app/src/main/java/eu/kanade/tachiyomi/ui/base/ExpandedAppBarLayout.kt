@@ -635,6 +635,24 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
     }
 
     /**
+     * Background intensity for the current appbar position.
+     *
+     * A scrolled list should not force the toolbar directly to its fully elevated color while
+     * the large appbar is still mostly expanded. Tying color to the actual collapse fraction keeps
+     * the background in phase with the visual motion and avoids one-frame flashes near the top.
+     */
+    fun backgroundProgressForScroll(notAtTop: Boolean): Float {
+        if (!notAtTop) return 0f
+
+        val collapsedY = yNeededForSmallToolbar.toFloat()
+        return if (collapsedY < 0f) {
+            MathUtils.clamp(y / collapsedY, 0f, 1f)
+        } else {
+            1f
+        }
+    }
+
+    /**
      * Swap the appBar's "active toolbar" — either [mainToolbar] or [searchToolbar].
      * Driven by scroll position and search-pill state; the appBar updates its own
      * visibility/background per the chosen toolbar and lifts the main toolbar's
