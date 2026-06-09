@@ -89,6 +89,7 @@ import eu.kanade.tachiyomi.data.database.models.orientationType
 import eu.kanade.tachiyomi.data.database.models.readingModeType
 import eu.kanade.tachiyomi.data.preference.changesIn
 import eu.kanade.tachiyomi.data.track.TrackService
+import eu.kanade.tachiyomi.data.translation.TranslationService
 import eu.kanade.tachiyomi.databinding.ReaderActivityBinding
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.model.Page
@@ -289,6 +290,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
     private val readerPreferences: ReaderPreferences by injectLazy()
     private val basePreferences: BasePreferences by injectLazy()
+    private val translationService: TranslationService by injectLazy()
 
     companion object {
 
@@ -2313,16 +2315,24 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     }
 
     /**
-     * Check if translation mode is currently enabled.
-     * Translation is out of scope for the initial port — always returns false.
+     * Check if real-time translation mode is currently enabled.
      */
-    fun isTranslationEnabled(): Boolean = false
+    fun isTranslationEnabled(): Boolean = translationService.isEnabled()
 
     /**
-     * Translate text content using the translation service.
-     * Translation is out of scope for the initial port — returns content unchanged.
+     * Translate text content using the configured translation service.
+     * Returns original content if translation is disabled, unconfigured, or fails.
      */
-    suspend fun translateContentIfEnabled(content: String): String = content
+    suspend fun translateContentIfEnabled(content: String): String {
+        if (!isTranslationEnabled()) return content
+        val mangaId = viewModel.manga?.id
+        val chapterId = viewModel.state.value.viewerChapters?.currChapter?.chapter?.id
+        return translationService.translateChapterContent(
+            content = content,
+            chapterId = chapterId,
+            mangaId = mangaId,
+        )
+    }
 
     /**
      * Called when the "Remember" action is triggered from the text-selection menu.

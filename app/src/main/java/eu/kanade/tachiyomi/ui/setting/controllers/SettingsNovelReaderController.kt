@@ -5,12 +5,16 @@ import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.ui.setting.SettingsLegacyController
 import eu.kanade.tachiyomi.ui.setting.bindTo
 import eu.kanade.tachiyomi.ui.setting.defaultValue
+import eu.kanade.tachiyomi.ui.setting.editTextPreference
 import eu.kanade.tachiyomi.ui.setting.infoPreference
 import eu.kanade.tachiyomi.ui.setting.listPreference
 import eu.kanade.tachiyomi.ui.setting.onChange
 import eu.kanade.tachiyomi.ui.setting.preferenceCategory
 import eu.kanade.tachiyomi.ui.setting.seekBarPreference
 import eu.kanade.tachiyomi.ui.setting.switchPreference
+import eu.kanade.tachiyomi.data.translation.TranslationEngineManager
+import tachiyomi.domain.translation.model.LanguageCodes
+import tachiyomi.domain.translation.service.TranslationPreferences
 import yokai.domain.ui.settings.ReaderPreferences
 import yokai.i18n.MR
 import yokai.util.lang.getString
@@ -38,6 +42,8 @@ class SettingsNovelReaderController : SettingsLegacyController() {
 
 fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceScreen) {
     val readerPreferences: ReaderPreferences = get()
+    val translationPreferences: TranslationPreferences = get()
+    val translationEngineManager: TranslationEngineManager = get()
 
     screen.apply {
         preferenceCategory {
@@ -206,6 +212,219 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
                 bindTo(readerPreferences.enableEpubJs)
                 titleRes = MR.strings.novel_enable_epub_js
                 summaryRes = MR.strings.novel_enable_epub_js_summary
+            }
+        }
+
+        preferenceCategory {
+            title = "Translation"
+
+            switchPreference {
+                bindTo(translationPreferences.translationEnabled())
+                title = "Enable translation"
+                summary = "Allow novel chapters to be translated"
+            }
+
+            switchPreference {
+                bindTo(translationPreferences.realTimeTranslation())
+                title = "Translate while reading"
+                summary = "Render translated chapter text in the novel reader"
+            }
+
+            switchPreference {
+                bindTo(translationPreferences.cacheTranslations())
+                title = "Cache translations"
+                summary = "Serve translated chapters from local cache instead of calling the API again"
+            }
+
+            switchPreference {
+                bindTo(translationPreferences.smartAutoTranslate())
+                title = "Smart auto-translate"
+                summary = "Skip translation when the detected language already matches the target"
+            }
+
+            listPreference(activity) {
+                isPersistent = false
+                title = "Translation engine"
+                val engines = translationEngineManager.engines
+                entries = engines.map { engine ->
+                    if (engine.isOffline) "${engine.name} (Offline)" else engine.name
+                }
+                entryValues = engines.map { it.id.toString() }
+                tempValue = entryValues.indexOf(translationPreferences.selectedEngineId().get().toString())
+                    .takeIf { it >= 0 }
+                summary = engines.firstOrNull { it.id == translationPreferences.selectedEngineId().get() }?.name
+                    ?: engines.firstOrNull()?.name
+                onChange { newValue ->
+                    val id = (newValue as String).toLongOrNull() ?: return@onChange false
+                    translationPreferences.selectedEngineId().set(id)
+                    summary = engines.firstOrNull { it.id == id }?.name ?: id.toString()
+                    true
+                }
+            }
+
+            listPreference(activity) {
+                bindTo(translationPreferences.sourceLanguage())
+                title = "Source language"
+                entries = LanguageCodes.common.map { it.second }
+                entryValues = LanguageCodes.common.map { it.first }
+            }
+
+            listPreference(activity) {
+                bindTo(translationPreferences.targetLanguage())
+                title = "Target language"
+                val targets = LanguageCodes.common.filterNot { it.first == "auto" }
+                entries = targets.map { it.second }
+                entryValues = targets.map { it.first }
+            }
+
+            seekBarPreference {
+                bindTo(translationPreferences.translationChunkSize())
+                title = "Paragraphs per request"
+                min = 1
+                max = 100
+                showSeekBarValue = true
+            }
+
+            switchPreference {
+                bindTo(translationPreferences.contextualAnchoringEnabled())
+                title = "Contextual anchoring"
+                summary = "Send previous translated paragraphs as context to LLM engines"
+            }
+
+            seekBarPreference {
+                bindTo(translationPreferences.contextualAnchoringParagraphs())
+                title = "Context paragraphs"
+                min = 1
+                max = 8
+                showSeekBarValue = true
+            }
+
+            seekBarPreference {
+                isPersistent = false
+                title = "Request timeout"
+                min = 10
+                max = 300
+                showSeekBarValue = true
+                val initial = (translationPreferences.translationTimeoutMs().get() / 1000L).toInt().coerceIn(10, 300)
+                defaultValue = initial
+                onChange { newValue ->
+                    translationPreferences.translationTimeoutMs().set((newValue as Int).toLong() * 1000L)
+                    true
+                }
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.openAiApiKey())
+                title = "OpenAI API key"
+                summary = "Used by OpenAI"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.openAiBaseUrl())
+                title = "OpenAI-compatible URL"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.openAiModel())
+                title = "OpenAI model"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.deepSeekApiKey())
+                title = "DeepSeek API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.geminiApiKey())
+                title = "Gemini API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.nvidiaNimBaseUrl())
+                title = "NVIDIA NIM base URL"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.nvidiaNimApiKey())
+                title = "NVIDIA NIM API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.nvidiaNimModel())
+                title = "NVIDIA NIM model"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.ollamaUrl())
+                title = "Ollama server URL"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.ollamaModel())
+                title = "Ollama model"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.libreTranslateUrl())
+                title = "LibreTranslate URL"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.libreTranslateApiKey())
+                title = "LibreTranslate API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.deepLApiKey())
+                title = "DeepL API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.googleApiKey())
+                title = "Google Cloud API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.systranApiKey())
+                title = "SYSTRAN API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.huggingFaceApiKey())
+                title = "Hugging Face API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.customHttpUrl())
+                title = "Custom HTTP URL"
+            }
+
+            listPreference(activity) {
+                bindTo(translationPreferences.customHttpMethod())
+                title = "Custom HTTP method"
+                entries = listOf("POST", "GET")
+                entryValues = listOf("POST", "GET")
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.customHttpApiKey())
+                title = "Custom HTTP API key"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.customHttpHeaders())
+                title = "Custom HTTP headers"
+                summary = "Name: Value pairs separated by semicolons or line breaks"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.customHttpRequestTemplate())
+                title = "Custom HTTP request template"
+            }
+
+            editTextPreference(activity) {
+                bindTo(translationPreferences.customHttpResponsePath())
+                title = "Custom HTTP response path"
             }
         }
 

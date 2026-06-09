@@ -107,6 +107,7 @@ internal class ExtensionApi {
                     apkName = it.apk,
                     iconUrl = "$repoUrl/icon/${it.pkg}.png",
                     repoUrl = repoUrl,
+                    isNovel = it.isNovel,
                 )
             }
     }
@@ -132,4 +133,5 @@ private data class ExtensionJsonObject(
     val hasReadme: Int = 0,
     val hasChangelog: Int = 0,
     val sources: List<Extension.AvailableSource>?,
+    val isNovel: Boolean = false,
 )

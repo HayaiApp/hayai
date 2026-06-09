@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.domain.manga.models.Manga.Companion.TYPE_MANHWA
 import eu.kanade.tachiyomi.domain.manga.models.Manga.Companion.TYPE_NOVEL
 import eu.kanade.tachiyomi.domain.manga.models.Manga.Companion.TYPE_WEBTOON
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.reader.settings.OrientationType
 import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
@@ -60,7 +61,7 @@ fun Manga.seriesType(context: Context, sourceManager: SourceManager? = null): St
  */
 fun Manga.seriesType(useOriginalTags: Boolean = false, customTags: String? = null, sourceManager: SourceManager? = null): Int {
     val source = (sourceManager ?: get()).getOrStub(this.source)
-    if (source is TextSource) {
+    if (source is TextSource || source.isNovelSource()) {
         return TYPE_NOVEL
     }
     val sourceName = source.name

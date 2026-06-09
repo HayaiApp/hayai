@@ -31,6 +31,16 @@ interface Source {
         get() = null
 
     /**
+     * Whether this source provides novel (text-based) content instead of manga (image-based).
+     *
+     * Novel sources should override [fetchPageText] to return the chapter text/HTML for a
+     * placeholder [Page]. Keeping this flag on [Source] lets extension classloaders dispatch it
+     * directly without reflection.
+     */
+    val isNovelSource: Boolean
+        get() = false
+
+    /**
      * Returns the URL for a manga when available.
      */
     fun getMangaUrl(manga: SManga): String? = null
@@ -83,6 +93,12 @@ interface Source {
     suspend fun getPageList(chapter: SChapter): List<Page> {
         return fetchPageList(chapter).awaitSingle()
     }
+
+    /**
+     * Fetches the text content for a novel page.
+     */
+    suspend fun fetchPageText(page: Page): String =
+        throw UnsupportedOperationException("Not a novel source")
 
     @Deprecated(
         "Use the non-RxJava API instead",

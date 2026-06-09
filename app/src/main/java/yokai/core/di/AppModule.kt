@@ -16,6 +16,9 @@ import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.library.CustomMangaManager
 import eu.kanade.tachiyomi.data.track.TrackManager
+import eu.kanade.tachiyomi.data.translation.TranslationCache
+import eu.kanade.tachiyomi.data.translation.TranslationEngineManager
+import eu.kanade.tachiyomi.data.translation.TranslationService
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.network.JavaScriptEngine
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -128,6 +131,10 @@ fun appModule(app: Application) = module {
     single { CustomMangaManager(app) }
 
     single { TrackManager(app) }
+
+    single { TranslationCache(app) }
+    single { TranslationEngineManager(get()) }
+    single { TranslationService(app, get(), get(), get()) }
 
     single {
         Json {

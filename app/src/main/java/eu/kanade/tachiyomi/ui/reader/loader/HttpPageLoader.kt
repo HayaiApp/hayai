@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.reader.loader
 import yokai.util.koin.get
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.online.all.EHentai
@@ -88,6 +89,9 @@ class HttpPageLoader(
         queue.clear()
 
         // Cache current page list progress for online chapters to allow a faster reopen
+        // Novel text lives on Page.text, which is transient. Reusing the image page-list
+        // cache would reopen novel chapters with text=null, so novel sources always fetch fresh.
+        if (source.isNovelSource()) return
         chapter.pages?.let { pages ->
             launchIO {
                 try {
@@ -108,17 +112,21 @@ class HttpPageLoader(
      * otherwise fallbacks to network.
      */
     override suspend fun getPages(): List<ReaderPage> {
-        val pages = try {
-            chapterCache.getPageListFromCache(chapter.chapter)
-        } catch (e: Throwable) {
-            if (e is CancellationException) {
-                throw e
-            }
+        val pages = if (source.isNovelSource()) {
             source.getPageList(chapter.chapter)
+        } else {
+            try {
+                chapterCache.getPageListFromCache(chapter.chapter)
+            } catch (e: Throwable) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                source.getPageList(chapter.chapter)
+            }
         }
         return pages.mapIndexed { index, page ->
             // Don't trust sources and use our own indexing
-            ReaderPage(index, page.url, page.imageUrl)
+            ReaderPage(index, page.url, page.imageUrl, page.text)
         }
     }
 
@@ -216,6 +224,13 @@ class HttpPageLoader(
      */
     private suspend fun _loadPage(page: ReaderPage) {
         try {
+            if (source.isNovelSource() && page.imageUrl.isNullOrEmpty()) {
+                page.status = Page.State.LoadPage
+                page.text = page.text ?: source.fetchPageText(page)
+                page.status = Page.State.Ready
+                return
+            }
+
             if (page.imageUrl.isNullOrEmpty()) {
                 page.status = Page.State.LoadPage
                 page.imageUrl = source.getImageUrl(page)

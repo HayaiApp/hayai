@@ -78,9 +78,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     private var webViewScrollRange: Int = 0
     private var webViewScrollExtent: Int = 0
     private val preferences: ReaderPreferences by injectLazy()
-    // Translation feature is out of scope for the initial Hayai port; the donor's
-    // TranslationPreferences class has no Hayai counterpart. realTimeTranslation calls
-    // are stubbed to false at the call site (see displayContent).
+    // ReaderActivity owns translation state and delegates to TranslationService before
+    // content reaches this WebView, so the viewer only has to reload/render the result.
     private val libraryPreferences: LibraryPreferences by injectLazy()
     // Used by buildTransitionCardHtml to swap the cloud icon for a check-circle when a
     // chapter is locally downloaded (mirrors the manga ChapterTransition widget).

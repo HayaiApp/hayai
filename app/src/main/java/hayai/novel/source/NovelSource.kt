@@ -70,6 +70,7 @@ class NovelSource(
     override val name: String get() = pluginName
     val baseUrl: String get() = siteUrl
     override val webViewUrl: String get() = baseUrl
+    override val isNovelSource: Boolean get() = true
 
     override fun toString() = "$name (${lang.uppercase()})"
 
@@ -159,7 +160,14 @@ class NovelSource(
             ?.jsonPrimitive?.contentOrNull?.toIntOrNull()
             ?: 1
         if (totalPages > 1) {
-            for (pageNum in 2..totalPages) {
+            val hasParsePage = runCatching {
+                rt.evaluateRaw("typeof __plugin.parsePage === 'function'")
+            }.getOrDefault("false") == "true"
+            if (!hasParsePage) {
+                Logger.w { "NovelSource($pluginId): totalPages=$totalPages but parsePage is unavailable" }
+            }
+            val pageRange = if (hasParsePage) 2..totalPages else emptyList()
+            for (pageNum in pageRange) {
                 val pageChapters = try {
                     val pageJson = rt.callMethod(
                         "parsePage",
@@ -208,6 +216,10 @@ class NovelSource(
             // If it's not a valid JSON string, return as-is (strip quotes if present)
             resultJson.removeSurrounding("\"")
         }
+    }
+
+    override suspend fun fetchPageText(page: Page): String {
+        return getChapterText(page.url)
     }
 
     override fun getMangaUrl(manga: SManga): String {

@@ -27,6 +27,7 @@ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.PreMigrationControllerBinding
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.base.SmallToolbarInterface
 import eu.kanade.tachiyomi.ui.base.controller.BaseLegacyController
@@ -36,9 +37,6 @@ import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
 import eu.kanade.tachiyomi.util.view.expand
 import eu.kanade.tachiyomi.util.view.liftAppbarWith
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
-// NOVEL -->
-import hayai.novel.source.TextSource
-// NOVEL <--
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -183,7 +181,7 @@ class PreMigrationController(bundle: Bundle? = null) :
         val sourcesSaved = prefs.migrationSources().get().split("/")
         var sources = sourceManager.getVisibleCatalogueSources()
             .filter { source ->
-                if (isNovelMigration) source is TextSource else source is HttpSource
+                if (isNovelMigration) source.isNovelSource() else source is HttpSource && !source.isNovelSource()
             }
             .filter { it.lang in languages }
             .sortedBy { "(${it.lang}) ${it.name}" }

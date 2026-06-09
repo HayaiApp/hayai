@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 // NOVEL -->
 import hayai.novel.reader.NovelDownloadPageLoader
@@ -60,7 +61,7 @@ class ChapterLoader(
 
                 if (page != null) {
                     chapter.requestedPage = page
-                } else if (source !is TextSource && !chapter.chapter.read) {
+                } else if (!source.isNovelSource() && !chapter.chapter.read) {
                     // If the chapter is partially read, set the starting page to the last the user read
                     chapter.requestedPage = chapter.chapter.last_page_read
                 }

@@ -14,12 +14,23 @@ interface SChapter : Serializable {
 
     var scanlator: String?
 
+    var chapterLocked: Boolean
+
+    var read: Boolean
+        get() = false
+        set(_) {}
+
+    var last_page_read: Int
+        get() = 0
+        set(_) {}
+
     fun copyFrom(other: SChapter) {
         name = other.name
         url = other.url
         date_upload = other.date_upload
         chapter_number = other.chapter_number
         scanlator = other.scanlator
+        chapterLocked = other.chapterLocked
     }
 
     companion object {

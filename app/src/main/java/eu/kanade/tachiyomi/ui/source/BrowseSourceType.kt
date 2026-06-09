@@ -4,7 +4,7 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.core.preference.Preference
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.source.CatalogueSource
-import hayai.novel.source.NovelSource
+import eu.kanade.tachiyomi.source.isNovelSource
 import yokai.i18n.MR
 
 /**
@@ -28,7 +28,7 @@ enum class BrowseSourceType(val stringRes: StringResource) {
 
 /** Classifies a [CatalogueSource] into one of the [BrowseSourceType] tabs. */
 val CatalogueSource.browseType: BrowseSourceType
-    get() = if (this is NovelSource) BrowseSourceType.Novel else BrowseSourceType.Manga
+    get() = if (isNovelSource()) BrowseSourceType.Novel else BrowseSourceType.Manga
 
 /**
  * Per-type pinned catalogues preference selector. Avoids open-coding the same

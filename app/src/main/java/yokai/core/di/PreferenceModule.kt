@@ -19,6 +19,7 @@ import yokai.domain.source.SourcePreferences
 import yokai.domain.storage.StoragePreferences
 import yokai.domain.ui.UiPreferences
 import yokai.domain.ui.settings.ReaderPreferences
+import tachiyomi.domain.translation.service.TranslationPreferences
 
 fun preferenceModule(application: Application) = module {
     single<PreferenceStore> { AndroidPreferenceStore(application) }
@@ -32,6 +33,8 @@ fun preferenceModule(application: Application) = module {
     single { UiPreferences(get()) }
 
     single { ReaderPreferences(get()) }
+
+    single { TranslationPreferences(get()) }
 
     single { RecentsPreferences(get()) }
 

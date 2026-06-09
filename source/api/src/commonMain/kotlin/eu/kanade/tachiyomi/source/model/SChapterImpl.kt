@@ -11,4 +11,10 @@ class SChapterImpl : SChapter {
     override var chapter_number: Float = -1f
 
     override var scanlator: String? = null
+
+    override var chapterLocked: Boolean = false
+
+    override var read: Boolean = false
+
+    override var last_page_read: Int = 0
 }

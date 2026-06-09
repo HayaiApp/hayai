@@ -35,7 +35,6 @@ import eu.kanade.tachiyomi.data.track.EnhancedTrackService
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.data.track.model.TrackContentType
-import hayai.novel.source.NovelSource
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.NetworkPreferences
@@ -44,6 +43,7 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.SourceNotFoundException
 import eu.kanade.tachiyomi.source.getExtension
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
@@ -1015,7 +1015,7 @@ class MangaDetailsPresenter(
     // Tracking
     private fun setTrackItems() {
         // Filter by content type so manga only see manga trackers and novels only see novel trackers.
-        val contentType = if (source is NovelSource) TrackContentType.NOVEL else TrackContentType.MANGA
+        val contentType = if (source.isNovelSource()) TrackContentType.NOVEL else TrackContentType.MANGA
         trackList = loggedServices.filter { service ->
             if (contentType !in service.supportedContentTypes) return@filter false
             if (service !is EnhancedTrackService) return@filter true
