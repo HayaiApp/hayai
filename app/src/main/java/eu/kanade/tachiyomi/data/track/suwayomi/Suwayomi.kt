@@ -77,7 +77,7 @@ class Suwayomi(private val context: Context, id: Long) : TrackService(id), Enhan
     }
 
     override suspend fun search(query: String): List<TrackSearch> {
-        TODO("Not yet implemented")
+        return emptyList()
     }
 
     override suspend fun refresh(track: Track): Track {

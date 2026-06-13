@@ -58,6 +58,7 @@ import eu.kanade.tachiyomi.ui.base.TabMode
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.recents.options.TabbedRecentsOptionsSheet
+import eu.kanade.tachiyomi.ui.upcoming.UpcomingController
 import eu.kanade.tachiyomi.ui.source.browse.ProgressItem
 import eu.kanade.tachiyomi.util.chapter.updateTrackChapterMarkedAsRead
 import eu.kanade.tachiyomi.util.system.addCheckBoxPrompt
@@ -1123,6 +1124,10 @@ class RecentsController(bundle: Bundle? = null) :
                     presenter.viewType.mainValue.coerceIn(0, 2),
                 )
                 displaySheet?.show()
+            }
+            R.id.action_view_upcoming -> {
+                router.pushController(UpcomingController().withFadeTransaction())
+                return true
             }
         }
         return super.onOptionsItemSelected(item)

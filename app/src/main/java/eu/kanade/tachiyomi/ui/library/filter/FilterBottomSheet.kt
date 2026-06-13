@@ -77,6 +77,8 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
 
     private lateinit var bookmarked: FilterTagGroup
 
+    private lateinit var customInterval: FilterTagGroup
+
     private lateinit var contentType: FilterTagGroup
 
     private var tracked: FilterTagGroup? = null
@@ -101,6 +103,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
         list.add(downloaded)
         list.add(completed)
         list.add(bookmarked)
+        list.add(customInterval)
         if (hasTracking) {
             tracked?.let { list.add(it) }
         }
@@ -330,6 +333,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
             preferences.filterTracked().get() > 0 ||
             preferences.filterMangaType().get() > 0 ||
             preferences.filterBookmarked().get() > 0 ||
+            preferences.filterCustomInterval().get() > 0 ||
             FILTER_TRACKER.isNotEmpty()
     }
 
@@ -348,6 +352,9 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
 
         bookmarked = inflate(R.layout.filter_tag_group) as FilterTagGroup
         bookmarked.setup(this, MR.strings.bookmarked, MR.strings.not_bookmarked)
+
+        customInterval = inflate(R.layout.filter_tag_group) as FilterTagGroup
+        customInterval.setup(this, MR.strings.custom_update_interval, MR.strings.not_custom_update_interval)
 
         if (hasTracking) {
             tracked = inflate(R.layout.filter_tag_group) as FilterTagGroup
@@ -442,6 +449,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
             downloaded.setState(preferences.filterDownloaded())
             completed.setState(preferences.filterCompleted())
             bookmarked.setState(preferences.filterBookmarked())
+            customInterval.setState(preferences.filterCustomInterval())
             val unreadP = preferences.filterUnread().get()
             if (unreadP <= 2) {
                 unread.state = unreadP - 1
@@ -464,6 +472,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
             }
         }
         listOfNotNull(unreadProgress, unread, downloaded, completed, mangaType, bookmarked, tracked, contentType)
+            .plus(customInterval)
             .forEach {
                 if (!filterItems.contains(it)) {
                     filterItems.add(it)
@@ -483,6 +492,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
             Filters.Completed -> completed
             Filters.SeriesType -> mangaType
             Filters.Bookmarked -> bookmarked
+            Filters.CustomInterval -> customInterval
             Filters.Tracked -> if (hasTracking) tracked else null
             Filters.ContentType -> contentType
             else -> null
@@ -534,6 +544,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
             downloaded -> preferences.filterDownloaded()
             completed -> preferences.filterCompleted()
             bookmarked -> preferences.filterBookmarked()
+            customInterval -> preferences.filterCustomInterval()
             tracked -> preferences.filterTracked()
             mangaType -> {
                 val newIndex = when (view.nameOf(index)) {
@@ -585,6 +596,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
         preferences.filterUnread().set(0)
         preferences.filterCompleted().set(0)
         preferences.filterBookmarked().set(0)
+        preferences.filterCustomInterval().set(0)
         preferences.filterTracked().set(0)
         preferences.filterMangaType().set(0)
         FILTER_TRACKER = ""
@@ -640,6 +652,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
         Completed('c', MR.strings.status),
         SeriesType('m', MR.strings.series_type),
         Bookmarked('b', MR.strings.bookmarked),
+        CustomInterval('i', MR.strings.custom_update_interval),
         Tracked('t', MR.strings.tracking),
         ContentType('s', MR.strings.content_type)
         ;
@@ -652,6 +665,7 @@ class FilterBottomSheet @JvmOverloads constructor(context: Context, attrs: Attri
                 Completed,
                 SeriesType,
                 Bookmarked,
+                CustomInterval,
                 Tracked,
                 ContentType,
             ).joinToString("") { it.value.toString() }

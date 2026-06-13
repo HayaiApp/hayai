@@ -31,6 +31,7 @@ import yokai.domain.library.custom.model.CustomMangaInfo.Companion.getMangaInfo
 import yokai.domain.manga.interactor.GetManga
 import yokai.domain.manga.interactor.UpdateManga
 import yokai.domain.manga.models.MangaUpdate
+import yokai.domain.series.SeriesKnowledgeRepository
 import yokai.domain.track.interactor.GetTrack
 import yokai.domain.track.interactor.InsertTrack
 import yokai.domain.ui.UiPreferences
@@ -166,6 +167,8 @@ class MigrationProcessAdapter(
             prevManga: Manga,
             manga: Manga,
             replace: Boolean,
+            seriesKnowledgeRepository: SeriesKnowledgeRepository = get(),
+            updateManga: UpdateManga = get(),
         ) {
             // Update chapters read
             if (MigrationFlags.hasChapters(flags)) {
@@ -236,7 +239,6 @@ class MigrationProcessAdapter(
                     }
                 get<InsertTrack>().awaitBulk(tracksToUpdate)
             }
-            val updateManga: UpdateManga = get()
             // Update favorite status
             if (replace) {
                 prevManga.favorite = false
@@ -262,8 +264,19 @@ class MigrationProcessAdapter(
                     manga.updateCoverLastModified()
                 }
                 customMangaManager.getManga(prevManga)?.let { customManga ->
-                    customMangaManager.updateMangaInfo(prevManga.id, manga.id, customManga.getMangaInfo())
+                    customMangaManager.updateMangaInfo(
+                        prevManga.id,
+                        manga.id,
+                        customManga.getMangaInfo(),
+                        moveSeriesData = false,
+                    )
                 }
+            }
+
+            if (replace) {
+                seriesKnowledgeRepository.relink(prevManga.id!!, manga.id!!)
+            } else {
+                seriesKnowledgeRepository.copy(prevManga.id!!, manga.id!!)
             }
 
             updateManga.await(

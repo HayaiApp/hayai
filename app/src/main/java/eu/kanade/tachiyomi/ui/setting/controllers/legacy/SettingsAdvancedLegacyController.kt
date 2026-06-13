@@ -77,10 +77,7 @@ import eu.kanade.tachiyomi.util.view.setTitle
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import java.io.File
 import kotlinx.collections.immutable.toImmutableMap
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import okhttp3.Headers
@@ -493,14 +490,14 @@ class SettingsAdvancedLegacyController : SettingsLegacyController() {
         }
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     private fun cleanupDownloads(removeRead: Boolean, removeNonFavorite: Boolean) {
         if (job?.isActive == true) return
-        activity?.toast(MR.strings.starting_cleanup)
-        job = GlobalScope.launch(Dispatchers.IO, CoroutineStart.DEFAULT) {
+        val activity = activity ?: return
+        activity.toast(MR.strings.starting_cleanup)
+        job = viewScope.launch(Dispatchers.IO) {
             val mangaList = getManga.awaitAll()
             val sourceManager: SourceManager = get()
-            val downloadProvider = DownloadProvider(activity!!)
+            val downloadProvider = DownloadProvider(activity)
             var foldersCleared = 0
             val sources = sourceManager.getOnlineSources()
 
@@ -523,7 +520,6 @@ class SettingsAdvancedLegacyController : SettingsLegacyController() {
                 }
             }
             launchUI {
-                val activity = activity ?: return@launchUI
                 val cleanupString =
                     if (foldersCleared == 0) {
                         activity.getString(MR.strings.no_folders_to_cleanup)

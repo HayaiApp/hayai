@@ -4,7 +4,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/manga_header_layout"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
     <View
         android:id="@+id/true_backdrop"
@@ -163,9 +165,9 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:clipToPadding="false"
+        android:fadingEdgeLength="24dp"
         android:requiresFadingEdge="horizontal"
         android:scrollbars="none"
-        app:layout_constraintBottom_toTopOf="@id/metadata_compose"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/bottom_line">
@@ -191,6 +193,15 @@
                 android:layout_marginStart="6dp"
                 android:text="@string/tracking"
                 app:icon="@drawable/ic_sync_24dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/predicted_update_button"
+                style="@style/Widget.Tachiyomi.Button.OutlinedButton.Icon"
+                android:layout_marginStart="6dp"
+                android:text="@string/manga_interval_expected_update_soon"
+                android:visibility="gone"
+                app:icon="@drawable/ic_hourglass_empty_24dp"
+                tools:visibility="visible" />
 
             <ImageView
                 android:id="@+id/webview_button"
@@ -237,9 +248,12 @@
         android:id="@+id/metadata_compose"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/sub_button_scroll" />
+        app:layout_constraintTop_toBottomOf="@id/manga_genres_tags" />
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/manga_summary_label"
@@ -253,7 +267,7 @@
         android:textIsSelectable="false"
         android:textSize="17sp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/metadata_compose"
+        app:layout_constraintTop_toBottomOf="@id/sub_button_scroll"
         tools:text="About this manga" />
 
     <TextView
@@ -344,9 +358,11 @@
         android:layout_height="wrap_content"
         android:minHeight="40dp"
         android:layout_marginTop="8dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:visibility="visible"
         app:layout_constrainedHeight="true"
-        app:layout_constraintBottom_toTopOf="@id/less_button"
+        app:layout_constraintBottom_toTopOf="@id/metadata_compose"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/manga_summary" />
@@ -368,7 +384,7 @@
         app:layout_constraintBottom_toTopOf="@id/button_group_compose"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/manga_genres_tags"
+        app:layout_constraintTop_toBottomOf="@id/metadata_compose"
         app:rippleColor="@null"
         tools:visibility="visible" />
 
@@ -382,6 +398,8 @@
         android:layout_height="wrap_content"
         android:minHeight="56dp"
         android:layout_marginTop="12dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/less_button" />
@@ -391,6 +409,8 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/button_group_compose" />

@@ -15,6 +15,8 @@ import eu.kanade.tachiyomi.ui.setting.switchPreference
 import eu.kanade.tachiyomi.data.translation.TranslationEngineManager
 import tachiyomi.domain.translation.model.LanguageCodes
 import tachiyomi.domain.translation.service.TranslationPreferences
+import yokai.domain.series.SeriesPreferences
+import yokai.domain.series.model.TranslationMode
 import yokai.domain.ui.settings.ReaderPreferences
 import yokai.i18n.MR
 import yokai.util.lang.getString
@@ -43,6 +45,7 @@ class SettingsNovelReaderController : SettingsLegacyController() {
 fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceScreen) {
     val readerPreferences: ReaderPreferences = get()
     val translationPreferences: TranslationPreferences = get()
+    val seriesPreferences: SeriesPreferences = get()
     val translationEngineManager: TranslationEngineManager = get()
 
     screen.apply {
@@ -92,10 +95,10 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
                 bindTo(readerPreferences.novelFontFamily)
                 titleRes = MR.strings.novel_font_family
                 entries = listOf(
-                    "Default",
-                    "Sans Serif",
-                    "Serif",
-                    "Monospace",
+                    context.getString(MR.strings.novel_font_default),
+                    context.getString(MR.strings.novel_font_sans_serif),
+                    context.getString(MR.strings.novel_font_serif),
+                    context.getString(MR.strings.novel_font_monospace),
                 )
                 entryValues = listOf("default", "sans-serif", "serif", "monospace")
             }
@@ -216,38 +219,49 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
         }
 
         preferenceCategory {
-            title = "Translation"
+            titleRes = MR.strings.pref_category_translation
 
             switchPreference {
                 bindTo(translationPreferences.translationEnabled())
-                title = "Enable translation"
-                summary = "Allow novel chapters to be translated"
+                titleRes = MR.strings.pref_translation_enabled
+                summaryRes = MR.strings.pref_translation_enabled_summary
             }
 
             switchPreference {
                 bindTo(translationPreferences.realTimeTranslation())
-                title = "Translate while reading"
-                summary = "Render translated chapter text in the novel reader"
+                titleRes = MR.strings.pref_translation_realtime
+                summaryRes = MR.strings.pref_translation_realtime_summary
             }
 
             switchPreference {
                 bindTo(translationPreferences.cacheTranslations())
-                title = "Cache translations"
-                summary = "Serve translated chapters from local cache instead of calling the API again"
+                titleRes = MR.strings.pref_translation_cache
+                summaryRes = MR.strings.pref_translation_cache_summary
             }
 
             switchPreference {
                 bindTo(translationPreferences.smartAutoTranslate())
-                title = "Smart auto-translate"
-                summary = "Skip translation when the detected language already matches the target"
+                titleRes = MR.strings.pref_translation_smart_auto
+                summaryRes = MR.strings.pref_translation_smart_auto_summary
+            }
+
+            listPreference(activity) {
+                bindTo(seriesPreferences.translationMode())
+                titleRes = MR.strings.pref_translation_mode
+                summaryRes = MR.strings.pref_translation_mode_summary
+                entries = listOf(
+                    context.getString(MR.strings.pref_translation_mode_simple),
+                    context.getString(MR.strings.pref_translation_mode_advanced),
+                )
+                entryValues = listOf(TranslationMode.SIMPLE.dbKey, TranslationMode.ADVANCED.dbKey)
             }
 
             listPreference(activity) {
                 isPersistent = false
-                title = "Translation engine"
+                titleRes = MR.strings.pref_translation_engine
                 val engines = translationEngineManager.engines
                 entries = engines.map { engine ->
-                    if (engine.isOffline) "${engine.name} (Offline)" else engine.name
+                    if (engine.isOffline) context.getString(MR.strings.pref_translation_engine_offline_format, engine.name) else engine.name
                 }
                 entryValues = engines.map { it.id.toString() }
                 tempValue = entryValues.indexOf(translationPreferences.selectedEngineId().get().toString())
@@ -264,14 +278,14 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
 
             listPreference(activity) {
                 bindTo(translationPreferences.sourceLanguage())
-                title = "Source language"
+                titleRes = MR.strings.pref_translation_source_language
                 entries = LanguageCodes.common.map { it.second }
                 entryValues = LanguageCodes.common.map { it.first }
             }
 
             listPreference(activity) {
                 bindTo(translationPreferences.targetLanguage())
-                title = "Target language"
+                titleRes = MR.strings.pref_translation_target_language
                 val targets = LanguageCodes.common.filterNot { it.first == "auto" }
                 entries = targets.map { it.second }
                 entryValues = targets.map { it.first }
@@ -279,7 +293,7 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
 
             seekBarPreference {
                 bindTo(translationPreferences.translationChunkSize())
-                title = "Paragraphs per request"
+                titleRes = MR.strings.pref_translation_chunk_size
                 min = 1
                 max = 100
                 showSeekBarValue = true
@@ -287,13 +301,13 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
 
             switchPreference {
                 bindTo(translationPreferences.contextualAnchoringEnabled())
-                title = "Contextual anchoring"
-                summary = "Send previous translated paragraphs as context to LLM engines"
+                titleRes = MR.strings.pref_translation_contextual_anchoring
+                summaryRes = MR.strings.pref_translation_contextual_anchoring_summary
             }
 
             seekBarPreference {
                 bindTo(translationPreferences.contextualAnchoringParagraphs())
-                title = "Context paragraphs"
+                titleRes = MR.strings.pref_translation_contextual_paragraphs
                 min = 1
                 max = 8
                 showSeekBarValue = true
@@ -301,7 +315,7 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
 
             seekBarPreference {
                 isPersistent = false
-                title = "Request timeout"
+                titleRes = MR.strings.pref_translation_request_timeout
                 min = 10
                 max = 300
                 showSeekBarValue = true
@@ -315,116 +329,119 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.openAiApiKey())
-                title = "OpenAI API key"
-                summary = "Used by OpenAI"
+                titleRes = MR.strings.pref_translation_openai_api_key
+                summaryRes = MR.strings.pref_translation_openai_summary
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.openAiBaseUrl())
-                title = "OpenAI-compatible URL"
+                titleRes = MR.strings.pref_translation_openai_base_url
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.openAiModel())
-                title = "OpenAI model"
+                titleRes = MR.strings.pref_translation_openai_model
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.deepSeekApiKey())
-                title = "DeepSeek API key"
+                titleRes = MR.strings.pref_translation_deepseek_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.geminiApiKey())
-                title = "Gemini API key"
+                titleRes = MR.strings.pref_translation_gemini_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.nvidiaNimBaseUrl())
-                title = "NVIDIA NIM base URL"
+                titleRes = MR.strings.pref_translation_nvidia_base_url
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.nvidiaNimApiKey())
-                title = "NVIDIA NIM API key"
+                titleRes = MR.strings.pref_translation_nvidia_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.nvidiaNimModel())
-                title = "NVIDIA NIM model"
+                titleRes = MR.strings.pref_translation_nvidia_model
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.ollamaUrl())
-                title = "Ollama server URL"
+                titleRes = MR.strings.pref_translation_ollama_url
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.ollamaModel())
-                title = "Ollama model"
+                titleRes = MR.strings.pref_translation_ollama_model
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.libreTranslateUrl())
-                title = "LibreTranslate URL"
+                titleRes = MR.strings.pref_translation_libretranslate_url
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.libreTranslateApiKey())
-                title = "LibreTranslate API key"
+                titleRes = MR.strings.pref_translation_libretranslate_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.deepLApiKey())
-                title = "DeepL API key"
+                titleRes = MR.strings.pref_translation_deepl_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.googleApiKey())
-                title = "Google Cloud API key"
+                titleRes = MR.strings.pref_translation_google_cloud_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.systranApiKey())
-                title = "SYSTRAN API key"
+                titleRes = MR.strings.pref_translation_systran_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.huggingFaceApiKey())
-                title = "Hugging Face API key"
+                titleRes = MR.strings.pref_translation_huggingface_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.customHttpUrl())
-                title = "Custom HTTP URL"
+                titleRes = MR.strings.pref_translation_custom_http_url
             }
 
             listPreference(activity) {
                 bindTo(translationPreferences.customHttpMethod())
-                title = "Custom HTTP method"
-                entries = listOf("POST", "GET")
+                titleRes = MR.strings.pref_translation_custom_http_method
+                entries = listOf(
+                    context.getString(MR.strings.pref_translation_http_method_post),
+                    context.getString(MR.strings.pref_translation_http_method_get),
+                )
                 entryValues = listOf("POST", "GET")
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.customHttpApiKey())
-                title = "Custom HTTP API key"
+                titleRes = MR.strings.pref_translation_custom_http_api_key
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.customHttpHeaders())
-                title = "Custom HTTP headers"
-                summary = "Name: Value pairs separated by semicolons or line breaks"
+                titleRes = MR.strings.pref_translation_custom_http_headers
+                summaryRes = MR.strings.pref_translation_custom_http_headers_summary
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.customHttpRequestTemplate())
-                title = "Custom HTTP request template"
+                titleRes = MR.strings.pref_translation_custom_http_request_template
             }
 
             editTextPreference(activity) {
                 bindTo(translationPreferences.customHttpResponsePath())
-                title = "Custom HTTP response path"
+                titleRes = MR.strings.pref_translation_custom_http_response_path
             }
         }
 

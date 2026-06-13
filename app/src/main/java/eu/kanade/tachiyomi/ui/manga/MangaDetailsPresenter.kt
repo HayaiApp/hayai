@@ -35,6 +35,7 @@ import eu.kanade.tachiyomi.data.track.EnhancedTrackService
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.data.track.model.TrackContentType
+import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.NetworkPreferences
@@ -99,6 +100,7 @@ import yokai.domain.manga.interactor.GetManga
 import yokai.domain.manga.interactor.UpdateManga
 import yokai.domain.manga.models.MangaUpdate
 import yokai.domain.manga.models.cover
+import yokai.domain.series.SeriesKnowledgeRepository
 import yokai.domain.storage.StorageManager
 import yokai.domain.track.interactor.DeleteTrack
 import yokai.domain.track.interactor.GetTrack
@@ -126,6 +128,7 @@ class MangaDetailsPresenter(
     private val getTrack: GetTrack by injectLazy()
     private val insertTrack: InsertTrack by injectLazy()
     private val getHistory: GetHistory by injectLazy()
+    private val seriesKnowledgeRepository: SeriesKnowledgeRepository by injectLazy()
 
     private val networkPreferences: NetworkPreferences by injectLazy()
 
@@ -456,6 +459,7 @@ class MangaDetailsPresenter(
      */
     fun setFetchInterval(interval: Int) {
         presenterScope.launchNonCancellableIO {
+            if (!preferences.smartUpdateEnabled().get()) return@launchNonCancellableIO
             // Custom intervals are stored negative; 0 clears the lock back to auto.
             manga.fetch_interval = -interval
             if (updateManga.awaitUpdateFetchInterval(manga)) {
@@ -1086,11 +1090,24 @@ class MangaDetailsPresenter(
                 withContext(Dispatchers.IO) {
                     if (binding != null) {
                         insertTrack.await(binding)
+                        syncChaptersWithTrackServiceTwoWay(chapters, binding, service)
                     }
-
-                    syncChaptersWithTrackServiceTwoWay(chapters, item, service)
+                }
+                val metadataSearch = (binding as? TrackSearch) ?: (item as? TrackSearch)
+                if (binding != null && metadataSearch != null) {
+                    persistTrackerMetadata(metadataSearch, service)
                 }
                 fetchTracks()
+            }
+        }
+    }
+
+    private fun persistTrackerMetadata(item: TrackSearch, service: TrackService) {
+        val mangaId = manga.id ?: return
+        presenterScope.launchIO {
+            val values = service.enrichedMetadataValues(preferences.context, mangaId, item)
+            if (values.isNotEmpty()) {
+                seriesKnowledgeRepository.upsertMetadataValues(values)
             }
         }
     }

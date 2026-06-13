@@ -31,7 +31,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import yokai.presentation.core.AppBarScrollBehavior
-import yokai.presentation.core.enterAlwaysAppBarScrollBehavior
+import yokai.presentation.core.pinnedAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -75,7 +75,7 @@ fun YokaiScaffold(
     searchResult: @Composable (ColumnScope.() -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
-    val behavior = scrollBehavior ?: enterAlwaysAppBarScrollBehavior()
+    val behavior = scrollBehavior ?: pinnedAppBarScrollBehavior()
     val m3ScrollBehavior = behavior.m3ScrollBehavior
     val view = LocalView.current
     val useDarkIcons = MaterialTheme.colorScheme.surface.luminance() > .5

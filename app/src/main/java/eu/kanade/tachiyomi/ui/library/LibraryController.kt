@@ -859,6 +859,20 @@ open class LibraryController(
         setAppBarBG(appBar.backgroundProgressForScroll(!atTopOfPageRecycler(recycler)), includeTabView = true)
     }
 
+    private fun syncLibraryToolbarBackground(scrolled: Boolean) {
+        if (!showActivityTabs) {
+            setAppBarBG(0f, includeTabView = false)
+            return
+        }
+        val pageRecycler = pagerAdapter?.recyclerForPosition(binding.libraryPager.currentItem)
+        if (pageRecycler != null) {
+            syncPageToolbarBackground(pageRecycler)
+        } else {
+            val progress = appBar()?.backgroundProgressForScroll(scrolled) ?: 0f
+            setAppBarBG(progress, includeTabView = true)
+        }
+    }
+
     /**
      * Mirrors [scrollViewWith]'s onScrolled for the per-tab recycler. The appbar position is still
      * driven by the page delta, while the background is derived from that position so color and
@@ -1144,6 +1158,7 @@ open class LibraryController(
                 onLeavingController = {
                     binding.headerCard.isVisible = false
                 },
+                liftOnScroll = ::syncLibraryToolbarBackground,
                 onBottomNavUpdate = {
                     updateFilterSheetY()
                 },

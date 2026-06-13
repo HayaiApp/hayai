@@ -3,6 +3,22 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/action_select_all"
+        android:icon="@drawable/ic_select_all_24dp"
+        android:title="@string/select_all"
+        android:visible="false"
+        app:iconTint="?attr/actionBarTintColor"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_select_inverse"
+        android:icon="@drawable/ic_flip_to_back_24dp"
+        android:title="@string/select_inverse"
+        android:visible="false"
+        app:iconTint="?attr/actionBarTintColor"
+        app:showAsAction="always" />
+
+    <item
         android:id="@+id/action_search"
         android:icon="@drawable/ic_search_24dp"
         android:title="@string/search"
@@ -82,8 +98,16 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_advanced_translation"
+        android:icon="@drawable/ic_translate_24dp"
+        android:title="@string/advanced_translation_memory"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_set_fetch_interval"
+        android:icon="@drawable/ic_calendar_text_outline_24dp"
         android:title="@string/manga_interval_custom_amount"
+        app:iconTint="?attr/actionBarTintColor"
         app:showAsAction="never" />
 
     <item

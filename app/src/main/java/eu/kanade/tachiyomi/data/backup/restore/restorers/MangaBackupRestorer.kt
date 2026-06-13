@@ -1,15 +1,20 @@
 package eu.kanade.tachiyomi.data.backup.restore.restorers
 
+import android.content.Context
+import hayai.novel.reader.quote.QuoteManager
 import yokai.util.koin.get
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupManga
+import eu.kanade.tachiyomi.data.backup.models.BackupNovelQuote
+import eu.kanade.tachiyomi.data.backup.models.BackupSeriesKnowledge
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.History
 import eu.kanade.tachiyomi.data.database.models.MangaCategory
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.library.CustomMangaManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
+import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.util.chapter.ChapterUtil
@@ -28,10 +33,12 @@ import yokai.domain.library.custom.model.CustomMangaInfo
 import yokai.domain.manga.interactor.GetManga
 import yokai.domain.manga.interactor.InsertManga
 import yokai.domain.manga.interactor.UpdateManga
+import yokai.domain.series.SeriesKnowledgeRepository
 import yokai.domain.track.interactor.GetTrack
 import yokai.domain.track.interactor.InsertTrack
 
 class MangaBackupRestorer(
+    private val context: Context = get(),
     private val customMangaManager: CustomMangaManager = get(),
     private val handler: DatabaseHandler = get(),
     private val getCategories: GetCategories = get(),
@@ -42,10 +49,12 @@ class MangaBackupRestorer(
     private val getManga: GetManga = get(),
     private val insertManga: InsertManga = get(),
     private val updateManga: UpdateManga = get(),
+    private val preferences: PreferencesHelper = get(),
     private val getHistory: GetHistory = get(),
     private val upsertHistory: UpsertHistory = get(),
     private val getTrack: GetTrack = get(),
     private val insertTrack: InsertTrack = get(),
+    private val seriesKnowledgeRepository: SeriesKnowledgeRepository = get(),
 ) {
     suspend fun restoreManga(
         backupManga: BackupManga,
@@ -61,12 +70,14 @@ class MangaBackupRestorer(
         val tracks = backupManga.getTrackingImpl()
         val customManga = backupManga.getCustomMangaInfo()
         val filteredScanlators = backupManga.excludedScanlators
+        val seriesKnowledge = backupManga.seriesKnowledge
+        val novelQuotes = backupManga.novelQuotes
 
         try {
             val dbManga = getManga.awaitByUrlAndSource(manga.url, manga.source)
             if (dbManga == null) {
                 // Manga not in database
-                restoreNewManga(manga, chapters, categories, history, tracks, backupCategories, filteredScanlators, customManga)
+                restoreNewManga(manga, chapters, categories, history, tracks, backupCategories, filteredScanlators, customManga, seriesKnowledge, novelQuotes)
             } else {
                 // Manga in database
                 // Copy information from manga already in database
@@ -75,7 +86,7 @@ class MangaBackupRestorer(
                 manga.copyFrom(dbManga)
                 updateManga.await(manga.toMangaUpdate())
                 // Fetch rest of manga information
-                restoreExistingManga(manga, chapters, categories, history, tracks, backupCategories, filteredScanlators, customManga)
+                restoreExistingManga(manga, chapters, categories, history, tracks, backupCategories, filteredScanlators, customManga, seriesKnowledge, novelQuotes)
             }
         } catch (e: Exception) {
             onError(manga, e)
@@ -101,6 +112,8 @@ class MangaBackupRestorer(
         backupCategories: List<BackupCategory>,
         filteredScanlators: List<String>,
         customManga: CustomMangaInfo?,
+        seriesKnowledge: BackupSeriesKnowledge?,
+        novelQuotes: List<BackupNovelQuote>,
     ) {
         val fetchedManga = manga.also {
             it.initialized = it.description != null
@@ -109,7 +122,7 @@ class MangaBackupRestorer(
         fetchedManga.id ?: return
 
         restoreChapters(fetchedManga, chapters)
-        restoreExtras(fetchedManga, categories, history, tracks, backupCategories, filteredScanlators, customManga)
+        restoreExtras(fetchedManga, categories, history, tracks, backupCategories, filteredScanlators, customManga, seriesKnowledge, novelQuotes)
     }
 
     private suspend fun restoreExistingManga(
@@ -121,9 +134,11 @@ class MangaBackupRestorer(
         backupCategories: List<BackupCategory>,
         filteredScanlators: List<String>,
         customManga: CustomMangaInfo?,
+        seriesKnowledge: BackupSeriesKnowledge?,
+        novelQuotes: List<BackupNovelQuote>,
     ) {
         restoreChapters(backupManga, chapters)
-        restoreExtras(backupManga, categories, history, tracks, backupCategories, filteredScanlators, customManga)
+        restoreExtras(backupManga, categories, history, tracks, backupCategories, filteredScanlators, customManga, seriesKnowledge, novelQuotes)
     }
 
     private suspend fun restoreChapters(manga: Manga, chapters: List<Chapter>) {
@@ -161,6 +176,8 @@ class MangaBackupRestorer(
         backupCategories: List<BackupCategory>,
         filteredScanlators: List<String>,
         customManga: CustomMangaInfo?,
+        seriesKnowledge: BackupSeriesKnowledge?,
+        novelQuotes: List<BackupNovelQuote>,
     ) {
         restoreCategories(manga, categories, backupCategories)
         restoreHistoryForManga(history)
@@ -181,6 +198,29 @@ class MangaBackupRestorer(
                 customMangaManager.saveMangaInfo(it)
             }
         }
+        restoreSeriesKnowledge(manga, seriesKnowledge)
+        restoreNovelQuotes(manga, novelQuotes)
+        if (preferences.smartUpdateEnabled().get()) {
+            updateManga.awaitUpdateFetchInterval(manga)
+        }
+    }
+
+    private suspend fun restoreSeriesKnowledge(manga: Manga, seriesKnowledge: BackupSeriesKnowledge?) {
+        val mangaId = manga.id ?: return
+        seriesKnowledge?.let {
+            seriesKnowledgeRepository.restore(mangaId, it.toBundle(mangaId))
+        }
+    }
+
+    private suspend fun restoreNovelQuotes(manga: Manga, novelQuotes: List<BackupNovelQuote>) {
+        val mangaId = manga.id ?: return
+        if (novelQuotes.isEmpty()) return
+        val manager = QuoteManager(context)
+        val existing = manager.getQuotes(mangaId)
+        val merged = (existing + novelQuotes.map { it.toQuote() })
+            .distinctBy { it.id }
+            .sortedBy { it.timestamp }
+        manager.saveQuotes(mangaId, merged)
     }
 
     /**

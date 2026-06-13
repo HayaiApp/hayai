@@ -2,25 +2,34 @@ package eu.kanade.tachiyomi.data.translation
 
 import android.content.Context
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import yokai.data.Database
 import java.io.File
 import java.security.MessageDigest
 
 class TranslationCache(
     context: Context,
+    private val database: Database,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
-    private val cacheDir = File(context.filesDir, "translations").apply { mkdirs() }
+    private val legacyCacheDir = File(context.filesDir, "translations")
+    private var legacyMigrated = false
 
     fun hasTranslation(mangaId: Long, chapterId: Long, targetLanguage: String): Boolean {
-        return getCacheFile(mangaId, chapterId, targetLanguage).exists()
+        migrateLegacyIfNeeded()
+        return database.series_knowledgeQueries
+            .findCachedTranslation(mangaId, chapterId, targetLanguage)
+            .executeAsOneOrNull() != null
     }
 
     fun getTranslation(mangaId: Long, chapterId: Long, targetLanguage: String): CachedTranslation? {
-        val file = getCacheFile(mangaId, chapterId, targetLanguage)
-        if (!file.exists()) return null
-        return runCatching { json.decodeFromString<CachedTranslation>(file.readText()) }.getOrNull()
+        migrateLegacyIfNeeded()
+        return database.series_knowledgeQueries.findCachedTranslation(
+            mangaId,
+            chapterId,
+            targetLanguage,
+            ::mapCachedTranslation,
+        ).executeAsOneOrNull()
     }
 
     fun saveTranslation(
@@ -32,35 +41,90 @@ class TranslationCache(
         translatedContent: String,
         engineId: String,
     ) {
-        val cached = CachedTranslation(
-            chapterId = chapterId,
-            mangaId = mangaId,
-            sourceLanguage = sourceLanguage,
-            targetLanguage = targetLanguage,
-            originalHash = originalContent.sha256(),
-            translatedContent = translatedContent,
-            engineId = engineId,
-            createdAt = System.currentTimeMillis(),
+        migrateLegacyIfNeeded()
+        database.series_knowledgeQueries.upsertCachedTranslation(
+            mangaId,
+            chapterId,
+            sourceLanguage,
+            targetLanguage,
+            originalContent.sha256(),
+            translatedContent,
+            engineId,
+            System.currentTimeMillis(),
         )
-        getCacheFile(mangaId, chapterId, targetLanguage).writeText(json.encodeToString(cached))
     }
 
     fun deleteTranslation(mangaId: Long, chapterId: Long, targetLanguage: String) {
-        getCacheFile(mangaId, chapterId, targetLanguage).delete()
+        migrateLegacyIfNeeded()
+        database.series_knowledgeQueries.deleteCachedTranslation(mangaId, chapterId, targetLanguage)
     }
 
     fun clear() {
-        cacheDir.listFiles()?.forEach { it.deleteRecursively() }
+        database.series_knowledgeQueries.clearCachedTranslations()
+        legacyCacheDir.deleteRecursively()
     }
 
-    fun getCacheSize(): Long = cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+    fun getCacheSize(): Long {
+        migrateLegacyIfNeeded()
+        return database.series_knowledgeQueries.cachedTranslationBytes().executeAsOne()
+    }
 
-    fun getCacheCount(): Int = cacheDir.walkTopDown().filter { it.isFile && it.extension == "json" }.count()
+    fun getCacheCount(): Int {
+        migrateLegacyIfNeeded()
+        return database.series_knowledgeQueries.countCachedTranslations().executeAsOne().toInt()
+    }
 
-    private fun getCacheFile(mangaId: Long, chapterId: Long, targetLanguage: String): File {
-        val mangaDir = File(cacheDir, mangaId.toString()).apply { mkdirs() }
-        val safeLang = targetLanguage.replace(Regex("[^A-Za-z0-9_-]"), "_")
-        return File(mangaDir, "${chapterId}_$safeLang.json")
+    private fun migrateLegacyIfNeeded() {
+        if (legacyMigrated) return
+        legacyMigrated = true
+        if (!legacyCacheDir.exists()) return
+
+        val cached = legacyCacheDir.walkTopDown()
+            .filter { it.isFile && it.extension.equals("json", ignoreCase = true) }
+            .mapNotNull { file ->
+                runCatching { json.decodeFromString<CachedTranslation>(file.readText()) }.getOrNull()
+            }
+            .toList()
+
+        if (cached.isNotEmpty()) {
+            database.transaction {
+                cached.forEach {
+                    database.series_knowledgeQueries.upsertCachedTranslation(
+                        it.mangaId,
+                        it.chapterId,
+                        it.sourceLanguage,
+                        it.targetLanguage,
+                        it.originalHash,
+                        it.translatedContent,
+                        it.engineId,
+                        it.createdAt,
+                    )
+                }
+            }
+        }
+        legacyCacheDir.deleteRecursively()
+    }
+
+    private fun mapCachedTranslation(
+        mangaId: Long,
+        chapterId: Long,
+        sourceLanguage: String,
+        targetLanguage: String,
+        originalHash: String,
+        translatedContent: String,
+        engineId: String,
+        createdAt: Long,
+    ): CachedTranslation {
+        return CachedTranslation(
+            mangaId = mangaId,
+            chapterId = chapterId,
+            sourceLanguage = sourceLanguage,
+            targetLanguage = targetLanguage,
+            originalHash = originalHash,
+            translatedContent = translatedContent,
+            engineId = engineId,
+            createdAt = createdAt,
+        )
     }
 
     private fun String.sha256(): String {

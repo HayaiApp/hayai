@@ -60,6 +60,8 @@ data class BackupManga(
     // skipping 803 due to using duplicate value in previous builds
     @ProtoNumber(804) var customDescription: String? = null,
     @ProtoNumber(805) var customGenre: List<String>? = null,
+    @ProtoNumber(806) var seriesKnowledge: BackupSeriesKnowledge? = null,
+    @ProtoNumber(807) var novelQuotes: List<BackupNovelQuote> = emptyList(),
 ) {
     fun getMangaImpl(): MangaImpl {
         return MangaImpl(

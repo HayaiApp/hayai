@@ -35,6 +35,11 @@ enum class LibrarySort(
         MR.strings.random,
         R.drawable.ic_shuffle_24dp,
     ),
+    NextExpectedUpdate(
+        9,
+        MR.strings.action_sort_next_updated,
+        R.drawable.ic_calendar_text_outline_24dp,
+    ),
     ;
 
     val categoryValue: Char
@@ -51,6 +56,7 @@ enum class LibrarySort(
             LatestChapter -> "LATEST_CHAPTER"
             DateFetched -> "CHAPTER_FETCH_DATE"
             DateAdded -> "DATE_ADDED"
+            NextExpectedUpdate -> "NEXT_EXPECTED_UPDATE"
             Random -> "RANDOM"
             else -> "ALPHABETICAL"
         }
@@ -63,7 +69,7 @@ enum class LibrarySort(
     fun iconRes(isDynamic: Boolean) = if (isDynamic) dynamicIconRes else iconRes
 
     val hasInvertedSort: Boolean
-        get() = this in listOf(LastRead, TotalChapters, DateAdded, LatestChapter, DateFetched)
+        get() = this in listOf(LastRead, TotalChapters, DateAdded, LatestChapter, DateFetched, NextExpectedUpdate)
 
     val isDirectional: Boolean
         get() = this !in listOf(DragAndDrop, Random)
@@ -90,6 +96,7 @@ enum class LibrarySort(
                     "LATEST_CHAPTER" -> LatestChapter
                     "CHAPTER_FETCH_DATE" -> DateFetched
                     "DATE_ADDED" -> DateAdded
+                    "NEXT_EXPECTED_UPDATE" -> NextExpectedUpdate
                     "RANDOM" -> Random
                     else -> Title
                 }

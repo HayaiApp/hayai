@@ -32,7 +32,9 @@ import eu.kanade.tachiyomi.ui.setting.triStateListPreference
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import yokai.util.koin.injectLazy
 import yokai.domain.category.interactor.GetCategories
 import yokai.domain.library.LibraryPreferences
@@ -51,6 +53,9 @@ class SettingsLibraryController : SettingsLegacyController() {
 
     private val uiPreferences: UiPreferences by injectLazy()
     private val libraryPreferences: LibraryPreferences by injectLazy()
+
+    private var cachedCategories: List<Category>? = null
+    private var loadingCategories = false
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
         titleRes = MR.strings.library
@@ -94,8 +99,10 @@ class SettingsLibraryController : SettingsLegacyController() {
             }
         }
 
-        // FIXME: Don't do blocking
-        val dbCategories = runBlocking { getCategories.await() }
+        val dbCategories = cachedCategories ?: run {
+            loadCategoriesThenRebuild(this)
+            return@apply
+        }
 
         preferenceCategory {
             titleRes = MR.strings.categories
@@ -193,6 +200,22 @@ class SettingsLibraryController : SettingsLegacyController() {
                 }
             }
 
+            switchPreference {
+                bindTo(preferences.smartUpdateEnabled())
+                titleRes = MR.strings.pref_library_update_smart_update
+                summaryRes = MR.strings.pref_library_update_smart_update_summary
+
+                onChange {
+                    if (it == false) {
+                        val restrictions = preferences.libraryUpdateMangaRestriction().get()
+                        if (MANGA_OUTSIDE_RELEASE_PERIOD in restrictions) {
+                            preferences.libraryUpdateMangaRestriction().set(restrictions - MANGA_OUTSIDE_RELEASE_PERIOD)
+                        }
+                    }
+                    true
+                }
+            }
+
             multiSelectListPreferenceMat(activity) {
                 bindTo(preferences.libraryUpdateMangaRestriction())
                 titleRes = MR.strings.pref_library_update_manga_restriction
@@ -204,6 +227,10 @@ class SettingsLibraryController : SettingsLegacyController() {
                 )
                 entryValues = listOf(MANGA_HAS_UNREAD, MANGA_NON_READ, MANGA_NON_COMPLETED, MANGA_OUTSIDE_RELEASE_PERIOD)
                 noSelectionRes = MR.strings.none
+
+                preferences.smartUpdateEnabled().changesIn(viewScope) {
+                    isVisible = it
+                }
             }
 
             // Categories that always update even when the release-period skip is on. Only relevant
@@ -219,7 +246,10 @@ class SettingsLibraryController : SettingsLegacyController() {
                 noSelectionRes = MR.strings.none
 
                 preferences.libraryUpdateMangaRestriction().changesIn(viewScope) {
-                    isVisible = MANGA_OUTSIDE_RELEASE_PERIOD in it
+                    isVisible = preferences.smartUpdateEnabled().get() && MANGA_OUTSIDE_RELEASE_PERIOD in it
+                }
+                preferences.smartUpdateEnabled().changesIn(viewScope) {
+                    isVisible = it && MANGA_OUTSIDE_RELEASE_PERIOD in preferences.libraryUpdateMangaRestriction().get()
                 }
             }
 
@@ -284,6 +314,21 @@ class SettingsLibraryController : SettingsLegacyController() {
                     true
                 }
             }
+        }
+    }
+
+    private fun loadCategoriesThenRebuild(screen: PreferenceScreen) {
+        if (loadingCategories) return
+        loadingCategories = true
+        viewScope.launch {
+            cachedCategories = try {
+                withContext(Dispatchers.IO) { getCategories.await() }
+            } catch (_: Exception) {
+                emptyList()
+            }
+            loadingCategories = false
+            screen.removeAll()
+            setupPreferenceScreen(screen)
         }
     }
 }

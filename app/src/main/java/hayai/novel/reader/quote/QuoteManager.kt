@@ -4,23 +4,25 @@ import yokai.util.koin.get
 import android.content.Context
 import co.touchlab.kermit.Logger
 import com.hippo.unifile.UniFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import yokai.domain.storage.StorageManager
+import yokai.data.DatabaseHandler
 import java.io.IOException
 
 /**
- * File-backed manager for quote storage and retrieval.
- *
- * Ports `tsundoku/.../ui/reader/quote/QuoteManager.kt` 1:1, swapping `logcat` for kermit
- * (matching Hayai's logger convention used elsewhere in `hayai/novel/reader/`).
- *
- * Quotes are persisted as JSON files at `<storage>/quotes/novel_<id>.json`.
+ * DB-backed manager for quote storage and retrieval.
+ * Legacy JSON files are imported once for users who created quotes before the DB-backed model.
  */
 class QuoteManager(@Suppress("unused") private val context: Context) {
 
     private val jsonFormat = Json { prettyPrint = true }
+
+    private val handler: DatabaseHandler by lazy {
+        get<DatabaseHandler>()
+    }
 
     private val storageManager: StorageManager by lazy {
         get<StorageManager>()
@@ -33,83 +35,136 @@ class QuoteManager(@Suppress("unused") private val context: Context) {
         return quotesDir?.findFile("novel_$novelId.json")
     }
 
-    fun saveQuotes(novelId: Long, quotes: List<Quote>) {
-        try {
-            val novelQuotes = NovelQuotes(novelId, quotes)
-            val json = jsonFormat.encodeToString(novelQuotes)
-
-            val existingFile = getQuotesFile(novelId)
-            if (existingFile?.exists() == true) {
-                existingFile.delete()
-            }
-
-            val file = quotesDir?.createFile("novel_$novelId.json") ?: return
-            file.openOutputStream().use { outputStream ->
-                outputStream.write(json.toByteArray())
-            }
-            Logger.d { "Quotes saved for novel $novelId: ${quotes.size} quotes" }
-        } catch (e: IOException) {
-            Logger.e(e) { "Failed to save quotes for novel $novelId" }
-        } catch (e: SerializationException) {
-            Logger.e(e) { "Failed to serialize quotes for novel $novelId" }
-        }
-    }
-
-    fun loadQuotes(novelId: Long): List<Quote> {
-        return try {
-            val file = getQuotesFile(novelId)
-            if (file == null || !file.exists()) {
-                emptyList()
-            } else {
-                val json = file.openInputStream().use { inputStream ->
-                    String(inputStream.readBytes())
+    suspend fun saveQuotes(novelId: Long, quotes: List<Quote>) {
+        withContext(Dispatchers.IO) {
+            try {
+                handler.await(true) {
+                    series_knowledgeQueries.deleteQuotesForManga(novelId)
+                    quotes.forEach { quote ->
+                        series_knowledgeQueries.upsertQuote(
+                            quote.id,
+                            novelId,
+                            quote.novelName,
+                            quote.chapterName,
+                            quote.content,
+                            quote.originalContent,
+                            quote.translatedContent,
+                            quote.language,
+                            quote.timestamp,
+                        )
+                    }
                 }
-                val novelQuotes = jsonFormat.decodeFromString<NovelQuotes>(json)
-                novelQuotes.quotes
+                getQuotesFile(novelId)?.delete()
+                Logger.d { "Quotes saved for novel $novelId: ${quotes.size} quotes" }
+            } catch (e: IOException) {
+                Logger.e(e) { "Failed to save quotes for novel $novelId" }
+            } catch (e: SerializationException) {
+                Logger.e(e) { "Failed to serialize quotes for novel $novelId" }
             }
-        } catch (e: IOException) {
-            Logger.e(e) { "Failed to load quotes for novel $novelId" }
-            emptyList()
-        } catch (e: SerializationException) {
-            Logger.e(e) { "Failed to deserialize quotes for novel $novelId" }
-            emptyList()
         }
     }
 
-    fun addQuote(novelId: Long, quote: Quote) {
-        val existingQuotes = loadQuotes(novelId).toMutableList()
-        existingQuotes.add(quote)
-        saveQuotes(novelId, existingQuotes)
-    }
-
-    fun removeQuote(novelId: Long, quoteId: String) {
-        val existingQuotes = loadQuotes(novelId).toMutableList()
-        existingQuotes.removeAll { it.id == quoteId }
-        saveQuotes(novelId, existingQuotes)
-    }
-
-    fun updateQuote(novelId: Long, updatedQuote: Quote) {
-        val existingQuotes = loadQuotes(novelId).toMutableList()
-        val index = existingQuotes.indexOfFirst { it.id == updatedQuote.id }
-        if (index >= 0) {
-            existingQuotes[index] = updatedQuote
-            saveQuotes(novelId, existingQuotes)
+    suspend fun loadQuotes(novelId: Long): List<Quote> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val dbQuotes =
+                handler.awaitList {
+                    series_knowledgeQueries.findQuotes(novelId) { quoteId, _, novelName, chapterName, displayedContent, originalContent, translatedContent, language, timestamp ->
+                        Quote(
+                            id = quoteId,
+                            novelName = novelName,
+                            chapterName = chapterName,
+                            content = displayedContent,
+                            originalContent = originalContent,
+                            translatedContent = translatedContent,
+                            language = language,
+                            timestamp = timestamp,
+                        )
+                    }
+                }
+                dbQuotes.ifEmpty { importLegacyQuotes(novelId) }
+            } catch (e: IOException) {
+                Logger.e(e) { "Failed to load quotes for novel $novelId" }
+                emptyList()
+            } catch (e: SerializationException) {
+                Logger.e(e) { "Failed to deserialize quotes for novel $novelId" }
+                emptyList()
+            }
         }
     }
 
-    fun getQuotes(novelId: Long): List<Quote> {
+    suspend fun addQuote(novelId: Long, quote: Quote) {
+        withContext(Dispatchers.IO) {
+            try {
+                handler.await {
+                    series_knowledgeQueries.upsertQuote(
+                        quote.id,
+                        novelId,
+                        quote.novelName,
+                        quote.chapterName,
+                        quote.content,
+                        quote.originalContent,
+                        quote.translatedContent,
+                        quote.language,
+                        quote.timestamp,
+                    )
+                }
+            } catch (e: Exception) {
+                Logger.e(e) { "Failed to add quote for novel $novelId" }
+            }
+        }
+    }
+
+    suspend fun removeQuote(novelId: Long, quoteId: String) {
+        withContext(Dispatchers.IO) {
+            handler.await { series_knowledgeQueries.deleteQuote(quoteId) }
+        }
+    }
+
+    suspend fun updateQuote(novelId: Long, updatedQuote: Quote) {
+        addQuote(novelId, updatedQuote)
+    }
+
+    suspend fun getQuotes(novelId: Long): List<Quote> {
         return loadQuotes(novelId)
     }
 
-    fun clearQuotes(novelId: Long) {
-        val file = getQuotesFile(novelId)
-        if (file?.exists() == true) {
-            file.delete()
+    suspend fun clearQuotes(novelId: Long) {
+        withContext(Dispatchers.IO) {
+            handler.await { series_knowledgeQueries.deleteQuotesForManga(novelId) }
+            val file = getQuotesFile(novelId)
+            if (file?.exists() == true) {
+                file.delete()
+            }
         }
     }
 
-    fun getQuoteCount(novelId: Long): Int {
-        return loadQuotes(novelId).size
+    suspend fun getQuoteCount(novelId: Long): Int {
+        return withContext(Dispatchers.IO) {
+            handler.awaitOne { series_knowledgeQueries.countQuotes(novelId) }.toInt()
+        }
+    }
+
+    private suspend fun importLegacyQuotes(novelId: Long): List<Quote> {
+        val file = getQuotesFile(novelId)
+        if (file == null || !file.exists()) return emptyList()
+        return try {
+            val json = file.openInputStream().use { inputStream ->
+                String(inputStream.readBytes())
+            }
+            val novelQuotes = jsonFormat.decodeFromString<NovelQuotes>(json)
+            val quotes = novelQuotes.quotes
+            if (quotes.isNotEmpty()) {
+                saveQuotes(novelId, quotes)
+            }
+            quotes
+        } catch (e: IOException) {
+            Logger.e(e) { "Failed to import legacy quotes for novel $novelId" }
+            emptyList()
+        } catch (e: SerializationException) {
+            Logger.e(e) { "Failed to import legacy quotes JSON for novel $novelId" }
+            emptyList()
+        }
     }
 }
 

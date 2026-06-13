@@ -6,21 +6,21 @@
         android:id="@+id/action_select_all"
         android:icon="@drawable/ic_select_all_24dp"
         android:title="@string/select_all"
-        app:iconTint="?colorOnSurface"
+        app:iconTint="?attr/actionBarTintColor"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_select_inverse"
         android:icon="@drawable/ic_flip_to_back_24dp"
         android:title="@string/select_inverse"
-        app:iconTint="?colorOnSurface"
+        app:iconTint="?attr/actionBarTintColor"
         app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/action_sort"
         android:icon="@drawable/ic_sort_24dp"
         android:title="@string/sort_by"
-        app:iconTint="?colorOnSurface"
+        app:iconTint="?attr/actionBarTintColor"
         app:showAsAction="ifRoom" >
         <menu>
             <group android:checkableBehavior="single"
@@ -39,7 +39,7 @@
         android:id="@+id/action_select_uninstalled"
         android:icon="@drawable/ic_select_none_24dp"
         android:title="@string/select_uninstalled_sources"
-        app:iconTint="?colorOnSurface"
+        app:iconTint="?attr/actionBarTintColor"
         app:showAsAction="ifRoom" />
 
 </menu>

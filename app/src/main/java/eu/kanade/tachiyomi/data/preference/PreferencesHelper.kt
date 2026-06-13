@@ -222,6 +222,8 @@ class PreferencesHelper(val context: Context, val preferenceStore: PreferenceSto
     // Category IDs whose manga always update, never skipped by MANGA_OUTSIDE_RELEASE_PERIOD.
     fun libraryUpdateSmartUpdateCategoriesExclude() = preferenceStore.getStringSet("library_update_smart_update_categories_exclude", emptySet())
 
+    fun smartUpdateEnabled() = preferenceStore.getBoolean("library_smart_update_enabled", true)
+
     fun libraryLayout() = preferenceStore.getInt(Keys.libraryLayout, LibraryItem.LAYOUT_COMFORTABLE_GRID)
 
     // Browse-scoped grid density. Defaults to the existing library layout so users keep their
@@ -245,6 +247,8 @@ class PreferencesHelper(val context: Context, val preferenceStore: PreferenceSto
     fun filterCompleted() = preferenceStore.getInt(Keys.filterCompleted, 0)
 
     fun filterBookmarked() = preferenceStore.getInt("pref_filter_bookmarked_key", 0)
+
+    fun filterCustomInterval() = preferenceStore.getInt("pref_filter_custom_interval_key", 0)
 
     fun filterTracked() = preferenceStore.getInt(Keys.filterTracked, 0)
 

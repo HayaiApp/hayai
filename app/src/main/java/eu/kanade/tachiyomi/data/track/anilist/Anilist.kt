@@ -6,13 +6,23 @@ import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.TrackService
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALCharacterMetadata
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALManga
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
+import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.data.track.updateNewTrackInfo
+import eu.kanade.tachiyomi.util.lang.htmlDecode
 import eu.kanade.tachiyomi.util.system.e
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import yokai.domain.series.model.MetadataProviderType
+import yokai.domain.series.model.SeriesMetadataField
+import yokai.domain.series.model.SeriesMetadataValue
 import yokai.util.koin.injectLazy
 import yokai.i18n.MR
 import yokai.util.lang.getString
@@ -35,6 +45,8 @@ class Anilist(private val context: Context, id: Long) : TrackService(id) {
         const val POINT_10_DECIMAL = "POINT_10_DECIMAL"
         const val POINT_5 = "POINT_5"
         const val POINT_3 = "POINT_3"
+
+        private const val MAX_CHARACTER_METADATA = 25
     }
 
     private val json: Json by injectLazy()
@@ -203,6 +215,132 @@ class Anilist(private val context: Context, id: Long) : TrackService(id) {
         track.total_chapters = remoteTrack.total_chapters
         return track
     }
+
+    override suspend fun enrichedMetadataValues(
+        context: Context,
+        mangaId: Long,
+        track: Track,
+        now: Long,
+    ): List<SeriesMetadataValue> =
+        super.enrichedMetadataValues(context, mangaId, track, now) +
+            detailMetadataValues(context, mangaId, track.media_id, now) +
+            characterMetadataValues(context, mangaId, track.media_id, now)
+
+    override suspend fun enrichedMetadataValues(
+        context: Context,
+        mangaId: Long,
+        search: TrackSearch,
+        now: Long,
+    ): List<SeriesMetadataValue> =
+        super.enrichedMetadataValues(context, mangaId, search, now) +
+            detailMetadataValues(context, mangaId, search.media_id, now) +
+            characterMetadataValues(context, mangaId, search.media_id, now)
+
+    private suspend fun detailMetadataValues(
+        context: Context,
+        mangaId: Long,
+        mediaId: Long,
+        now: Long,
+    ): List<SeriesMetadataValue> {
+        if (mediaId <= 0L) return emptyList()
+        val manga = runCatching { api.getMangaDetails(mediaId) }
+            .onFailure { Logger.e(it) { "Failed to fetch AniList metadata for $mediaId" } }
+            .getOrNull() ?: return emptyList()
+
+        return manga.toMetadataValues(context, mangaId, now)
+    }
+
+    private fun ALManga.toMetadataValues(
+        context: Context,
+        mangaId: Long,
+        now: Long,
+    ): List<SeriesMetadataValue> {
+        val providerId = this@Anilist.id.toString()
+        val providerName = context.getString(nameRes())
+        fun value(field: SeriesMetadataField, text: String?, confidence: Double = 0.85): SeriesMetadataValue? =
+            text?.trim()?.takeIf { it.isNotBlank() }?.let {
+                SeriesMetadataValue(
+                    mangaId = mangaId,
+                    field = field.key,
+                    providerType = MetadataProviderType.TRACKER,
+                    providerId = providerId,
+                    providerName = providerName,
+                    value = it,
+                    extraJson = null,
+                    confidence = confidence,
+                    userLocked = false,
+                    updatedAt = now,
+                )
+            }
+
+        val tagsAndGenres = (genres + tags)
+            .mapNotNull { it.trim().takeIf(String::isNotBlank) }
+            .distinctBy { it.lowercase() }
+            .joinToString(", ")
+        val links = (listOfNotNull(siteUrl, AnilistApi.mangaUrl(remoteId)) + externalLinks)
+            .mapNotNull { it.trim().takeIf(String::isNotBlank) }
+            .distinct()
+            .joinToString("\n")
+
+        return listOfNotNull(
+            value(SeriesMetadataField.TITLE, title),
+            value(SeriesMetadataField.COVER, imageUrl),
+            value(SeriesMetadataField.BANNER, bannerImage),
+            value(SeriesMetadataField.DESCRIPTION, description?.htmlDecode()),
+            value(SeriesMetadataField.STATUS, publishingStatus),
+            value(SeriesMetadataField.GENRES, tagsAndGenres, confidence = 0.8),
+            value(SeriesMetadataField.EXTERNAL_LINKS, links, confidence = 0.85),
+        )
+    }
+
+    private suspend fun characterMetadataValues(
+        context: Context,
+        mangaId: Long,
+        mediaId: Long,
+        now: Long,
+    ): List<SeriesMetadataValue> {
+        if (mediaId <= 0L) return emptyList()
+        val characters = runCatching { api.getCharacters(mediaId) }
+            .onFailure { Logger.e(it) { "Failed to fetch AniList characters for $mediaId" } }
+            .getOrDefault(emptyList())
+            .take(MAX_CHARACTER_METADATA)
+        if (characters.isEmpty()) return emptyList()
+
+        return listOf(
+            SeriesMetadataValue(
+                mangaId = mangaId,
+                field = SeriesMetadataField.CHARACTERS.key,
+                providerType = MetadataProviderType.TRACKER,
+                providerId = id.toString(),
+                providerName = context.getString(nameRes()),
+                value = characters.joinToString(", ") { it.name },
+                extraJson = characters.toExtraJson(),
+                confidence = 0.8,
+                userLocked = false,
+                updatedAt = now,
+            ),
+        )
+    }
+
+    private fun List<ALCharacterMetadata>.toExtraJson(): String =
+        buildJsonArray {
+            forEach { character ->
+                add(
+                    buildJsonObject {
+                        character.id?.let { put("id", it) }
+                        put("name", character.name)
+                        character.role?.trim()?.takeIf { it.isNotBlank() }?.let { put("role", it) }
+                        character.imageUrl?.trim()?.takeIf { it.isNotBlank() }?.let { put("imageUrl", it) }
+                        character.gender?.trim()?.takeIf { it.isNotBlank() }?.let { put("gender", it) }
+                        character.description?.trim()?.takeIf { it.isNotBlank() }?.let { put("description", it) }
+                        character.siteUrl?.trim()?.takeIf { it.isNotBlank() }?.let {
+                            put("siteUrl", it)
+                            put("url", it)
+                        }
+                    },
+                )
+            }
+        }.toString()
 
     override suspend fun login(username: String, password: String) = login(password)
 

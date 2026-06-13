@@ -19,6 +19,11 @@ data class ALManga(
     val startDateFuzzy: Long,
     val totalChapters: Long,
     val averageScore: Int,
+    val bannerImage: String?,
+    val genres: List<String>,
+    val tags: List<String>,
+    val siteUrl: String?,
+    val externalLinks: List<String>,
 ) {
     fun toTrack() = TrackSearch.create(TrackManager.ANILIST).apply {
         media_id = remoteId
@@ -27,7 +32,7 @@ data class ALManga(
         cover_url = imageUrl
         summary = description?.htmlDecode() ?: ""
         score = averageScore.toFloat()  // TODO: Turn to Double
-        tracking_url = AnilistApi.mangaUrl(media_id)
+        tracking_url = siteUrl ?: AnilistApi.mangaUrl(media_id)
         publishing_status = publishingStatus
         publishing_type = format
         if (startDateFuzzy != 0L) {

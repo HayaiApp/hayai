@@ -1,0 +1,540 @@
+import kotlin.Boolean;
+
+CREATE TABLE series_translation_canon(
+    manga_id INTEGER NOT NULL PRIMARY KEY,
+    mode TEXT NOT NULL DEFAULT 'simple',
+    source_language TEXT,
+    target_language TEXT,
+    summary TEXT,
+    style_guide TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE series_translation_entities(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    entity_key TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    original_name TEXT,
+    translated_name TEXT,
+    entity_type TEXT NOT NULL,
+    gender TEXT,
+    description TEXT,
+    aliases TEXT,
+    source TEXT NOT NULL,
+    confidence REAL,
+    user_locked INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(manga_id, entity_key) ON CONFLICT REPLACE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE series_translation_relationships(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    from_entity_key TEXT NOT NULL,
+    from_entity_name TEXT NOT NULL,
+    to_entity_key TEXT NOT NULL,
+    to_entity_name TEXT NOT NULL,
+    relationship_type TEXT NOT NULL,
+    description TEXT,
+    source TEXT NOT NULL,
+    user_locked INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE series_translation_events(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    sequence_index INTEGER,
+    source TEXT NOT NULL,
+    user_locked INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE SET NULL
+);
+
+CREATE TABLE series_translation_nudges(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER,
+    scope TEXT NOT NULL,
+    instruction TEXT NOT NULL,
+    active INTEGER AS Boolean NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE SET NULL
+);
+
+CREATE TABLE series_metadata_values(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    field TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    provider_name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    extra_json TEXT,
+    confidence REAL,
+    user_locked INTEGER AS Boolean NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(manga_id, field, provider_type, provider_id) ON CONFLICT REPLACE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE series_metadata_choices(
+    manga_id INTEGER NOT NULL,
+    field TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(manga_id, field),
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE series_display_options(
+    manga_id INTEGER NOT NULL,
+    option_key TEXT NOT NULL,
+    visible INTEGER AS Boolean NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(manga_id, option_key),
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE series_quotes(
+    quote_id TEXT NOT NULL PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    novel_name TEXT NOT NULL,
+    chapter_name TEXT NOT NULL,
+    displayed_content TEXT NOT NULL,
+    original_content TEXT,
+    translated_content TEXT,
+    language TEXT,
+    timestamp INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE chapter_translation_cache(
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    source_language TEXT NOT NULL,
+    target_language TEXT NOT NULL,
+    original_hash TEXT NOT NULL,
+    translated_content TEXT NOT NULL,
+    engine_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(manga_id, chapter_id, target_language),
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE chapter_translation_queue(
+    task_id INTEGER NOT NULL PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    chapter_name TEXT NOT NULL,
+    manga_title TEXT NOT NULL,
+    source_language TEXT NOT NULL,
+    target_language TEXT NOT NULL,
+    engine_id INTEGER NOT NULL,
+    priority INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    error_message TEXT,
+    retry_count INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    force_retranslate INTEGER AS Boolean NOT NULL DEFAULT 0,
+    position_index INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);
+
+findTranslationCanon:
+SELECT *
+FROM series_translation_canon
+WHERE manga_id = :manga_id;
+
+upsertTranslationCanon:
+INSERT INTO series_translation_canon(manga_id, mode, source_language, target_language, summary, style_guide, created_at, updated_at)
+VALUES (:manga_id, :mode, :source_language, :target_language, :summary, :style_guide, :created_at, :updated_at)
+ON CONFLICT(manga_id) DO UPDATE SET
+    mode = :mode,
+    source_language = :source_language,
+    target_language = :target_language,
+    summary = :summary,
+    style_guide = :style_guide,
+    updated_at = :updated_at;
+
+findTranslationEntities:
+SELECT *
+FROM series_translation_entities
+WHERE manga_id = :manga_id
+ORDER BY entity_type, display_name;
+
+upsertTranslationEntity:
+INSERT INTO series_translation_entities(
+    manga_id, entity_key, display_name, original_name, translated_name, entity_type,
+    gender, description, aliases, source, confidence, user_locked, created_at, updated_at
+)
+VALUES (
+    :manga_id, :entity_key, :display_name, :original_name, :translated_name, :entity_type,
+    :gender, :description, :aliases, :source, :confidence, :user_locked, :created_at, :updated_at
+)
+ON CONFLICT(manga_id, entity_key) DO UPDATE SET
+    display_name = :display_name,
+    original_name = :original_name,
+    translated_name = :translated_name,
+    entity_type = :entity_type,
+    gender = :gender,
+    description = :description,
+    aliases = :aliases,
+    source = :source,
+    confidence = :confidence,
+    user_locked = :user_locked,
+    updated_at = :updated_at;
+
+deleteTranslationEntity:
+DELETE FROM series_translation_entities
+WHERE manga_id = :manga_id AND entity_key = :entity_key;
+
+findTranslationRelationships:
+SELECT *
+FROM series_translation_relationships
+WHERE manga_id = :manga_id
+ORDER BY from_entity_name COLLATE NOCASE, relationship_type COLLATE NOCASE, to_entity_name COLLATE NOCASE;
+
+insertTranslationRelationship:
+INSERT INTO series_translation_relationships(
+    manga_id, from_entity_key, from_entity_name, to_entity_key, to_entity_name,
+    relationship_type, description, source, user_locked, created_at, updated_at
+)
+VALUES (
+    :manga_id, :from_entity_key, :from_entity_name, :to_entity_key, :to_entity_name,
+    :relationship_type, :description, :source, :user_locked, :created_at, :updated_at
+);
+
+updateTranslationRelationship:
+UPDATE series_translation_relationships
+SET from_entity_key = :from_entity_key,
+    from_entity_name = :from_entity_name,
+    to_entity_key = :to_entity_key,
+    to_entity_name = :to_entity_name,
+    relationship_type = :relationship_type,
+    description = :description,
+    source = :source,
+    user_locked = :user_locked,
+    updated_at = :updated_at
+WHERE _id = :id;
+
+deleteTranslationRelationship:
+DELETE FROM series_translation_relationships
+WHERE _id = :id;
+
+findTranslationEvents:
+SELECT *
+FROM series_translation_events
+WHERE manga_id = :manga_id
+ORDER BY coalesce(sequence_index, 9223372036854775807), created_at;
+
+insertTranslationEvent:
+INSERT INTO series_translation_events(
+    manga_id, chapter_id, title, description, sequence_index, source, user_locked, created_at, updated_at
+)
+VALUES (
+    :manga_id, :chapter_id, :title, :description, :sequence_index, :source, :user_locked, :created_at, :updated_at
+);
+
+updateTranslationEvent:
+UPDATE series_translation_events
+SET chapter_id = :chapter_id,
+    title = :title,
+    description = :description,
+    sequence_index = :sequence_index,
+    source = :source,
+    user_locked = :user_locked,
+    updated_at = :updated_at
+WHERE _id = :id;
+
+deleteTranslationEvent:
+DELETE FROM series_translation_events
+WHERE _id = :id;
+
+findTranslationNudges:
+SELECT *
+FROM series_translation_nudges
+WHERE manga_id = :manga_id
+ORDER BY active DESC, created_at DESC;
+
+insertTranslationNudge:
+INSERT INTO series_translation_nudges(manga_id, chapter_id, scope, instruction, active, created_at, updated_at)
+VALUES (:manga_id, :chapter_id, :scope, :instruction, :active, :created_at, :updated_at);
+
+updateTranslationNudge:
+UPDATE series_translation_nudges
+SET chapter_id = :chapter_id,
+    scope = :scope,
+    instruction = :instruction,
+    active = :active,
+    updated_at = :updated_at
+WHERE _id = :id;
+
+deleteTranslationNudge:
+DELETE FROM series_translation_nudges
+WHERE _id = :id;
+
+findMetadataValues:
+SELECT *
+FROM series_metadata_values
+WHERE manga_id = :manga_id
+ORDER BY field, provider_type, provider_name;
+
+findMetadataValuesForField:
+SELECT *
+FROM series_metadata_values
+WHERE manga_id = :manga_id AND field = :field
+ORDER BY provider_type, provider_name;
+
+upsertMetadataValue:
+INSERT INTO series_metadata_values(
+    manga_id, field, provider_type, provider_id, provider_name, value, extra_json,
+    confidence, user_locked, updated_at
+)
+VALUES (
+    :manga_id, :field, :provider_type, :provider_id, :provider_name, :value, :extra_json,
+    :confidence, :user_locked, :updated_at
+)
+ON CONFLICT(manga_id, field, provider_type, provider_id) DO UPDATE SET
+    provider_name = :provider_name,
+    value = :value,
+    extra_json = :extra_json,
+    confidence = :confidence,
+    user_locked = :user_locked,
+    updated_at = :updated_at;
+
+findMetadataChoices:
+SELECT *
+FROM series_metadata_choices
+WHERE manga_id = :manga_id;
+
+upsertMetadataChoice:
+INSERT INTO series_metadata_choices(manga_id, field, provider_type, provider_id, updated_at)
+VALUES (:manga_id, :field, :provider_type, :provider_id, :updated_at)
+ON CONFLICT(manga_id, field) DO UPDATE SET
+    provider_type = :provider_type,
+    provider_id = :provider_id,
+    updated_at = :updated_at;
+
+deleteMetadataChoice:
+DELETE FROM series_metadata_choices
+WHERE manga_id = :manga_id AND field = :field;
+
+findDisplayOptions:
+SELECT *
+FROM series_display_options
+WHERE manga_id = :manga_id;
+
+upsertDisplayOption:
+INSERT INTO series_display_options(manga_id, option_key, visible, updated_at)
+VALUES (:manga_id, :option_key, :visible, :updated_at)
+ON CONFLICT(manga_id, option_key) DO UPDATE SET
+    visible = :visible,
+    updated_at = :updated_at;
+
+deleteDisplayOption:
+DELETE FROM series_display_options
+WHERE manga_id = :manga_id AND option_key = :option_key;
+
+findQuotes:
+SELECT *
+FROM series_quotes
+WHERE manga_id = :manga_id
+ORDER BY timestamp DESC;
+
+upsertQuote:
+INSERT INTO series_quotes(
+    quote_id, manga_id, novel_name, chapter_name, displayed_content,
+    original_content, translated_content, language, timestamp
+)
+VALUES (
+    :quote_id, :manga_id, :novel_name, :chapter_name, :displayed_content,
+    :original_content, :translated_content, :language, :timestamp
+)
+ON CONFLICT(quote_id) DO UPDATE SET
+    manga_id = :manga_id,
+    novel_name = :novel_name,
+    chapter_name = :chapter_name,
+    displayed_content = :displayed_content,
+    original_content = :original_content,
+    translated_content = :translated_content,
+    language = :language,
+    timestamp = :timestamp;
+
+deleteQuote:
+DELETE FROM series_quotes
+WHERE quote_id = :quote_id;
+
+deleteQuotesForManga:
+DELETE FROM series_quotes
+WHERE manga_id = :manga_id;
+
+countQuotes:
+SELECT count(*)
+FROM series_quotes
+WHERE manga_id = :manga_id;
+
+copyQuotes:
+INSERT OR REPLACE INTO series_quotes(
+    quote_id, manga_id, novel_name, chapter_name, displayed_content,
+    original_content, translated_content, language, timestamp
+)
+SELECT
+    quote_id || ':' || :new_quote_suffix, :new_manga_id, novel_name, chapter_name, displayed_content,
+    original_content, translated_content, language, timestamp
+FROM series_quotes
+WHERE manga_id = :old_manga_id;
+
+deleteKnowledgeForManga:
+DELETE FROM series_translation_canon
+WHERE manga_id = :manga_id;
+
+deleteTranslationEntitiesForManga:
+DELETE FROM series_translation_entities
+WHERE manga_id = :manga_id;
+
+deleteTranslationRelationshipsForManga:
+DELETE FROM series_translation_relationships
+WHERE manga_id = :manga_id;
+
+deleteTranslationEventsForManga:
+DELETE FROM series_translation_events
+WHERE manga_id = :manga_id;
+
+deleteTranslationNudgesForManga:
+DELETE FROM series_translation_nudges
+WHERE manga_id = :manga_id;
+
+deleteMetadataValuesForManga:
+DELETE FROM series_metadata_values
+WHERE manga_id = :manga_id;
+
+deleteMetadataChoicesForManga:
+DELETE FROM series_metadata_choices
+WHERE manga_id = :manga_id;
+
+deleteDisplayOptionsForManga:
+DELETE FROM series_display_options
+WHERE manga_id = :manga_id;
+
+relinkTranslationCanon:
+UPDATE series_translation_canon
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+relinkTranslationEntities:
+UPDATE series_translation_entities
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+relinkTranslationRelationships:
+UPDATE series_translation_relationships
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+relinkTranslationEvents:
+UPDATE series_translation_events
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+relinkTranslationNudges:
+UPDATE series_translation_nudges
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+relinkMetadataValues:
+UPDATE series_metadata_values
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+relinkMetadataChoices:
+UPDATE series_metadata_choices
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+relinkDisplayOptions:
+UPDATE series_display_options
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+relinkQuotes:
+UPDATE series_quotes
+SET manga_id = :new_id
+WHERE manga_id = :old_id;
+
+findCachedTranslation:
+SELECT *
+FROM chapter_translation_cache
+WHERE manga_id = :manga_id
+    AND chapter_id = :chapter_id
+    AND target_language = :target_language;
+
+upsertCachedTranslation:
+INSERT INTO chapter_translation_cache(
+    manga_id, chapter_id, source_language, target_language, original_hash,
+    translated_content, engine_id, created_at
+)
+VALUES (
+    :manga_id, :chapter_id, :source_language, :target_language, :original_hash,
+    :translated_content, :engine_id, :created_at
+)
+ON CONFLICT(manga_id, chapter_id, target_language) DO UPDATE SET
+    source_language = :source_language,
+    original_hash = :original_hash,
+    translated_content = :translated_content,
+    engine_id = :engine_id,
+    created_at = :created_at;
+
+deleteCachedTranslation:
+DELETE FROM chapter_translation_cache
+WHERE manga_id = :manga_id
+    AND chapter_id = :chapter_id
+    AND target_language = :target_language;
+
+clearCachedTranslations:
+DELETE FROM chapter_translation_cache;
+
+countCachedTranslations:
+SELECT count(*)
+FROM chapter_translation_cache;
+
+cachedTranslationBytes:
+SELECT coalesce(sum(length(translated_content)), 0)
+FROM chapter_translation_cache;
+
+loadTranslationQueue:
+SELECT *
+FROM chapter_translation_queue
+ORDER BY position_index, priority DESC, task_id;
+
+clearTranslationQueue:
+DELETE FROM chapter_translation_queue;
+
+insertTranslationQueueTask:
+INSERT INTO chapter_translation_queue(
+    task_id, manga_id, chapter_id, chapter_name, manga_title,
+    source_language, target_language, engine_id, priority, status,
+    error_message, retry_count, created_at, force_retranslate, position_index
+)
+VALUES (
+    :task_id, :manga_id, :chapter_id, :chapter_name, :manga_title,
+    :source_language, :target_language, :engine_id, :priority, :status,
+    :error_message, :retry_count, :created_at, :force_retranslate, :position_index
+);

@@ -18,10 +18,17 @@ data class MALManga(
     val mediaType: String,
     @SerialName("start_date")
     val startDate: String?,
+    val genres: List<MALGenre> = emptyList(),
 )
 
 @Serializable
 data class MALMangaCovers(
     val large: String?,
     val medium: String,
+)
+
+@Serializable
+data class MALGenre(
+    val id: Long,
+    val name: String,
 )

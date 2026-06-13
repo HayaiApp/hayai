@@ -9,6 +9,17 @@ data class ALSearchResult(
 )
 
 @Serializable
+data class ALMediaResult(
+    val data: ALMediaData,
+)
+
+@Serializable
+data class ALMediaData(
+    @SerialName("Media")
+    val media: ALSearchItem,
+)
+
+@Serializable
 data class ALSearchPage(
     @SerialName("Page")
     val page: ALSearchMedia,

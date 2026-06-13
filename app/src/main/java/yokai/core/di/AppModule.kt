@@ -132,9 +132,9 @@ fun appModule(app: Application) = module {
 
     single { TrackManager(app) }
 
-    single { TranslationCache(app) }
+    single { TranslationCache(app, get()) }
     single { TranslationEngineManager(get()) }
-    single { TranslationService(app, get(), get(), get()) }
+    single { TranslationService(app, get(), get(), get(), get(), get(), get()) }
 
     single {
         Json {

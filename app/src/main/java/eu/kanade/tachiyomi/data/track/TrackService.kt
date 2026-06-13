@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.track
 
 import androidx.annotation.CallSuper
 import androidx.annotation.DrawableRes
+import android.content.Context
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.database.models.isOneShotOrCompleted
@@ -14,8 +15,12 @@ import yokai.util.koin.injectLazy
 import yokai.domain.chapter.interactor.GetChapter
 import yokai.domain.history.interactor.GetHistory
 import yokai.domain.manga.interactor.GetManga
+import yokai.domain.series.model.MetadataProviderType
+import yokai.domain.series.model.SeriesMetadataField
+import yokai.domain.series.model.SeriesMetadataValue
+import yokai.util.lang.getString
 
-abstract class TrackService(val id: Long) {
+abstract class TrackService(val id: Long) : TrackerMetadataProvider {
 
     val trackPreferences: TrackPreferences by injectLazy()
     val networkService: NetworkHelper by injectLazy()
@@ -84,6 +89,90 @@ abstract class TrackService(val id: Long) {
     abstract suspend fun login(username: String, password: String): Boolean
 
     open suspend fun removeFromService(track: Track): Boolean = false
+
+    override fun metadataValues(
+        context: Context,
+        mangaId: Long,
+        track: Track,
+        now: Long,
+    ): List<SeriesMetadataValue> {
+        val providerId = id.toString()
+        val providerName = context.getString(nameRes())
+        fun value(field: SeriesMetadataField, text: String?, confidence: Double = 0.75): SeriesMetadataValue? =
+            text?.trim()?.takeIf { it.isNotBlank() }?.let {
+                SeriesMetadataValue(
+                    mangaId = mangaId,
+                    field = field.key,
+                    providerType = MetadataProviderType.TRACKER,
+                    providerId = providerId,
+                    providerName = providerName,
+                    value = it,
+                    extraJson = null,
+                    confidence = confidence,
+                    userLocked = false,
+                    updatedAt = now,
+                )
+            }
+        val trackerSummary = buildList {
+            runCatching { getStatus(track.status) }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
+            track.total_chapters.takeIf { it > 0 }?.let {
+                add(context.getString(yokai.i18n.MR.strings.tracker_metadata_total_chapters_format, it))
+            }
+        }.joinToString("\n").takeIf { it.isNotBlank() }
+
+        return listOfNotNull(
+            value(SeriesMetadataField.TITLE, track.title),
+            value(SeriesMetadataField.EXTERNAL_LINKS, track.tracking_url),
+            value(SeriesMetadataField.TRACKER_SUMMARY, trackerSummary, confidence = 0.65),
+        )
+    }
+
+    override fun metadataValues(
+        context: Context,
+        mangaId: Long,
+        search: TrackSearch,
+        now: Long,
+    ): List<SeriesMetadataValue> {
+        val providerId = id.toString()
+        val providerName = context.getString(nameRes())
+        fun value(field: SeriesMetadataField, text: String?, confidence: Double = 0.85): SeriesMetadataValue? =
+            text?.trim()?.takeIf { it.isNotBlank() }?.let {
+                SeriesMetadataValue(
+                    mangaId = mangaId,
+                    field = field.key,
+                    providerType = MetadataProviderType.TRACKER,
+                    providerId = providerId,
+                    providerName = providerName,
+                    value = it,
+                    extraJson = null,
+                    confidence = confidence,
+                    userLocked = false,
+                    updatedAt = now,
+                )
+        }
+        fun safeText(read: () -> String): String? = runCatching(read).getOrNull()
+
+        val trackerSummary = buildList {
+            search.publishing_type.trim().takeIf { it.isNotBlank() }?.let {
+                add(context.getString(yokai.i18n.MR.strings.tracker_metadata_type_format, it))
+            }
+            search.start_date.trim().takeIf { it.isNotBlank() }?.let {
+                add(context.getString(yokai.i18n.MR.strings.tracker_metadata_start_date_format, it))
+            }
+            search.total_chapters.takeIf { it > 0 }?.let {
+                add(context.getString(yokai.i18n.MR.strings.tracker_metadata_total_chapters_format, it))
+            }
+        }.joinToString("\n").takeIf { it.isNotBlank() }
+
+        return listOfNotNull(
+            value(SeriesMetadataField.TITLE, safeText { search.title }),
+            value(SeriesMetadataField.COVER, search.cover_url),
+            value(SeriesMetadataField.DESCRIPTION, search.summary),
+            value(SeriesMetadataField.STATUS, search.publishing_status),
+            value(SeriesMetadataField.EXTERNAL_LINKS, safeText { search.tracking_url }),
+            value(SeriesMetadataField.TRACKER_SUMMARY, trackerSummary, confidence = 0.7),
+        )
+    }
 
     open fun updateTrackStatus(
         track: Track,

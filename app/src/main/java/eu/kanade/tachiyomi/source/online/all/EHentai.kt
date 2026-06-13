@@ -1094,7 +1094,7 @@ class EHentai(
 
     /**
      * POSTs `method=showpage` to /api.php and returns the resolved image URL.
-     * Response shape (per ehwiki / EhViewer EhEngine.kt):
+     * Response shape (per EHentai API behavior / EhViewer EhEngine.kt):
      *   { "i3": "<img src='...' />", "i6": "...nl token wrapper...", "s": "nlToken",
      *     "k": "newImgKey", "n": ... }
      * The actual image URL is parsed out of the i3 HTML fragment. The new `nl` token is

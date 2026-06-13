@@ -7,6 +7,8 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALCharacterMetadata
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALManga
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALOAuth
 import eu.kanade.tachiyomi.data.track.updateNewTrackInfo
 import eu.kanade.tachiyomi.util.system.e
@@ -14,6 +16,12 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import yokai.domain.series.model.MetadataProviderType
+import yokai.domain.series.model.SeriesMetadataField
+import yokai.domain.series.model.SeriesMetadataValue
 import yokai.util.koin.injectLazy
 import yokai.i18n.MR
 import yokai.util.lang.getString
@@ -123,6 +131,125 @@ class MyAnimeList(private val context: Context, id: Long) : TrackService(id) {
         return api.findListItem(track) ?: add(track)
     }
 
+    override suspend fun enrichedMetadataValues(
+        context: Context,
+        mangaId: Long,
+        track: Track,
+        now: Long,
+    ): List<SeriesMetadataValue> =
+        super.enrichedMetadataValues(context, mangaId, track, now) +
+            detailMetadataValues(context, mangaId, track.media_id, now) +
+            characterMetadataValues(context, mangaId, track.media_id, now)
+
+    override suspend fun enrichedMetadataValues(
+        context: Context,
+        mangaId: Long,
+        search: TrackSearch,
+        now: Long,
+    ): List<SeriesMetadataValue> =
+        super.enrichedMetadataValues(context, mangaId, search, now) +
+            detailMetadataValues(context, mangaId, search.media_id, now) +
+            characterMetadataValues(context, mangaId, search.media_id, now)
+
+    private suspend fun detailMetadataValues(
+        context: Context,
+        mangaId: Long,
+        mediaId: Long,
+        now: Long,
+    ): List<SeriesMetadataValue> {
+        if (mediaId <= 0L) return emptyList()
+        val manga = runCatching { api.getMangaMetadata(mediaId) }
+            .onFailure { Logger.e(it) { "Failed to fetch MAL metadata for $mediaId" } }
+            .getOrNull() ?: return emptyList()
+
+        return manga.toMetadataValues(context, mangaId, now)
+    }
+
+    private fun MALManga.toMetadataValues(
+        context: Context,
+        mangaId: Long,
+        now: Long,
+    ): List<SeriesMetadataValue> {
+        val providerId = this@MyAnimeList.id.toString()
+        val providerName = context.getString(nameRes())
+        fun value(field: SeriesMetadataField, text: String?, confidence: Double = 0.8): SeriesMetadataValue? =
+            text?.trim()?.takeIf { it.isNotBlank() }?.let {
+                SeriesMetadataValue(
+                    mangaId = mangaId,
+                    field = field.key,
+                    providerType = MetadataProviderType.TRACKER,
+                    providerId = providerId,
+                    providerName = providerName,
+                    value = it,
+                    extraJson = null,
+                    confidence = confidence,
+                    userLocked = false,
+                    updatedAt = now,
+                )
+            }
+
+        val genreText = genres
+            .mapNotNull { it.name.trim().takeIf(String::isNotBlank) }
+            .distinctBy { it.lowercase() }
+            .joinToString(", ")
+
+        return listOfNotNull(
+            value(SeriesMetadataField.TITLE, title),
+            value(SeriesMetadataField.COVER, covers?.large ?: covers?.medium),
+            value(SeriesMetadataField.DESCRIPTION, synopsis),
+            value(SeriesMetadataField.STATUS, status.replace("_", " ")),
+            value(SeriesMetadataField.GENRES, genreText, confidence = 0.8),
+            value(SeriesMetadataField.EXTERNAL_LINKS, MyAnimeListApi.webMangaUrl(id), confidence = 0.85),
+        )
+    }
+
+    private suspend fun characterMetadataValues(
+        context: Context,
+        mangaId: Long,
+        mediaId: Long,
+        now: Long,
+    ): List<SeriesMetadataValue> {
+        if (mediaId <= 0L) return emptyList()
+        val characters = runCatching { api.getCharacters(mediaId) }
+            .onFailure { Logger.e(it) { "Failed to fetch MAL characters for $mediaId" } }
+            .getOrDefault(emptyList())
+            .take(MAX_CHARACTER_METADATA)
+        if (characters.isEmpty()) return emptyList()
+
+        return listOf(
+            SeriesMetadataValue(
+                mangaId = mangaId,
+                field = SeriesMetadataField.CHARACTERS.key,
+                providerType = MetadataProviderType.TRACKER,
+                providerId = id.toString(),
+                providerName = context.getString(nameRes()),
+                value = characters.joinToString(", ") { it.name },
+                extraJson = characters.toExtraJson(),
+                confidence = 0.7,
+                userLocked = false,
+                updatedAt = now,
+            ),
+        )
+    }
+
+    private fun List<MALCharacterMetadata>.toExtraJson(): String =
+        buildJsonArray {
+            forEach { character ->
+                add(
+                    buildJsonObject {
+                        character.id?.let { put("id", it) }
+                        put("name", character.name)
+                        character.role?.trim()?.takeIf { it.isNotBlank() }?.let { put("role", it) }
+                        character.imageUrl?.trim()?.takeIf { it.isNotBlank() }?.let { put("imageUrl", it) }
+                        character.url?.trim()?.takeIf { it.isNotBlank() }?.let {
+                            put("url", it)
+                            put("siteUrl", it)
+                        }
+                    },
+                )
+            }
+        }.toString()
+
     override suspend fun login(username: String, password: String) = login(password)
 
     suspend fun login(authCode: String): Boolean {
@@ -182,5 +309,7 @@ class MyAnimeList(private val context: Context, id: Long) : TrackService(id) {
         const val BASE_URL = "https://myanimelist.net"
         const val USER_SESSION_COOKIE = "MALSESSIONID"
         const val LOGGED_IN_COOKIE = "is_logged_in"
+
+        private const val MAX_CHARACTER_METADATA = 25
     }
 }

@@ -9,20 +9,29 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import eu.kanade.tachiyomi.data.translation.advanced.AdvancedTranslationMemory
 import tachiyomi.domain.translation.model.LanguageCodes
 import tachiyomi.domain.translation.model.TranslationProgress
 import tachiyomi.domain.translation.model.TranslationResult
 import tachiyomi.domain.translation.model.TranslationTask
 import tachiyomi.domain.translation.service.TranslationPreferences
+import yokai.data.Database
+import yokai.domain.series.SeriesKnowledgeRepository
+import yokai.domain.series.SeriesPreferences
+import yokai.domain.series.model.TranslationMode
 import java.util.concurrent.ConcurrentHashMap
 
 class TranslationService(
     context: Context,
     private val preferences: TranslationPreferences,
+    private val seriesPreferences: SeriesPreferences,
+    seriesKnowledgeRepository: SeriesKnowledgeRepository,
     private val engineManager: TranslationEngineManager,
     private val cache: TranslationCache,
+    database: Database,
 ) {
-    private val store = TranslationStore(context)
+    private val store = TranslationStore(context, database)
+    private val advancedMemory = AdvancedTranslationMemory(seriesKnowledgeRepository)
     private val mutexes = ConcurrentHashMap<String, Mutex>()
 
     private val _queueState = MutableStateFlow(store.load())
@@ -64,6 +73,7 @@ class TranslationService(
         content: String,
         chapterId: Long?,
         mangaId: Long?,
+        mangaTitle: String? = null,
         forceRetranslate: Boolean = false,
     ): String = withContext(Dispatchers.IO) {
         if (!isEnabled()) return@withContext content
@@ -74,37 +84,41 @@ class TranslationService(
         }
         val targetLanguage = preferences.targetLanguage().get()
         val sourceLanguage = preferences.sourceLanguage().get()
-        val cacheEnabled = preferences.cacheTranslations().get() && chapterId != null && mangaId != null
+        val cacheKey = if (preferences.cacheTranslations().get() && mangaId != null && chapterId != null) {
+            mangaId to chapterId
+        } else {
+            null
+        }
 
-        if (cacheEnabled && !forceRetranslate) {
-            val cached = cache.getTranslation(mangaId!!, chapterId!!, targetLanguage)
-            if (TranslationCachePolicy.shouldServeCached(cached)) {
-                return@withContext cached!!.translatedContent
+        if (cacheKey != null && !forceRetranslate) {
+            val cached = cache.getTranslation(cacheKey.first, cacheKey.second, targetLanguage)
+            if (cached != null && TranslationCachePolicy.shouldServeCached(cached)) {
+                return@withContext cached.translatedContent
             }
         }
 
         val key = "${mangaId ?: -1}:${chapterId ?: -1}:$targetLanguage:${engine.id}"
         val mutex = mutexes.getOrPut(key) { Mutex() }
         mutex.withLock {
-            if (cacheEnabled && !forceRetranslate) {
-                val cached = cache.getTranslation(mangaId!!, chapterId!!, targetLanguage)
-                if (TranslationCachePolicy.shouldServeCached(cached)) {
-                    return@withLock cached!!.translatedContent
+            if (cacheKey != null && !forceRetranslate) {
+                val cached = cache.getTranslation(cacheKey.first, cacheKey.second, targetLanguage)
+                if (cached != null && TranslationCachePolicy.shouldServeCached(cached)) {
+                    return@withLock cached.translatedContent
                 }
             }
 
             val translated = runCatching {
-                translateHtmlContent(content, sourceLanguage, targetLanguage)
+                translateHtmlContent(content, sourceLanguage, targetLanguage, mangaId, mangaTitle)
             }.getOrElse { e ->
                 if (e is CancellationException) throw e
                 Logger.e(e) { "Chapter translation failed" }
                 content
             }
 
-            if (cacheEnabled && translated != content) {
+            if (cacheKey != null && translated != content) {
                 cache.saveTranslation(
-                    mangaId = mangaId!!,
-                    chapterId = chapterId!!,
+                    mangaId = cacheKey.first,
+                    chapterId = cacheKey.second,
                     sourceLanguage = sourceLanguage,
                     targetLanguage = targetLanguage,
                     originalContent = content,
@@ -140,6 +154,8 @@ class TranslationService(
         content: String,
         sourceLanguage: String,
         targetLanguage: String,
+        mangaId: Long?,
+        mangaTitle: String?,
     ): String {
         if (preferences.smartAutoTranslate().get()) {
             val detected = detectLanguage(content)
@@ -149,6 +165,12 @@ class TranslationService(
         }
 
         val engine = engineManager.getEngine() ?: return content
+        val advancedMode = TranslationMode.fromDbKey(seriesPreferences.translationMode().get()) == TranslationMode.ADVANCED
+        val advancedPrompt = if (advancedMode) {
+            advancedMemory.buildPromptPrefix(mangaId, mangaTitle, sourceLanguage, targetLanguage)
+        } else {
+            ""
+        }
         val (htmlWithoutImages, images) = TranslationHtmlUtils.extractImages(content)
         val plainText = TranslationHtmlUtils.extractTextFromHtml(htmlWithoutImages)
         val paragraphs = TranslationHtmlUtils.splitParagraphsPreserving(plainText)
@@ -167,7 +189,7 @@ class TranslationService(
         )
 
         for ((index, chunk) in chunks.withIndex()) {
-            val textToTranslate = withContextualAnchor(chunk, translatedChunks)
+            val textToTranslate = buildTranslationInput(chunk, translatedChunks, advancedPrompt)
             val result = engine.translate(listOf(textToTranslate), sourceLanguage, targetLanguage)
             val translated = when (result) {
                 is TranslationResult.Success -> result.translatedTexts.firstOrNull().orEmpty()
@@ -191,7 +213,33 @@ class TranslationService(
 
         _progressState.value = TranslationProgress(totalChapters = 1, completedChapters = 1)
         val translatedHtml = TranslationHtmlUtils.wrapTextInHtml(translatedChunks.joinToString("\n\n"))
-        return TranslationHtmlUtils.reinsertImages(translatedHtml, images)
+        val finalHtml = TranslationHtmlUtils.reinsertImages(translatedHtml, images)
+        if (advancedMode) {
+            runCatching {
+                advancedMemory.ingestChapter(
+                    mangaId = mangaId,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    originalHtml = content,
+                    translatedHtml = finalHtml,
+                )
+            }.onFailure { Logger.e(it) { "Advanced translation memory update failed" } }
+        }
+        return finalHtml
+    }
+
+    private fun buildTranslationInput(
+        chunk: String,
+        translatedChunks: List<String>,
+        advancedPrompt: String,
+    ): String {
+        val anchored = withContextualAnchor(chunk, translatedChunks)
+        if (advancedPrompt.isBlank()) return anchored
+        return """
+            $advancedPrompt
+
+            $anchored
+        """.trimIndent()
     }
 
     private fun withContextualAnchor(chunk: String, translatedChunks: List<String>): String {

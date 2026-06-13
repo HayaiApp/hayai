@@ -2319,18 +2319,24 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      */
     fun isTranslationEnabled(): Boolean = translationService.isEnabled()
 
+    fun currentTranslationLanguage(): String = translationService.getLastTargetLanguage()
+
     /**
      * Translate text content using the configured translation service.
      * Returns original content if translation is disabled, unconfigured, or fails.
      */
-    suspend fun translateContentIfEnabled(content: String): String {
+    suspend fun translateContentIfEnabled(
+        content: String,
+        chapterId: Long? = viewModel.state.value.viewerChapters?.currChapter?.chapter?.id,
+        mangaId: Long? = viewModel.manga?.id,
+        mangaTitle: String? = viewModel.manga?.title,
+    ): String {
         if (!isTranslationEnabled()) return content
-        val mangaId = viewModel.manga?.id
-        val chapterId = viewModel.state.value.viewerChapters?.currChapter?.chapter?.id
         return translationService.translateChapterContent(
             content = content,
             chapterId = chapterId,
             mangaId = mangaId,
+            mangaTitle = mangaTitle,
         )
     }
 

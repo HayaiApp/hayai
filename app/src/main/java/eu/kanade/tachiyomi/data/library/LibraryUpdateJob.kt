@@ -38,6 +38,7 @@ import eu.kanade.tachiyomi.data.preference.MANGA_NON_READ
 import eu.kanade.tachiyomi.data.preference.MANGA_OUTSIDE_RELEASE_PERIOD
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.track.TrackManager
+import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.extension.ExtensionUpdateJob
 import eu.kanade.tachiyomi.source.CatalogueSource
@@ -93,6 +94,7 @@ import yokai.domain.manga.interactor.FetchInterval
 import yokai.domain.manga.interactor.GetLibraryManga
 import yokai.domain.manga.interactor.UpdateManga
 import yokai.domain.manga.models.cover
+import yokai.domain.series.SeriesKnowledgeRepository
 import yokai.domain.track.interactor.GetTrack
 import yokai.domain.track.interactor.InsertTrack
 import yokai.i18n.MR
@@ -115,6 +117,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     private val fetchInterval: FetchInterval = get()
     private val getTrack: GetTrack = get()
     private val insertTrack: InsertTrack by injectLazy()
+    private val seriesKnowledgeRepository: SeriesKnowledgeRepository by injectLazy()
 
     // Release-prediction window for this update run; recomputed when an update starts.
     private var fetchWindow: Pair<Long, Long> = Pair(0, 0)
@@ -337,10 +340,18 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 val service = trackManager.getService(track.sync_id)
                 if (service != null && service in loggedServices) {
                     try {
+                        val mangaId = manga.manga.id!!
                         val newTrack = service.refresh(track)
                         insertTrack.await(newTrack)
+                        val metadataValues = when (newTrack) {
+                            is TrackSearch -> service.enrichedMetadataValues(context, mangaId, newTrack)
+                            else -> service.enrichedMetadataValues(context, mangaId, newTrack)
+                        }
+                        if (metadataValues.isNotEmpty()) {
+                            seriesKnowledgeRepository.upsertMetadataValues(metadataValues)
+                        }
 
-                        syncChaptersWithTrackServiceTwoWay(getChapter.awaitAll(manga.manga.id!!, false), track, service)
+                        syncChaptersWithTrackServiceTwoWay(getChapter.awaitAll(mangaId, false), newTrack, service)
                     } catch (e: Exception) {
                         Logger.e(e)
                     }
@@ -485,6 +496,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
 
     private fun filterMangaToUpdate(mangaToAdd: List<LibraryManga>): List<LibraryManga> {
         val restrictions = preferences.libraryUpdateMangaRestriction().get()
+        val smartUpdateEnabled = preferences.smartUpdateEnabled().get()
         // Categories whose manga always update, bypassing the release-period skip.
         val smartUpdateExcludedCategories =
             preferences.libraryUpdateSmartUpdateCategoriesExclude().get().mapNotNull { it.toIntOrNull() }.toSet()
@@ -534,7 +546,8 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 MANGA_NON_READ in restrictions && manga.totalChapters > 0 && !manga.hasRead -> {
                     skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_started)
                 }
-                MANGA_OUTSIDE_RELEASE_PERIOD in restrictions &&
+                smartUpdateEnabled &&
+                    MANGA_OUTSIDE_RELEASE_PERIOD in restrictions &&
                     manga.manga.id !in smartUpdateExcludedMangaIds &&
                     manga.manga.next_update > fetchWindow.second -> {
                     skippedUpdates[manga.manga] = context.getString(MR.strings.skipped_reason_not_in_release_period)

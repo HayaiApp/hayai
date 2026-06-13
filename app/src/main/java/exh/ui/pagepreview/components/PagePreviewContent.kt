@@ -3,17 +3,20 @@ package exh.ui.pagepreview.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Numbers
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.request.ImageRequest
@@ -130,77 +134,57 @@ fun PagePreviewContent(
                 }
             }
             is PagePreviewState.Success -> {
-                BoxWithConstraints(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
+                val layoutDirection = LocalLayoutDirection.current
+                val gridState = rememberLazyGridState()
+                val gridPadding = PaddingValues(
+                    start = paddingValues.calculateStartPadding(layoutDirection) + 8.dp,
+                    top = paddingValues.calculateTopPadding(),
+                    end = paddingValues.calculateEndPadding(layoutDirection) + 8.dp,
+                    bottom = paddingValues.calculateBottomPadding() + 16.dp,
+                )
+
+                val shouldLoadMore by remember {
+                    derivedStateOf {
+                        val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        val totalItems = gridState.layoutInfo.totalItemsCount
+                        lastVisible >= totalItems - 6 && state.hasNextPage && !state.isLoadingMore
+                    }
+                }
+                LaunchedEffect(shouldLoadMore) {
+                    if (shouldLoadMore) onLoadMore()
+                }
+
+                LaunchedEffect(scrollEvents) {
+                    scrollEvents?.collect { previewIndex ->
+                        gridState.scrollToItem(previewIndex.coerceAtLeast(0))
+                    }
+                }
+
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 120.dp),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = gridPadding,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    val itemPerRowCount = remember(maxWidth) {
-                        (maxWidth / 120.dp).toInt().coerceAtLeast(1)
+                    items(state.pagePreviews, key = { it.index }) { page ->
+                        PagePreviewItem(
+                            modifier = Modifier.fillMaxWidth(),
+                            page = page,
+                            imageLoader = imageLoader,
+                            onOpenPage = onOpenPage,
+                        )
                     }
-                    val chunkedItems = remember(state.pagePreviews, itemPerRowCount) {
-                        state.pagePreviews.chunked(itemPerRowCount)
-                    }
-                    val lazyListState = rememberLazyListState()
-
-                    // Trigger load more when near bottom
-                    val shouldLoadMore by remember {
-                        derivedStateOf {
-                            val lastVisible = lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                            val totalItems = lazyListState.layoutInfo.totalItemsCount
-                            lastVisible >= totalItems - 3 && state.hasNextPage && !state.isLoadingMore
-                        }
-                    }
-                    LaunchedEffect(shouldLoadMore) {
-                        if (shouldLoadMore) onLoadMore()
-                    }
-
-                    // Scroll the list when the model emits a jump target. Keyed only on the flow
-                    // (and itemPerRowCount for rotation safety) so list replacement after a jump
-                    // doesn't cancel the collector mid-emit.
-                    LaunchedEffect(scrollEvents, itemPerRowCount) {
-                        scrollEvents?.collect { previewIndex ->
-                            val rowIndex = previewIndex / itemPerRowCount
-                            lazyListState.scrollToItem(rowIndex.coerceAtLeast(0))
-                        }
-                    }
-
-                    LazyColumn(
-                        state = lazyListState,
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(chunkedItems) { row ->
-                            Row(
+                    if (state.isLoadingMore) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                row.forEach { page ->
-                                    PagePreviewItem(
-                                        modifier = Modifier.weight(1F),
-                                        page = page,
-                                        imageLoader = imageLoader,
-                                        onOpenPage = onOpenPage,
-                                    )
-                                }
-                                repeat(itemPerRowCount - row.size) {
-                                    Box(Modifier.weight(1F))
-                                }
-                            }
-                        }
-                        if (state.isLoadingMore) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CircularProgressIndicator()
-                                }
+                                CircularProgressIndicator()
                             }
                         }
                     }
@@ -248,4 +232,3 @@ private fun PagePreviewItem(
         )
     }
 }
-

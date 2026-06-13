@@ -9,6 +9,7 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
+import android.text.format.DateUtils
 import android.view.MotionEvent
 import android.view.View
 import android.widget.TextView
@@ -25,11 +26,15 @@ import androidx.core.widget.TextViewCompat
 import androidx.transition.TransitionSet
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import coil3.asDrawable
+import coil3.compose.AsyncImage
+import coil3.imageLoader
 import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import coil3.request.error
 import coil3.request.placeholder
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.R as materialR
+import dev.icerock.moko.resources.compose.stringResource
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.seriesType
 import eu.kanade.tachiyomi.databinding.ChapterHeaderItemBinding
@@ -45,20 +50,27 @@ import eu.kanade.tachiyomi.util.lang.toNormalized
 import eu.kanade.tachiyomi.util.system.getResourceColor
 import eu.kanade.tachiyomi.util.system.isInNightMode
 import eu.kanade.tachiyomi.util.system.isLTR
+import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.view.resetStrokeColor
 import io.noties.markwon.Markwon
 import io.noties.markwon.SoftBreakAddsNewLinePlugin
 import android.text.method.LinkMovementMethod
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
@@ -71,7 +83,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -81,6 +95,28 @@ import yokai.util.lang.getString
 import eu.kanade.tachiyomi.source.PagePreviewSource
 import eu.kanade.tachiyomi.source.online.NamespaceSource
 import exh.source.getMainSource
+import hayai.novel.reader.quote.quoteManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import tachiyomi.domain.translation.service.TranslationPreferences
+import yokai.domain.manga.models.cover
+import yokai.domain.series.SeriesKnowledgeRepository
+import yokai.domain.series.SeriesPreferences
+import yokai.domain.series.model.MetadataProviderType
+import yokai.domain.series.model.SeriesDisplaySection
+import yokai.domain.series.model.SeriesKnowledgeBundle
+import yokai.domain.series.model.SeriesMetadataField
+import yokai.domain.series.model.SeriesMetadataValue
+import yokai.domain.series.model.TranslationMode
+import yokai.domain.series.model.sourceMetadataValues
+import yokai.util.koin.injectLazy
 import android.R as AR
 
 @SuppressLint("ClickableViewAccessibility")
@@ -109,6 +145,22 @@ class MangaHeaderHolder(
     private var showMoreButton = true
     var hadSelection = false
     private var canCollapse = true
+    private var showTitleSection = true
+    private var showCoverSection = true
+    private var showAuthorSection = true
+    private var showDescriptionSection = true
+    private var showGenresSection = true
+    private var showAliasesSection = true
+    private var showCharactersSection = false
+    private var showMetadataSection = true
+    private var showTrackersSection = true
+    private var showQuotesTranslationSection = true
+    private var showExtraImagesSection = true
+    private var seriesQuoteCount = 0
+    private var seriesKnowledgeBundle: SeriesKnowledgeBundle? = null
+    private var resolvedSeriesMetadata: ResolvedSeriesMetadata? = null
+    private var seriesKnowledgeJob: Job? = null
+    private var boundMangaId: Long? = null
     private val accentColorState = mutableStateOf<Int?>(null)
     private val descriptionExpandedState = mutableStateOf(false)
     // Cache the (description, genre) the post-layout lineCount probe last ran against.
@@ -116,6 +168,9 @@ class MangaHeaderHolder(
     // after layout each time, costing an extra layout pass per bind even when the text
     // hasn't changed. Same pattern as RecentMangaHolder's holder-level cache.
     private var lastBoundDescSignature: Int = 0
+    private val seriesKnowledgeRepository: SeriesKnowledgeRepository by injectLazy()
+    private val seriesPreferences: SeriesPreferences by injectLazy()
+    private val translationPreferences: TranslationPreferences by injectLazy()
 
     init {
 
@@ -208,6 +263,7 @@ class MangaHeaderHolder(
             // bitmap at init, so calling it here only set alpha/renderEffect on an empty view.
             mangaCover.setOnClickListener { adapter.delegate.zoomImageFromThumb(coverCard) }
             trackButton.setOnClickListener { adapter.delegate.showTrackingSheet() }
+            predictedUpdateButton?.setOnClickListener { adapter.delegate.showFetchIntervalDialog() }
             if (startExpanded) {
                 expandDesc()
             } else {
@@ -313,7 +369,11 @@ class MangaHeaderHolder(
             // The holder can be created before the presenter's manga is set (a layout pass races the
             // async load — e.g. the action-bar ComposeView measuring); bind() re-runs this once ready.
             if (!adapter.controller.mangaPresenter().isMangaLateInitInitialized()) return
-            val desc = adapter.controller.mangaPresenter().manga.description?.replace("<", "&lt;")?.replace(">", "&gt;")?.replace(Regex("""(?m)^\s*-\s*$"""), "\\-")?.replace(Regex("""(?m)^\s*\*\s*$"""), "\\*")
+            val desc = (resolvedSeriesMetadata?.description ?: adapter.controller.mangaPresenter().manga.description)
+                ?.replace("<", "&lt;")
+                ?.replace(">", "&gt;")
+                ?.replace(Regex("""(?m)^\s*-\s*$"""), "\\-")
+                ?.replace(Regex("""(?m)^\s*\*\s*$"""), "\\*")
             binding.mangaSummary.movementMethod = LinkMovementMethod.getInstance()
             binding.mangaSummary.text = when {
                 desc.isNullOrBlank() -> itemView.context.getString(MR.strings.no_description)
@@ -354,22 +414,18 @@ class MangaHeaderHolder(
             }
             return
         }
-        binding.title.text = manga.title
-
-        setGenreTags(binding, manga)
-
-        if (manga.hasSameAuthorAndArtist) {
-            binding.mangaAuthor.text = manga.author?.trim()
-        } else {
-            binding.mangaAuthor.text = listOfNotNull(manga.author?.trim(), manga.artist?.trim()).joinToString(", ")
-        }
-        setDescription()
+        boundMangaId = manga.id
+        seriesKnowledgeJob?.cancel()
+        resolveDisplayOptions(null, 0)
+        applyResolvedMetadata(manga, null)
+        applyDisplayVisibility()
+        loadSeriesKnowledge(manga.id)
 
         // Only re-run the post-layout lineCount probe when the description or genres actually
         // changed; expand/collapse based on adapter filter state is cheap and must run every
         // bind, so it stays outside the cache gate.
-        val descSignature = (manga.description ?: "").hashCode() xor
-            (manga.genre ?: "").hashCode() xor
+        val descSignature = (resolvedSeriesMetadata?.description ?: manga.description ?: "").hashCode() xor
+            resolvedSeriesMetadata?.genres.orEmpty().joinToString("|").hashCode() xor
             (if (manga.initialized) 1 else 0)
         if (descSignature != lastBoundDescSignature) {
             lastBoundDescSignature = descSignature
@@ -422,7 +478,7 @@ class MangaHeaderHolder(
         val tracked = presenter.isTracked() && !item.isLocked
 
         with(binding.trackButton) {
-            isVisible = presenter.hasTrackers()
+            isVisible = presenter.hasTrackers() && showTrackersSection
             text = itemView.context.getString(
                 if (tracked) {
                     MR.strings.tracked
@@ -441,25 +497,7 @@ class MangaHeaderHolder(
         boundHeaderItem = item
         bindReadingButton(item)
 
-        // Metadata section (EH info, etc.) — for non-EH sources MangaMetadataSection emits
-        // nothing, so the ComposeView stays 0-height permanently. Either way, defer
-        // setContent so it doesn't charge the push frame.
-        binding?.metadataCompose?.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            postOnAnimation {
-                setContent {
-                    yokai.presentation.theme.YokaiTheme {
-                        MangaMetadataSection(
-                            mangaId = manga.id ?: -1L,
-                            sourceId = manga.source,
-                            isExpanded = descriptionExpandedState.value,
-                            openMetadataViewer = { adapter.delegate.openMetadataViewer() },
-                            onSearch = { query -> adapter.delegate.searchFromMetadata(query) },
-                        )
-                    }
-                }
-            }
-        }
+        renderMetadataSection(manga)
 
         // Page preview strip — only inflate Compose if the source actually implements
         // PagePreviewSource. Otherwise PagePreviewInlineSection would render a 150dp
@@ -494,31 +532,33 @@ class MangaHeaderHolder(
             height = adapter.delegate.topCoverHeight()
         }
 
-        val statusText = itemView.context.getString(
-            when (manga.status) {
-                SManga.ONGOING -> MR.strings.ongoing
-                SManga.COMPLETED -> MR.strings.completed
-                SManga.LICENSED -> MR.strings.licensed
-                SManga.PUBLISHING_FINISHED -> MR.strings.publishing_finished
-                SManga.CANCELLED -> MR.strings.cancelled
-                SManga.ON_HIATUS -> MR.strings.on_hiatus
-                else -> MR.strings.unknown_status
-            },
-        )
-        // Surface the predicted next chapter release for favorited, ongoing-ish series.
-        val showNextUpdate = manga.favorite && manga.next_update > 0L &&
-            manga.status != SManga.COMPLETED && manga.status != SManga.CANCELLED &&
-            manga.status != SManga.PUBLISHING_FINISHED
-        binding.mangaStatus.isVisible = manga.status != 0 || showNextUpdate
-        binding.mangaStatus.text = if (showNextUpdate) {
-            itemView.context.getString(
-                MR.strings.manga_next_update_,
-                manga.next_update.timeSpanFromNow(itemView.context),
-            ).let { nextText ->
-                if (manga.status != 0) "$statusText • $nextText" else nextText
+        val resolvedStatus = resolvedSeriesMetadata?.status?.trim()?.takeIf { it.isNotBlank() }
+        val statusText = resolvedStatus?.toIntOrNull()?.let { status ->
+            itemView.context.getString(status.stringResourceForMangaStatus())
+        } ?: resolvedStatus ?: itemView.context.getString(manga.status.stringResourceForMangaStatus())
+        // Surface the predicted next chapter release only while smart update is enabled.
+        val showNextUpdate = presenter.preferences.smartUpdateEnabled().get() &&
+            manga.favorite && !manga.isLocal() && manga.next_update > 0L &&
+            manga.status in setOf(SManga.ONGOING, SManga.PUBLISHING_FINISHED)
+        binding.mangaStatus.isVisible = statusText.isNotBlank() && (resolvedStatus != null || manga.status != 0)
+        binding.mangaStatus.text = statusText
+        binding.predictedUpdateButton?.apply {
+            isVisible = showNextUpdate
+            text = if (showNextUpdate) {
+                val relativeUpdate = if (DateUtils.isToday(manga.next_update)) {
+                    itemView.context.getString(MR.strings.manga_interval_expected_update_soon)
+                } else {
+                    manga.next_update.timeSpanFromNow(itemView.context)
+                }
+                itemView.context.getString(
+                    MR.strings.manga_next_update_,
+                    relativeUpdate,
+                )
+            } else {
+                itemView.context.getString(MR.strings.manga_interval_custom_amount)
             }
-        } else {
-            statusText
+            icon = ContextCompat.getDrawable(itemView.context, R.drawable.ic_hourglass_empty_24dp)
+            checked(showNextUpdate)
         }
         with(binding.mangaSource) {
             val enabledLanguages = presenter.preferences.enabledLanguages().get()
@@ -549,8 +589,119 @@ class MangaHeaderHolder(
         }
     }
 
-    private fun setGenreTags(binding: MangaHeaderItemBinding, manga: Manga) {
-        val genres = if (manga.genre.isNullOrBlank()) emptyList() else (manga.getGenres() ?: emptyList())
+    private fun loadSeriesKnowledge(mangaId: Long?) {
+        mangaId ?: return
+        seriesKnowledgeJob = adapter.controller.viewScope.launch {
+            val (bundle, quoteCount) = withContext(Dispatchers.IO) {
+                val knowledge = seriesKnowledgeRepository.get(mangaId)
+                val quotes = itemView.context.quoteManager.getQuoteCount(mangaId)
+                knowledge to quotes
+            }
+            if (boundMangaId != mangaId || binding == null) return@launch
+            resolveDisplayOptions(bundle, quoteCount)
+            applyResolvedMetadata(adapter.delegate.mangaPresenter().manga, bundle)
+            applyDisplayVisibility()
+            renderMetadataSection(adapter.delegate.mangaPresenter().manga)
+        }
+    }
+
+    private fun resolveDisplayOptions(bundle: SeriesKnowledgeBundle?, quoteCount: Int) {
+        seriesKnowledgeBundle = bundle
+        val local = bundle?.displayOptions?.associateBy { it.optionKey }.orEmpty()
+
+        fun visible(section: SeriesDisplaySection): Boolean =
+            local[section.key]?.visible ?: seriesPreferences.displaySection(section).get()
+
+        showTitleSection = visible(SeriesDisplaySection.TITLE)
+        showCoverSection = visible(SeriesDisplaySection.COVER_BANNER)
+        showAuthorSection = visible(SeriesDisplaySection.AUTHORS)
+        showDescriptionSection = visible(SeriesDisplaySection.DESCRIPTION)
+        showGenresSection = visible(SeriesDisplaySection.GENRES)
+        showAliasesSection = visible(SeriesDisplaySection.ALIASES)
+        showCharactersSection = visible(SeriesDisplaySection.CHARACTERS)
+        showTrackersSection = visible(SeriesDisplaySection.TRACKERS)
+        showQuotesTranslationSection = visible(SeriesDisplaySection.QUOTES_TRANSLATION)
+        showExtraImagesSection = visible(SeriesDisplaySection.EXTRA_IMAGES)
+        seriesQuoteCount = if (showQuotesTranslationSection) quoteCount else 0
+        showMetadataSection = showAliasesSection || showCharactersSection ||
+            showTrackersSection || showQuotesTranslationSection || showExtraImagesSection
+    }
+
+    private fun applyResolvedMetadata(manga: Manga, bundle: SeriesKnowledgeBundle?) {
+        val resolved = resolveSeriesMetadata(
+            manga = manga,
+            knowledge = bundle,
+            includeTrackers = showTrackersSection,
+        )
+        resolvedSeriesMetadata = resolved
+        binding ?: return
+        binding.title.text = resolved.title
+        binding.mangaAuthor.text = listOfNotNull(
+            resolved.author?.trim()?.takeIf { it.isNotBlank() },
+            resolved.artist?.trim()?.takeIf { it.isNotBlank() && it != resolved.author },
+        ).joinToString(", ")
+        setDescription()
+        setGenreTags(binding, manga, resolved.genres)
+        if (manga.initialized) {
+            updateCover(manga)
+        }
+    }
+
+    private fun renderMetadataSection(manga: Manga) {
+        binding?.metadataCompose?.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            postOnAnimation {
+                setContent {
+                    yokai.presentation.theme.YokaiTheme {
+                        if (showMetadataSection) {
+                            SeriesEnrichmentSection(
+                                knowledge = seriesKnowledgeBundle,
+                                showAliases = showAliasesSection,
+                                showCharacters = showCharactersSection,
+                                showTrackers = showTrackersSection,
+                                showExtraImages = showExtraImagesSection,
+                                showQuotesTranslation = showQuotesTranslationSection,
+                                quoteCount = seriesQuoteCount,
+                                translationMode = TranslationMode.fromDbKey(seriesPreferences.translationMode().get()),
+                                translationCacheEnabled = translationPreferences.cacheTranslations().get(),
+                                onSearch = { query -> adapter.delegate.searchFromMetadata(query) },
+                                onOpenLink = { url -> itemView.context.openInBrowser(url) },
+                            )
+                            MangaMetadataSection(
+                                mangaId = manga.id ?: -1L,
+                                sourceId = manga.source,
+                                isExpanded = descriptionExpandedState.value,
+                                openMetadataViewer = { adapter.delegate.openMetadataViewer() },
+                                onSearch = { query -> adapter.delegate.searchFromMetadata(query) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun applyDisplayVisibility() {
+        binding ?: return
+        binding.title.isVisible = showTitleSection
+        binding.coverCard.isVisible = showCoverSection
+        binding.backdrop.isVisible = showCoverSection
+        binding.mangaAuthor.isVisible = showAuthorSection
+        binding.mangaSummaryLabel.isVisible = showDescriptionSection
+        binding.mangaSummary.isVisible = showDescriptionSection
+        binding.moreButtonGroup.isVisible = showDescriptionSection && binding.moreButtonGroup.isVisible
+        binding.lessButton.isVisible = showDescriptionSection && binding.lessButton.isVisible
+        binding.mangaGenresTags.isVisible = showGenresSection && binding.mangaGenresTags.isVisible
+        binding.metadataCompose?.isVisible = showMetadataSection && binding.metadataCompose?.isVisible == true
+        binding.trackButton.isVisible = showTrackersSection && binding.trackButton.isVisible
+    }
+
+    private fun setGenreTags(
+        binding: MangaHeaderItemBinding,
+        manga: Manga,
+        resolvedGenres: List<String>? = resolvedSeriesMetadata?.genres,
+    ) {
+        val genres = resolvedGenres ?: if (manga.genre.isNullOrBlank()) emptyList() else (manga.getGenres() ?: emptyList())
         val delegate = adapter.delegate
         val context = binding.root.context
         val dark = context.isInNightMode()
@@ -689,9 +840,11 @@ class MangaHeaderHolder(
 
             trackButton.iconTint = ColorStateList.valueOf(accentColor)
             favoriteButton.iconTint = ColorStateList.valueOf(accentColor)
+            predictedUpdateButton?.iconTint = ColorStateList.valueOf(accentColor)
             if (updateAll) {
                 trackButton.checked(trackButton.stateListAnimator != null)
                 favoriteButton.checked(favoriteButton.stateListAnimator != null)
+                predictedUpdateButton?.checked(predictedUpdateButton?.isVisible == true)
                 setGenreTags(this, manga)
             }
         }
@@ -723,8 +876,10 @@ class MangaHeaderHolder(
             filterButton.imageTintList = defaultTint
             trackButton.iconTint = defaultTint
             favoriteButton.iconTint = defaultTint
+            predictedUpdateButton?.iconTint = defaultTint
             trackButton.checked(trackButton.stateListAnimator != null)
             favoriteButton.checked(favoriteButton.stateListAnimator != null)
+            predictedUpdateButton?.checked(predictedUpdateButton?.isVisible == true)
         }
     }
 
@@ -823,18 +978,47 @@ class MangaHeaderHolder(
         binding ?: return
         if (!manga.initialized) return
         val drawable = adapter.controller.binding.mangaCoverFull.drawable
-        binding.mangaCover.loadManga(manga) {
-            placeholder(drawable)
-            error(drawable)
-            if (manga.favorite) networkCachePolicy(CachePolicy.READ_ONLY)
-            diskCachePolicy(CachePolicy.READ_ONLY)
+        val resolved = resolvedSeriesMetadata
+        val coverUrl = resolved?.coverUrl?.takeIf { it.isSupportedImageModel() }
+        if (coverUrl != null && coverUrl != manga.thumbnail_url) {
+            val request = ImageRequest.Builder(itemView.context)
+                .data(coverUrl)
+                .placeholder(drawable)
+                .error(drawable)
+                .diskCachePolicy(CachePolicy.READ_ONLY)
+                .target(
+                    onSuccess = {
+                        binding.mangaCover.setImageDrawable(it.asDrawable(itemView.resources))
+                    },
+                )
+                .build()
+            itemView.context.imageLoader.enqueue(request)
+        } else {
+            binding.mangaCover.loadManga(manga) {
+                placeholder(drawable)
+                error(drawable)
+                if (manga.favorite) networkCachePolicy(CachePolicy.READ_ONLY)
+                diskCachePolicy(CachePolicy.READ_ONLY)
+            }
         }
-        binding.backdrop.loadManga(manga) {
-            placeholder(drawable)
-            error(drawable)
-            if (manga.favorite) networkCachePolicy(CachePolicy.READ_ONLY)
-            diskCachePolicy(CachePolicy.READ_ONLY)
-            target(
+        loadBackdrop(
+            model = resolved?.bannerUrl?.takeIf { it.isSupportedImageModel() }
+                ?: coverUrl
+                ?: manga,
+            placeholder = drawable,
+            manga = manga,
+        )
+    }
+
+    private fun loadBackdrop(model: Any, placeholder: android.graphics.drawable.Drawable?, manga: Manga) {
+        binding ?: return
+        val requestModel = if (model is Manga) model.cover() else model
+        val requestBuilder = ImageRequest.Builder(itemView.context)
+            .data(requestModel)
+            .placeholder(placeholder)
+            .error(placeholder)
+            .diskCachePolicy(CachePolicy.READ_ONLY)
+            .target(
                 onSuccess = {
                     val result = it.asDrawable(itemView.resources)
                     val bitmap = (result as? BitmapDrawable)?.bitmap
@@ -851,24 +1035,28 @@ class MangaHeaderHolder(
                     applyBlur()
                 },
             )
+        if (model is Manga && manga.favorite) {
+            requestBuilder.networkCachePolicy(CachePolicy.READ_ONLY)
         }
+        itemView.context.imageLoader.enqueue(requestBuilder.build())
     }
 
     fun expand() {
         binding ?: return
         binding.subItemGroup.isVisible = true
-        binding.mangaGenresTags.isVisible = true
+        binding.mangaGenresTags.isVisible = showGenresSection
         if (!showMoreButton) {
             binding.moreButtonGroup.isVisible = false
         } else {
             if (binding.mangaSummary.maxLines != Integer.MAX_VALUE) {
-                binding.moreButtonGroup.isVisible = !isTablet
+                binding.moreButtonGroup.isVisible = showDescriptionSection && !isTablet
             } else {
-                binding.lessButton.isVisible = !isTablet
+                binding.lessButton.isVisible = showDescriptionSection && !isTablet
             }
         }
         binding.buttonGroupCompose?.isVisible = showReadingButton
-        binding.metadataCompose?.isVisible = true
+        binding.metadataCompose?.isVisible = showMetadataSection
+        applyDisplayVisibility()
     }
 
     override fun onLongClick(view: View?): Boolean {
@@ -876,6 +1064,728 @@ class MangaHeaderHolder(
         return false
     }
 }
+
+private const val CHARACTER_PREVIEW_LIMIT = 8
+private const val EXTRA_IMAGE_LIMIT = 12
+private const val EXTERNAL_LINK_LIMIT = 8
+private val enrichmentJson = Json { ignoreUnknownKeys = true }
+
+private data class ResolvedSeriesMetadata(
+    val title: String,
+    val author: String?,
+    val artist: String?,
+    val description: String?,
+    val genres: List<String>,
+    val status: String?,
+    val coverUrl: String?,
+    val bannerUrl: String?,
+)
+
+internal data class SeriesCharacterCard(
+    val name: String,
+    val role: String?,
+    val imageUrl: String?,
+    val url: String?,
+    val sourceLabel: String?,
+) {
+    val subtitle: String?
+        get() = role?.takeIf { it.isNotBlank() } ?: sourceLabel?.takeIf { it.isNotBlank() }
+}
+
+internal data class SeriesExtraImage(
+    val url: String,
+    val label: String?,
+)
+
+internal data class SeriesExternalLink(
+    val url: String,
+    val label: String?,
+)
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SeriesEnrichmentSection(
+    knowledge: SeriesKnowledgeBundle?,
+    showAliases: Boolean,
+    showCharacters: Boolean,
+    showTrackers: Boolean,
+    showExtraImages: Boolean,
+    showQuotesTranslation: Boolean,
+    quoteCount: Int,
+    translationMode: TranslationMode,
+    translationCacheEnabled: Boolean,
+    onSearch: (String) -> Unit,
+    onOpenLink: (String) -> Unit,
+) {
+    val displayValues = remember(knowledge, showTrackers) {
+        knowledge?.metadataValues
+            .orEmpty()
+            .filter { value -> showTrackers || value.providerType != MetadataProviderType.TRACKER }
+    }
+    val aliases = remember(knowledge, showAliases) {
+        if (!showAliases) {
+            emptyList()
+        } else {
+            displayValues
+                .filter { it.field == SeriesMetadataField.ALIASES.key }
+                .flatMap { it.value.split(",") }
+                .mapNotNull { it.trim().takeUnless(String::isBlank) }
+                .distinct()
+        }
+    }
+    val characters = remember(knowledge, showCharacters, showTrackers) {
+        if (!showCharacters) {
+            emptyList()
+        } else {
+            parseSeriesCharacters(knowledge, includeTrackers = showTrackers)
+        }
+    }
+    val extraImages = remember(knowledge, showExtraImages) {
+        if (!showExtraImages) {
+            emptyList()
+        } else {
+            parseSeriesExtraImages(displayValues)
+        }
+    }
+    val externalLinks = remember(knowledge, showTrackers) {
+        if (!showTrackers) {
+            emptyList()
+        } else {
+            parseSeriesExternalLinks(displayValues)
+        }
+    }
+    if (
+        aliases.isEmpty() &&
+        characters.isEmpty() &&
+        extraImages.isEmpty() &&
+        externalLinks.isEmpty() &&
+        !showQuotesTranslation
+    ) {
+        return
+    }
+
+    var charactersExpanded by remember(characters) { mutableStateOf(false) }
+    val visibleCharacters = if (charactersExpanded) {
+        characters
+    } else {
+        characters.take(CHARACTER_PREVIEW_LIMIT)
+    }
+    val hiddenCharacterCount = (characters.size - visibleCharacters.size).coerceAtLeast(0)
+    val translationEntityCount = knowledge?.entities.orEmpty().size
+    val translationEventCount = knowledge?.events.orEmpty().size
+    val activeNudgeCount = knowledge?.nudges.orEmpty().count { it.active }
+
+    @Composable
+    fun Chip(
+        text: String,
+        onClick: (() -> Unit)? = null,
+        prominent: Boolean = false,
+    ) {
+        val containerColor = when {
+            prominent -> MaterialTheme.colorScheme.primaryContainer
+            onClick != null -> MaterialTheme.colorScheme.secondaryContainer
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        }
+        val contentColor = when {
+            prominent -> MaterialTheme.colorScheme.onPrimaryContainer
+            onClick != null -> MaterialTheme.colorScheme.onSecondaryContainer
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+        val borderColor = when {
+            prominent -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+            onClick != null -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.32f)
+            else -> MaterialTheme.colorScheme.outlineVariant
+        }
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+            Surface(
+                modifier = Modifier
+                    .padding(vertical = 3.dp)
+                    .then(if (onClick != null) Modifier.combinedClickable(onClick = onClick) else Modifier),
+                shape = CircleShape,
+                color = containerColor,
+                border = BorderStroke(1.dp, borderColor),
+            ) {
+                Text(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    text = text,
+                    style = if (prominent) {
+                        MaterialTheme.typography.labelMedium
+                    } else {
+                        MaterialTheme.typography.bodySmall
+                    },
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun SectionLabel(text: String) {
+        Text(
+            modifier = Modifier.padding(top = 2.dp),
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    @Composable
+    fun QuotesTranslationBlock() {
+        if (!showQuotesTranslation) return
+        val modeLabel = stringResource(
+            if (translationMode == TranslationMode.ADVANCED) {
+                MR.strings.pref_translation_mode_advanced
+            } else {
+                MR.strings.pref_translation_mode_simple
+            },
+        )
+        val cacheLabel = stringResource(
+            if (translationCacheEnabled) {
+                MR.strings.enabled
+            } else {
+                MR.strings.disabled
+            },
+        )
+        SectionLabel(stringResource(MR.strings.series_display_quotes_translation))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Chip(
+                text = stringResource(MR.strings.series_translation_quote_count_format, quoteCount),
+                prominent = true,
+            )
+            Chip(
+                text = stringResource(MR.strings.series_translation_mode_status_format, modeLabel),
+            )
+            Chip(
+                text = stringResource(MR.strings.series_translation_cache_status_format, cacheLabel),
+            )
+            if (translationMode == TranslationMode.ADVANCED && translationEntityCount > 0) {
+                Chip(
+                    text = stringResource(
+                        MR.strings.series_translation_entities_count_format,
+                        translationEntityCount,
+                    ),
+                )
+            }
+            if (translationMode == TranslationMode.ADVANCED && translationEventCount > 0) {
+                Chip(
+                    text = stringResource(
+                        MR.strings.advanced_translation_event_count_format,
+                        translationEventCount,
+                    ),
+                )
+            }
+            if (translationMode == TranslationMode.ADVANCED && activeNudgeCount > 0) {
+                Chip(
+                    text = stringResource(
+                        MR.strings.series_translation_nudges_count_format,
+                        activeNudgeCount,
+                    ),
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun CharacterCard(character: SeriesCharacterCard) {
+        Surface(
+            modifier = Modifier
+                .width(128.dp)
+                .combinedClickable(
+                    onClick = {
+                        character.url?.let(onOpenLink) ?: onSearch(character.name)
+                    },
+                ),
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+            tonalElevation = 1.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                val imageModifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .clip(MaterialTheme.shapes.small)
+                val imageUrl = character.imageUrl?.takeIf { it.isNotBlank() }
+                if (imageUrl != null) {
+                    AsyncImage(
+                        modifier = imageModifier,
+                        model = imageUrl,
+                        contentDescription = character.name,
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(
+                        modifier = imageModifier
+                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                        contentAlignment = androidx.compose.ui.Alignment.Center,
+                    ) {
+                        Text(
+                            text = character.name
+                                .split(Regex("\\s+"))
+                                .mapNotNull { it.firstOrNull()?.uppercaseChar()?.toString() }
+                                .take(2)
+                                .joinToString(""),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+                Text(
+                    text = character.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                character.role?.takeIf { it.isNotBlank() }?.let { role ->
+                    Text(
+                        text = role,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                character.sourceLabel?.takeIf { it.isNotBlank() && it != character.role }?.let { source ->
+                    Text(
+                        text = source,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ExtraImagesBlock(images: List<SeriesExtraImage>) {
+        if (images.isEmpty()) return
+        SectionLabel(stringResource(MR.strings.series_display_extra_images))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            itemsIndexed(images, key = { _, image -> image.url }) { index, image ->
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    AsyncImage(
+                        modifier = Modifier
+                            .height(104.dp)
+                            .aspectRatio(16f / 10f)
+                            .clip(MaterialTheme.shapes.small),
+                        model = image.url,
+                        contentDescription = image.label
+                            ?: stringResource(MR.strings.series_metadata_extra_image_description_format, index + 1),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ExternalLinksBlock(links: List<SeriesExternalLink>) {
+        if (links.isEmpty()) return
+        SectionLabel(stringResource(MR.strings.series_display_external_links))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            links.forEach { link ->
+                Chip(
+                    text = link.label ?: link.url,
+                    onClick = { onOpenLink(link.url) },
+                )
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (aliases.isNotEmpty()) {
+            SectionLabel(stringResource(MR.strings.series_display_aliases))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                aliases.forEach { alias ->
+                    Chip(text = alias, onClick = { onSearch(alias) })
+                }
+            }
+        }
+        if (characters.isNotEmpty()) {
+            SectionLabel(stringResource(MR.strings.series_display_characters))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(visibleCharacters) { character ->
+                    CharacterCard(character)
+                }
+                if (hiddenCharacterCount > 0) {
+                    item {
+                        Chip(
+                            text = stringResource(MR.strings.series_enrichment_more_count_format, hiddenCharacterCount),
+                            onClick = { charactersExpanded = true },
+                            prominent = true,
+                        )
+                    }
+                }
+                if (charactersExpanded && characters.size > CHARACTER_PREVIEW_LIMIT) {
+                    item {
+                        Chip(
+                            text = stringResource(MR.strings.series_details_show_less),
+                            onClick = { charactersExpanded = false },
+                        )
+                    }
+                }
+            }
+        }
+        QuotesTranslationBlock()
+        ExtraImagesBlock(extraImages)
+        ExternalLinksBlock(externalLinks)
+    }
+}
+
+private fun resolveSeriesMetadata(
+    manga: Manga,
+    knowledge: SeriesKnowledgeBundle?,
+    includeTrackers: Boolean,
+): ResolvedSeriesMetadata {
+    val metadataValues = (
+        manga.sourceMetadataValues() +
+            knowledge?.metadataValues.orEmpty()
+        )
+        .filter { value ->
+            includeTrackers || value.providerType != MetadataProviderType.TRACKER
+        }
+    val choices = knowledge?.metadataChoices.orEmpty().associateBy { it.field }
+
+    fun chosenValue(field: SeriesMetadataField): SeriesMetadataValue? {
+        val choice = choices[field.key] ?: return null
+        return metadataValues
+            .filter { it.field == field.key }
+            .filter { it.providerType == choice.providerType && it.providerId == choice.providerId }
+            .maxByOrNull { it.updatedAt }
+    }
+
+    fun chosenText(field: SeriesMetadataField, fallback: String?): String? =
+        chosenValue(field)?.value?.trim()?.takeIf { it.isNotBlank() }
+            ?: fallback?.trim()?.takeIf { it.isNotBlank() }
+
+    val sourceGenres = manga.getGenres().orEmpty()
+    val enrichedGenres = metadataValues
+        .filter { it.field == SeriesMetadataField.GENRES.key }
+        .flatMap { it.value.split(",", ";", "\n") }
+        .mapNotNull { it.trim().takeUnless(String::isBlank) }
+    val chosenGenres = chosenValue(SeriesMetadataField.GENRES)
+        ?.value
+        ?.split(",", ";", "\n")
+        ?.mapNotNull { it.trim().takeUnless(String::isBlank) }
+    val genres = (chosenGenres ?: (sourceGenres + enrichedGenres))
+        .distinctBy { it.lowercase() }
+
+    return ResolvedSeriesMetadata(
+        title = chosenText(SeriesMetadataField.TITLE, manga.title) ?: manga.title,
+        author = chosenText(SeriesMetadataField.AUTHOR, manga.author),
+        artist = chosenText(SeriesMetadataField.ARTIST, manga.artist),
+        description = chosenText(SeriesMetadataField.DESCRIPTION, manga.description),
+        genres = genres,
+        status = chosenText(SeriesMetadataField.STATUS, manga.status.toString()),
+        coverUrl = chosenText(SeriesMetadataField.COVER, manga.thumbnail_url),
+        bannerUrl = chosenText(
+            SeriesMetadataField.BANNER,
+            metadataValues
+                .filter { it.field == SeriesMetadataField.BANNER.key }
+                .maxByOrNull { it.updatedAt }
+                ?.value,
+        ),
+    )
+}
+
+private fun Int.stringResourceForMangaStatus() = when (this) {
+    SManga.ONGOING -> MR.strings.ongoing
+    SManga.COMPLETED -> MR.strings.completed
+    SManga.LICENSED -> MR.strings.licensed
+    SManga.PUBLISHING_FINISHED -> MR.strings.publishing_finished
+    SManga.CANCELLED -> MR.strings.cancelled
+    SManga.ON_HIATUS -> MR.strings.on_hiatus
+    else -> MR.strings.unknown_status
+}
+
+internal fun parseSeriesCharacters(
+    knowledge: SeriesKnowledgeBundle?,
+    includeTrackers: Boolean,
+): List<SeriesCharacterCard> {
+    val metadataCharacters = knowledge?.metadataValues
+        .orEmpty()
+        .filter { it.field == SeriesMetadataField.CHARACTERS.key }
+        .filter { value -> includeTrackers || value.providerType != MetadataProviderType.TRACKER }
+        .flatMap { value ->
+            parseCharacterMetadata(value.extraJson, value.providerName) +
+                parseCharacterMetadata(value.value, value.providerName) +
+                parseDelimitedCharacterValues(value.value, value.providerName)
+        }
+
+    return metadataCharacters
+        .mapNotNull { character ->
+            character.name.trim().takeUnless(String::isBlank)?.let { character.copy(name = it) }
+        }
+        .sortedWith(
+            compareByDescending<SeriesCharacterCard> { !it.url.isNullOrBlank() }
+                .thenByDescending { !it.imageUrl.isNullOrBlank() },
+        )
+        .distinctBy { it.name.lowercase() }
+}
+
+private fun parseCharacterMetadata(raw: String?, providerName: String): List<SeriesCharacterCard> {
+    val text = raw?.trim()?.takeIf { it.isNotBlank() } ?: return emptyList()
+    val element = runCatching { enrichmentJson.parseToJsonElement(text) }.getOrNull() ?: return emptyList()
+    return when (element) {
+        is JsonArray -> element.toSeriesCharacters(providerName)
+        is JsonObject -> element.toSeriesCharacters(providerName)
+        else -> emptyList()
+    }
+}
+
+private fun parseDelimitedCharacterValues(raw: String?, providerName: String): List<SeriesCharacterCard> =
+    raw
+        ?.split(Regex("[,;\\n]"))
+        ?.mapNotNull { it.trim().takeUnless(String::isBlank) }
+        ?.filterNot { it.startsWith("[") || it.startsWith("{") }
+        ?.map {
+            SeriesCharacterCard(
+                name = it,
+                role = null,
+                imageUrl = null,
+                url = null,
+                sourceLabel = providerName,
+            )
+        }
+        .orEmpty()
+
+private fun JsonArray.toSeriesCharacters(providerName: String): List<SeriesCharacterCard> = buildList {
+    for (element in this@toSeriesCharacters) {
+        val nestedObject = element as? JsonObject
+        if (nestedObject != null) {
+            addAll(nestedObject.toSeriesCharacters(providerName))
+        } else {
+            element.cleanString()?.let {
+                add(
+                    SeriesCharacterCard(
+                        name = it,
+                        role = null,
+                        imageUrl = null,
+                        url = null,
+                        sourceLabel = providerName,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+private fun JsonObject.toSeriesCharacters(providerName: String): List<SeriesCharacterCard> =
+    listOfNotNull(characterEntry(providerName)) +
+        listOf("characters", "items", "data").flatMap { key ->
+            (get(key) as? JsonArray)?.toSeriesCharacters(providerName).orEmpty()
+        }
+
+private fun JsonObject.characterEntry(providerName: String): SeriesCharacterCard? {
+    val name = firstNonBlank("name", "title", "full", "userPreferred", "native") ?: return null
+    val imageUrl = firstNonBlank("imageUrl", "image", "thumbnailUrl", "thumbnail", "cover")
+    val url = firstNonBlank("url", "siteUrl", "pageUrl", "trackingUrl", "tracking_url")
+    val role = firstNonBlank("role", "type")
+    val source = firstNonBlank("source", "provider", "site") ?: providerName
+    return SeriesCharacterCard(
+        name = name,
+        role = role,
+        imageUrl = imageUrl,
+        url = url,
+        sourceLabel = source,
+    )
+}
+
+internal fun parseSeriesExtraImages(values: List<SeriesMetadataValue>): List<SeriesExtraImage> =
+    values
+        .asSequence()
+        .filter { it.field == SeriesMetadataField.IMAGES.key }
+        .flatMap { value ->
+            (
+                parseImageMetadata(value.extraJson) +
+                    parseImageMetadata(value.value) +
+                    parseDelimitedImageValues(value.value)
+                )
+                .asSequence()
+                .map { image ->
+                    if (image.label.isNullOrBlank()) {
+                        image.copy(label = value.providerName.takeIf { it.isNotBlank() })
+                    } else {
+                        image
+                    }
+                }
+        }
+        .filter { it.url.isSupportedImageModel() }
+        .distinctBy { it.url }
+        .take(EXTRA_IMAGE_LIMIT)
+        .toList()
+
+internal fun parseSeriesExternalLinks(values: List<SeriesMetadataValue>): List<SeriesExternalLink> =
+    values
+        .asSequence()
+        .filter { it.field == SeriesMetadataField.EXTERNAL_LINKS.key }
+        .flatMap { value ->
+            (
+                parseExternalLinkMetadata(value.extraJson) +
+                    parseExternalLinkMetadata(value.value) +
+                    parseDelimitedExternalLinks(value.value)
+                )
+                .asSequence()
+                .map { link ->
+                    if (link.label.isNullOrBlank()) {
+                        link.copy(
+                            label = value.providerName.takeIf { it.isNotBlank() }
+                                ?: link.url.hostLabel(),
+                        )
+                    } else {
+                        link
+                    }
+                }
+        }
+        .filter { it.url.isSupportedExternalLink() }
+        .distinctBy { it.url }
+        .take(EXTERNAL_LINK_LIMIT)
+        .toList()
+
+private fun parseImageMetadata(raw: String?): List<SeriesExtraImage> {
+    val text = raw?.trim()?.takeIf { it.isNotBlank() } ?: return emptyList()
+    val element = runCatching { enrichmentJson.parseToJsonElement(text) }.getOrNull() ?: return emptyList()
+    return when (element) {
+        is JsonArray -> element.toSeriesExtraImages()
+        is JsonObject -> element.toSeriesExtraImages()
+        else -> emptyList()
+    }
+}
+
+private fun parseDelimitedImageValues(raw: String?): List<SeriesExtraImage> =
+    raw
+        ?.split(Regex("[,;\\n]"))
+        ?.mapNotNull { it.trim().takeUnless(String::isBlank) }
+        ?.map { SeriesExtraImage(url = it, label = null) }
+        .orEmpty()
+
+private fun parseExternalLinkMetadata(raw: String?): List<SeriesExternalLink> {
+    val text = raw?.trim()?.takeIf { it.isNotBlank() } ?: return emptyList()
+    val element = runCatching { enrichmentJson.parseToJsonElement(text) }.getOrNull() ?: return emptyList()
+    return when (element) {
+        is JsonArray -> element.toSeriesExternalLinks()
+        is JsonObject -> element.toSeriesExternalLinks()
+        else -> emptyList()
+    }
+}
+
+private fun parseDelimitedExternalLinks(raw: String?): List<SeriesExternalLink> =
+    raw
+        ?.split(Regex("[,;\\n]"))
+        ?.mapNotNull { it.trim().takeUnless(String::isBlank) }
+        ?.map { SeriesExternalLink(url = it, label = null) }
+        .orEmpty()
+
+private fun JsonArray.toSeriesExtraImages(): List<SeriesExtraImage> = buildList {
+    for (element in this@toSeriesExtraImages) {
+        val nestedObject = element as? JsonObject
+        if (nestedObject != null) {
+            addAll(nestedObject.toSeriesExtraImages())
+        } else {
+            element.cleanString()
+                ?.let { add(SeriesExtraImage(url = it, label = null)) }
+        }
+    }
+}
+
+private fun JsonArray.toSeriesExternalLinks(): List<SeriesExternalLink> = buildList {
+    for (element in this@toSeriesExternalLinks) {
+        val nestedObject = element as? JsonObject
+        if (nestedObject != null) {
+            addAll(nestedObject.toSeriesExternalLinks())
+        } else {
+            element.cleanString()
+                ?.let { add(SeriesExternalLink(url = it, label = null)) }
+        }
+    }
+}
+
+private fun JsonObject.toSeriesExtraImages(): List<SeriesExtraImage> = buildList {
+    imageEntry()?.let(::add)
+    listOf("images", "items", "extraImages").forEach { key ->
+        (get(key) as? JsonArray)?.let { addAll(it.toSeriesExtraImages()) }
+    }
+}
+
+private fun JsonObject.toSeriesExternalLinks(): List<SeriesExternalLink> = buildList {
+    linkEntry()?.let(::add)
+    listOf("links", "externalLinks", "items").forEach { key ->
+        (get(key) as? JsonArray)?.let { addAll(it.toSeriesExternalLinks()) }
+    }
+}
+
+private fun JsonObject.imageEntry(): SeriesExtraImage? {
+    val url = firstNonBlank("url", "imageUrl", "image", "src", "thumbnailUrl", "thumbnail", "cover", "banner")
+        ?: return null
+    val label = firstNonBlank("title", "label", "caption", "alt", "description")
+    return SeriesExtraImage(url = url, label = label)
+}
+
+private fun JsonObject.linkEntry(): SeriesExternalLink? {
+    val url = firstNonBlank("url", "link", "href", "trackingUrl", "tracking_url")
+        ?: return null
+    val label = firstNonBlank("title", "label", "name", "site", "provider")
+    return SeriesExternalLink(url = url, label = label)
+}
+
+private fun JsonObject.firstNonBlank(vararg keys: String): String? =
+    keys.firstNotNullOfOrNull { key ->
+        get(key)?.cleanString()
+    }
+
+private fun JsonElement.cleanString(): String? =
+    runCatching { jsonPrimitive.content }
+        .getOrNull()
+        ?.trim()
+        ?.takeUnless { it.isBlank() || it == "null" }
+
+private fun String.isSupportedImageModel(): Boolean {
+    val normalized = trim().lowercase()
+    return normalized.startsWith("http://") ||
+        normalized.startsWith("https://") ||
+        normalized.startsWith("file://") ||
+        normalized.startsWith("content://") ||
+        normalized.startsWith("android.resource://") ||
+        normalized.startsWith("data:image/")
+}
+
+private fun String.isSupportedExternalLink(): Boolean {
+    val normalized = trim().lowercase()
+    return normalized.startsWith("http://") || normalized.startsWith("https://")
+}
+
+private fun String.hostLabel(): String? =
+    runCatching {
+        java.net.URI(trim()).host
+            ?.removePrefix("www.")
+            ?.takeIf { it.isNotBlank() }
+    }.getOrNull()
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

@@ -7,6 +7,7 @@ import yokai.data.extension.repo.ExtensionRepoRepositoryImpl
 import yokai.data.history.HistoryRepositoryImpl
 import yokai.data.library.custom.CustomMangaRepositoryImpl
 import yokai.data.recents.RecentsHiddenRepositoryImpl
+import yokai.data.series.SeriesKnowledgeRepositoryImpl
 import yokai.data.stats.NovelStatsRepositoryImpl
 import yokai.data.manga.EhFavoritesRepositoryImpl
 import yokai.data.manga.MangaRepositoryImpl
@@ -48,6 +49,7 @@ import yokai.domain.manga.interactor.GetLibraryManga
 import yokai.domain.manga.interactor.GetManga
 import yokai.domain.manga.interactor.GetMergedReferencesById
 import yokai.domain.manga.interactor.FetchInterval
+import yokai.domain.manga.interactor.GetUpcomingManga
 import yokai.domain.manga.interactor.InsertManga
 import yokai.domain.manga.interactor.UpdateManga
 import yokai.domain.recents.RecentsHiddenRepository
@@ -55,6 +57,7 @@ import yokai.domain.recents.interactor.GetHiddenRecents
 import yokai.domain.recents.interactor.GetRecents
 import yokai.domain.recents.interactor.HideRecents
 import yokai.domain.recents.interactor.UnhideRecents
+import yokai.domain.series.SeriesKnowledgeRepository
 import yokai.domain.source.browse.filter.FilterSerializer
 import yokai.domain.stats.NovelStatsRepository
 import yokai.domain.stats.interactor.GetNovelStats
@@ -94,6 +97,7 @@ fun domainModule() = module {
     single<MangaRepository> { MangaRepositoryImpl(get()) }
     factory { GetManga(get()) }
     factory { GetLibraryManga(get()) }
+    factory { GetUpcomingManga(get()) }
     factory { InsertManga(get()) }
     factory { FetchInterval(get()) }
     factory { UpdateManga(get(), get()) }
@@ -126,6 +130,8 @@ fun domainModule() = module {
     factory { HideRecents(get()) }
     factory { UnhideRecents(get()) }
     factory { GetHiddenRecents(get()) }
+
+    single<SeriesKnowledgeRepository> { SeriesKnowledgeRepositoryImpl(get()) }
 
     single<TrackRepository> { TrackRepositoryImpl(get()) }
     factory { DeleteTrack(get()) }

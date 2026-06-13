@@ -8,11 +8,14 @@ import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALListItem
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALListItemStatus
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALCharacterMetadata
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALCharactersResult
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALManga
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALOAuth
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALSearchResult
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUser
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALUserSearchResult
+import eu.kanade.tachiyomi.data.track.myanimelist.dto.toCharacterMetadata
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -83,13 +86,7 @@ class MyAnimeListApi(private val client: OkHttpClient, interceptor: MyAnimeListI
 
     suspend fun getMangaDetails(id: Int): TrackSearch {
         return withIOContext {
-            val url = "$BASE_API_URL/manga".toUri().buildUpon()
-                .appendPath(id.toString())
-                .appendQueryParameter("fields", "id,title,synopsis,num_chapters,main_picture,status,media_type,start_date")
-                .build()
-            authClient.newCall(GET(url.toString()))
-                .awaitSuccess()
-                .parseAs<MALManga>()
+            getMangaMetadata(id.toLong())
                 .let {
                     TrackSearch.create(TrackManager.MYANIMELIST).apply {
                         media_id = it.id
@@ -97,12 +94,40 @@ class MyAnimeListApi(private val client: OkHttpClient, interceptor: MyAnimeListI
                         summary = it.synopsis
                         total_chapters = it.numChapters
                         cover_url = (it.covers?.large ?: it.covers?.medium).orEmpty()
-                        tracking_url = "https://myanimelist.net/manga/$media_id"
+                        tracking_url = webMangaUrl(media_id)
                         publishing_status = it.status.replace("_", " ")
                         publishing_type = it.mediaType.replace("_", " ")
                         start_date = it.startDate ?: ""
                     }
                 }
+        }
+    }
+
+    suspend fun getMangaMetadata(id: Long): MALManga {
+        return withIOContext {
+            val url = "$BASE_API_URL/manga".toUri().buildUpon()
+                .appendPath(id.toString())
+                .appendQueryParameter(
+                    "fields",
+                    "id,title,synopsis,num_chapters,mean,main_picture,status,media_type,start_date,genres",
+                )
+                .build()
+            authClient.newCall(GET(url.toString()))
+                .awaitSuccess()
+                .parseAs()
+        }
+    }
+
+    suspend fun getCharacters(id: Long): List<MALCharacterMetadata> {
+        return withIOContext {
+            val url = "$JIKAN_API_URL/manga".toUri().buildUpon()
+                .appendPath(id.toString())
+                .appendPath("characters")
+                .build()
+            client.newCall(GET(url.toString()))
+                .awaitSuccess()
+                .parseAs<MALCharactersResult>()
+                .toCharacterMetadata()
         }
     }
 
@@ -234,8 +259,10 @@ class MyAnimeListApi(private val client: OkHttpClient, interceptor: MyAnimeListI
     companion object {
         private const val CLIENT_ID = "9e6656c53d1910999cc3c537e0e6256a"
 
+        private const val BASE_WEB_URL = "https://myanimelist.net"
         private const val BASE_OAUTH_URL = "https://myanimelist.net/v1/oauth2"
         private const val BASE_API_URL = "https://api.myanimelist.net/v2"
+        private const val JIKAN_API_URL = "https://api.jikan.moe/v4"
 
         private const val LIST_PAGINATION_AMOUNT = 250
 
@@ -251,6 +278,8 @@ class MyAnimeListApi(private val client: OkHttpClient, interceptor: MyAnimeListI
             .appendPath(id.toString())
             .appendPath("my_list_status")
             .build()
+
+        fun webMangaUrl(id: Long): String = "$BASE_WEB_URL/manga/$id"
 
         fun refreshTokenRequest(oauth: MALOAuth): Request {
             val formBody: RequestBody = FormBody.Builder()

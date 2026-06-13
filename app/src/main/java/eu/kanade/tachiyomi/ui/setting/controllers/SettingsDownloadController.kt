@@ -23,7 +23,9 @@ import eu.kanade.tachiyomi.ui.setting.titleMRes as titleRes
 import eu.kanade.tachiyomi.ui.setting.triStateListPreference
 import eu.kanade.tachiyomi.util.lang.addBetaTag
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import yokai.util.koin.injectLazy
 import yokai.domain.category.interactor.GetCategories
 import yokai.domain.download.DownloadPreferences
@@ -34,6 +36,9 @@ class SettingsDownloadController : SettingsLegacyController() {
     private val getCategories: GetCategories by injectLazy()
 
     private val downloadPreferences: DownloadPreferences by injectLazy()
+
+    private var cachedCategories: List<Category>? = null
+    private var loadingCategories = false
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
         titleRes = MR.strings.downloads
@@ -73,8 +78,10 @@ class SettingsDownloadController : SettingsLegacyController() {
             showSeekBarValue = true
         }
 
-        // FIXME: Don't do blocking
-        val dbCategories = runBlocking { getCategories.await() }
+        val dbCategories = cachedCategories ?: run {
+            loadCategoriesThenRebuild(this)
+            return@apply
+        }
         val categories = listOf(Category.createDefault(context)) + dbCategories
 
         preferenceCategory {
@@ -187,5 +194,20 @@ class SettingsDownloadController : SettingsLegacyController() {
 
     private fun navigateTo(controller: Controller) {
         router.pushController(controller.withFadeTransaction())
+    }
+
+    private fun loadCategoriesThenRebuild(screen: PreferenceScreen) {
+        if (loadingCategories) return
+        loadingCategories = true
+        viewScope.launch {
+            cachedCategories = try {
+                withContext(Dispatchers.IO) { getCategories.await() }
+            } catch (_: Exception) {
+                emptyList()
+            }
+            loadingCategories = false
+            screen.removeAll()
+            setupPreferenceScreen(screen)
+        }
     }
 }

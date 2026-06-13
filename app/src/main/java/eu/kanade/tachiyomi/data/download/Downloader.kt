@@ -54,7 +54,6 @@ import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
 import nl.adaptivity.xmlutil.serialization.XML
 import okhttp3.Response
@@ -662,18 +661,13 @@ class Downloader(
      * @param chapter the chapter.
      * @param chapterUrl the resolved URL for the chapter.
      */
-    private fun createComicInfoFile(
+    private suspend fun createComicInfoFile(
         dir: UniFile,
         manga: Manga,
         chapter: Chapter,
         source: HttpSource,
     ) {
-        val categories = manga.id?.let { mangaId ->
-            // FIXME: Don't do blocking
-            runBlocking {
-                getCategories.awaitByMangaId(mangaId)
-            }
-        }
+        val categories = manga.id?.let { mangaId -> getCategories.awaitByMangaId(mangaId) }
             .orEmpty()
             .map { it.name.trim() }
             .takeUnless { it.isEmpty() }

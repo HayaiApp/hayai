@@ -17,6 +17,13 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_view_upcoming"
+        android:icon="@drawable/ic_calendar_text_outline_24dp"
+        android:title="@string/action_view_upcoming"
+        app:iconTint="?attr/actionBarTintColor"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_more"
         android:icon="@drawable/ic_more_vert_24dp"
         android:title="@string/more"

@@ -33,9 +33,8 @@ import eu.kanade.tachiyomi.util.lang.chop
 import eu.kanade.tachiyomi.util.system.notification
 import eu.kanade.tachiyomi.util.system.notificationBuilder
 import eu.kanade.tachiyomi.util.system.notificationManager
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import yokai.util.koin.injectLazy
 import yokai.domain.manga.models.cover
 import yokai.i18n.MR
@@ -184,11 +183,10 @@ class LibraryUpdateNotifier(private val context: Context) {
      *
      * @param updates a list of manga with new updates.
      */
-    @OptIn(DelicateCoroutinesApi::class)
-    fun showResultNotification(newUpdates: Map<LibraryManga, Array<Chapter>>) {
+    suspend fun showResultNotification(newUpdates: Map<LibraryManga, Array<Chapter>>) {
         // create a copy of the list since it will be cleared by the time it is used
         val updates = newUpdates.toMap()
-        GlobalScope.launch {
+        withContext(Dispatchers.Default) {
             val notifications = ArrayList<Pair<Notification, Int>>()
             if (!preferences.hideNotificationContent().get()) {
                 updates.forEach {

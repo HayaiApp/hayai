@@ -3,10 +3,15 @@ package eu.kanade.tachiyomi.data.track.anilist
 import androidx.core.net.toUri
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAddMangaResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALCharacterMetadata
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALCharactersResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALCurrentUserResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALManga
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALMediaResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALSearchResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALUserListMangaQueryResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.toCharacterMetadata
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -110,6 +115,38 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                 .map { it.toALUserManga() }
                 .firstOrNull()
                 ?.toTrack()
+        }
+    }
+
+    suspend fun getCharacters(mediaId: Long): List<ALCharacterMetadata> {
+        return withIOContext {
+            val payload = buildJsonObject {
+                put("query", charactersQuery())
+                putJsonObject("variables") {
+                    put("mangaId", mediaId)
+                }
+            }
+            authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                .awaitSuccess()
+                .parseAs<ALCharactersResult>()
+                .toCharacterMetadata()
+        }
+    }
+
+    suspend fun getMangaDetails(mediaId: Long): ALManga {
+        return withIOContext {
+            val payload = buildJsonObject {
+                put("query", mangaDetailsQuery())
+                putJsonObject("variables") {
+                    put("mangaId", mediaId)
+                }
+            }
+            authClient.newCall(POST(API_URL, body = payload.toString().toRequestBody(jsonMime)))
+                .awaitSuccess()
+                .parseAs<ALMediaResult>()
+                .data
+                .media
+                .toALManga()
         }
     }
 
@@ -236,24 +273,18 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
             |query Search(${'$'}query: String) {
                 |Page (perPage: 50) {
                     |media(search: ${'$'}query, type: MANGA, format_not_in: [NOVEL]) {
-                        |id
-                        |title {
-                            |userPreferred
-                        |}
-                        |coverImage {
-                            |large
-                        |}
-                        |format
-                        |status
-                        |chapters
-                        |description
-                        |startDate {
-                            |year
-                            |month
-                            |day
-                        |}
-                        |averageScore
+                        |${mediaFields()}
                     |}
+                |}
+            |}
+            |
+            """.trimMargin()
+
+        fun mangaDetailsQuery() =
+            """
+            |query MangaDetails(${'$'}mangaId: Int) {
+                |Media(id: ${'$'}mangaId, type: MANGA) {
+                    |${mediaFields()}
                 |}
             |}
             |
@@ -279,21 +310,35 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                             |day
                         |}
                         |media {
-                            |id
-                            |title {
-                                |userPreferred
-                            |}
-                            |coverImage {
-                                |large
-                            |}
-                            |format
-                            |status
-                            |chapters
-                            |description
-                            |startDate {
-                                |year
-                                |month
-                                |day
+                            |${mediaFields()}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+
+        fun charactersQuery() =
+            """
+            |query Characters(${'$'}mangaId: Int) {
+                |Media(id: ${'$'}mangaId, type: MANGA) {
+                    |characters(sort: [ROLE, RELEVANCE, ID], perPage: 25) {
+                        |edges {
+                            |role
+                            |node {
+                                |id
+                                |name {
+                                    |full
+                                    |native
+                                    |userPreferred
+                                |}
+                                |image {
+                                    |large
+                                    |medium
+                                |}
+                                |gender
+                                |description
+                                |siteUrl
                             |}
                         |}
                     |}
@@ -313,6 +358,40 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                 |}
             |}
             |
+            """.trimMargin()
+
+        private fun mediaFields() =
+            """
+                            |id
+                            |title {
+                                |userPreferred
+                            |}
+                            |coverImage {
+                                |large
+                            |}
+                            |bannerImage
+                            |format
+                            |status
+                            |chapters
+                            |description
+                            |genres
+                            |tags {
+                                |name
+                                |rank
+                                |isGeneralSpoiler
+                                |isMediaSpoiler
+                            |}
+                            |siteUrl
+                            |externalLinks {
+                                |url
+                                |site
+                            |}
+                            |startDate {
+                                |year
+                                |month
+                                |day
+                            |}
+                            |averageScore
             """.trimMargin()
     }
 }

@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.util.chapter
 import yokai.util.koin.get
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -43,6 +44,7 @@ suspend fun syncChaptersWithSource(
     updateManga: UpdateManga = get(),
     handler: DatabaseHandler = get(),
     libraryPreferences: LibraryPreferences = get(),
+    preferences: PreferencesHelper = get(),
 ): Pair<List<Chapter>, List<Chapter>> {
     if (rawSourceChapters.isEmpty()) {
         throw Exception("No chapters found")
@@ -122,7 +124,9 @@ suspend fun syncChaptersWithSource(
 
     // Return if there's nothing to add, delete or change, avoid unnecessary db transactions.
     if (toAdd.isEmpty() && toDelete.isEmpty() && toChange.isEmpty()) {
-        if (manualFetch || manga.fetch_interval == 0 || manga.next_update < fetchWindow.first) {
+        if (preferences.smartUpdateEnabled().get() &&
+            (manualFetch || manga.fetch_interval == 0 || manga.next_update < fetchWindow.first)
+        ) {
             updateManga.awaitUpdateFetchInterval(manga, ZonedDateTime.now(), fetchWindow)
         }
         return Pair(emptyList(), emptyList())
@@ -208,7 +212,9 @@ suspend fun syncChaptersWithSource(
 
     // Recompute the predicted next-release window now that the chapter list changed.
     // Computed against the manga's pre-update lastUpdate, mirroring mihon's call ordering.
-    updateManga.awaitUpdateFetchInterval(manga, ZonedDateTime.now(), fetchWindow)
+    if (preferences.smartUpdateEnabled().get()) {
+        updateManga.awaitUpdateFetchInterval(manga, ZonedDateTime.now(), fetchWindow)
+    }
 
     // Set this manga as updated since chapters were changed
     // Note that last_update actually represents last time the chapter list changed at all

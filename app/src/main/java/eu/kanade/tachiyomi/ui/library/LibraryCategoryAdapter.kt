@@ -297,6 +297,14 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
                         LibrarySort.LatestChapter -> {
                             context.timeSpanFromNow(MR.strings.updated_, item.manga.manga.last_update)
                         }
+                        LibrarySort.NextExpectedUpdate -> {
+                            val nextUpdate = item.manga.manga.next_update
+                            if (nextUpdate > 0L) {
+                                context.timeSpanFromNow(MR.strings.manga_next_update_, nextUpdate)
+                            } else {
+                                "N/A"
+                            }
+                        }
                         LibrarySort.DateAdded -> {
                             context.timeSpanFromNow(MR.strings.added_, item.manga.manga.date_added)
                         }

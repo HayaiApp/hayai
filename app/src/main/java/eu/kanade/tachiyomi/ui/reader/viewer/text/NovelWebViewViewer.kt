@@ -51,6 +51,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import org.json.JSONArray
 import kotlin.math.roundToInt
 import org.json.JSONObject
 import yokai.util.koin.injectLazy
@@ -140,6 +141,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     // single piece of state the TTS controller needs from the viewer; everything else
     // (engine instance, queue, current paragraph, audio focus) lives in the controller.
     private val chapterParagraphsById = LinkedHashMap<Long, List<String>>()
+    private val originalChapterParagraphsById = LinkedHashMap<Long, List<String>>()
+    private val chapterTranslationStateById = LinkedHashMap<Long, NovelDisplayedTranslationState>()
 
     /**
      * Emits a chapter's DB id each time its paragraph list is added to
@@ -935,6 +938,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             val removedId = loadedChapterIds.removeAt(removeIndex)
             loadedChapters.removeAt(removeIndex)
             chapterParagraphsById.remove(removedId)
+            originalChapterParagraphsById.remove(removedId)
+            chapterTranslationStateById.remove(removedId)
             removed.add(removedId)
         }
         if (removed.isEmpty()) return
@@ -1238,7 +1243,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     var paraIdx = paraAttr ? parseInt(paraAttr, 10) : -1;
                     if (isNaN(paraIdx) || paraIdx < 0) return;
 
-                    var chapEl = paraEl.parentElement;
+                    var chapEl = paraEl.hasAttribute('data-chapter-id') ? paraEl : paraEl.parentElement;
                     while (chapEl && chapEl !== document.body && !(chapEl.hasAttribute && chapEl.hasAttribute('data-chapter-id'))) {
                         chapEl = chapEl.parentElement;
                     }
@@ -1806,21 +1811,45 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             content = stripChapterTitle(content, chapter.chapter.name)
         }
 
-        // Apply translation if enabled (async)
-        val finalContent = content
+        val originalContent = content
         if (activity.isTranslationEnabled()) {
             // Show loading indicator while translating
             loadingIndicator?.show()
             scope.launch {
-                val translatedContent = activity.translateContentIfEnabled(finalContent)
+                val chapterUrl = chapter.chapter.url
+                val plainTextMode = NovelViewerTextUtils.isPlainTextChapter(chapterUrl)
+                val originalParagraphs = withContext(Dispatchers.Default) {
+                    extractParagraphsForQuoteOriginal(originalContent, plainTextMode, chapterUrl)
+                }
+                var translatedContent = activity.translateContentIfEnabled(
+                    content = originalContent,
+                    chapterId = chapterId,
+                )
+                val translationState = NovelDisplayedText.translationState(
+                    translationEnabled = activity.isTranslationEnabled(),
+                    originalContent = originalContent,
+                    displayedContent = translatedContent,
+                    language = activity.currentTranslationLanguage(),
+                )
+                translatedContent = applyRegexReplacements(translatedContent)
+                if (preferences.novelForceTextLowercase.get()) translatedContent = translatedContent.lowercase()
                 withContext(Dispatchers.Main) {
                     loadingIndicator?.hide()
-                    loadHtmlContent(translatedContent, chapterId, chapter.chapter.name, chapter.chapter.url)
+                    loadHtmlContent(
+                        translatedContent,
+                        chapterId,
+                        chapter.chapter.name,
+                        chapter.chapter.url,
+                        originalParagraphs,
+                        translationState,
+                    )
                 }
             }
         } else {
             scope.launch {
-                loadHtmlContent(finalContent, chapterId, chapter.chapter.name, chapter.chapter.url)
+                var displayedContent = applyRegexReplacements(originalContent)
+                if (preferences.novelForceTextLowercase.get()) displayedContent = displayedContent.lowercase()
+                loadHtmlContent(displayedContent, chapterId, chapter.chapter.name, chapter.chapter.url)
             }
         }
     }
@@ -2040,25 +2069,38 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         val forceLowercase = preferences.novelForceTextLowercase.get()
         val chapterName = chapter.chapter.name
         val chapterUrl = chapter.chapter.url
-        val shouldTranslate = !isAppendOrPrepend
 
         scope.launch {
             val renderableContent = withContext(Dispatchers.Default) {
                 var content = rawText
                 if (hideTitle) content = stripChapterTitle(content, chapterName)
+                val plainTextMode = NovelViewerTextUtils.isPlainTextChapter(chapterUrl)
+                val originalContent = content
+                val translationEnabled = activity.isTranslationEnabled()
+                val originalParagraphs = if (translationEnabled) {
+                    extractParagraphsForQuoteOriginal(content, plainTextMode, chapterUrl)
+                } else {
+                    null
+                }
+                val translatedContent = activity.translateContentIfEnabled(
+                    content = content,
+                    chapterId = chapterId,
+                )
+                val translationState = NovelDisplayedText.translationState(
+                    translationEnabled = translationEnabled,
+                    originalContent = originalContent,
+                    displayedContent = translatedContent,
+                    language = activity.currentTranslationLanguage(),
+                )
+                content = translatedContent
                 content = applyRegexReplacements(content)
                 if (forceLowercase) content = content.lowercase()
-                val processed = if (shouldTranslate) {
-                    activity.translateContentIfEnabled(content)
+                val normalizedContent = if (plainTextMode) {
+                    NovelViewerTextUtils.normalizePlainTextContent(content)
                 } else {
-                    content
+                    NovelViewerTextUtils.normalizeContentForHtml(content, chapterUrl)
                 }
-                val plainTextMode = NovelViewerTextUtils.isPlainTextChapter(chapterUrl)
-                if (plainTextMode) {
-                    NovelViewerTextUtils.normalizePlainTextContent(processed)
-                } else {
-                    NovelViewerTextUtils.normalizeContentForHtml(processed, chapterUrl)
-                }
+                RenderableChapterContent(normalizedContent, originalParagraphs, translationState)
             }
 
             withContext(Dispatchers.Main) {
@@ -2083,14 +2125,35 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                         }
                     }
                     if (isPrepend) {
-                        prependHtmlContent(renderableContent, chapterId, chapter, fromChapter)
+                        prependHtmlContent(
+                            renderableContent.html,
+                            chapterId,
+                            chapter,
+                            fromChapter,
+                            renderableContent.originalParagraphs,
+                            renderableContent.translationState,
+                        )
                     } else {
-                        appendHtmlContent(renderableContent, chapterId, chapter, fromChapter)
+                        appendHtmlContent(
+                            renderableContent.html,
+                            chapterId,
+                            chapter,
+                            fromChapter,
+                            renderableContent.originalParagraphs,
+                            renderableContent.translationState,
+                        )
                     }
                     // Enforce the loaded-chapter DOM window after every append/prepend.
                     trimLoadedChapterWindow()
                 } else {
-                    loadHtmlContent(renderableContent, chapterId, chapter.chapter.name, chapter.chapter.url)
+                    loadHtmlContent(
+                        renderableContent.html,
+                        chapterId,
+                        chapter.chapter.name,
+                        chapter.chapter.url,
+                        renderableContent.originalParagraphs,
+                        renderableContent.translationState,
+                    )
 
                     // Fresh load: reset tracking to this single chapter.
                     loadedChapterIds.clear()
@@ -2122,6 +2185,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         chapterId: Long,
         chapter: ReaderChapter,
         fromChapter: ReaderChapter?,
+        originalParagraphs: List<String>? = null,
+        translationState: NovelDisplayedTranslationState? = null,
     ) {
         val chapterUrl = chapter.chapter.url
         val plainTextMode = NovelViewerTextUtils.isPlainTextChapter(chapterUrl)
@@ -2140,6 +2205,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         // Phase C #17: tag every text block with data-paragraph-index so the JS click
         // handler reports an index that lines up exactly with chapterParagraphsById.
         cleanContent = tagAndStashViaHelper(chapterId, cleanContent, plainTextMode, chapterUrl)
+        storeOriginalParagraphs(chapterId, originalParagraphs)
+        storeTranslationState(chapterId, translationState)
         val escapedContent = JSONObject.quote(cleanContent)
 
         // Visible Prev/Current card. `from` is the previously-top chapter (the one the user
@@ -2180,6 +2247,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 var contentDiv = document.createElement('div');
                 contentDiv.className = 'chapter-content';
                 contentDiv.setAttribute('data-chapter-id', '$chapterId');
+                ${if (plainTextMode) "contentDiv.setAttribute('data-paragraph-index', '0');" else ""}
                 ${if (plainTextMode) "contentDiv.textContent = $escapedContent;" else "contentDiv.innerHTML = $escapedContent;"}
 
                 var firstChild = document.body.firstChild;
@@ -2220,6 +2288,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         chapterId: Long,
         chapter: ReaderChapter,
         fromChapter: ReaderChapter?,
+        originalParagraphs: List<String>? = null,
+        translationState: NovelDisplayedTranslationState? = null,
     ) {
         val chapterUrl = chapter.chapter.url
         val plainTextMode = NovelViewerTextUtils.isPlainTextChapter(chapterUrl)
@@ -2238,6 +2308,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         // Phase C #17: tag every text block with data-paragraph-index so the JS click
         // handler reports an index that lines up exactly with chapterParagraphsById.
         cleanContent = tagAndStashViaHelper(chapterId, cleanContent, plainTextMode, chapterUrl)
+        storeOriginalParagraphs(chapterId, originalParagraphs)
+        storeTranslationState(chapterId, translationState)
         val escapedContent = JSONObject.quote(cleanContent)
         // Gate the visible transition card on alwaysShowChapterTransition (mirrors the manga
         // pager/webtoon viewers). When off, still emit the invisible boundary divider so
@@ -2262,6 +2334,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 var contentDiv = document.createElement('div');
                 contentDiv.className = 'chapter-content';
                 contentDiv.setAttribute('data-chapter-id', '$chapterId');
+                ${if (plainTextMode) "contentDiv.setAttribute('data-paragraph-index', '0');" else ""}
                 ${if (plainTextMode) "contentDiv.textContent = $escapedContent;" else "contentDiv.innerHTML = $escapedContent;"}
                 document.body.appendChild(contentDiv);
 
@@ -2416,6 +2489,8 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         chapterId: Long? = null,
         chapterName: String? = null,
         chapterUrl: String? = null,
+        originalParagraphs: List<String>? = null,
+        translationState: NovelDisplayedTranslationState? = null,
     ) {
         // Resolve the current chapter (for the top transition card) from currentChapters,
         // which setChapters wires up before we reach here. Falls back to the first loaded
@@ -2449,6 +2524,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             }
             if (blockMedia) cleanContent = stripMediaTags(cleanContent)
             cleanContent = applyRegexReplacements(cleanContent)
+            if (preferences.novelForceTextLowercase.get()) cleanContent = cleanContent.lowercase()
 
             var finalContent = cleanContent
             var paragraphsForChapter: List<String>? = null
@@ -2456,9 +2532,9 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             if (plainTextMode) {
                 paragraphsForChapter = if (cleanContent.isBlank()) emptyList() else listOf(cleanContent)
                 finalContent = """
-                    <pre class="chapter-content" data-tsundoku-plain-text="1" style="white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; margin: 0;"></pre>
+                    <pre class="chapter-content" data-paragraph-index="0" data-tsundoku-plain-text="1" style="white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; margin: 0;"></pre>
                     <script>
-                        document.querySelector('.chapter-content').textContent = ${JSONObject.quote(cleanContent)};
+                        document.currentScript.previousElementSibling.textContent = ${JSONObject.quote(cleanContent)};
                     </script>
                 """.trimIndent()
             } else {
@@ -2682,14 +2758,24 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         loadedChapterIds.clear()
         loadedChapters.clear()
         chapterParagraphsById.clear()
+        originalChapterParagraphsById.clear()
+        chapterTranslationStateById.clear()
         if (chapterId != null && prepared.paragraphsForChapter != null) {
             chapterParagraphsById[chapterId] = prepared.paragraphsForChapter
+            storeOriginalParagraphs(chapterId, originalParagraphs)
+            storeTranslationState(chapterId, translationState)
             chapterParagraphReadyFlow.tryEmit(chapterId)
         }
         webView.loadDataWithBaseURL(resolveWebViewBaseUrl(normalizedChapterUrl), prepared.html, "text/html", "UTF-8", null)
     }
 
     private data class PreparedHtml(val html: String, val paragraphsForChapter: List<String>?)
+
+    private data class RenderableChapterContent(
+        val html: String,
+        val originalParagraphs: List<String>?,
+        val translationState: NovelDisplayedTranslationState?,
+    )
 
 
 
@@ -2808,6 +2894,41 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         chapterParagraphsById[chapterId] = tagged.paragraphs
         chapterParagraphReadyFlow.tryEmit(chapterId)
         return tagged.html
+    }
+
+    private fun extractParagraphsForQuoteOriginal(
+        content: String,
+        plainTextMode: Boolean,
+        chapterUrl: String?,
+    ): List<String> {
+        var cleanContent = if (plainTextMode) {
+            NovelViewerTextUtils.normalizePlainTextContent(content)
+        } else {
+            NovelViewerTextUtils.normalizeContentForHtml(content, chapterUrl)
+                .replace(Regex("<script[^>]*>.*?</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
+                .replace(Regex("<script[^>]*/>", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("<style[^>]*>.*?</style>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
+                .replace(Regex("<noscript[^>]*>.*?</noscript>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
+        }
+        if (preferences.novelBlockMedia.get()) cleanContent = stripMediaTags(cleanContent)
+        if (plainTextMode) return if (cleanContent.isBlank()) emptyList() else listOf(cleanContent)
+        return NovelViewerTextUtils.normalizeAndTagContentForHtml(cleanContent, chapterUrl).paragraphs
+    }
+
+    private fun storeOriginalParagraphs(chapterId: Long, paragraphs: List<String>?) {
+        if (paragraphs.isNullOrEmpty()) {
+            originalChapterParagraphsById.remove(chapterId)
+        } else {
+            originalChapterParagraphsById[chapterId] = paragraphs
+        }
+    }
+
+    private fun storeTranslationState(chapterId: Long, state: NovelDisplayedTranslationState?) {
+        if (state?.translated == true) {
+            chapterTranslationStateById[chapterId] = state
+        } else {
+            chapterTranslationStateById.remove(chapterId)
+        }
     }
 
     /**
@@ -3319,13 +3440,30 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             content = stripChapterTitle(content, chapter.chapter.name)
         }
 
-        // Optionally force lowercase
-        if (preferences.novelForceTextLowercase.get()) {
-            content = content.lowercase()
-        }
-
-        val processedContent = activity.translateContentIfEnabled(content)
         val plainTextMode = NovelViewerTextUtils.isPlainTextChapter(chapter.chapter.url)
+        val originalContent = content
+        val translationEnabled = activity.isTranslationEnabled()
+        val originalParagraphs = if (translationEnabled) {
+            withContext(Dispatchers.Default) {
+                extractParagraphsForQuoteOriginal(content, plainTextMode, chapter.chapter.url)
+            }
+        } else {
+            null
+        }
+        var processedContent = activity.translateContentIfEnabled(
+            content = content,
+            chapterId = chapterId,
+        )
+        val translationState = NovelDisplayedText.translationState(
+            translationEnabled = translationEnabled,
+            originalContent = originalContent,
+            displayedContent = processedContent,
+            language = activity.currentTranslationLanguage(),
+        )
+        processedContent = applyRegexReplacements(processedContent)
+        if (preferences.novelForceTextLowercase.get()) {
+            processedContent = processedContent.lowercase()
+        }
         val renderableContent = if (plainTextMode) {
             NovelViewerTextUtils.normalizePlainTextContent(processedContent)
         } else {
@@ -3354,11 +3492,11 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     loadedChapterIds.add(chapterId)
                     loadedChapters.add(chapter)
                 }
-                appendHtmlContent(renderableContent, chapterId, chapter, fromChapter)
+                appendHtmlContent(renderableContent, chapterId, chapter, fromChapter, originalParagraphs, translationState)
                 // Enforce the loaded-chapter DOM window after every append/prepend.
                 trimLoadedChapterWindow()
             } else {
-                loadHtmlContent(renderableContent, chapterId, chapter.chapter.name, chapter.chapter.url)
+                loadHtmlContent(renderableContent, chapterId, chapter.chapter.name, chapter.chapter.url, originalParagraphs, translationState)
                 loadedChapterIds.clear()
                 loadedChapters.clear()
                 loadedChapterIds.add(chapterId)
@@ -3935,7 +4073,31 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         (function() {
             var selection = window.getSelection();
             if (selection && selection.toString().trim()) {
-                return selection.toString().trim();
+                var text = selection.toString().trim();
+                var node = selection.anchorNode || selection.focusNode;
+                if (node && node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+                var paraEl = node;
+                while (paraEl && paraEl !== document.body && !(paraEl.hasAttribute && paraEl.hasAttribute('data-paragraph-index'))) {
+                    paraEl = paraEl.parentElement;
+                }
+                var chapterId = null;
+                var paragraphIndex = -1;
+                if (paraEl && paraEl !== document.body) {
+                    var paraAttr = paraEl.getAttribute('data-paragraph-index');
+                    paragraphIndex = paraAttr ? parseInt(paraAttr, 10) : -1;
+                    var chapEl = paraEl.hasAttribute('data-chapter-id') ? paraEl : paraEl.parentElement;
+                    while (chapEl && chapEl !== document.body && !(chapEl.hasAttribute && chapEl.hasAttribute('data-chapter-id'))) {
+                        chapEl = chapEl.parentElement;
+                    }
+                    if (chapEl && chapEl !== document.body) {
+                        chapterId = chapEl.getAttribute('data-chapter-id');
+                    }
+                }
+                return JSON.stringify({
+                    text: text,
+                    chapterId: chapterId,
+                    paragraphIndex: isNaN(paragraphIndex) ? -1 : paragraphIndex
+                });
             }
             return null;
         })();
@@ -3943,17 +4105,10 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         ) { result ->
             activity.runOnUiThread {
                 actionMode?.finish() // finish AFTER JS has read the selection
-                val selectedText = if (result != null && result != "null" &&
-                    result.startsWith("\"") && result.endsWith("\"")
-                ) {
-                    result.substring(1, result.length - 1)
-                        .replace("\\n", "\n")
-                        .replace("\\t", "\t")
-                        .replace("\\\"", "\"")
-                        .replace("\\\\", "\\")
-                } else {
-                    null
-                }
+                val payload = decodeJsStringResult(result)
+                    ?.let { runCatching { JSONObject(it) }.getOrNull() }
+                val selectedText = payload?.optString("text")
+                    ?.takeUnless { it.isBlank() }
 
                 if (!selectedText.isNullOrBlank()) {
                     pendingSelectedText = selectedText
@@ -3961,13 +4116,19 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     val novelId = manga?.id
                     val chapterName = getCurrentChapterName()
                     if (novelId != null && chapterName != null) {
+                        val quoteText = payload.quoteTextForSelection(selectedText)
                         val quote = hayai.novel.reader.quote.Quote.create(
                             novelName = manga.title,
                             chapterName = chapterName,
-                            content = selectedText,
+                            content = quoteText.displayedContent,
+                            originalContent = quoteText.originalContent,
+                            translatedContent = quoteText.translatedContent,
+                            language = quoteText.language,
                         )
-                        hayai.novel.reader.quote.QuoteManager(activity).addQuote(novelId, quote)
-                        activity.toast(activity.getString(MR.strings.novel_quote_saved))
+                        scope.launch {
+                            hayai.novel.reader.quote.QuoteManager(activity).addQuote(novelId, quote)
+                            activity.toast(activity.getString(MR.strings.novel_quote_saved))
+                        }
                     }
                     clearTextSelection()
                 } else {
@@ -3975,6 +4136,30 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 }
             }
         }
+    }
+
+    private fun decodeJsStringResult(result: String?): String? {
+        if (result == null || result == "null") return null
+        return runCatching { JSONArray("[$result]").optString(0) }
+            .getOrNull()
+            ?.takeUnless { it.isBlank() }
+    }
+
+    private fun JSONObject?.quoteTextForSelection(displayedText: String): NovelDisplayedQuoteText {
+        if (this == null) return NovelDisplayedText.quoteText(displayedText, null, null)
+        val chapterId = optString("chapterId").toLongOrNull()
+            ?: return NovelDisplayedText.quoteText(displayedText, null, null)
+        val paragraphIndex = optInt("paragraphIndex", -1)
+        val originalParagraph = if (paragraphIndex >= 0) {
+            originalChapterParagraphsById[chapterId]?.getOrNull(paragraphIndex)
+        } else {
+            null
+        }
+        return NovelDisplayedText.quoteText(
+            displayedText = displayedText,
+            originalParagraph = originalParagraph,
+            translationState = chapterTranslationStateById[chapterId],
+        )
     }
     companion object {
         private const val REMEMBER_MENU_ITEM_ID = 0xBEEF // arbitrary unique ID

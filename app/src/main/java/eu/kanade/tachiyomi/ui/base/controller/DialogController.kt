@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.util.view.dismissSafely
 import eu.kanade.tachiyomi.util.view.previousController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 
 /**
  * A controller that displays a dialog window, floating on top of its activity's window.
@@ -76,6 +77,8 @@ abstract class DialogController : Controller {
 
     override fun onDestroyView(view: View) {
         super.onDestroyView(view)
+        onCreateViewScope?.cancel()
+        onCreateViewScope = null
         dialog?.setOnDismissListener(null)
         dialog?.dismissSafely()
         dialog = null

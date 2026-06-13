@@ -53,6 +53,14 @@ FROM mangas
 WHERE favorite = 1
 ORDER BY title;
 
+findUpcoming:
+SELECT *
+FROM mangas
+WHERE favorite = 1
+AND next_update > :now
+AND status IN :statuses
+ORDER BY next_update, title COLLATE NOCASE;
+
 findReadNotFavorites:
 SELECT *
 FROM mangas

@@ -31,9 +31,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.icerock.moko.resources.compose.stringResource
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import kotlinx.coroutines.launch
 import yokai.i18n.MR
 import yokai.presentation.theme.Size
 import yokai.presentation.theme.YokaiTheme
@@ -97,12 +100,32 @@ fun QuotesSheet(
 
     if (selectedQuote != null) {
         val q = selectedQuote!!
+        val originalCopyText = q.originalContent?.takeIf { it != q.content }
+            ?.let { stringResource(MR.strings.novel_quote_original_format, it) }
+            .orEmpty()
+        val originalCopySuffix = originalCopyText.takeIf { it.isNotBlank() }?.let { "\n\n$it" }.orEmpty()
+        val quoteCopyText = stringResource(
+            MR.strings.novel_quote_copy_format,
+            q.content,
+            originalCopySuffix,
+            q.novelName,
+            q.chapterName,
+        )
         AlertDialog(
             onDismissRequest = { selectedQuote = null },
             title = { Text(q.chapterName) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(stringResource(MR.strings.novel_quote_displayed), style = MaterialTheme.typography.labelMedium)
                     Text(q.content, style = MaterialTheme.typography.bodyLarge)
+                    q.originalContent?.takeIf { it != q.content }?.let { original ->
+                        Text(
+                            text = stringResource(MR.strings.novel_quote_original),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(top = Size.medium),
+                        )
+                        Text(original, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             },
             confirmButton = {
@@ -115,8 +138,7 @@ fun QuotesSheet(
             dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(Size.small)) {
                     TextButton(onClick = {
-                        val text = "\"${q.content}\"\n\n- ${q.novelName}, ${q.chapterName}"
-                        clipboardManager.setText(AnnotatedString(text))
+                        clipboardManager.setText(AnnotatedString(quoteCopyText))
                         selectedQuote = null
                     }) { Text(stringResource(MR.strings.action_copy)) }
                     TextButton(onClick = { selectedQuote = null }) {
@@ -241,12 +263,22 @@ fun QuotesSheet(
                         .padding(horizontal = Size.medium),
                 ) {
                     itemsIndexed(quotes) { _, quote ->
+                        val originalCopyText = quote.originalContent?.takeIf { it != quote.content }
+                            ?.let { stringResource(MR.strings.novel_quote_original_format, it) }
+                            .orEmpty()
+                        val originalCopySuffix = originalCopyText.takeIf { it.isNotBlank() }?.let { "\n\n$it" }.orEmpty()
+                        val quoteCopyText = stringResource(
+                            MR.strings.novel_quote_copy_format,
+                            quote.content,
+                            originalCopySuffix,
+                            quote.novelName,
+                            quote.chapterName,
+                        )
                         QuoteCard(
                             quote = quote,
                             onClick = { selectedQuote = quote },
                             onCopy = {
-                                val text = "\"${quote.content}\"\n\n- ${quote.novelName}, ${quote.chapterName}"
-                                clipboardManager.setText(AnnotatedString(text))
+                                clipboardManager.setText(AnnotatedString(quoteCopyText))
                             },
                             onEdit = {
                                 editingQuote = quote
@@ -288,6 +320,14 @@ private fun QuoteCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = Size.tiny),
             )
+            if (quote.originalContent != null && quote.originalContent != quote.content) {
+                Text(
+                    text = stringResource(MR.strings.novel_quote_original_saved),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = Size.tiny),
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -330,24 +370,36 @@ fun showQuotesSheet(
     val composeView = ComposeView(activity)
     composeView.setContent {
         YokaiTheme {
-            var quotes by remember { mutableStateOf(manager.getQuotes(novelId)) }
+            val scope = rememberCoroutineScope()
+            var quotes by remember { mutableStateOf(emptyList<Quote>()) }
+
+            LaunchedEffect(novelId) {
+                quotes = manager.getQuotes(novelId)
+            }
+
             QuotesSheet(
                 quotes = quotes,
                 onDismiss = {
                     (composeView.parent as? ViewGroup)?.removeView(composeView)
                 },
                 onQuoteAdd = { content ->
-                    val q = Quote.create(novelName, chapterName, content)
-                    manager.addQuote(novelId, q)
-                    quotes = manager.getQuotes(novelId)
+                    scope.launch {
+                        val q = Quote.create(novelName, chapterName, content)
+                        manager.addQuote(novelId, q)
+                        quotes = manager.getQuotes(novelId)
+                    }
                 },
                 onQuoteUpdate = { updated ->
-                    manager.updateQuote(novelId, updated)
-                    quotes = manager.getQuotes(novelId)
+                    scope.launch {
+                        manager.updateQuote(novelId, updated)
+                        quotes = manager.getQuotes(novelId)
+                    }
                 },
                 onQuoteDelete = { q ->
-                    manager.removeQuote(novelId, q.id)
-                    quotes = manager.getQuotes(novelId)
+                    scope.launch {
+                        manager.removeQuote(novelId, q.id)
+                        quotes = manager.getQuotes(novelId)
+                    }
                 },
             )
         }

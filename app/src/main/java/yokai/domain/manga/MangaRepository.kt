@@ -12,6 +12,7 @@ interface MangaRepository {
     fun getMangaByUrlAndSourceAsFlow(url: String, source: Long): Flow<Manga?>
     suspend fun getMangaById(id: Long): Manga?
     suspend fun getFavorites(): List<Manga>
+    fun getUpcoming(statuses: Set<Long>, now: Long): Flow<List<Manga>>
     suspend fun getReadNotFavorites(): List<Manga>
     suspend fun getDuplicateFavorite(title: String, source: Long): Manga?
     fun getMangaListAsFlow(): Flow<List<Manga>>

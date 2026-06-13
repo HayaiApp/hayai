@@ -199,13 +199,16 @@ class LibraryPresenter(
 
         val filterContentType = preferences.filterContentType().get()
 
+        val filterCustomInterval = preferences.filterCustomInterval().get()
+
         !(
             filterDownloaded == 0 &&
             filterUnread == 0 &&
             filterCompleted == 0 &&
             filterTracked == 0 &&
             filterMangaType == 0 &&
-            filterContentType == 0
+            filterContentType == 0 &&
+            filterCustomInterval == 0
         )
     }
 
@@ -492,6 +495,9 @@ class LibraryPresenter(
         if (filterPrefs.filterBookmarked == STATE_INCLUDE && item.manga.bookmarkCount == 0) return false
         if (filterPrefs.filterBookmarked == STATE_EXCLUDE && item.manga.bookmarkCount > 0) return false
 
+        if (filterPrefs.filterCustomInterval == STATE_INCLUDE && item.manga.manga.fetch_interval >= 0) return false
+        if (filterPrefs.filterCustomInterval == STATE_EXCLUDE && item.manga.manga.fetch_interval < 0) return false
+
         if (filterPrefs.filterMangaType > 0) {
             if (if (filterPrefs.filterMangaType == Manga.TYPE_MANHWA) {
                 item.manga.manga.seriesType(sourceManager = sourceManager) !in arrayOf(filterPrefs.filterMangaType, Manga.TYPE_WEBTOON)
@@ -730,6 +736,11 @@ class LibraryPresenter(
                         LibrarySort.DateFetched -> {
                             i2.manga.lastFetch.compareTo(i1.manga.lastFetch)
                         }
+                        LibrarySort.NextExpectedUpdate -> {
+                            val next1 = i1.manga.manga.next_update.takeIf { it > 0L } ?: Long.MAX_VALUE
+                            val next2 = i2.manga.manga.next_update.takeIf { it > 0L } ?: Long.MAX_VALUE
+                            next1.compareTo(next2)
+                        }
                         LibrarySort.DateAdded -> i2.manga.manga.date_added.compareTo(i1.manga.manga.date_added)
                         LibrarySort.DragAndDrop -> {
                             if (category.isDynamic) {
@@ -842,6 +853,7 @@ class LibraryPresenter(
         preferences.filterMangaType().changes(),
         preferences.filterContentType().changes(),
         preferences.filterBookmarked().changes(),
+        preferences.filterCustomInterval().changes(),
 
         preferences.groupLibraryBy().changes(),
         preferences.showAllCategories().changes(),
@@ -854,7 +866,7 @@ class LibraryPresenter(
 
         preferences.libraryDisplayMode().changes(),
     ) {
-        val tabbed = (it[13] as Int) == LibraryItem.DISPLAY_MODE_TABBED
+        val tabbed = (it[14] as Int) == LibraryItem.DISPLAY_MODE_TABBED
         ItemPreferences(
             filterDownloaded = it[0] as Int,
             filterUnread = it[1] as Int,
@@ -863,12 +875,13 @@ class LibraryPresenter(
             filterMangaType = it[4] as Int,
             filterContentType = it[5] as Int,
             filterBookmarked = it[6] as Int,
-            groupType = it[7] as Int,
-            showAllCategories = (it[8] as Boolean) || tabbed,
-            sortingMode = it[9] as Int,
-            sortAscending = it[10] as Boolean,
-            collapsedCategories = it[11] as Set<String>,
-            collapsedDynamicCategories = it[12] as Set<String>,
+            filterCustomInterval = it[7] as Int,
+            groupType = it[8] as Int,
+            showAllCategories = (it[9] as Boolean) || tabbed,
+            sortingMode = it[10] as Int,
+            sortAscending = it[11] as Boolean,
+            collapsedCategories = it[12] as Set<String>,
+            collapsedDynamicCategories = it[13] as Set<String>,
         )
     }
 
@@ -1757,6 +1770,7 @@ class LibraryPresenter(
         val filterMangaType: Int,
         val filterContentType: Int,
         val filterBookmarked: Int,
+        val filterCustomInterval: Int,
 
         val groupType: Int,
         val showAllCategories: Boolean,

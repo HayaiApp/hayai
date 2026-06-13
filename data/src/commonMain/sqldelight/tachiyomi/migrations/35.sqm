@@ -1,0 +1,157 @@
+CREATE TABLE IF NOT EXISTS series_translation_canon(
+    manga_id INTEGER NOT NULL PRIMARY KEY,
+    mode TEXT NOT NULL DEFAULT 'simple',
+    source_language TEXT,
+    target_language TEXT,
+    summary TEXT,
+    style_guide TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS series_translation_entities(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    entity_key TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    original_name TEXT,
+    translated_name TEXT,
+    entity_type TEXT NOT NULL,
+    gender TEXT,
+    description TEXT,
+    aliases TEXT,
+    source TEXT NOT NULL,
+    confidence REAL,
+    user_locked INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(manga_id, entity_key) ON CONFLICT REPLACE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS series_translation_relationships(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    from_entity_key TEXT NOT NULL,
+    from_entity_name TEXT NOT NULL,
+    to_entity_key TEXT NOT NULL,
+    to_entity_name TEXT NOT NULL,
+    relationship_type TEXT NOT NULL,
+    description TEXT,
+    source TEXT NOT NULL,
+    user_locked INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS series_translation_events(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    sequence_index INTEGER,
+    source TEXT NOT NULL,
+    user_locked INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS series_translation_nudges(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER,
+    scope TEXT NOT NULL,
+    instruction TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS series_metadata_values(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL,
+    field TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    provider_name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    extra_json TEXT,
+    confidence REAL,
+    user_locked INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(manga_id, field, provider_type, provider_id) ON CONFLICT REPLACE,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS series_metadata_choices(
+    manga_id INTEGER NOT NULL,
+    field TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(manga_id, field),
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS series_display_options(
+    manga_id INTEGER NOT NULL,
+    option_key TEXT NOT NULL,
+    visible INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(manga_id, option_key),
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS series_quotes(
+    quote_id TEXT NOT NULL PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    novel_name TEXT NOT NULL,
+    chapter_name TEXT NOT NULL,
+    displayed_content TEXT NOT NULL,
+    original_content TEXT,
+    translated_content TEXT,
+    language TEXT,
+    timestamp INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS chapter_translation_cache(
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    source_language TEXT NOT NULL,
+    target_language TEXT NOT NULL,
+    original_hash TEXT NOT NULL,
+    translated_content TEXT NOT NULL,
+    engine_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(manga_id, chapter_id, target_language),
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS chapter_translation_queue(
+    task_id INTEGER NOT NULL PRIMARY KEY,
+    manga_id INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    chapter_name TEXT NOT NULL,
+    manga_title TEXT NOT NULL,
+    source_language TEXT NOT NULL,
+    target_language TEXT NOT NULL,
+    engine_id INTEGER NOT NULL,
+    priority INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    error_message TEXT,
+    retry_count INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    force_retranslate INTEGER NOT NULL DEFAULT 0,
+    position_index INTEGER NOT NULL,
+    FOREIGN KEY(manga_id) REFERENCES mangas (_id) ON DELETE CASCADE,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id) ON DELETE CASCADE
+);

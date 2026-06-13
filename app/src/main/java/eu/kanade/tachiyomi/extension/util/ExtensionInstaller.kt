@@ -214,6 +214,7 @@ internal class ExtensionInstaller(private val context: Context) {
                 val step = when (downloadState) {
                     DownloadManager.STATUS_PENDING -> InstallStep.Pending
                     DownloadManager.STATUS_RUNNING -> InstallStep.Downloading
+                    DownloadManager.STATUS_FAILED -> InstallStep.Error
                     else -> return@flatMapConcat emptyFlow()
                 }
                 flowOf(ExtensionIntallInfo(step, null))

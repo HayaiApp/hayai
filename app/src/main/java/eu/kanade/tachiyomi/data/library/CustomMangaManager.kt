@@ -27,6 +27,7 @@ import yokai.domain.library.custom.interactor.GetCustomManga
 import yokai.domain.library.custom.interactor.RelinkCustomManga
 import yokai.domain.library.custom.model.CustomMangaInfo
 import yokai.domain.library.custom.model.CustomMangaInfo.Companion.getMangaInfo
+import yokai.domain.series.SeriesKnowledgeRepository
 
 class CustomMangaManager(val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -41,6 +42,7 @@ class CustomMangaManager(val context: Context) {
     private val deleteCustomManga: DeleteCustomManga by injectLazy()
     private val getCustomManga: GetCustomManga by injectLazy()
     private val relinkCustomManga: RelinkCustomManga by injectLazy()
+    private val seriesKnowledgeRepository: SeriesKnowledgeRepository by injectLazy()
 
     init {
         scope.launch {
@@ -124,12 +126,20 @@ class CustomMangaManager(val context: Context) {
             (status ?: -1) == -1
         )
 
-    suspend fun updateMangaInfo(oldId: Long?, newId: Long?, manga: CustomMangaInfo) {
+    suspend fun updateMangaInfo(
+        oldId: Long?,
+        newId: Long?,
+        manga: CustomMangaInfo,
+        moveSeriesData: Boolean = true,
+    ) {
         if (oldId == null || newId == null) return
         if (manga.shouldDelete) {
             deleteCustomInfo(manga.mangaId)
         } else {
             relinkCustomManga.await(oldId, newId)
+        }
+        if (moveSeriesData) {
+            relinkSeriesKnowledge(oldId, newId)
         }
     }
 
@@ -150,6 +160,10 @@ class CustomMangaManager(val context: Context) {
     private suspend fun addCustomInfo(manga: CustomMangaInfo, onComplete: () -> Unit = {}) {
         createCustomManga.await(manga)
         onComplete()
+    }
+
+    private suspend fun relinkSeriesKnowledge(oldId: Long, newId: Long) {
+        seriesKnowledgeRepository.relink(oldId, newId)
     }
 
     private suspend fun saveCustomInfo(onComplete: () -> Unit = {}) {
