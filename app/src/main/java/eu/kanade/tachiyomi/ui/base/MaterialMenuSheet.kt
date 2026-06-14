@@ -153,7 +153,7 @@ class MaterialMenuSheet(
 
     data class MenuSheetItem(
         val id: Int,
-        @DrawableRes val drawable: Int = 0,
+        @field:DrawableRes val drawable: Int = 0,
         val textRes: StringResource = StringResource(0),
         val text: String? = null,
         var endDrawableRes: Int = 0,

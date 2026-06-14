@@ -80,7 +80,7 @@ class AboutController : BaseComposeController() {
 
         override fun onAttach(view: View) {
             super.onAttach(view)
-            (dialog?.findViewById(AR.id.message) as? TextView)?.movementMethod =
+            dialog?.findViewById<TextView>(AR.id.message)?.movementMethod =
                 LinkMovementMethod.getInstance()
         }
 

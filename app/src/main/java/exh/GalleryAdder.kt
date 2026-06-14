@@ -141,7 +141,7 @@ class GalleryAdder {
 
             // Fetch and update manga details from source
             // manga is non-null here: either found in DB or inserted and re-fetched above
-            val nonNullManga = manga ?: return GalleryAddEvent.Fail.Error(url, "Manga not found (Gallery: $url)")
+            val nonNullManga = manga
             val newMangaDetails = retry(retry) { source.getMangaDetails(nonNullManga) }
             nonNullManga.copyFrom(newMangaDetails)
             nonNullManga.initialized = true

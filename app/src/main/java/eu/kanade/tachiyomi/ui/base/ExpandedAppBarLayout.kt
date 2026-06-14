@@ -672,7 +672,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
                 main?.isInvisible = true
             }
             main?.backgroundColor = null
-            card?.backgroundColor = null
+            card.backgroundColor = null
             liftMenuToPill()
         } else {
             currentActiveToolbar = main

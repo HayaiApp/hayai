@@ -199,7 +199,7 @@ class NotificationReceiver : BroadcastReceiver() {
             intent,
             ExtensionInstallerJob.KEY_EXTENSION,
             ExtensionManager.ExtensionInfo::class.java,
-        ) as? ArrayList<ExtensionManager.ExtensionInfo> ?: return
+        ) ?: return
         ExtensionInstallerJob.startJob(context, extensions, 1)
     }
 

@@ -11,7 +11,7 @@ import eu.kanade.tachiyomi.util.lang.next
 
 private const val SHIFT = 0x00000000
 
-enum class ReadingModeType(val prefValue: Int, val stringRes: StringResource, @DrawableRes val iconRes: Int) {
+enum class ReadingModeType(val prefValue: Int, val stringRes: StringResource, @field:DrawableRes val iconRes: Int) {
     DEFAULT(0, MR.strings.default_value, R.drawable.ic_reader_default_24dp),
     LEFT_TO_RIGHT(1, MR.strings.left_to_right_viewer, R.drawable.ic_reader_ltr_24dp),
     RIGHT_TO_LEFT(2, MR.strings.right_to_left_viewer, R.drawable.ic_reader_rtl_24dp),

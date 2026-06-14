@@ -8,7 +8,7 @@ import android.os.Parcelable
 fun <T> Intent.getParcelableCompat(name: String, clazz: Class<T>) =
     extras?.getParcelableCompat(name, clazz)
 
-@Suppress("DEPRECATION")
+@Suppress("DEPRECATION", "UNCHECKED_CAST")
 fun <T> Bundle.getParcelableCompat(name: String, clazz: Class<T>) =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) getParcelable(name, clazz) else getParcelable(name) as? T
 

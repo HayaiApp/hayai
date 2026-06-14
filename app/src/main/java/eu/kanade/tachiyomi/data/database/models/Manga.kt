@@ -130,34 +130,6 @@ fun Manga.defaultReaderType(): Int {
     }
 }
 
-fun Manga.copyFrom(other: SManga) {
-    thumbnail_url = other.thumbnail_url ?: thumbnail_url
-
-    if (other.author != null) {
-        author = if (other is Manga) other.originalAuthor else other.author
-    }
-
-    if (other.artist != null) {
-        artist = if (other is Manga) other.originalArtist else other.artist
-    }
-
-    if (other.description != null) {
-        description = if (other is Manga) other.originalDescription else other.description
-    }
-
-    if (other.genre != null) {
-        genre = if (other is Manga) other.originalGenre else other.genre
-    }
-
-    status = if (other is Manga) other.originalStatus else other.status
-
-    update_strategy = other.update_strategy
-
-    if (!initialized) {
-        initialized = other.initialized
-    }
-}
-
 suspend fun Manga.isOneShotOrCompleted(): Boolean = withIOContext {
     val tags by lazy { genre?.split(",")?.map { it.trim().lowercase(Locale.US) } }
     val getChapter: GetChapter by injectLazy()

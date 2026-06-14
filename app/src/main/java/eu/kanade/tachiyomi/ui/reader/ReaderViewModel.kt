@@ -283,7 +283,7 @@ class ReaderViewModel(
                     // Warm the lazy unfiltered list off-main so adjacentChapterResult()'s first
                     // touch (which runs on Main) never blocks the UI thread on a SQLDelight read.
                     unfilteredChapterList
-                    loadChapter(loader!!, chapterList!!.first { chapterId == it.chapter.id }, page)
+                    loadChapter(loader!!, chapterList.first { chapterId == it.chapter.id }, page)
                     Result.success(true)
                 } else {
                     // Unlikely but okay
@@ -427,7 +427,7 @@ class ReaderViewModel(
                     val newChapters = syncChaptersWithSource(
                         chapters,
                         manga,
-                        delegatedSource.delegate!!,
+                        delegatedSource.delegate,
                     ).first
                     chapterId = newChapters.find { it.url == chapter.url }?.id
                         ?: error(context.getString(MR.strings.chapter_not_found))
@@ -481,7 +481,7 @@ class ReaderViewModel(
     ): ViewerChapters {
         loader.loadChapter(chapter, page)
 
-        val chapterPos = chapterList.indexOf(chapter) ?: -1
+        val chapterPos = chapterList.indexOf(chapter)
         val newChapters = ViewerChapters(
             chapter,
             chapterList.getOrNull(chapterPos - 1),

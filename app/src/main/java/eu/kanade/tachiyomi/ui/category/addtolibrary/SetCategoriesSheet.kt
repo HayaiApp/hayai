@@ -291,7 +291,7 @@ class SetCategoriesSheet(
         val singleManga = listManga.singleOrNull()
         val flipToFavorite = singleManga != null && !singleManga.favorite
         if (flipToFavorite) {
-            singleManga!!.favorite = true
+            singleManga.favorite = true
             singleManga.date_added = Date().time
         }
         // Snapshot of the data we need on IO — capture now in case the sheet view is gone
@@ -301,7 +301,7 @@ class SetCategoriesSheet(
 
         sheetScope.launch {
             withContext(Dispatchers.IO) {
-                if (flipToFavorite && singleManga != null) {
+                if (flipToFavorite) {
                     updateManga.await(
                         MangaUpdate(
                             id = singleManga.id!!,

@@ -213,9 +213,9 @@ class EhLoginActivity : AppCompatActivity() {
             }
 
             // Update prefs
-            exhPreferences.memberIdVal.set(memberId!!)
-            exhPreferences.passHashVal.set(passHash!!)
-            exhPreferences.igneousVal.set(igneous!!)
+            exhPreferences.memberIdVal.set(memberId)
+            exhPreferences.passHashVal.set(passHash)
+            exhPreferences.igneousVal.set(igneous)
 
             return true
         }

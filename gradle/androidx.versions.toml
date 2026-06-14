@@ -1,48 +1,49 @@
 [versions]
-activity = "1.11.0"
-agp = "8.13.2"
-lifecycle = "2.9.4"
+activity = "1.13.0"
+agp = "9.2.1"
+lifecycle = "2.10.0"
 
 [libraries]
 gradle = { module = "com.android.tools.build:gradle", version.ref = "agp" }
 
 activity = { module = "androidx.activity:activity-ktx", version.ref = "activity" }
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
-annotation = { module = "androidx.annotation:annotation", version = "1.9.1" }
-appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.0" }
-asynclayoutinflater = { module = "androidx.asynclayoutinflater:asynclayoutinflater", version = "1.0.0" }
-browser = { module = "androidx.browser:browser", version = "1.8.0" }
+annotation = { module = "androidx.annotation:annotation", version = "1.10.0" }
+appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.1" }
+asynclayoutinflater = { module = "androidx.asynclayoutinflater:asynclayoutinflater", version = "1.1.0" }
+browser = { module = "androidx.browser:browser", version = "1.10.0" }
 biometric = { module = "androidx.biometric:biometric", version = "1.1.0" }
 cardview = { module = "androidx.cardview:cardview", version = "1.0.0" }
-core = { module = "androidx.core:core-ktx", version = "1.17.0" }
+core = { module = "androidx.core:core-ktx", version = "1.19.0" }
 core-splashscreen = { module = "androidx.core:core-splashscreen", version = "1.2.0" }
 glance-appwidget = { module = "androidx.glance:glance-appwidget", version = "1.1.1" }
 layout-constraint = { module = "androidx.constraintlayout:constraintlayout", version = "2.2.1" }
-layout-swiperefresh = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version = "1.1.0" }
+layout-swiperefresh = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version = "1.2.0" }
 lifecycle-common = { module = "androidx.lifecycle:lifecycle-common", version.ref = "lifecycle" }
 lifecycle-livedata = { module = "androidx.lifecycle:lifecycle-livedata-ktx", version.ref = "lifecycle" }
 lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "lifecycle" }
 lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
 lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel-ktx", version.ref = "lifecycle" }
 lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
-media = { module = "androidx.media:media", version = "1.7.0" }
+media = { module = "androidx.media:media", version = "1.8.0" }
 multidex = { module = "androidx.multidex:multidex", version = "2.0.1" }
 palette = { module = "androidx.palette:palette", version = "1.0.0" }
 preference = { module = "androidx.preference:preference-ktx", version = "1.2.1" }
 recyclerview = { module = "androidx.recyclerview:recyclerview", version = "1.4.0" }
-sqlite = { module = "androidx.sqlite:sqlite", version = "2.5.1" }
-webkit = { module = "androidx.webkit:webkit", version = "1.13.0" }
-work = { module = "androidx.work:work-runtime-ktx", version = "2.10.1" }
-window = { module = "androidx.window:window", version = "1.4.0" }
+sqlite = { module = "androidx.sqlite:sqlite", version = "2.6.2" }
+webkit = { module = "androidx.webkit:webkit", version = "1.15.0" }
+work = { module = "androidx.work:work-runtime-ktx", version = "2.11.2" }
+window = { module = "androidx.window:window", version = "1.5.1" }
 
 [bundles]
 androidx = [
     "activity", "activity-compose", "annotation", "appcompat", "asynclayoutinflater", "browser", "biometric", "cardview", "core",
     "core-splashscreen", "layout-constraint", "glance-appwidget", "lifecycle-common", "lifecycle-livedata",
-    "lifecycle-process", "lifecycle-runtime", "lifecycle-viewmodel", "lifecycle-viewmodel-compose", "media", "multidex",
+    "lifecycle-process", "lifecycle-runtime", "lifecycle-viewmodel", "lifecycle-viewmodel-compose", "media",
     "palette", "preference", "recyclerview", "sqlite", "layout-swiperefresh", "webkit", "work", "window"
 ]
 
 [plugins]
 application = { id = "com.android.application", version.ref = "agp" }
 library = { id = "com.android.library", version.ref = "agp" }
+android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }

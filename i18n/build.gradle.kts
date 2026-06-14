@@ -1,14 +1,26 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import yokai.build.generatedBuildDir
 
 plugins {
-    id("yokai.android.library")
     kotlin("multiplatform")
+    id("com.android.kotlin.multiplatform.library")
     alias(libs.plugins.moko)
 }
 
 kotlin {
-    androidTarget()
+    android {
+        namespace = "yokai.i18n"
+        compileSdk = AndroidConfig.COMPILE_SDK
+        minSdk = AndroidConfig.MIN_SDK
+        withHostTest {}
+        compilerOptions {
+            jvmTarget.set(JvmTarget.fromTarget(AndroidConfig.JavaVersion.toString()))
+        }
+        androidResources {
+            enable = true
+        }
+    }
 //    iosX64()
 //    iosArm64()
 //    iosSimulatorArm64()
@@ -31,15 +43,10 @@ kotlin {
 
 val generatedAndroidResourceDir = generatedBuildDir.resolve("android/res")
 
-android {
-    namespace = "yokai.i18n"
-
-    sourceSets {
-        val main by getting
-        main.res.srcDirs(
-            "src/commonMain/resources",
-            generatedAndroidResourceDir,
-        )
+androidComponents {
+    onVariants { variant ->
+        variant.sources.res?.addStaticSourceDirectory("src/commonMain/resources")
+        variant.sources.res?.addStaticSourceDirectory(generatedAndroidResourceDir.absolutePath)
     }
 }
 
@@ -49,7 +56,7 @@ multiplatformResources {
 
 tasks {
    val localesConfigTask = project.registerLocalesConfigTask(generatedAndroidResourceDir)
-   preBuild {
+   matching { it.name.contains("Resources") }.configureEach {
        dependsOn(localesConfigTask)
    }
 

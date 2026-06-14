@@ -61,7 +61,7 @@ abstract class BaseEngine(
                 500, 502, 503, 504 -> TranslationResult.ErrorCode.SERVICE_UNAVAILABLE
                 else -> TranslationResult.ErrorCode.UNKNOWN
             }
-            return TranslationResult.Error(e.message ?: "HTTP ${e.statusCode}", code)
+            return TranslationResult.Error(e.message, code)
         }
         return TranslationResult.Error(e.message ?: "Translation failed", TranslationResult.ErrorCode.UNKNOWN)
     }

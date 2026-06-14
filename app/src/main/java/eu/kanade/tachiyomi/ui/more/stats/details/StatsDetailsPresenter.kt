@@ -737,7 +737,7 @@ class StatsDetailsPresenter(
         val chaptersRead: Int = 0,
         val totalChapters: Int = 0,
         var label: String? = null,
-        @DrawableRes
+        @field:DrawableRes
         var iconRes: Int? = null,
         var iconBGColor: Int? = null,
         var icon: Drawable? = null,

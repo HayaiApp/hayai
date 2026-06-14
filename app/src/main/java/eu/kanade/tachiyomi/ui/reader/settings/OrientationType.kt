@@ -11,7 +11,7 @@ import dev.icerock.moko.resources.compose.stringResource
 
 private const val SHIFT = 0x00000003
 
-enum class OrientationType(val prefValue: Int, val flag: Int, val stringRes: StringResource, @DrawableRes val iconRes: Int) {
+enum class OrientationType(val prefValue: Int, val flag: Int, val stringRes: StringResource, @field:DrawableRes val iconRes: Int) {
     DEFAULT(0, ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, MR.strings.default_value, R.drawable.ic_screen_rotation_24dp),
     FREE(1, ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, MR.strings.free, R.drawable.ic_screen_rotation_24dp),
     PORTRAIT(2, ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT, MR.strings.portrait, R.drawable.ic_stay_current_portrait_24dp),

@@ -230,7 +230,7 @@ class MangaHeaderHolder(
 
             webviewButton.setOnClickListener { adapter.delegate.openInWebView() }
             shareButton.setOnClickListener { adapter.delegate.prepareToShareManga() }
-            recsButton?.setOnClickListener { adapter.delegate.openRecommendations() }
+            recsButton.setOnClickListener { adapter.delegate.openRecommendations() }
             favoriteButton.setOnClickListener {
                 adapter.delegate.favoriteManga(false)
             }
@@ -506,7 +506,7 @@ class MangaHeaderHolder(
         // PagePreviewSource. Otherwise PagePreviewInlineSection would render a 150dp
         // shimmer skeleton for 1-2 frames, then collapse to 0 when its LaunchedEffect
         // resolves Unavailable — visibly shifting chapter rows down then back up.
-        binding?.pagePreviewCompose?.apply {
+        binding.pagePreviewCompose.apply {
             val previewSource = presenter.source.getMainSource<PagePreviewSource>()
             if (previewSource == null) {
                 isVisible = false
@@ -700,7 +700,7 @@ class MangaHeaderHolder(
         binding.moreButtonGroup.isVisible = showDescriptionSection && binding.moreButtonGroup.isVisible
         binding.lessButton.isVisible = showDescriptionSection && binding.lessButton.isVisible
         binding.mangaGenresTags.isVisible = showGenresSection && binding.mangaGenresTags.isVisible
-        binding.metadataCompose?.isVisible = showMetadataSection && binding.metadataCompose?.isVisible == true
+        binding.metadataCompose.isVisible = showMetadataSection && binding.metadataCompose.isVisible
         binding.trackButton.isVisible = showTrackersSection && binding.trackButton.isVisible
     }
 
@@ -833,7 +833,7 @@ class MangaHeaderHolder(
             lessButton.setTextColor(accentColor)
             shareButton.imageTintList = ColorStateList.valueOf(accentColor)
             webviewButton.imageTintList = ColorStateList.valueOf(accentColor)
-            recsButton?.imageTintList = ColorStateList.valueOf(accentColor)
+            recsButton.imageTintList = ColorStateList.valueOf(accentColor)
             filterButton.imageTintList = ColorStateList.valueOf(accentColor)
 
             val states = arrayOf(
@@ -852,7 +852,7 @@ class MangaHeaderHolder(
             if (updateAll) {
                 trackButton.checked(trackButton.stateListAnimator != null)
                 favoriteButton.checked(favoriteButton.stateListAnimator != null)
-                predictedUpdateButton?.checked(predictedUpdateButton?.isVisible == true)
+                predictedUpdateButton?.let { it.checked(it.isVisible) }
                 setGenreTags(this, manga)
             }
         }
@@ -880,14 +880,14 @@ class MangaHeaderHolder(
             lessButton.setTextColor(default)
             shareButton.imageTintList = defaultTint
             webviewButton.imageTintList = defaultTint
-            recsButton?.imageTintList = defaultTint
+            recsButton.imageTintList = defaultTint
             filterButton.imageTintList = defaultTint
             trackButton.iconTint = defaultTint
             favoriteButton.iconTint = defaultTint
             predictedUpdateButton?.iconTint = defaultTint
             trackButton.checked(trackButton.stateListAnimator != null)
             favoriteButton.checked(favoriteButton.stateListAnimator != null)
-            predictedUpdateButton?.checked(predictedUpdateButton?.isVisible == true)
+            predictedUpdateButton?.let { it.checked(it.isVisible) }
         }
     }
 
@@ -950,7 +950,7 @@ class MangaHeaderHolder(
                             readEnabled = readEnabled,
                             showButton = showButtons,
                             accentColorInt = accentColorState.value,
-                            onReadClick = { adapter.delegate.readNextChapter(binding?.buttonGroupCompose ?: itemView) },
+                            onReadClick = { adapter.delegate.readNextChapter(binding.buttonGroupCompose) },
                         )
                     }
                 }
@@ -964,7 +964,7 @@ class MangaHeaderHolder(
         val item = boundHeaderItem ?: return
         bindReadingButton(item)
         if (binding?.subItemGroup?.isVisible == true) {
-            binding?.buttonGroupCompose?.isVisible = showReadingButton
+            binding.buttonGroupCompose.isVisible = showReadingButton
         }
     }
 
@@ -972,8 +972,8 @@ class MangaHeaderHolder(
         binding ?: return
         if (!canCollapse) return
         binding.subItemGroup.isVisible = false
-        binding.buttonGroupCompose?.isVisible = false
-        binding.metadataCompose?.isVisible = false
+        binding.buttonGroupCompose.isVisible = false
+        binding.metadataCompose.isVisible = false
         binding.mangaGenresTags.isVisible = false
         if (binding.moreButton.isVisible || binding.moreButton.isInvisible) {
             binding.moreButtonGroup.isInvisible = !isTablet
@@ -1062,8 +1062,8 @@ class MangaHeaderHolder(
                 binding.lessButton.isVisible = showDescriptionSection && !isTablet
             }
         }
-        binding.buttonGroupCompose?.isVisible = showReadingButton
-        binding.metadataCompose?.isVisible = showMetadataSection
+        binding.buttonGroupCompose.isVisible = showReadingButton
+        binding.metadataCompose.isVisible = showMetadataSection
         applyDisplayVisibility()
     }
 

@@ -1766,7 +1766,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
      */
     private fun currentActivePage(): ReaderPage? {
         val active = currentActiveChapter()
-        val activePage = active?.pages?.firstOrNull() as? ReaderPage
+        val activePage = active?.pages?.firstOrNull()
         return activePage ?: currentPage
     }
 
@@ -1855,7 +1855,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
     }
 
     override fun setChapters(chapters: ViewerChapters) {
-        val page = chapters.currChapter.pages?.firstOrNull() as? ReaderPage ?: return
+        val page = chapters.currChapter.pages?.firstOrNull() ?: return
         val chapterId = chapters.currChapter.chapter.id ?: return
 
         loadJob?.cancel()
@@ -2543,7 +2543,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                     doc.select("style, link[rel=stylesheet]").remove()
                     doc.select("script, noscript").remove()
                     val bodyNode = doc.body()
-                    val sanitized = if (bodyNode != null && (bodyNode.hasText() || bodyNode.children().isNotEmpty())) {
+                    val sanitized = if (bodyNode.hasText() || bodyNode.children().isNotEmpty()) {
                         bodyNode.html()
                     } else {
                         finalContent
@@ -3305,7 +3305,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 }
 
                 activity.viewModel.setNovelVisibleChapter(newChapter)
-                (newChapter.pages?.firstOrNull() as? ReaderPage)?.let { page ->
+                newChapter.pages?.firstOrNull()?.let { page ->
                     currentPage = page
                     activity.onPageSelected(page, false)
                 }
@@ -3546,7 +3546,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             return
         }
 
-        val page = preparedChapter.pages?.firstOrNull() as? ReaderPage ?: run {
+        val page = preparedChapter.pages?.firstOrNull() ?: run {
             Logger.e { "NovelWebViewViewer: No page in prepared next chapter" }
             showInlineError("No page in next chapter", isPrepend = false)
             return
@@ -3599,7 +3599,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         val prevId = preparedChapter.chapter.id ?: return
         if (loadedChapterIds.contains(prevId)) return
 
-        val page = preparedChapter.pages?.firstOrNull() as? ReaderPage ?: return
+        val page = preparedChapter.pages?.firstOrNull() ?: return
         val loader = page.chapter.pageLoader ?: return
 
         showInlineLoading(isPrepend = true)
@@ -3975,7 +3975,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 })();
                 """.trimIndent(),
             ) { raw ->
-                val parsed = raw?.trim('"')?.toIntOrNull()
+                val parsed = raw.trim('"').toIntOrNull()
                 deferred.complete(parsed)
             }
         }
@@ -4009,7 +4009,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
             """.trimIndent(),
         ) { result ->
             // JavaScript returns quoted string, need to unquote and unescape
-            selectedText = result?.let {
+            selectedText = result.let {
                 if (it.startsWith("\"") && it.endsWith("\"")) {
                     it.substring(1, it.length - 1)
                         .replace("\\n", "\n")

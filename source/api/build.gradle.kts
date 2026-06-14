@@ -1,13 +1,28 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    id("yokai.android.library")
     kotlin("multiplatform")
+    id("com.android.kotlin.multiplatform.library")
     alias(kotlinx.plugins.serialization)
 }
 
 kotlin {
-    androidTarget()
+    android {
+        namespace = "eu.kanade.tachiyomi.source"
+        compileSdk = AndroidConfig.COMPILE_SDK
+        minSdk = AndroidConfig.MIN_SDK
+        withHostTest {}
+        compilerOptions {
+            jvmTarget.set(JvmTarget.fromTarget(AndroidConfig.JavaVersion.toString()))
+        }
+        optimization {
+            consumerKeepRules.apply {
+                publish = true
+                file("consumer-proguard.pro")
+            }
+        }
+    }
     sourceSets {
         val commonMain by getting {
             dependencies {
@@ -21,7 +36,7 @@ kotlin {
         }
         val androidMain by getting {
             dependencies {
-                implementation(projects.core.main)
+                implementation(project(":core:main"))
                 api(androidx.preference)
 
                 // Workaround for https://youtrack.jetbrains.com/issue/KT-57605
@@ -31,16 +46,12 @@ kotlin {
         }
     }
 }
-android {
-    namespace = "eu.kanade.tachiyomi.source"
-    defaultConfig {
-        consumerProguardFile("consumer-proguard.pro")
-    }
-}
 tasks {
     withType<KotlinCompile> {
         compilerOptions.freeCompilerArgs.addAll(
             "-Xexpect-actual-classes",
+            "-Xwarning-level=DEPRECATION:disabled",
+            "-Xwarning-level=OVERRIDE_DEPRECATION:disabled",
         )
     }
 }

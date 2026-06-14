@@ -1,15 +1,35 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    id("yokai.android.library")
     kotlin("multiplatform")
+    id("com.android.kotlin.multiplatform.library")
     alias(kotlinx.plugins.serialization)
 }
 
+tasks {
+    withType<KotlinCompile> {
+        compilerOptions.freeCompilerArgs.addAll(
+            "-Xwarning-level=DEPRECATION:disabled",
+            "-Xwarning-level=OVERRIDE_DEPRECATION:disabled",
+        )
+    }
+}
+
 kotlin {
-    androidTarget()
+    android {
+        namespace = "yokai.domain"
+        compileSdk = AndroidConfig.COMPILE_SDK
+        minSdk = AndroidConfig.MIN_SDK
+        withHostTest {}
+        compilerOptions {
+            jvmTarget.set(JvmTarget.fromTarget(AndroidConfig.JavaVersion.toString()))
+        }
+    }
     sourceSets {
         commonMain {
             dependencies {
-                implementation(projects.source.api)
+                implementation(project(":source:api"))
             }
         }
         commonTest {
@@ -22,13 +42,5 @@ kotlin {
             dependencies {
             }
         }
-    }
-}
-
-android {
-    namespace = "yokai.domain"
-
-    defaultConfig {
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 }

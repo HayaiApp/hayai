@@ -30,7 +30,7 @@ class NovelStatsRepositoryImpl(
         val chaptersRead = handler.awaitOne { novel_statsQueries.chaptersReadCount(sourceIds) }
         val totalChapters = handler.awaitOne { novel_statsQueries.totalChaptersCount(sourceIds) }
         val totalReadDurationMs = handler.awaitOne { novel_statsQueries.totalReadDuration(sourceIds) }.toLong()
-        val totalWordsRead = handler.awaitOne { novel_statsQueries.totalWordsRead(sourceIds) }.toLong()
+        val totalWordsRead = handler.awaitOne { novel_statsQueries.totalWordsRead(sourceIds) }
         val mostRead = handler.awaitOneOrNull {
             novel_statsQueries.mostReadNovel(sourceIds) { title, readCount -> MostRead(title, readCount) }
         }

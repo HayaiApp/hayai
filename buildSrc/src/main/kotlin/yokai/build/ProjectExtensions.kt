@@ -14,7 +14,6 @@ import org.gradle.kotlin.dsl.provideDelegate
 import org.gradle.kotlin.dsl.the
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.compose.compiler.gradle.ComposeCompilerGradlePluginExtension
-import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.io.File
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -26,16 +25,21 @@ val Project.libs get() = the<LibrariesForLibs>()
 
 val Project.generatedBuildDir: File get() = project.layout.buildDirectory.asFile.get().resolve("generated/yokai")
 
-internal fun Project.configureAndroid(commonExtension: CommonExtension<*, *, *, *, *, *>) {
+private val deprecationWarningLevelArgs = listOf(
+    "-Xwarning-level=DEPRECATION:disabled",
+    "-Xwarning-level=OVERRIDE_DEPRECATION:disabled",
+)
+
+internal fun Project.configureAndroid(commonExtension: CommonExtension) {
     commonExtension.apply {
         compileSdk = AndroidConfig.COMPILE_SDK
-        defaultConfig {
+        defaultConfig.apply {
             minSdk = AndroidConfig.MIN_SDK
-            ndk {
+            ndk.apply {
                 version = AndroidConfig.NDK
             }
         }
-        compileOptions {
+        compileOptions.apply {
             sourceCompatibility = AndroidConfig.JavaVersion
             targetCompatibility = AndroidConfig.JavaVersion
             isCoreLibraryDesugaringEnabled = true
@@ -44,6 +48,7 @@ internal fun Project.configureAndroid(commonExtension: CommonExtension<*, *, *, 
     tasks.withType<KotlinCompile>().configureEach {
         compilerOptions {
             jvmTarget.set(JvmTarget.fromTarget(AndroidConfig.JavaVersion.toString()))
+            freeCompilerArgs.addAll(deprecationWarningLevelArgs)
             // freeCompilerArgs += "-opt-in=kotlin.RequiresOptIn"
             // freeCompilerArgs += "-Xcontext-receivers"
             // Treat all Kotlin warnings as errors (disabled by default)
@@ -57,12 +62,12 @@ internal fun Project.configureAndroid(commonExtension: CommonExtension<*, *, *, 
     }
 }
 
-internal fun Project.configureCompose(commonExtension: CommonExtension<*, *, *, *, *, *>) {
+internal fun Project.configureCompose(commonExtension: CommonExtension) {
     pluginManager.apply(kotlinx.plugins.compose.compiler.get().pluginId)
 
     commonExtension.apply {
-        buildFeatures {
-            compose = true
+        buildFeatures.apply {
+            this.compose = true
         }
 
         dependencies {
@@ -71,8 +76,6 @@ internal fun Project.configureCompose(commonExtension: CommonExtension<*, *, *, 
     }
 
     extensions.configure<ComposeCompilerGradlePluginExtension> {
-        featureFlags.set(setOf(ComposeFeatureFlag.OptimizeNonSkippingGroups))
-
         val enableMetrics = project.providers.gradleProperty("enableComposeCompilerMetrics").orNull.toBoolean()
         val enableReports = project.providers.gradleProperty("enableComposeCompilerReports").orNull.toBoolean()
 

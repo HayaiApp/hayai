@@ -71,7 +71,7 @@ abstract class LibraryHolder(
      */
     override fun onItemReleased(position: Int) {
         super.onItemReleased(position)
-        (adapter as? LibraryCategoryAdapter)?.libraryListener?.onItemReleased(position)
+        adapter.libraryListener?.onItemReleased(position)
     }
 
     override fun onLongClick(view: View?): Boolean {

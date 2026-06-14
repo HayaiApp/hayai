@@ -10,7 +10,7 @@ import yokai.util.lang.getString
 import dev.icerock.moko.resources.compose.stringResource
 
 @Suppress("unused")
-enum class Themes(@StyleRes val styleRes: Int, val nightMode: Int, val nameRes: StringResource, altNameRes: StringResource? = null) {
+enum class Themes(@field:StyleRes val styleRes: Int, val nightMode: Int, val nameRes: StringResource, altNameRes: StringResource? = null) {
     MONET(
         R.style.Theme_Tachiyomi_Monet,
         AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,

@@ -103,7 +103,7 @@ class BrowseController :
         if (isBindingInitialized) binding.appBar else null
 
     override fun onSetupLocalChrome() {
-        val appBar = binding.appBar ?: return
+        val appBar = binding.appBar
         // When Browse's extension sheet is expanded, the sheet owns the top of the
         // screen — hide the appBar so it doesn't render over the sheet content.
         // Sheet expand/collapse mutates these properties directly via updateTitleAndMenu
@@ -701,7 +701,6 @@ class BrowseController :
                         (searchItem.actionView as? SearchView)?.clearFocus()
                     }
                 }
-                else -> Unit
             }
             setBottomPadding()
         } finally {

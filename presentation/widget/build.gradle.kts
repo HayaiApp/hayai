@@ -3,7 +3,6 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     id("yokai.android.library")
     id("yokai.android.library.compose")
-    kotlin("android")
 }
 
 android {
@@ -20,12 +19,12 @@ android {
 }
 
 dependencies {
-    implementation(projects.core.main)
-    implementation(projects.data)
-    implementation(projects.domain)
-    implementation(projects.i18n)
-    implementation(projects.presentation.core)
-    implementation(projects.source.api)  // Access to SManga
+    implementation(project(":core:main"))
+    implementation(project(":data"))
+    implementation(project(":domain"))
+    implementation(project(":i18n"))
+    implementation(project(":presentation:core"))
+    implementation(project(":source:api"))  // Access to SManga
 
     implementation(androidx.glance.appwidget)
 

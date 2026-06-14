@@ -1,6 +1,5 @@
 plugins {
     id("yokai.android.library")
-    kotlin("android")
     alias(kotlinx.plugins.serialization)
 }
 

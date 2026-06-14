@@ -343,7 +343,7 @@ class ExtensionDetailsController(bundle: Bundle? = null) :
         matPref.apply {
             key = preference.key
             preferenceDataStore = preference.preferenceDataStore
-            title = (preference as? DialogPreference)?.dialogTitle ?: preference.title
+            title = preference.dialogTitle ?: preference.title
         }.performClick()
     }
 

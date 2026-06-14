@@ -148,7 +148,7 @@ class Kavita(private val context: Context, id: Long) : TrackService(id), Enhance
             }
 
             authentication.apiUrl = prefApiUrl
-            authentication.jwtToken = token.toString()
+            authentication.jwtToken = token
         }
         authentications = oauth
     }

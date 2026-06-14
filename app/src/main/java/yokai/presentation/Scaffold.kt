@@ -234,7 +234,6 @@ fun YokaiScaffold(
                                     windowInsets = noWindowInsets,
                                 )
                             }
-                            else -> {}
                         }
 
                         // For large app bar, if search is enabled, show the SearchBar below it

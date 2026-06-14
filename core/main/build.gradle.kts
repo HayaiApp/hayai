@@ -1,20 +1,29 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    id("yokai.android.library")
     kotlin("multiplatform")
+    id("com.android.kotlin.multiplatform.library")
     alias(kotlinx.plugins.serialization)
 }
 
 kotlin {
-    androidTarget()
+    android {
+        namespace = "yokai.core.main"
+        compileSdk = AndroidConfig.COMPILE_SDK
+        minSdk = AndroidConfig.MIN_SDK
+        withHostTest {}
+        compilerOptions {
+            jvmTarget.set(JvmTarget.fromTarget(AndroidConfig.JavaVersion.toString()))
+        }
+    }
     // iosX64()
     // iosArm64()
     // iosSimulatorArm64()
     sourceSets {
         commonMain {
             dependencies {
-                implementation(projects.i18n)
+                implementation(project(":i18n"))
 
                 // Logging
                 api(libs.bundles.logging)
@@ -58,15 +67,13 @@ kotlin {
     }
 }
 
-android {
-    namespace = "yokai.core.main"
-}
-
 tasks {
     withType<KotlinCompile> {
         compilerOptions.freeCompilerArgs.addAll(
             "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
             "-opt-in=kotlinx.serialization.ExperimentalSerializationApi",
+            "-Xwarning-level=DEPRECATION:disabled",
+            "-Xwarning-level=OVERRIDE_DEPRECATION:disabled",
         )
     }
 }

@@ -867,6 +867,10 @@ class LibraryPresenter(
         preferences.libraryDisplayMode().changes(),
     ) {
         val tabbed = (it[14] as Int) == LibraryItem.DISPLAY_MODE_TABBED
+        @Suppress("UNCHECKED_CAST")
+        val collapsedCategories = it[12] as Set<String>
+        @Suppress("UNCHECKED_CAST")
+        val collapsedDynamicCategories = it[13] as Set<String>
         ItemPreferences(
             filterDownloaded = it[0] as Int,
             filterUnread = it[1] as Int,
@@ -880,8 +884,8 @@ class LibraryPresenter(
             showAllCategories = (it[9] as Boolean) || tabbed,
             sortingMode = it[10] as Int,
             sortAscending = it[11] as Boolean,
-            collapsedCategories = it[12] as Set<String>,
-            collapsedDynamicCategories = it[13] as Set<String>,
+            collapsedCategories = collapsedCategories,
+            collapsedDynamicCategories = collapsedDynamicCategories,
         )
     }
 

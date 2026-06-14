@@ -17,7 +17,7 @@ class MangaDexFollowsScreenModel(
 ) : StateScreenModel<MangaDexFollowsScreenModel.State>(State.Loading) {
 
     private val source = sourceManager.get(sourceId)
-    private val mangaDex = source?.getMainSource() as? MangaDex
+    private val mangaDex = source?.getMainSource<MangaDex>()
 
     init {
         loadFollows()

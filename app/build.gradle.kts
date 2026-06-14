@@ -10,8 +10,6 @@ plugins {
     id("yokai.android.application.compose")
     alias(kotlinx.plugins.serialization)
     alias(kotlinx.plugins.parcelize)
-    alias(libs.plugins.aboutlibraries)
-    alias(libs.plugins.aboutlibraries.android)
     alias(libs.plugins.firebase.crashlytics) apply false
     alias(libs.plugins.google.services) apply false
 }
@@ -53,8 +51,6 @@ android {
         versionCode = 80
         versionName = _versionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        multiDexEnabled = true
-
         buildConfigField("String", "COMMIT_COUNT", "\"${commitCount}\"")
         buildConfigField("String", "BETA_COUNT", "\"${betaCount}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${commitHash}\"")
@@ -119,8 +115,23 @@ android {
 
         // Disable some unused things
         aidl = false
-        renderScript = false
         shaders = false
+    }
+
+    packaging {
+        jniLibs {
+            keepDebugSymbols.addAll(
+                listOf(
+                    "**/libandroidx.graphics.path.so",
+                    "**/libarchive-jni.so",
+                    "**/libconscrypt_jni.so",
+                    "**/libdatastore_shared_counter.so",
+                    "**/libimagedecoder.so",
+                    "**/libquickjs.so",
+                    "**/libsqlite3x.so",
+                )
+            )
+        }
     }
 
     flavorDimensions.add("default")
@@ -131,8 +142,7 @@ android {
             dimension = "default"
         }
         create("dev") {
-            resourceConfigurations.clear()
-            resourceConfigurations.add("en")
+            androidResources.localeFilters.add("en")
             dimension = "default"
         }
     }
@@ -147,13 +157,13 @@ android {
 }
 
 dependencies {
-    implementation(projects.core.archive)
-    implementation(projects.core.main)
-    implementation(projects.data)
-    implementation(projects.domain)
-    implementation(projects.i18n)
-    implementation(projects.presentation.core)
-    implementation(projects.source.api)
+    implementation(project(":core:archive"))
+    implementation(project(":core:main"))
+    implementation(project(":data"))
+    implementation(project(":domain"))
+    implementation(project(":i18n"))
+    implementation(project(":presentation:core"))
+    implementation(project(":source:api"))
 
     // Compose
     implementation(platform(compose.bom))

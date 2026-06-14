@@ -171,7 +171,7 @@ class SettingsGeneralController : SettingsLegacyController() {
                     dialogTitleRes = MR.strings.language
 
                     val langs = mutableListOf<Language>()
-                    val parser = context.resources.getXml(yokai.i18n.R.xml.locales_config)
+                    val parser = context.resources.getXml(R.xml.locales_config)
                     var eventType = parser.eventType
                     while (eventType != XmlResourceParser.END_DOCUMENT) {
                         if (eventType == XmlResourceParser.START_TAG && parser.name == "locale") {

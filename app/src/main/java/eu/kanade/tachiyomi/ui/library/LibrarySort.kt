@@ -9,10 +9,10 @@ import yokai.i18n.MR
 enum class LibrarySort(
     val mainValue: Int,
     private val stringRes: StringResource,
-    @DrawableRes private val iconRes: Int,
+    @field:DrawableRes private val iconRes: Int,
     private val catValue: Int = mainValue,
     private val dynamicStringRes: StringResource = stringRes,
-    @DrawableRes private val dynamicIconRes: Int = iconRes,
+    @field:DrawableRes private val dynamicIconRes: Int = iconRes,
 ) {
 
     Title(0, MR.strings.title, R.drawable.ic_sort_by_alpha_24dp),

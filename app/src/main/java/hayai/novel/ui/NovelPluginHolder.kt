@@ -55,21 +55,8 @@ class NovelPluginHolder(view: View, val adapter: NovelPluginAdapter) :
         binding.sourceImage.dispose()
         // Prefer the on-disk icon when present (#10). The book placeholder keeps the row
         // populated for the first paint frame while Coil resolves either the File or URL.
-        val installedIconFile = (plugin as? hayai.novel.plugin.model.NovelPlugin.Installed)
-            ?.iconFile
-            ?.takeIf { it.exists() }
         val placeholderImage = ContextCompat.getDrawable(itemView.context, R.drawable.ic_book_24dp)?.asImage()
         when {
-            installedIconFile != null -> {
-                binding.sourceImage.load(installedIconFile) {
-                    target(CoverViewTarget(binding.sourceImage))
-                    transformations(PaddedSourceIconTransformation())
-                    placeholderImage?.let {
-                        placeholder(it)
-                        error(it)
-                    }
-                }
-            }
             !plugin.iconUrl.isNullOrBlank() -> {
                 binding.sourceImage.load(plugin.iconUrl) {
                     target(CoverViewTarget(binding.sourceImage))

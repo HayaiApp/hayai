@@ -132,7 +132,7 @@ class NovelAppearanceView @JvmOverloads constructor(context: Context, attrs: Att
         swatch.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(color)
-            setStroke(1.dpToPx, 0x66888888.toInt())
+            setStroke(1.dpToPx, 0x66888888)
         }
     }
 

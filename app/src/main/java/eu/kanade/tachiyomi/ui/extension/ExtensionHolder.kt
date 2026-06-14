@@ -166,7 +166,6 @@ class ExtensionHolder(view: View, val adapter: ExtensionAdapter) :
                     InstallStep.Installing -> MR.strings.installing
                     InstallStep.Installed -> MR.strings.installed
                     InstallStep.Error -> MR.strings.retry
-                    else -> return@with
                 },
             )
             if (installStep != InstallStep.Error) {

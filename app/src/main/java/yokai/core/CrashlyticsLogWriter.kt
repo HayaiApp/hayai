@@ -5,8 +5,8 @@ import co.touchlab.kermit.LogWriter
 import co.touchlab.kermit.Message
 import co.touchlab.kermit.Severity
 import co.touchlab.kermit.Tag
-import com.google.firebase.crashlytics.ktx.crashlytics
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.Firebase
+import com.google.firebase.crashlytics.crashlytics
 
 class CrashlyticsLogWriter : LogWriter() {
     override fun isLoggable(tag: String, severity: Severity): Boolean = severity >= Severity.Info

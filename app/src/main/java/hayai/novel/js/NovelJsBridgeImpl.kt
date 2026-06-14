@@ -46,7 +46,7 @@ class NovelJsBridgeImpl(
             val request = buildRequest(url, init)
             val response = client.newCall(request).execute()
 
-            val bodyBytes = response.body?.bytes() ?: ByteArray(0)
+            val bodyBytes = response.body.bytes()
             val bodyText = String(bodyBytes, Charsets.UTF_8)
             val bodyBase64 = Base64.encodeToString(bodyBytes, Base64.NO_WRAP)
 
@@ -68,7 +68,7 @@ class NovelJsBridgeImpl(
             val request = buildRequest(url, init)
             val response = client.newCall(request).execute()
 
-            val bodyBytes = response.body?.bytes() ?: ByteArray(0)
+            val bodyBytes = response.body.bytes()
             val charset = try {
                 Charset.forName(encoding)
             } catch (_: Exception) {
@@ -87,7 +87,7 @@ class NovelJsBridgeImpl(
             val request = buildRequest(url, init)
             val response = client.newCall(request).execute()
 
-            val bodyBytes = response.body?.bytes() ?: ByteArray(0)
+            val bodyBytes = response.body.bytes()
             Base64.encodeToString(bodyBytes, Base64.NO_WRAP)
         } catch (e: Exception) {
             Logger.e(e) { "NovelJsBridge.fetchFile failed: $url" }

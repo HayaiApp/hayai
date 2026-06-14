@@ -179,7 +179,7 @@ open class LibraryController(
         if (isBindingInitialized) binding.appBar else null
 
     override fun onSetupLocalChrome() {
-        val appBar = binding.appBar ?: return
+        val appBar = binding.appBar
         appBar.alpha = 1f
         appBar.isInvisible = false
         appBar.lockYPos = false
@@ -196,7 +196,7 @@ open class LibraryController(
     // refresh just this without going through the full onSetupLocalChrome chain (which
     // used to drag setupToolbarMenu's now-removed seed block along — the recursion source).
     private fun refreshTabStrip() {
-        val appBar = binding.appBar ?: return
+        val appBar = binding.appBar
         val visibleCats = if (isTabbedMode) visibleTabCategories() else emptyList()
         val showStrip = isTabbedMode && visibleCats.size > 1 && !presenter.forceShowAllCategories
         if (showStrip) {
@@ -1019,7 +1019,7 @@ open class LibraryController(
                 .filterIsInstance<LibraryMangaItem>()
                 .filter { !it.manga.manga.initialized || it.manga.unread > 0 }
         if (items.isNotEmpty()) {
-            val item = items.random() as LibraryMangaItem
+            val item = items.random()
             openManga(item.manga.manga)
         }
     }
@@ -1634,7 +1634,6 @@ open class LibraryController(
                     binding.filterBottomSheet.filterBottomSheet.isInvisible = true
                 }
             }
-            else -> Unit
         }
     }
 
@@ -1992,21 +1991,19 @@ open class LibraryController(
         binding.recyclerCover.isFocusable = show
         // Operate on this controller's own local appBar.
         val localAppBar = binding.appBar
-        if (localAppBar != null) {
-            (activity as? MainActivity)?.reEnableBackPressedCallBack()
-            if (show && !localAppBar.compactSearchMode && localAppBar.useLargeToolbar) {
-                localAppBar.compactSearchMode = localAppBar.useLargeToolbar && show
-                if (localAppBar.compactSearchMode) {
-                    mainRecycler.requestApplyInsets()
-                    localAppBar.y = 0f
-                    localAppBar.updateAppBarAfterY(mainRecycler)
-                }
-            } else if (!show && localAppBar.compactSearchMode && localAppBar.useLargeToolbar &&
-                (resources?.configuration?.screenHeightDp ?: 0) >= 600
-            ) {
-                localAppBar.compactSearchMode = false
+        (activity as? MainActivity)?.reEnableBackPressedCallBack()
+        if (show && !localAppBar.compactSearchMode && localAppBar.useLargeToolbar) {
+            localAppBar.compactSearchMode = localAppBar.useLargeToolbar && show
+            if (localAppBar.compactSearchMode) {
                 mainRecycler.requestApplyInsets()
+                localAppBar.y = 0f
+                localAppBar.updateAppBarAfterY(mainRecycler)
             }
+        } else if (!show && localAppBar.compactSearchMode && localAppBar.useLargeToolbar &&
+            (resources?.configuration?.screenHeightDp ?: 0) >= 600
+        ) {
+            localAppBar.compactSearchMode = false
+            mainRecycler.requestApplyInsets()
         }
         if (closeSearch) {
             searchToolbar()?.searchItem?.collapseActionView()
@@ -2429,7 +2426,7 @@ open class LibraryController(
         val newHeader = adapter.getSectionHeader(position) as? LibraryHeaderItem
         val libraryItems = getSectionItems(adapter.getSectionHeader(position), item)
             .filterIsInstance<LibraryMangaItem>()
-        val mangaIds = libraryItems.mapNotNull { (it as? LibraryMangaItem)?.manga?.manga?.id }
+        val mangaIds = libraryItems.mapNotNull { it.manga.manga.id }
         if (newHeader?.category?.id == item.manga.category) {
             presenter.rearrangeCategory(item.manga.category, mangaIds)
         } else {
@@ -2562,7 +2559,7 @@ open class LibraryController(
             val item = adapter.findCategoryHeader(catId) ?: return
             val libraryItems = adapter.getSectionItems(item)
                 .filterIsInstance<LibraryMangaItem>()
-            val mangaIds = libraryItems.mapNotNull { (it as? LibraryMangaItem)?.manga?.manga?.id }
+            val mangaIds = libraryItems.mapNotNull { it.manga.manga.id }
             presenter.rearrangeCategory(catId, mangaIds)
         } else {
             presenter.sortCategory(catId, sortBy)

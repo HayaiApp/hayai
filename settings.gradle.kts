@@ -28,8 +28,6 @@ dependencyResolutionManagement {
     }
 }
 
-enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
-
 rootProject.name = "Hayai"
 include(":app")
 include(":core:archive")

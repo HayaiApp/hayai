@@ -116,15 +116,8 @@ class LibraryPagerAdapter(
 
     private fun bindCategoryItems(position: Int, adapter: LibraryCategoryAdapter) {
         val category = categories.getOrNull(position) ?: return
-        // libraryToDisplay's per-category list can include a LibraryHeaderItem at index 0 (continuous
-        // mode renders that as the category bubble). In tabbed mode the category IS the tab, so we
-        // strip pre-existing headers from the input. Auto-inserted headers (from each LibraryItem's
-        // getHeader()) are separately suppressed inside LibraryCategoryAdapter.setItems via the
-        // isPagedMode + LibraryItem.suppressSectionHeader path; together they guarantee zero headers
-        // end up in mItems while the page is bound.
         val items = controller.presenter.libraryToDisplay[category]
             .orEmpty()
-            .filter { it !is LibraryHeaderItem }
         // Seed the filter BEFORE setItems so its internal launchFilter picks it up — without
         // this, a page created (or recreated by the ViewPager when swiped past the offscreen
         // limit) while a search is active would render unfiltered.

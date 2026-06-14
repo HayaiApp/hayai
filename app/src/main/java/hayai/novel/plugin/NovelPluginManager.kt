@@ -135,9 +135,10 @@ class NovelPluginManager(
             // Only run QuickJS metadata extraction if the cache is missing required fields.
             // For installed plugins this is the cold-start hot path: each call evaluates ~5
             // minified JS bundles (cheerio, dayjs, ...) and easily takes 700ms+ per plugin.
-            val needsExtraction = cachedSource?.id.isNullOrBlank() ||
-                cachedSource?.name.isNullOrBlank() ||
-                cachedSource?.siteUrl.isNullOrBlank()
+            val needsExtraction = cachedSource == null ||
+                cachedSource.id.isBlank() ||
+                cachedSource.name.isBlank() ||
+                cachedSource.siteUrl.isBlank()
             val metadata = if (needsExtraction) pluginLoader.extractMetadata(jsFile.readText()) else null
 
             val sourceId = cachedSource?.id ?: metadata?.id ?: return null

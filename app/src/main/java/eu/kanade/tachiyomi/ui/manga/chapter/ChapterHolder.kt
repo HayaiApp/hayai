@@ -161,7 +161,7 @@ class ChapterHolder(
         }
     }
 
-    fun notifyStatus(status: Download.State, locked: Boolean, progress: Int, animated: Boolean = false) = with(binding.downloadButton.downloadButton) {
+    fun notifyStatus(status: Download.State, locked: Boolean, progress: Int, animated: Boolean = false): Unit = with(binding.downloadButton.downloadButton) {
         val delegateAccent = adapter.delegate.accentColor()
         if (delegateAccent != null) {
             binding.startView.backgroundTintList = ColorStateList.valueOf(delegateAccent)

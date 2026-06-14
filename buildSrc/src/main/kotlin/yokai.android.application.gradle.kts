@@ -3,7 +3,6 @@ import yokai.build.configureTest
 
 plugins {
     id("com.android.application")
-    kotlin("android")
 }
 
 android {

@@ -318,14 +318,14 @@ class MangaDetailsController :
                     return
                 }
 
-                if (headerBinding.buttonGroupCompose?.isVisible != true) {
+                if (headerBinding.buttonGroupCompose.isVisible != true) {
                     binding.fab.isVisible = false
                     return
                 }
 
                 val bound = Rect()
                 binding.recycler.getHitRect(bound)
-                if (headerBinding.buttonGroupCompose?.getLocalVisibleRect(bound) == true) {
+                if (headerBinding.buttonGroupCompose.getLocalVisibleRect(bound)) {
                     binding.fab.hide()
                 } else {
                     binding.fab.show()
@@ -379,8 +379,8 @@ class MangaDetailsController :
                     ColorUtils.blendARGB(
                         it,
                         context.contextCompatColor(R.color.colorOnDownloadBadgeDayNight),
-                        (if (!context.isInNightMode()) luminance else -(luminance - 1))
-                            .toFloat() * if (context.isInNightMode()) 0.22f else 0.35f,
+                        (if (!context.isInNightMode()) luminance else -(luminance - 1)) *
+                            if (context.isInNightMode()) 0.22f else 0.35f,
                     )
                 } else {
                     it

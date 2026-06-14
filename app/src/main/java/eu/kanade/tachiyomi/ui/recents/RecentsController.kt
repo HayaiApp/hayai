@@ -133,7 +133,7 @@ class RecentsController(bundle: Bundle? = null) :
         if (isBindingInitialized) binding.appBar else null
 
     override fun onSetupLocalChrome() {
-        val appBar = binding.appBar ?: return
+        val appBar = binding.appBar
         appBar.alpha = 1f
         appBar.isInvisible = false
         appBar.lockYPos = false
@@ -529,7 +529,7 @@ class RecentsController(bundle: Bundle? = null) :
         if (isControllerVisible) {
             val activity = (activity as? MainActivity) ?: return
             appBar()?.isInvisible = showingDownloads
-            (activity as? MainActivity)?.setStatusBarColorTransparent(showingDownloads)
+            activity.setStatusBarColorTransparent(showingDownloads)
             setTitle()
         }
     }
@@ -1039,7 +1039,6 @@ class RecentsController(bundle: Bundle? = null) :
                     setOptionsMenuHidden(true)
                     snack?.dismiss()
                 }
-                else -> Unit
             }
             setBottomPadding()
         } finally {
