@@ -426,11 +426,11 @@ private fun FilterRow(
     when (filter) {
         is Filter.Header -> FilterHeaderRow(filter)
         is Filter.Separator -> FilterSeparatorRow(filter)
-        is Filter.CheckBox -> FilterCheckBoxRow(filter)
-        is Filter.TriState -> FilterTriStateRow(filter)
-        is Filter.Select<*> -> FilterSelectRow(filter)
-        is Filter.Sort -> FilterSortRow(filter)
-        is Filter.Text -> FilterTextRow(filter)
+        is Filter.CheckBox -> FilterCheckBoxRow(filter, outerSelectionVersion)
+        is Filter.TriState -> FilterTriStateRow(filter, outerSelectionVersion)
+        is Filter.Select<*> -> FilterSelectRow(filter, outerSelectionVersion)
+        is Filter.Sort -> FilterSortRow(filter, outerSelectionVersion)
+        is Filter.Text -> FilterTextRow(filter, outerSelectionVersion)
         is Filter.AutoComplete -> FilterAutoCompleteRow(
             filter = filter,
             outerSelectionVersion = outerSelectionVersion,
@@ -504,11 +504,11 @@ private fun GroupChildrenScreen(
             when (child) {
                 is Filter.Header -> FilterHeaderRow(child)
                 is Filter.Separator -> FilterSeparatorRow(child)
-                is Filter.CheckBox -> FilterCheckBoxRow(child)
-                is Filter.TriState -> FilterTriStateRow(child)
-                is Filter.Select<*> -> FilterSelectRow(child)
-                is Filter.Sort -> FilterSortRow(child)
-                is Filter.Text -> FilterTextRow(child)
+                is Filter.CheckBox -> FilterCheckBoxRow(child, outerSelectionVersion)
+                is Filter.TriState -> FilterTriStateRow(child, outerSelectionVersion)
+                is Filter.Select<*> -> FilterSelectRow(child, outerSelectionVersion)
+                is Filter.Sort -> FilterSortRow(child, outerSelectionVersion)
+                is Filter.Text -> FilterTextRow(child, outerSelectionVersion)
                 is Filter.Group<*> -> FilterGroupRow(
                     filter = child,
                     outerSelectionVersion = outerSelectionVersion,

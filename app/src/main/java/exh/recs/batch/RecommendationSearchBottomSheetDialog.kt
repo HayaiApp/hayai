@@ -32,7 +32,7 @@ fun RecommendationSearchBottomSheetDialog(
     onSearchRequest: (flags: Int) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
-    var flags by remember { mutableIntStateOf(initialFlags) }
+    var flags by remember(initialFlags) { mutableIntStateOf(initialFlags) }
 
     val includeSources = SearchFlags.hasIncludeSources(flags)
     val includeTrackers = SearchFlags.hasIncludeTrackers(flags)

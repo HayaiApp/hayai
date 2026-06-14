@@ -68,7 +68,7 @@ class BrowseRecommendsScreen(
         val screenModel = rememberScreenModel { BrowseRecommendsScreenModel(args) }
         val state by screenModel.state.collectAsState()
 
-        val title = remember {
+        val title = remember(args) {
             when (val currentArgs = args) {
                 is Args.SingleSourceManga -> {
                     val rawName = currentArgs.recommendationSourceName

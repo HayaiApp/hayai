@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.icerock.moko.resources.StringResource
 import dev.icerock.moko.resources.compose.stringResource
 import eu.kanade.tachiyomi.core.preference.PreferenceStore
@@ -62,10 +66,23 @@ object SettingsMangadexScreen : ComposableSettings() {
     @Composable
     private fun getLoginPreference(): Preference.PreferenceItem.TextPreference {
         val context = LocalContext.current
+        val lifecycleOwner = LocalLifecycleOwner.current
         val scope = rememberCoroutineScope()
         val preferenceStore = remember { get<PreferenceStore>() }
-        val isLoggedIn = remember { MdUtil.isOAuthSet(preferenceStore) }
+        var isLoggedIn by remember(preferenceStore) { mutableStateOf(MdUtil.isOAuthSet(preferenceStore)) }
         var logoutDialogOpen by remember { mutableStateOf(false) }
+
+        DisposableEffect(lifecycleOwner, preferenceStore) {
+            val observer = object : DefaultLifecycleObserver {
+                override fun onResume(owner: LifecycleOwner) {
+                    isLoggedIn = MdUtil.isOAuthSet(preferenceStore)
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+            }
+        }
 
         if (logoutDialogOpen) {
             AlertDialog(
@@ -80,6 +97,7 @@ object SettingsMangadexScreen : ComposableSettings() {
                                 val success = mangaDex.logout()
                                 withUIContext {
                                     if (success) {
+                                        isLoggedIn = false
                                         context.toast(MR.strings.mangadex_logged_out)
                                     } else {
                                         context.toast(MR.strings.unknown_error)

@@ -114,13 +114,19 @@ fun PreferenceScreen(
 ) {
     val highlightKey = ComposableSettings.highlightKey
     if (highlightKey != null) {
-        LaunchedEffect(Unit) {
-            val i = items.findHighlightedIndex(highlightKey)
-            if (i >= 0) {
+        val highlightIndex = remember(items, highlightKey) {
+            items.findHighlightedIndex(highlightKey)
+        }
+        LaunchedEffect(highlightKey, highlightIndex, items.isNotEmpty()) {
+            if (highlightIndex >= 0) {
                 delay(0.5.seconds)
-                listState.animateScrollToItem(i)
+                listState.animateScrollToItem(highlightIndex)
+                if (ComposableSettings.highlightKey == highlightKey) {
+                    ComposableSettings.highlightKey = null
+                }
+            } else if (items.isNotEmpty() && ComposableSettings.highlightKey == highlightKey) {
+                ComposableSettings.highlightKey = null
             }
-            ComposableSettings.highlightKey = null
         }
     }
 

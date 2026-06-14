@@ -79,9 +79,9 @@ fun PagePreviewInlineSection(
     onOpenPagePreview: () -> Unit,
     onOpenReaderAtPage: (Int) -> Unit,
 ) {
-    var state by remember { mutableStateOf<PreviewState>(PreviewState.Loading) }
+    var state by remember(mangaId, sourceId) { mutableStateOf<PreviewState>(PreviewState.Loading) }
 
-    LaunchedEffect(mangaId) {
+    LaunchedEffect(mangaId, sourceId) {
         withContext(Dispatchers.IO) {
             try {
                 val getManga: GetManga = get()

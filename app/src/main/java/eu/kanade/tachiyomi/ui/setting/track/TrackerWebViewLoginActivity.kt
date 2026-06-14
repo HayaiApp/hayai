@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -131,21 +132,23 @@ private fun TrackerWebViewLoginScreen(
     val state = rememberWebViewState(url = loginUrl)
     val navigator = rememberWebViewNavigator()
     val scope = rememberCoroutineScope()
-    var currentUrl by remember { mutableStateOf(loginUrl) }
+    val currentOnLoginSuccess by rememberUpdatedState(onLoginSuccess)
+    val currentOnUp by rememberUpdatedState(onUp)
+    var currentUrl by remember(loginUrl) { mutableStateOf(loginUrl) }
     var isLoading by remember { mutableStateOf(true) }
 
     val extractToken: () -> Unit = {
         scope.launch {
             val token = extractTokenFromCookies(trackerId, currentUrl)
             if (token != null) {
-                onLoginSuccess(token)
+                currentOnLoginSuccess(token)
             }
         }
     }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     YokaiScaffold(
-        onNavigationIconClicked = onUp,
+        onNavigationIconClicked = currentOnUp,
         title = stringResource(MR.strings.log_in_to_, trackerName),
         navigationIcon = Icons.Outlined.Close,
         appBarType = AppBarType.SMALL,
@@ -185,7 +188,7 @@ private fun TrackerWebViewLoginScreen(
                 .fillMaxSize()
                 .padding(contentPadding),
         ) {
-            val webClient = remember {
+            val webClient = remember(loginUrl) {
                 object : AccompanistWebViewClient() {
                     override fun onPageStarted(view: AndroidWebView, url: String?, favicon: android.graphics.Bitmap?) {
                         super.onPageStarted(view, url, favicon)

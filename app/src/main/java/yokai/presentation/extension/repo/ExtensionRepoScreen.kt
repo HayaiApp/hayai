@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +62,8 @@ class ExtensionRepoScreen(
         val onBackPress = LocalBackPress.currentOrThrow
         val context = LocalContext.current
         val alertDialog = LocalDialogHostState.currentOrThrow
+        val currentContext by rememberUpdatedState(context)
+        val currentAlertDialog by rememberUpdatedState(alertDialog)
 
         val scope = rememberCoroutineScope()
         val extensionScreenModel = rememberScreenModel { ExtensionRepoScreenModel() }
@@ -145,12 +148,12 @@ class ExtensionRepoScreen(
             extensionScreenModel.event.collectLatest { event ->
                 when (event) {
                     is ExtensionRepoEvent.NoOp -> {}
-                    is ExtensionRepoEvent.LocalizedMessage -> context.toast(event.stringRes)
+                    is ExtensionRepoEvent.LocalizedMessage -> currentContext.toast(event.stringRes)
                     is ExtensionRepoEvent.Success -> {}
                     is ExtensionRepoEvent.ShowDialog -> {
                         when(event.dialog) {
                             is RepoDialog.Conflict -> {
-                                alertDialog.awaitExtensionRepoReplacePrompt(
+                                currentAlertDialog.awaitExtensionRepoReplacePrompt(
                                     oldRepo = event.dialog.oldRepo,
                                     newRepo = event.dialog.newRepo,
                                     onMigrate = { extensionScreenModel.replaceRepo(event.dialog.newRepo) },
@@ -166,7 +169,7 @@ class ExtensionRepoScreen(
             novelScreenModel.event.collectLatest { event ->
                 when (event) {
                     is ExtensionRepoEvent.NoOp -> {}
-                    is ExtensionRepoEvent.LocalizedMessage -> context.toast(event.stringRes)
+                    is ExtensionRepoEvent.LocalizedMessage -> currentContext.toast(event.stringRes)
                     is ExtensionRepoEvent.Success -> {}
                     is ExtensionRepoEvent.ShowDialog -> {}
                 }

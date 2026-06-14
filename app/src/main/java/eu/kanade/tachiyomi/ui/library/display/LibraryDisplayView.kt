@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import eu.kanade.tachiyomi.core.storage.preference.collectAsState
 import eu.kanade.tachiyomi.databinding.LibraryDisplayLayoutBinding
 import eu.kanade.tachiyomi.ui.library.LibraryItem
 import eu.kanade.tachiyomi.util.bindToPreference
@@ -52,11 +53,13 @@ class LibraryDisplayView @JvmOverloads constructor(context: Context, attrs: Attr
         binding.staggeredGrid.isEnabled = !uiPreferences.uniformGrid().get()
         binding.staggeredGrid.bindToPreference(preferences.useStaggeredGrid())
 
-        val initialValue = ((preferences.gridSize().get() + .5f) * 2f).roundToInt().toFloat()
+        val gridSizePreference = preferences.gridSize()
         val displayView = this@LibraryDisplayView
         binding.gridSizeCompose.setContent {
             val ctx = LocalContext.current
-            var sliderValue by remember { mutableFloatStateOf(initialValue) }
+            val gridSize by gridSizePreference.collectAsState()
+            val initialValue = ((gridSize + .5f) * 2f).roundToInt().toFloat()
+            var sliderValue by remember(initialValue) { mutableFloatStateOf(initialValue) }
             YokaiTheme {
                 val rows = remember(sliderValue) {
                     (displayView.mainView ?: displayView).rowsForValue(sliderValue)

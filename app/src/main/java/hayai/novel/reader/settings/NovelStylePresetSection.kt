@@ -163,7 +163,7 @@ private fun PresetNameDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var name by remember { mutableStateOf(initialName) }
+    var name by remember(initialName) { mutableStateOf(initialName) }
     val trimmed = name.trim()
     val isDuplicate = existingNames.any { it.equals(trimmed, ignoreCase = true) }
     val canSave = trimmed.isNotEmpty() && !isDuplicate

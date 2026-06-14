@@ -46,7 +46,7 @@ fun EditTextPreferenceWidget(
     if (isDialogShown) {
         val scope = rememberCoroutineScope()
         val onDismissRequest = { isDialogShown = false }
-        var textFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        var textFieldValue by rememberSaveable(value, stateSaver = TextFieldValue.Saver) {
             mutableStateOf(TextFieldValue(value))
         }
         AlertDialog(

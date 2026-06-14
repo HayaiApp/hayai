@@ -61,8 +61,8 @@ import yokai.i18n.MR
 // region CheckBox — Switch on the right, matches Hayai's SwitchPreferenceWidget.
 
 @Composable
-internal fun FilterCheckBoxRow(filter: Filter.CheckBox) {
-    var checked by remember(filter) { mutableStateOf(filter.state) }
+internal fun FilterCheckBoxRow(filter: Filter.CheckBox, stateVersion: Int) {
+    var checked by remember(filter, stateVersion) { mutableStateOf(filter.state) }
     FilterPreferenceRow(
         title = filter.name,
         onClick = {
@@ -85,8 +85,8 @@ internal fun FilterCheckBoxRow(filter: Filter.CheckBox) {
 // region TriState — connected 3-segment selector (Off / + / −). All three states always visible.
 
 @Composable
-internal fun FilterTriStateRow(filter: Filter.TriState) {
-    var state by remember(filter) { mutableIntStateOf(filter.state) }
+internal fun FilterTriStateRow(filter: Filter.TriState, stateVersion: Int) {
+    var state by remember(filter, stateVersion) { mutableIntStateOf(filter.state) }
     FilterPreferenceRow(
         title = filter.name,
         onClick = null,
@@ -195,9 +195,9 @@ private val SegmentShapeEnd = RoundedCornerShape(
 // region Select — value chip + chevron on the right; anchored DropdownMenu.
 
 @Composable
-internal fun FilterSelectRow(filter: Filter.Select<*>) {
+internal fun FilterSelectRow(filter: Filter.Select<*>, stateVersion: Int) {
     var expanded by remember { mutableStateOf(false) }
-    var selectedIndex by remember(filter) { mutableIntStateOf(filter.state) }
+    var selectedIndex by remember(filter, stateVersion) { mutableIntStateOf(filter.state) }
     val displayValue = filter.values.getOrNull(selectedIndex)?.toString().orEmpty()
     FilterPreferenceRow(
         title = filter.name,
@@ -238,9 +238,9 @@ internal fun FilterSelectRow(filter: Filter.Select<*>) {
 // region Sort — same row as Select but the trailing arrow shows direction.
 
 @Composable
-internal fun FilterSortRow(filter: Filter.Sort) {
+internal fun FilterSortRow(filter: Filter.Sort, stateVersion: Int) {
     var expanded by remember { mutableStateOf(false) }
-    var state by remember(filter) { mutableStateOf(filter.state) }
+    var state by remember(filter, stateVersion) { mutableStateOf(filter.state) }
     val selectedIndex = state?.index
     val ascending = state?.ascending == true
     val displayValue = selectedIndex?.let { filter.values.getOrNull(it) }.orEmpty()
@@ -481,8 +481,8 @@ internal fun FilterSeparatorRow(@Suppress("UNUSED_PARAMETER") filter: Filter.Sep
 }
 
 @Composable
-internal fun FilterTextRow(filter: Filter.Text) {
-    var value by remember(filter) { mutableStateOf(filter.state) }
+internal fun FilterTextRow(filter: Filter.Text, stateVersion: Int) {
+    var value by remember(filter, stateVersion) { mutableStateOf(filter.state) }
     // Every keystroke commits to the filter state — matches the legacy contract where the
     // source consumes the latest text without an explicit "submit" gesture.
     LaunchedEffect(value) {

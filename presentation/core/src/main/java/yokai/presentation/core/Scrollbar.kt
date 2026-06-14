@@ -230,7 +230,7 @@ private fun Modifier.drawScrollbar(
     val atEnd = if (orientation == Orientation.Vertical) isLtr else true
 
     val context = LocalContext.current
-    val thickness = remember { ViewConfiguration.get(context).scaledScrollBarSize.toFloat() }
+    val thickness = remember(context) { ViewConfiguration.get(context).scaledScrollBarSize.toFloat() }
     val color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.364f)
     Modifier
         .nestedScroll(nestedScrollConnection)

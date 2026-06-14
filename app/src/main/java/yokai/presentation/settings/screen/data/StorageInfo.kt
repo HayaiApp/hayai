@@ -28,7 +28,7 @@ fun StorageInfo(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val storages = remember { DiskUtil.getExternalStorages(context) }
+    val storages = remember(context) { DiskUtil.getExternalStorages(context) }
 
     Column(
         modifier = modifier,
@@ -47,9 +47,9 @@ private fun StorageInfo(
     val context = LocalContext.current
 
     val available = remember(file) { DiskUtil.getAvailableStorageSpace(file) }
-    val availableText = remember(available) { Formatter.formatFileSize(context, available) }
+    val availableText = remember(context, available) { Formatter.formatFileSize(context, available) }
     val total = remember(file) { DiskUtil.getTotalStorageSpace(file) }
-    val totalText = remember(total) { Formatter.formatFileSize(context, total) }
+    val totalText = remember(context, total) { Formatter.formatFileSize(context, total) }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(Size.tiny),

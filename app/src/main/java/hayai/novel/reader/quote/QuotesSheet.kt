@@ -72,9 +72,7 @@ fun QuotesSheet(
     var quoteToDelete by remember { mutableStateOf<Quote?>(null) }
     var selectedQuote by remember { mutableStateOf<Quote?>(null) }
     var editingQuote by remember { mutableStateOf<Quote?>(null) }
-    var editedContent by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
-    var newQuoteContent by remember { mutableStateOf("") }
 
     val clipboardManager = LocalClipboardManager.current
 
@@ -131,7 +129,6 @@ fun QuotesSheet(
             confirmButton = {
                 TextButton(onClick = {
                     editingQuote = q
-                    editedContent = q.content
                     selectedQuote = null
                 }) { Text(stringResource(MR.strings.edit)) }
             },
@@ -151,6 +148,7 @@ fun QuotesSheet(
 
     if (editingQuote != null) {
         val q = editingQuote!!
+        var editedContent by remember(q) { mutableStateOf(q.content) }
         AlertDialog(
             onDismissRequest = { editingQuote = null },
             title = { Text(stringResource(MR.strings.novel_quote_edit)) },
@@ -180,8 +178,11 @@ fun QuotesSheet(
     }
 
     if (showAddDialog && onQuoteAdd != null) {
+        var newQuoteContent by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { showAddDialog = false },
+            onDismissRequest = {
+                showAddDialog = false
+            },
             title = { Text(stringResource(MR.strings.novel_quote_add)) },
             text = {
                 OutlinedTextField(
@@ -196,7 +197,6 @@ fun QuotesSheet(
                 TextButton(onClick = {
                     if (newQuoteContent.isNotBlank()) {
                         onQuoteAdd(newQuoteContent.trim())
-                        newQuoteContent = ""
                     }
                     showAddDialog = false
                 }) { Text(stringResource(MR.strings.save)) }
@@ -284,7 +284,6 @@ fun QuotesSheet(
                             },
                             onEdit = {
                                 editingQuote = quote
-                                editedContent = quote.content
                             },
                             onDelete = { quoteToDelete = quote },
                         )

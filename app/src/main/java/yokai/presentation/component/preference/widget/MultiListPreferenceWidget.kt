@@ -32,7 +32,7 @@ fun MultiSelectListPreferenceWidget(
     )
 
     if (isDialogShown) {
-        val selected = remember {
+        val selected = remember(values, preference.entries) {
             preference.entries.keys
                 .filter { values.contains(it) }
                 .toMutableStateList()

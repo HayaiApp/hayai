@@ -240,13 +240,13 @@ private fun RegexEditDialog(
     onDismiss: () -> Unit,
     onConfirm: (RegexReplacement) -> Unit,
 ) {
-    var title by remember { mutableStateOf(initialRule?.title ?: "") }
-    var pattern by remember { mutableStateOf(initialRule?.pattern ?: "") }
-    var replacement by remember { mutableStateOf(initialRule?.replacement ?: "") }
-    var isRegex by remember { mutableStateOf(initialRule?.isRegex ?: true) }
-    var testInput by remember { mutableStateOf("") }
-    var testOutput by remember { mutableStateOf<String?>(null) }
-    var testError by remember { mutableStateOf<String?>(null) }
+    var title by remember(initialRule) { mutableStateOf(initialRule?.title ?: "") }
+    var pattern by remember(initialRule) { mutableStateOf(initialRule?.pattern ?: "") }
+    var replacement by remember(initialRule) { mutableStateOf(initialRule?.replacement ?: "") }
+    var isRegex by remember(initialRule) { mutableStateOf(initialRule?.isRegex ?: true) }
+    var testInput by remember(initialRule) { mutableStateOf("") }
+    var testOutput by remember(initialRule) { mutableStateOf<String?>(null) }
+    var testError by remember(initialRule) { mutableStateOf<String?>(null) }
 
     val patternEmptyText = stringResource(MR.strings.novel_rule_pattern_empty)
     val invalidRegexText = stringResource(MR.strings.novel_rule_invalid_regex)

@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.setValue
@@ -88,8 +89,11 @@ fun WebViewScreenContent(
     onUrlChange: (String) -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val currentOnNavigateUp by rememberUpdatedState(onNavigateUp)
+    val currentOnUrlChange by rememberUpdatedState(onUrlChange)
+    val currentHeaders by rememberUpdatedState(headers)
 
-    val windowStack = remember {
+    val windowStack = remember(url, headers) {
         mutableStateStackOf(
             WebViewWindow(
                 WebContent.Url(url = url, additionalHttpHeaders = headers),
@@ -105,7 +109,7 @@ fun WebViewScreenContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var currentUrl by remember { mutableStateOf(url) }
+    var currentUrl by remember(url) { mutableStateOf(url) }
     var showCloudflareHelp by remember { mutableStateOf(false) }
     var isActive by remember { mutableStateOf(true) }
 
@@ -119,7 +123,7 @@ fun WebViewScreenContent(
                 super.onPageStarted(view, url, favicon)
                 url?.let {
                     currentUrl = it
-                    onUrlChange(it)
+                    currentOnUrlChange(it)
                 }
             }
 
@@ -139,7 +143,7 @@ fun WebViewScreenContent(
                 super.doUpdateVisitedHistory(view, url, isReload)
                 url?.let {
                     currentUrl = it
-                    onUrlChange(it)
+                    currentOnUrlChange(it)
                 }
             }
 
@@ -155,7 +159,7 @@ fun WebViewScreenContent(
                 // Only open valid web urls
                 if (url.startsWith("http") || url.startsWith("https")) {
                     if (url != view?.url) {
-                        view?.loadUrl(url, headers)
+                        view?.loadUrl(url, currentHeaders)
                         return true
                     }
                 }
@@ -165,7 +169,7 @@ fun WebViewScreenContent(
         }
     }
 
-    val webChromeClient = remember {
+    val webChromeClient = remember(windowStack, coroutineScope) {
         object : AccompanistWebChromeClient() {
             override fun onCreateWindow(
                 view: WebView,
@@ -220,13 +224,11 @@ fun WebViewScreenContent(
         return webView
     }
 
-    val popState = remember<() -> Unit> {
-        {
-            if (windowStack.size == 1) {
-                onNavigateUp()
-            } else {
-                windowStack.pop()
-            }
+    val popState: () -> Unit = {
+        if (windowStack.size == 1) {
+            currentOnNavigateUp()
+        } else {
+            windowStack.pop()
         }
     }
 
@@ -244,7 +246,7 @@ fun WebViewScreenContent(
                             )
                         },
                         navigationIcon = {
-                            IconButton(onClick = onNavigateUp) {
+                            IconButton(onClick = currentOnNavigateUp) {
                                 UpIcon(navigationIcon = Icons.Outlined.Close)
                             }
                         },
