@@ -55,6 +55,11 @@
 -keep interface com.google.android.material.** { *; }
 -keep public class com.google.android.material.R$* { *; }
 
+# AndroidX Window reflects optional platform extension/sidecar APIs that are
+# only present on devices which provide them.
+-dontwarn androidx.window.extensions.**
+-dontwarn androidx.window.sidecar.**
+
 ##---------------Begin: proguard configuration for RxJava 1.x  ----------
 -dontwarn sun.misc.**
 

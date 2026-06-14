@@ -123,7 +123,7 @@ jobs:
 
       - name: Build and test
         if: startsWith(env.BUILD_TYPE, 'Standard')
-        run: ./gradlew assemble${{ env.BUILD_TYPE }} testReleaseUnitTest test${{ env.BUILD_TYPE }}UnitTest
+        run: ./gradlew assemble${{ env.BUILD_TYPE }} testStandardReleaseUnitTest test${{ env.BUILD_TYPE }}UnitTest
 
       - name: Upload R8 APK to artifact
         uses: actions/upload-artifact@v4

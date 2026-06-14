@@ -52,7 +52,7 @@ jobs:
           cache-disabled: true
 
       - name: Build and test
-        run: ./gradlew assembleStandardRelease testReleaseUnitTest testStandardReleaseUnitTest
+        run: ./gradlew assembleStandardRelease testStandardReleaseUnitTest
 
       - name: Publish test report
         uses: mikepenz/action-junit-report@v5

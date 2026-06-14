@@ -29,3 +29,7 @@ tasks.named("dependencyUpdates", com.github.benmanes.gradle.versions.updates.Dep
 tasks.register("clean", Delete::class) {
     delete(rootProject.layout.buildDirectory)
 }
+
+tasks.register("testReleaseUnitTest") {
+    dependsOn(":app:testStandardReleaseUnitTest")
+}
