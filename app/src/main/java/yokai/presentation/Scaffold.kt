@@ -2,11 +2,15 @@ package yokai.presentation
 
 import android.app.Activity
 import android.os.Build
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,8 +32,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import yokai.presentation.core.AppBarScrollBehavior
 import yokai.presentation.core.pinnedAppBarScrollBehavior
@@ -50,6 +53,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
@@ -78,14 +83,22 @@ fun YokaiScaffold(
     val behavior = scrollBehavior ?: pinnedAppBarScrollBehavior()
     val m3ScrollBehavior = behavior.m3ScrollBehavior
     val view = LocalView.current
-    val useDarkIcons = MaterialTheme.colorScheme.surface.luminance() > .5
     val (color, scrolledColor) = getTopAppBarColor(title)
+    val appBarScrolled = m3ScrollBehavior.state.collapsedFraction > 0.01f ||
+        m3ScrollBehavior.state.overlappedFraction > 0.01f
+    val appBarSurfaceColor by animateColorAsState(
+        targetValue = if (appBarScrolled) scrolledColor else color,
+        label = "AppBarSurfaceColor",
+    )
+    val statusBarContrastColor = appBarSurfaceColor.takeUnless { it == Color.Transparent }
+        ?: MaterialTheme.colorScheme.surface
+    val useDarkIcons = statusBarContrastColor.luminance() > .5
 
     SideEffect {
         val activity = view.context as Activity
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM)
-                activity.window.statusBarColor = Color.Transparent.toArgb()
+                activity.window.statusBarColor = appBarSurfaceColor.toArgb()
             WindowInsetsControllerCompat(activity.window, view).isAppearanceLightStatusBars = useDarkIcons
         }
     }
@@ -93,6 +106,7 @@ fun YokaiScaffold(
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     var appBarHeight by remember { mutableStateOf(0f) }
+    val noWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
 
     Scaffold(
         modifier = modifier.nestedScroll(m3ScrollBehavior.nestedScrollConnection),
@@ -102,6 +116,7 @@ fun YokaiScaffold(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(appBarSurfaceColor)
                         .statusBarsPadding()
                         .onSizeChanged { size ->
                             appBarHeight = size.height.toFloat()
@@ -158,39 +173,65 @@ fun YokaiScaffold(
                         // Display the standard app bar
                         when (appBarType) {
                             AppBarType.SMALL -> {
-                                TopAppBar(
-                                    title = { Text(text = title) },
+                                CenterAlignedTopAppBar(
+                                    title = {
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    },
                                     colors = topAppBarColors(
                                         containerColor = color,
                                         scrolledContainerColor = scrolledColor,
+                                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                     ),
                                     navigationIcon = {
-                                        ToolTipButton(
-                                            toolTipLabel = navigationIconLabel,
-                                            icon = navigationIcon,
-                                            buttonClicked = onNavigationIconClicked,
-                                        )
+                                        Box(Modifier.padding(start = 4.dp)) {
+                                            ToolTipButton(
+                                                toolTipLabel = navigationIconLabel,
+                                                icon = navigationIcon,
+                                                enabledTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                buttonClicked = onNavigationIconClicked,
+                                            )
+                                        }
                                     },
                                     actions = actions,
                                     scrollBehavior = m3ScrollBehavior,
+                                    windowInsets = noWindowInsets,
                                 )
                             }
                             AppBarType.LARGE -> {
                                 LargeTopAppBar(
-                                    title = { Text(text = title) },
+                                    title = {
+                                        Text(
+                                            text = title,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    },
                                     colors = topAppBarColors(
                                         containerColor = color,
                                         scrolledContainerColor = scrolledColor,
+                                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                     ),
                                     navigationIcon = {
                                         ToolTipButton(
                                             toolTipLabel = navigationIconLabel,
                                             icon = navigationIcon,
+                                            enabledTint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             buttonClicked = onNavigationIconClicked,
                                         )
                                     },
                                     actions = actions,
                                     scrollBehavior = m3ScrollBehavior,
+                                    windowInsets = noWindowInsets,
                                 )
                             }
                             else -> {}
@@ -258,7 +299,7 @@ fun YokaiScaffold(
 fun getTopAppBarColor(title: String): Pair<Color, Color> {
     return when (title.isEmpty()) {
         true -> Color.Transparent to Color.Transparent
-        false -> MaterialTheme.colorScheme.surface to MaterialTheme.colorScheme.primaryContainer
+        false -> MaterialTheme.colorScheme.surfaceContainerLow to MaterialTheme.colorScheme.surfaceContainerHigh
     }
 }
 
