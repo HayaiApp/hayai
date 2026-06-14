@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -80,6 +81,8 @@ fun MangaChapterActionBar(
     state: ChapterActionBarState,
     handlers: ChapterActionBarHandlers,
     modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     AnimatedVisibility(
         visible = state.visible,
@@ -89,7 +92,8 @@ fun MangaChapterActionBar(
         Surface(
             modifier = modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large.copy(bottomEnd = ZeroCornerSize, bottomStart = ZeroCornerSize),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = containerColor,
+            contentColor = contentColor,
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
         ) {

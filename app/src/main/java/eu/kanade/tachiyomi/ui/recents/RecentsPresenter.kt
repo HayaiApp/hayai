@@ -391,16 +391,14 @@ class RecentsPresenter(
         }
 
         if (query != oldQuery) return
-        // Per-tab hidden-source filter. Hide-lists are scoped to History or
-        // Updates individually; for GroupedAll (the mixed view) we intersect:
-        // an entry only disappears from Grouped when the user has hidden the
-        // source in BOTH tabs (otherwise it's still real in at least one).
+        // Per-tab hidden-source filter. GroupedAll is the mixed view, so it should respect
+        // any source hidden from either History or Updates.
         val hiddenSources: Set<String> = when (viewType) {
             RecentsViewType.History -> recentsPreferences.hiddenSourcesInHistory().get()
             RecentsViewType.Updates -> recentsPreferences.hiddenSourcesInUpdates().get()
             RecentsViewType.GroupedAll ->
                 recentsPreferences.hiddenSourcesInHistory().get()
-                    .intersect(recentsPreferences.hiddenSourcesInUpdates().get())
+                    .union(recentsPreferences.hiddenSourcesInUpdates().get())
         }
         val mangaList = cReading.distinctBy {
             if (query.isEmpty() && viewType.isAll) it.manga.id else it.chapter.id

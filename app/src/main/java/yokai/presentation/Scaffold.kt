@@ -85,7 +85,7 @@ fun YokaiScaffold(
     val (color, scrolledColor) = getTopAppBarColor(title)
     val appBarContentColor = getTopAppBarContentColor()
     val appBarBackgroundProgress = when (appBarType) {
-        AppBarType.LARGE -> m3ScrollBehavior.state.collapsedFraction
+        AppBarType.LARGE -> if (m3ScrollBehavior.state.collapsedFraction >= 0.99f) 1f else 0f
         AppBarType.SMALL -> maxOf(
             m3ScrollBehavior.state.collapsedFraction,
             m3ScrollBehavior.state.overlappedFraction,

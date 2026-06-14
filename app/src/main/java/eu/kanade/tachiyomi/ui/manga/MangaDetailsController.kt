@@ -2412,9 +2412,24 @@ class MangaDetailsController :
         )
         binding.actionBarCompose.setContent {
             yokai.presentation.theme.YokaiTheme {
-                MangaChapterActionBar(state = actionBarState, handlers = handlers)
+                MangaChapterActionBar(
+                    state = actionBarState,
+                    handlers = handlers,
+                    containerColor = androidx.compose.ui.graphics.Color(selectionActionBarContainerColor()),
+                    contentColor = androidx.compose.ui.graphics.Color(selectionActionBarContentColor()),
+                )
             }
         }
+    }
+
+    private fun selectionActionBarContainerColor(): Int {
+        val context = view?.context ?: activity ?: return Color.TRANSPARENT
+        return headerColor ?: context.getResourceColor(materialR.attr.colorPrimaryVariant)
+    }
+
+    private fun selectionActionBarContentColor(): Int {
+        val context = view?.context ?: activity ?: return Color.WHITE
+        return context.getResourceColor(R.attr.actionBarTintColor)
     }
 
     /** Recomputes the bottom-bar contextual visibility from the current selection. */
