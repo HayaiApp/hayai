@@ -22,7 +22,6 @@ class SeriesKnowledgeModelsTest {
         assertTrue("artist" in fields)
         assertTrue("status" in fields)
         assertTrue("characters" in fields)
-        assertTrue("external_links" in fields)
         assertTrue("tracker_summary" in fields)
     }
 

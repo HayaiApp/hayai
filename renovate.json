@@ -1,0 +1,69 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommitsDisabled"
+  ],
+  "timezone": "Africa/Cairo",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "gradle",
+    "gradle-wrapper",
+    "npm"
+  ],
+  "configMigration": true,
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "rangeStrategy": "bump",
+  "rebaseWhen": "behind-base-branch",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ],
+    "commitMessageAction": "Refresh"
+  },
+  "packageRules": [
+    {
+      "description": "Give npm releases time to settle before opening update PRs.",
+      "matchDatasources": [
+        "npm"
+      ],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Group GitHub Actions workflow updates.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Group AndroidX and Compose library updates.",
+      "matchPackageNames": [
+        "/^androidx\\./"
+      ],
+      "groupName": "androidx dependencies"
+    },
+    {
+      "description": "Group Kotlin and kotlinx updates.",
+      "matchPackageNames": [
+        "/^org\\.jetbrains\\.kotlin($|:)/",
+        "/^org\\.jetbrains\\.kotlinx:/"
+      ],
+      "groupName": "kotlin and kotlinx"
+    },
+    {
+      "description": "Group Firebase and Google Play Services updates.",
+      "matchPackageNames": [
+        "/^com\\.google\\.firebase:/",
+        "/^com\\.google\\.gms:/"
+      ],
+      "groupName": "firebase and google services"
+    }
+  ]
+}
