@@ -3,10 +3,12 @@ package yokai.presentation.extension.repo.component
 import android.content.res.Configuration
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.Add
@@ -27,6 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,52 +38,69 @@ import eu.kanade.tachiyomi.util.compose.textHint
 import yokai.domain.extension.repo.model.ExtensionRepo
 import yokai.presentation.component.Gap
 import yokai.presentation.theme.Size
+import yokai.util.secondaryItemAlpha
 
-// TODO: Redesign
-// - Edit
 @Composable
 fun ExtensionRepoItem(
     modifier: Modifier = Modifier,
     extensionRepo: ExtensionRepo,
     onDeleteClick: (String) -> Unit = {},
 ) {
-    Row(
-        modifier = modifier.padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f),
     ) {
-        Icon(
-            modifier = Modifier.padding(horizontal = 8.dp),
-            imageVector = Icons.AutoMirrored.Outlined.Label,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onBackground,
-        )
-        Column(
-            modifier = modifier.weight(1.0f),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .basicMarquee(),
-                text = extensionRepo.name,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 16.sp,
-            )
-            Gap(Size.tiny)
-            Text(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .basicMarquee(),
-                text = extensionRepo.baseUrl,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 16.sp,
-            )
-        }
-        IconButton(onClick = { onDeleteClick(extensionRepo.baseUrl) }) {
             Icon(
-                imageVector = Icons.Filled.Delete,
+                imageVector = Icons.AutoMirrored.Outlined.Label,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onBackground,
+                tint = MaterialTheme.colorScheme.secondary,
             )
+            Column(
+                modifier = Modifier.weight(1.0f),
+            ) {
+                Text(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .basicMarquee(),
+                    text = extensionRepo.name,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Gap(Size.extraTiny)
+                Text(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .secondaryItemAlpha(),
+                    text = extensionRepo.baseUrl,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(
+                modifier = Modifier.size(40.dp),
+                onClick = { onDeleteClick(extensionRepo.baseUrl) },
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
     }
 }
@@ -108,46 +129,57 @@ fun ExtensionRepoInput(
         errorIndicatorColor = Color.Transparent,
         disabledIndicatorColor = Color.Transparent,
     )
-    Row(
-        modifier = modifier.padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
     ) {
-        Icon(
-            modifier = Modifier.padding(horizontal = 8.dp),
-            imageVector = Icons.Filled.Add,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onBackground,
-        )
-        TextField(
-            modifier = Modifier
-                .indicatorLine(
-                    enabled = false,
-                    colors = colors,
-                    interactionSource = interactionSource,
-                    isError = true,
-                )
-                .weight(1.0f),
-            value = inputText,
-            onValueChange = onInputChange,
-            enabled = !isLoading,
-            placeholder = { Text(text = inputHint, fontSize = 16.sp) },
-            textStyle = TextStyle(fontSize = 16.sp),
-            colors = colors,
-        )
-        IconButton(
-            onClick = { onAddClick(inputText) },
-            enabled = inputText.isNotEmpty(),
+        Row(
+            modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (!isLoading)
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary,
-                )
-            else
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary,
+            )
+            TextField(
+                modifier = Modifier
+                    .indicatorLine(
+                        enabled = false,
+                        colors = colors,
+                        interactionSource = interactionSource,
+                        isError = true,
+                    )
+                    .weight(1.0f),
+                value = inputText,
+                onValueChange = onInputChange,
+                enabled = !isLoading,
+                placeholder = { Text(text = inputHint, fontSize = 16.sp) },
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 16.sp),
+                colors = colors,
+            )
+            IconButton(
+                modifier = Modifier.size(40.dp),
+                onClick = { onAddClick(inputText) },
+                enabled = inputText.isNotEmpty(),
+            ) {
+                if (!isLoading) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         }
     }
 }

@@ -56,6 +56,13 @@ import eu.kanade.tachiyomi.util.view.resetStrokeColor
 import io.noties.markwon.Markwon
 import io.noties.markwon.SoftBreakAddsNewLinePlugin
 import android.text.method.LinkMovementMethod
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -65,9 +72,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -117,6 +127,7 @@ import yokai.domain.series.model.SeriesMetadataField
 import yokai.domain.series.model.SeriesMetadataValue
 import yokai.domain.series.model.TranslationMode
 import yokai.domain.series.model.sourceMetadataValues
+import yokai.presentation.theme.motionAwareCrossfadeMillis
 import yokai.util.koin.injectLazy
 import android.R as AR
 
@@ -158,13 +169,16 @@ class MangaHeaderHolder(
     private var showQuotesTranslationSection = true
     private var showExtraImagesSection = true
     private var seriesQuoteCount = 0
+    private var seriesTranslationEnabled = false
     private var seriesKnowledgeBundle: SeriesKnowledgeBundle? = null
     private var resolvedSeriesMetadata: ResolvedSeriesMetadata? = null
     private var seriesKnowledgeJob: Job? = null
+    private var metadataContentInstalled = false
     private var boundMangaId: Long? = null
     private var boundMangaIsNovel = false
     private val accentColorState = mutableStateOf<Int?>(null)
     private val descriptionExpandedState = mutableStateOf(false)
+    private val metadataRenderState = mutableStateOf<MetadataRenderState?>(null)
     // Cache the (description, genre) the post-layout lineCount probe last ran against.
     // bind() is invoked on every notifyDataSetChanged; without a cache the probe re-runs
     // after layout each time, costing an extra layout pass per bind even when the text
@@ -409,7 +423,7 @@ class MangaHeaderHolder(
                 chapterBinding.chaptersTitle.text =
                     itemView.context.getString(MR.plurals.chapters_plural, count, count)
                 chapterBinding.filtersText.text = presenter.currentFilters()
-                if (adapter.preferences.themeMangaDetails().get()) {
+                if (adapter.delegate.useCoverColorTheming()) {
                     val accentColor = adapter.delegate.accentColor() ?: return
                     chapterBinding.filterButton.imageTintList = ColorStateList.valueOf(accentColor)
                 }
@@ -422,6 +436,7 @@ class MangaHeaderHolder(
         resolveDisplayOptions(null, 0)
         applyResolvedMetadata(manga, null)
         applyDisplayVisibility()
+        renderMetadataSection(manga)
         loadSeriesKnowledge(manga.id)
 
         // Only re-run the post-layout lineCount probe when the description or genres actually
@@ -500,8 +515,6 @@ class MangaHeaderHolder(
         boundHeaderItem = item
         bindReadingButton(item)
 
-        renderMetadataSection(manga)
-
         // Page preview strip — only inflate Compose if the source actually implements
         // PagePreviewSource. Otherwise PagePreviewInlineSection would render a 150dp
         // shimmer skeleton for 1-2 frames, then collapse to 0 when its LaunchedEffect
@@ -542,6 +555,7 @@ class MangaHeaderHolder(
         // Surface the predicted next chapter release only while smart update is enabled.
         val showNextUpdate = presenter.preferences.smartUpdateEnabled().get() &&
             manga.favorite && !manga.isLocal() && manga.next_update > 0L &&
+            manga.next_update.isTodayOrFutureDay() &&
             manga.status in setOf(SManga.ONGOING, SManga.PUBLISHING_FINISHED)
         binding.mangaStatus.isVisible = statusText.isNotBlank() && (resolvedStatus != null || manga.status != 0)
         binding.mangaStatus.text = statusText
@@ -587,7 +601,7 @@ class MangaHeaderHolder(
 
         if (!manga.initialized) return
         updateCover(manga)
-        if (adapter.preferences.themeMangaDetails().get()) {
+        if (adapter.delegate.useCoverColorTheming()) {
             updateColors(false)
         }
     }
@@ -628,7 +642,10 @@ class MangaHeaderHolder(
         showAliasesSection = visible(SeriesDisplaySection.ALIASES)
         showCharactersSection = visible(SeriesDisplaySection.CHARACTERS)
         showTrackersSection = visible(SeriesDisplaySection.TRACKERS)
-        showQuotesTranslationSection = boundMangaIsNovel && visible(SeriesDisplaySection.QUOTES_TRANSLATION)
+        seriesTranslationEnabled = translationPreferences.translationEnabled().get()
+        showQuotesTranslationSection = boundMangaIsNovel &&
+            visible(SeriesDisplaySection.QUOTES_TRANSLATION) &&
+            (seriesTranslationEnabled || quoteCount > 0)
         showExtraImagesSection = visible(SeriesDisplaySection.EXTRA_IMAGES)
         seriesQuoteCount = if (showQuotesTranslationSection) quoteCount else 0
         showMetadataSection = showAliasesSection || showCharactersSection ||
@@ -656,35 +673,36 @@ class MangaHeaderHolder(
     }
 
     private fun renderMetadataSection(manga: Manga) {
-        binding?.metadataCompose?.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            postOnAnimation {
-                setContent {
-                    yokai.presentation.theme.YokaiTheme {
-                        if (showMetadataSection) {
-                            SeriesEnrichmentSection(
-                                knowledge = seriesKnowledgeBundle,
-                                showAliases = showAliasesSection,
-                                showCharacters = showCharactersSection,
-                                showTrackers = showTrackersSection,
-                                showExtraImages = showExtraImagesSection,
-                                showQuotesTranslation = showQuotesTranslationSection,
-                                quoteCount = seriesQuoteCount,
-                                translationMode = TranslationMode.fromDbKey(seriesPreferences.translationMode().get()),
-                                translationCacheEnabled = translationPreferences.cacheTranslations().get(),
-                                onSearch = { query -> adapter.delegate.searchFromMetadata(query) },
-                                onOpenLink = { url -> itemView.context.openInBrowser(url) },
-                            )
-                            MangaMetadataSection(
-                                mangaId = manga.id ?: -1L,
-                                sourceId = manga.source,
-                                isExpanded = descriptionExpandedState.value,
-                                openMetadataViewer = { adapter.delegate.openMetadataViewer() },
-                                onSearch = { query -> adapter.delegate.searchFromMetadata(query) },
-                            )
-                        }
-                    }
-                }
+        metadataRenderState.value = MetadataRenderState(
+            mangaId = manga.id ?: -1L,
+            sourceId = manga.source,
+            knowledge = seriesKnowledgeBundle,
+            showMetadataSection = showMetadataSection,
+            showAliases = showAliasesSection,
+            showCharacters = showCharactersSection,
+            showTrackers = showTrackersSection,
+            showExtraImages = showExtraImagesSection,
+            showQuotesTranslation = showQuotesTranslationSection,
+            quoteCount = seriesQuoteCount,
+            translationEnabled = seriesTranslationEnabled,
+            translationMode = TranslationMode.fromDbKey(seriesPreferences.translationMode().get()),
+        )
+
+        val metadataCompose = binding?.metadataCompose ?: return
+        if (metadataContentInstalled) return
+        metadataContentInstalled = true
+        metadataCompose.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        metadataCompose.setContent {
+            yokai.presentation.theme.YokaiTheme {
+                MetadataSectionHost(
+                    state = metadataRenderState.value,
+                    isExpanded = descriptionExpandedState.value,
+                    onOpenQuotes = { adapter.delegate.openQuotesSheet() },
+                    onOpenTranslationSettings = { adapter.delegate.openTranslationSettings() },
+                    onSearch = { query -> adapter.delegate.searchFromMetadata(query) },
+                    onOpenLink = { url -> itemView.context.openInBrowser(url) },
+                    openMetadataViewer = { adapter.delegate.openMetadataViewer() },
+                )
             }
         }
     }
@@ -700,7 +718,7 @@ class MangaHeaderHolder(
         binding.moreButtonGroup.isVisible = showDescriptionSection && binding.moreButtonGroup.isVisible
         binding.lessButton.isVisible = showDescriptionSection && binding.lessButton.isVisible
         binding.mangaGenresTags.isVisible = showGenresSection && binding.mangaGenresTags.isVisible
-        binding.metadataCompose.isVisible = showMetadataSection && binding.metadataCompose.isVisible
+        binding.metadataCompose.isVisible = showMetadataSection && binding.subItemGroup.isVisible
         binding.trackButton.isVisible = showTrackersSection && binding.trackButton.isVisible
     }
 
@@ -1075,7 +1093,6 @@ class MangaHeaderHolder(
 
 private const val CHARACTER_PREVIEW_LIMIT = 8
 private const val EXTRA_IMAGE_LIMIT = 12
-private const val EXTERNAL_LINK_LIMIT = 8
 private val enrichmentJson = Json { ignoreUnknownKeys = true }
 
 private data class ResolvedSeriesMetadata(
@@ -1087,6 +1104,21 @@ private data class ResolvedSeriesMetadata(
     val status: String?,
     val coverUrl: String?,
     val bannerUrl: String?,
+)
+
+private data class MetadataRenderState(
+    val mangaId: Long,
+    val sourceId: Long,
+    val knowledge: SeriesKnowledgeBundle?,
+    val showMetadataSection: Boolean,
+    val showAliases: Boolean,
+    val showCharacters: Boolean,
+    val showTrackers: Boolean,
+    val showExtraImages: Boolean,
+    val showQuotesTranslation: Boolean,
+    val quoteCount: Int,
+    val translationEnabled: Boolean,
+    val translationMode: TranslationMode,
 )
 
 internal data class SeriesCharacterCard(
@@ -1105,10 +1137,58 @@ internal data class SeriesExtraImage(
     val label: String?,
 )
 
-internal data class SeriesExternalLink(
-    val url: String,
-    val label: String?,
-)
+@Composable
+private fun MetadataSectionHost(
+    state: MetadataRenderState?,
+    isExpanded: Boolean,
+    onOpenQuotes: () -> Unit,
+    onOpenTranslationSettings: () -> Unit,
+    onSearch: (String) -> Unit,
+    onOpenLink: (String) -> Unit,
+    openMetadataViewer: () -> Unit,
+) {
+    val renderState = state ?: return
+    val animationMillis = motionAwareCrossfadeMillis(220)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(animationSpec = tween(durationMillis = animationMillis)),
+    ) {
+        AnimatedVisibility(
+            visible = renderState.showMetadataSection,
+            enter = fadeIn(animationSpec = tween(durationMillis = animationMillis)) +
+                expandVertically(animationSpec = tween(durationMillis = animationMillis)),
+            exit = fadeOut(animationSpec = tween(durationMillis = animationMillis)) +
+                shrinkVertically(animationSpec = tween(durationMillis = animationMillis)),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                SeriesEnrichmentSection(
+                    knowledge = renderState.knowledge,
+                    showAliases = renderState.showAliases,
+                    showCharacters = renderState.showCharacters,
+                    showTrackers = renderState.showTrackers,
+                    showExtraImages = renderState.showExtraImages,
+                    showQuotesTranslation = renderState.showQuotesTranslation,
+                    quoteCount = renderState.quoteCount,
+                    translationEnabled = renderState.translationEnabled,
+                    translationMode = renderState.translationMode,
+                    onOpenQuotes = onOpenQuotes,
+                    onOpenTranslationSettings = onOpenTranslationSettings,
+                    onSearch = onSearch,
+                    onOpenLink = onOpenLink,
+                )
+                MangaMetadataSection(
+                    mangaId = renderState.mangaId,
+                    sourceId = renderState.sourceId,
+                    isExpanded = isExpanded,
+                    openMetadataViewer = openMetadataViewer,
+                    onSearch = onSearch,
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1120,8 +1200,10 @@ private fun SeriesEnrichmentSection(
     showExtraImages: Boolean,
     showQuotesTranslation: Boolean,
     quoteCount: Int,
+    translationEnabled: Boolean,
     translationMode: TranslationMode,
-    translationCacheEnabled: Boolean,
+    onOpenQuotes: () -> Unit,
+    onOpenTranslationSettings: () -> Unit,
     onSearch: (String) -> Unit,
     onOpenLink: (String) -> Unit,
 ) {
@@ -1155,18 +1237,10 @@ private fun SeriesEnrichmentSection(
             parseSeriesExtraImages(displayValues)
         }
     }
-    val externalLinks = remember(knowledge, showTrackers) {
-        if (!showTrackers) {
-            emptyList()
-        } else {
-            parseSeriesExternalLinks(displayValues)
-        }
-    }
     if (
         aliases.isEmpty() &&
         characters.isEmpty() &&
         extraImages.isEmpty() &&
-        externalLinks.isEmpty() &&
         !showQuotesTranslation
     ) {
         return
@@ -1249,13 +1323,6 @@ private fun SeriesEnrichmentSection(
                 MR.strings.pref_translation_mode_simple
             },
         )
-        val cacheLabel = stringResource(
-            if (translationCacheEnabled) {
-                MR.strings.enabled
-            } else {
-                MR.strings.disabled
-            },
-        )
         SectionLabel(stringResource(MR.strings.series_display_quotes_translation))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1263,37 +1330,41 @@ private fun SeriesEnrichmentSection(
         ) {
             Chip(
                 text = stringResource(MR.strings.series_translation_quote_count_format, quoteCount),
+                onClick = onOpenQuotes,
                 prominent = true,
             )
-            Chip(
-                text = stringResource(MR.strings.series_translation_mode_status_format, modeLabel),
-            )
-            Chip(
-                text = stringResource(MR.strings.series_translation_cache_status_format, cacheLabel),
-            )
-            if (translationMode == TranslationMode.ADVANCED && translationEntityCount > 0) {
+            if (translationEnabled) {
                 Chip(
-                    text = stringResource(
-                        MR.strings.series_translation_entities_count_format,
-                        translationEntityCount,
-                    ),
+                    text = stringResource(MR.strings.series_translation_mode_status_format, modeLabel),
+                    onClick = onOpenTranslationSettings,
                 )
-            }
-            if (translationMode == TranslationMode.ADVANCED && translationEventCount > 0) {
-                Chip(
-                    text = stringResource(
-                        MR.strings.advanced_translation_event_count_format,
-                        translationEventCount,
-                    ),
-                )
-            }
-            if (translationMode == TranslationMode.ADVANCED && activeNudgeCount > 0) {
-                Chip(
-                    text = stringResource(
-                        MR.strings.series_translation_nudges_count_format,
-                        activeNudgeCount,
-                    ),
-                )
+                if (translationMode == TranslationMode.ADVANCED && translationEntityCount > 0) {
+                    Chip(
+                        text = stringResource(
+                            MR.strings.series_translation_entities_count_format,
+                            translationEntityCount,
+                        ),
+                        onClick = onOpenTranslationSettings,
+                    )
+                }
+                if (translationMode == TranslationMode.ADVANCED && translationEventCount > 0) {
+                    Chip(
+                        text = stringResource(
+                            MR.strings.advanced_translation_event_count_format,
+                            translationEventCount,
+                        ),
+                        onClick = onOpenTranslationSettings,
+                    )
+                }
+                if (translationMode == TranslationMode.ADVANCED && activeNudgeCount > 0) {
+                    Chip(
+                        text = stringResource(
+                            MR.strings.series_translation_nudges_count_format,
+                            activeNudgeCount,
+                        ),
+                        onClick = onOpenTranslationSettings,
+                    )
+                }
             }
         }
     }
@@ -1302,24 +1373,24 @@ private fun SeriesEnrichmentSection(
     fun CharacterCard(character: SeriesCharacterCard) {
         Surface(
             modifier = Modifier
-                .width(128.dp)
+                .width(218.dp)
+                .height(92.dp)
                 .combinedClickable(
                     onClick = {
                         character.url?.let(onOpenLink) ?: onSearch(character.name)
                     },
                 ),
             shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
-            tonalElevation = 1.dp,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            tonalElevation = 0.dp,
         ) {
-            Column(
+            Row(
                 modifier = Modifier.padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 val imageModifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
+                    .size(64.dp)
                     .clip(MaterialTheme.shapes.small)
                 val imageUrl = character.imageUrl?.takeIf { it.isNotBlank() }
                 if (imageUrl != null) {
@@ -1346,31 +1417,84 @@ private fun SeriesEnrichmentSection(
                         )
                     }
                 }
+                Column(
+                    modifier = Modifier.fillMaxHeight(),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = character.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    character.role?.takeIf { it.isNotBlank() }?.let { role ->
+                        Text(
+                            modifier = Modifier.padding(top = 4.dp),
+                            text = role,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    character.sourceLabel?.takeIf { it.isNotBlank() && it != character.role }?.let { source ->
+                        Text(
+                            modifier = Modifier.padding(top = 2.dp),
+                            text = source,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun CharacterActionCard(text: String, onClick: () -> Unit) {
+        Surface(
+            modifier = Modifier
+                .width(104.dp)
+                .height(92.dp)
+                .combinedClickable(onClick = onClick),
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.28f)),
+        ) {
+            Box(
+                modifier = Modifier.padding(12.dp),
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) {
                 Text(
-                    text = character.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                character.role?.takeIf { it.isNotBlank() }?.let { role ->
-                    Text(
-                        text = role,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                character.sourceLabel?.takeIf { it.isNotBlank() && it != character.role }?.let { source ->
-                    Text(
-                        text = source,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            }
+        }
+    }
+
+    @Composable
+    fun CharacterSectionLabel() {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            SectionLabel(stringResource(MR.strings.series_display_characters))
+            if (characters.size > 1) {
+                Text(
+                    modifier = Modifier.padding(top = 2.dp),
+                    text = stringResource(MR.strings.series_metadata_character_count_format, characters.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -1401,23 +1525,6 @@ private fun SeriesEnrichmentSection(
         }
     }
 
-    @Composable
-    fun ExternalLinksBlock(links: List<SeriesExternalLink>) {
-        if (links.isEmpty()) return
-        SectionLabel(stringResource(MR.strings.series_display_external_links))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            links.forEach { link ->
-                Chip(
-                    text = link.label ?: link.url,
-                    onClick = { onOpenLink(link.url) },
-                )
-            }
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1436,23 +1543,22 @@ private fun SeriesEnrichmentSection(
             }
         }
         if (characters.isNotEmpty()) {
-            SectionLabel(stringResource(MR.strings.series_display_characters))
+            CharacterSectionLabel()
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(visibleCharacters) { character ->
                     CharacterCard(character)
                 }
                 if (hiddenCharacterCount > 0) {
                     item {
-                        Chip(
+                        CharacterActionCard(
                             text = stringResource(MR.strings.series_enrichment_more_count_format, hiddenCharacterCount),
                             onClick = { charactersExpanded = true },
-                            prominent = true,
                         )
                     }
                 }
                 if (charactersExpanded && characters.size > CHARACTER_PREVIEW_LIMIT) {
                     item {
-                        Chip(
+                        CharacterActionCard(
                             text = stringResource(MR.strings.series_details_show_less),
                             onClick = { charactersExpanded = false },
                         )
@@ -1462,7 +1568,6 @@ private fun SeriesEnrichmentSection(
         }
         QuotesTranslationBlock()
         ExtraImagesBlock(extraImages)
-        ExternalLinksBlock(externalLinks)
     }
 }
 
@@ -1649,33 +1754,6 @@ internal fun parseSeriesExtraImages(values: List<SeriesMetadataValue>): List<Ser
         .take(EXTRA_IMAGE_LIMIT)
         .toList()
 
-internal fun parseSeriesExternalLinks(values: List<SeriesMetadataValue>): List<SeriesExternalLink> =
-    values
-        .asSequence()
-        .filter { it.field == SeriesMetadataField.EXTERNAL_LINKS.key }
-        .flatMap { value ->
-            (
-                parseExternalLinkMetadata(value.extraJson) +
-                    parseExternalLinkMetadata(value.value) +
-                    parseDelimitedExternalLinks(value.value)
-                )
-                .asSequence()
-                .map { link ->
-                    if (link.label.isNullOrBlank()) {
-                        link.copy(
-                            label = value.providerName.takeIf { it.isNotBlank() }
-                                ?: link.url.hostLabel(),
-                        )
-                    } else {
-                        link
-                    }
-                }
-        }
-        .filter { it.url.isSupportedExternalLink() }
-        .distinctBy { it.url }
-        .take(EXTERNAL_LINK_LIMIT)
-        .toList()
-
 private fun parseImageMetadata(raw: String?): List<SeriesExtraImage> {
     val text = raw?.trim()?.takeIf { it.isNotBlank() } ?: return emptyList()
     val element = runCatching { enrichmentJson.parseToJsonElement(text) }.getOrNull() ?: return emptyList()
@@ -1693,23 +1771,6 @@ private fun parseDelimitedImageValues(raw: String?): List<SeriesExtraImage> =
         ?.map { SeriesExtraImage(url = it, label = null) }
         .orEmpty()
 
-private fun parseExternalLinkMetadata(raw: String?): List<SeriesExternalLink> {
-    val text = raw?.trim()?.takeIf { it.isNotBlank() } ?: return emptyList()
-    val element = runCatching { enrichmentJson.parseToJsonElement(text) }.getOrNull() ?: return emptyList()
-    return when (element) {
-        is JsonArray -> element.toSeriesExternalLinks()
-        is JsonObject -> element.toSeriesExternalLinks()
-        else -> emptyList()
-    }
-}
-
-private fun parseDelimitedExternalLinks(raw: String?): List<SeriesExternalLink> =
-    raw
-        ?.split(Regex("[,;\\n]"))
-        ?.mapNotNull { it.trim().takeUnless(String::isBlank) }
-        ?.map { SeriesExternalLink(url = it, label = null) }
-        .orEmpty()
-
 private fun JsonArray.toSeriesExtraImages(): List<SeriesExtraImage> = buildList {
     for (element in this@toSeriesExtraImages) {
         val nestedObject = element as? JsonObject
@@ -1722,29 +1783,10 @@ private fun JsonArray.toSeriesExtraImages(): List<SeriesExtraImage> = buildList 
     }
 }
 
-private fun JsonArray.toSeriesExternalLinks(): List<SeriesExternalLink> = buildList {
-    for (element in this@toSeriesExternalLinks) {
-        val nestedObject = element as? JsonObject
-        if (nestedObject != null) {
-            addAll(nestedObject.toSeriesExternalLinks())
-        } else {
-            element.cleanString()
-                ?.let { add(SeriesExternalLink(url = it, label = null)) }
-        }
-    }
-}
-
 private fun JsonObject.toSeriesExtraImages(): List<SeriesExtraImage> = buildList {
     imageEntry()?.let(::add)
     listOf("images", "items", "extraImages").forEach { key ->
         (get(key) as? JsonArray)?.let { addAll(it.toSeriesExtraImages()) }
-    }
-}
-
-private fun JsonObject.toSeriesExternalLinks(): List<SeriesExternalLink> = buildList {
-    linkEntry()?.let(::add)
-    listOf("links", "externalLinks", "items").forEach { key ->
-        (get(key) as? JsonArray)?.let { addAll(it.toSeriesExternalLinks()) }
     }
 }
 
@@ -1753,13 +1795,6 @@ private fun JsonObject.imageEntry(): SeriesExtraImage? {
         ?: return null
     val label = firstNonBlank("title", "label", "caption", "alt", "description")
     return SeriesExtraImage(url = url, label = label)
-}
-
-private fun JsonObject.linkEntry(): SeriesExternalLink? {
-    val url = firstNonBlank("url", "link", "href", "trackingUrl", "tracking_url")
-        ?: return null
-    val label = firstNonBlank("title", "label", "name", "site", "provider")
-    return SeriesExternalLink(url = url, label = label)
 }
 
 private fun JsonObject.firstNonBlank(vararg keys: String): String? =
@@ -1783,17 +1818,19 @@ private fun String.isSupportedImageModel(): Boolean {
         normalized.startsWith("data:image/")
 }
 
-private fun String.isSupportedExternalLink(): Boolean {
-    val normalized = trim().lowercase()
-    return normalized.startsWith("http://") || normalized.startsWith("https://")
-}
+private fun Long.isTodayOrFutureDay(): Boolean {
+    fun startOfDay(timeMillis: Long): Long {
+        return java.util.Calendar.getInstance().apply {
+            this.timeInMillis = timeMillis
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
 
-private fun String.hostLabel(): String? =
-    runCatching {
-        java.net.URI(trim()).host
-            ?.removePrefix("www.")
-            ?.takeIf { it.isNotBlank() }
-    }.getOrNull()
+    return startOfDay(this) >= startOfDay(System.currentTimeMillis())
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

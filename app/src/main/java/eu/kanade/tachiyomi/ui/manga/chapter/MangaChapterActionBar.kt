@@ -43,6 +43,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.icerock.moko.resources.StringResource
 import dev.icerock.moko.resources.compose.stringResource
@@ -81,6 +82,7 @@ fun MangaChapterActionBar(
     state: ChapterActionBarState,
     handlers: ChapterActionBarHandlers,
     modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
@@ -97,12 +99,11 @@ fun MangaChapterActionBar(
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
         ) {
-            // Nav-bar bottom inset is applied once as static padding on the host ComposeView
-            // (MangaDetailsController.setInsets); keeping it out of this animated subtree avoids
-            // the CoordinatorLayout<->Compose inset re-dispatch + AnimatedVisibility relayout loop.
+            // The host view consumes platform insets; this plain Dp value lets the visible
+            // surface extend to the screen bottom without using Compose WindowInsets here.
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                    .padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 12.dp + bottomInset),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 var confirmingIndex by remember { mutableIntStateOf(-1) }

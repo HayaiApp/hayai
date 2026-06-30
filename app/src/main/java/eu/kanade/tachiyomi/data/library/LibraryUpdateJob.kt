@@ -150,7 +150,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     // Boolean to determine if DownloadManager has downloads
     private var hasDownloads = false
 
-    private val requestSemaphore = Semaphore(5)
+    private val requestSemaphore = Semaphore(preferences.libraryUpdateParallelism().get().coerceIn(1, 10))
 
     // For updates delete removed chapters if not preference is set as well
     private val deleteRemoved by lazy { preferences.deleteRemovedChapters().get() != 1 }
@@ -390,16 +390,32 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 skipped = skippedUpdates.toReportEntries(),
             ),
         )
-        if (skippedUpdates.isNotEmpty() && Notifications.isNotificationChannelEnabled(context, Notifications.CHANNEL_LIBRARY_SKIPPED)) {
-            val skippedFile = writeErrorFile(
+        val skippedFile = if (skippedUpdates.isNotEmpty()) {
+            writeErrorFile(
                 skippedUpdates,
                 "skipped",
                 context.getString(MR.strings.learn_why) + " - " + LibraryUpdateNotifier.HELP_SKIPPED_URL,
-            ).getUriCompat(context)
-            notifier.showUpdateSkippedNotification(skippedUpdates.map { it.key.title }, skippedFile)
+            ).takeIf { it.exists() && it.length() > 0L }
+        } else {
+            reportStore.clearSkippedLog()
+            null
         }
-        if (failedUpdates.isNotEmpty() && Notifications.isNotificationChannelEnabled(context, Notifications.CHANNEL_LIBRARY_ERROR)) {
-            val errorFile = writeErrorFile(failedUpdates).getUriCompat(context)
+        if (skippedUpdates.isNotEmpty() &&
+            skippedFile != null &&
+            Notifications.isNotificationChannelEnabled(context, Notifications.CHANNEL_LIBRARY_SKIPPED)
+        ) {
+            notifier.showUpdateSkippedNotification(skippedUpdates.map { it.key.title }, skippedFile.getUriCompat(context))
+        }
+        val errorFile = if (failedUpdates.isNotEmpty()) {
+            writeErrorFile(failedUpdates).takeIf { it.exists() && it.length() > 0L }?.getUriCompat(context)
+        } else {
+            reportStore.clearErrorLog()
+            null
+        }
+        if (failedUpdates.isNotEmpty() &&
+            errorFile != null &&
+            Notifications.isNotificationChannelEnabled(context, Notifications.CHANNEL_LIBRARY_ERROR)
+        ) {
             notifier.showUpdateErrorNotification(failedUpdates.map { it.key.title }, errorFile)
         }
         mangaShortcutManager.updateShortcuts(context)

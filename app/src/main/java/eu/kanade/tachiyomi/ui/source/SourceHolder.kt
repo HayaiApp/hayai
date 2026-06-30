@@ -6,10 +6,8 @@ import androidx.core.view.isVisible
 import androidx.core.content.ContextCompat
 import coil3.asImage
 import coil3.load
-import coil3.request.transformations
 import com.google.android.material.R as materialR
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.coil.PaddedSourceIconTransformation
 import yokai.i18n.MR
 import yokai.util.lang.getString
 import dev.icerock.moko.resources.compose.stringResource
@@ -85,7 +83,6 @@ class SourceHolder(view: View, val adapter: SourceAdapter) :
                 source is NovelSource && source.iconFile != null && source.iconFile.exists() -> {
                     val placeholder = ContextCompat.getDrawable(itemView.context, R.drawable.ic_book_24dp)
                     binding.sourceImage.load(source.iconFile) {
-                        transformations(PaddedSourceIconTransformation())
                         placeholder?.asImage()?.let {
                             placeholder(it)
                             error(it)
@@ -95,7 +92,6 @@ class SourceHolder(view: View, val adapter: SourceAdapter) :
                 source is NovelSource && !source.iconUrl.isNullOrBlank() -> {
                     val placeholder = ContextCompat.getDrawable(itemView.context, R.drawable.ic_book_24dp)
                     binding.sourceImage.load(source.iconUrl) {
-                        transformations(PaddedSourceIconTransformation())
                         placeholder?.asImage()?.let {
                             placeholder(it)
                             error(it)

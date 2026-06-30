@@ -17,6 +17,8 @@ class ChapterItem(chapter: Chapter, val manga: Manga) :
     BaseChapterItem<ChapterHolder, AbstractHeaderItem<FlexibleViewHolder>>(chapter) {
 
     var isLocked = false
+    var hasCachedTranslation = false
+    var isTranslating = false
 
     override fun getLayoutRes(): Int {
         return R.layout.chapters_item

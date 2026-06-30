@@ -366,7 +366,7 @@ private fun MangaRow(
         modifier = Modifier
             .fillMaxWidth()
             .sizeIn(minHeight = 72.dp)
-            .clickable(onClick = onClick)
+            .clickable(enabled = entry.mangaId > 0L, onClick = onClick)
             .padding(horizontal = Size.medium, vertical = Size.small),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Size.smedium),

@@ -24,7 +24,6 @@ enum class SeriesMetadataField(val key: String, val label: String) {
     ARTIST("artist", "Artist"),
     STATUS("status", "Status"),
     CHARACTERS("characters", "Characters"),
-    EXTERNAL_LINKS("external_links", "External links"),
     TRACKER_SUMMARY("tracker_summary", "Tracker summary");
 
     companion object {

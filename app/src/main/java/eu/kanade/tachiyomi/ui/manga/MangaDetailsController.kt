@@ -45,8 +45,10 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePaddingRelative
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.palette.graphics.Palette
@@ -133,7 +135,6 @@ import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
 import eu.kanade.tachiyomi.util.system.setCustomTitleAndMessage
-import eu.kanade.tachiyomi.util.system.timeSpanFromNow
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.withUIContext
 import eu.kanade.tachiyomi.util.view.activityBinding
@@ -238,6 +239,7 @@ class MangaDetailsController :
 
     // Drives the mihon-style bottom action bar (ComposeView island). Recomposes on assignment.
     private var actionBarState by mutableStateOf(ChapterActionBarState())
+    private var chapterActionBarBottomInsetPx by mutableIntStateOf(0)
     private var editMangaController: EditMangaController? = null
     var refreshTracker: Int? = null
     private var chapterPopupMenu: Pair<Int, PopupMenu>? = null
@@ -308,28 +310,7 @@ class MangaDetailsController :
 
                 if (isTablet) return
 
-                val headerBinding = getHeader()?.binding
-                if (headerBinding == null) {
-                    if (binding.fab.isEnabled) {
-                        binding.fab.show()
-                    } else {
-                        binding.fab.isVisible = false
-                    }
-                    return
-                }
-
-                if (headerBinding.buttonGroupCompose.isVisible != true) {
-                    binding.fab.isVisible = false
-                    return
-                }
-
-                val bound = Rect()
-                binding.recycler.getHitRect(bound)
-                if (headerBinding.buttonGroupCompose.getLocalVisibleRect(bound)) {
-                    binding.fab.hide()
-                } else {
-                    binding.fab.show()
-                }
+                syncReadingFabVisibility()
             }
         })
         binding.fab.transitionName = "details start reading transition"
@@ -344,7 +325,7 @@ class MangaDetailsController :
         binding.swipeRefresh.isRefreshing = presenter.isLoading
         binding.swipeRefresh.setOnRefreshListener { presenter.refreshAll() }
         updateToolbarTitleAlpha()
-        if (presenter.preferences.themeMangaDetails().get()) {
+        if (useCoverColorTheming()) {
             setItemColors()
         }
     }
@@ -360,15 +341,21 @@ class MangaDetailsController :
         setPaletteColor()
         presenter.onCreateLate()
         if (isControllerVisible) setTitle()
-        if (presenter.preferences.themeMangaDetails().get()) {
+        activity?.invalidateOptionsMenu()
+        if (useCoverColorTheming()) {
             setItemColors()
         }
+    }
+
+    override fun useCoverColorTheming(): Boolean {
+        val mangaId = manga?.id ?: if (presenter.isMangaLateInitInitialized()) presenter.manga.id else null
+        return presenter.preferences.themeMangaDetailsFor(mangaId)
     }
 
     private fun setAccentColorValue(colorToUse: Int? = null) {
         val context = view?.context ?: return
         setCoverColorValue(colorToUse)
-        accentColor = if (presenter.preferences.themeMangaDetails().get()) {
+        accentColor = if (useCoverColorTheming()) {
             (colorToUse ?: manga?.vibrantCoverColor)?.let {
                 val luminance = ColorUtils.calculateLuminance(it).toFloat()
                 // Softer blend than before (0.5/0.33 → 0.35/0.22): the previous factors pulled
@@ -397,7 +384,7 @@ class MangaDetailsController :
         // When cover-color theming is off, leave coverColor null so consumers fall back to the
         // plain M3 colorBackground; no half-tinted colorSecondary blend.
         coverColor =
-            if (!presenter.preferences.themeMangaDetails().get()) {
+            if (!useCoverColorTheming()) {
                 null
             } else {
                 (colorToUse ?: manga?.vibrantCoverColor)?.let {
@@ -417,7 +404,7 @@ class MangaDetailsController :
 
     private fun setRefreshStyle() {
         with(binding.swipeRefresh) {
-            if (presenter.preferences.themeMangaDetails().get() && accentColor != null && headerColor != null) {
+            if (useCoverColorTheming() && accentColor != null && headerColor != null) {
                 val newColor = makeColorFrom(
                     hueOf = accentColor!!,
                     satAndLumOf = context.getResourceColor(R.attr.actionBarTintColor),
@@ -432,7 +419,7 @@ class MangaDetailsController :
 
     private fun setHeaderColorValue(colorToUse: Int? = null) {
         val context = view?.context ?: return
-        headerColor = if (presenter.preferences.themeMangaDetails().get()) {
+        headerColor = if (useCoverColorTheming()) {
             (colorToUse ?: manga?.vibrantCoverColor)?.let { color ->
                 val newColor =
                     makeColorFrom(color, context.getResourceColor(materialR.attr.colorPrimaryVariant))
@@ -505,9 +492,14 @@ class MangaDetailsController :
         binding.fab.iconTint = ColorStateList(states, textColors)
     }
 
+    /** Re-applies cover-derived theming after the edit screen changes the local override. */
+    fun refreshCoverColorTheming() {
+        applyCoverColorTheming()
+    }
+
     /** Re-applies or clears cover-derived theming after the toggle flips. */
     private fun applyCoverColorTheming() {
-        val on = presenter.preferences.themeMangaDetails().get()
+        val on = useCoverColorTheming()
         if (on) {
             // Recompute from the cached vibrant color; falls back to a fresh Palette pass if
             // the cover hasn't been decoded yet.
@@ -694,10 +686,7 @@ class MangaDetailsController :
         val fabPadding = 72.dpToPx // FAB height (56dp) + margin (16dp)
         binding.recycler.updatePaddingRelative(bottom = systemInsets.bottom + fabPadding)
         binding.tabletRecycler.updatePaddingRelative(bottom = systemInsets.bottom)
-        // Nav-bar inset is applied ONCE here as static padding instead of via windowInsetsPadding
-        // inside the animated bottom-bar Compose subtree (which formed the recompose/relayout ANR
-        // loop). The host's own inset listener consumes insets so this is never re-fired.
-        binding.actionBarCompose.updatePaddingRelative(bottom = systemInsets.bottom)
+        chapterActionBarBottomInsetPx = systemInsets.bottom
         val tHeight = toolbarHeight.takeIf { it ?: 0 > 0 } ?: appbarHeight
         headerHeight = tHeight + systemInsets.top
         binding.swipeRefresh.setProgressViewOffset(false, (-40).dpToPx, headerHeight + offset)
@@ -795,7 +784,7 @@ class MangaDetailsController :
                     // Skip Palette work on cache hit; cached color is set by MangaCoverMetadata.
                     val cachedVibrant = manga?.vibrantCoverColor
                     if (bitmap != null) {
-                        if (cachedVibrant != null && presenter.preferences.themeMangaDetails().get()) {
+                        if (cachedVibrant != null && useCoverColorTheming()) {
                             // Defer one frame so the palette-application work (color blends +
                             // setItemColors iterating every visible ChapterHolder) doesn't run
                             // mid-push inside Coil's main-thread onSuccess callback, stalling
@@ -807,7 +796,7 @@ class MangaDetailsController :
                             }
                         } else {
                             Palette.from(bitmap).generate { palette ->
-                                if (presenter.preferences.themeMangaDetails().get()) {
+                                if (useCoverColorTheming()) {
                                     launchUI {
                                         val vibrantColor = palette?.getBestColor() ?: return@launchUI
                                         manga?.vibrantCoverColor = vibrantColor
@@ -1060,6 +1049,27 @@ class MangaDetailsController :
         } else {
             binding.fab.isVisible = false
         }
+        syncReadingFabVisibility()
+    }
+
+    private fun syncReadingFabVisibility() {
+        if (!isBindingInitialized) return
+        val shouldShow = shouldShowReadingFab()
+        if (shouldShow) {
+            binding.fab.show()
+        } else if (binding.fab.isVisible) {
+            binding.fab.hide()
+        }
+    }
+
+    private fun shouldShowReadingFab(): Boolean {
+        if (isTablet || !binding.fab.isEnabled || isSelectionMode) return false
+        val headerBinding = getHeader()?.binding ?: return true
+        if (headerBinding.buttonGroupCompose.isVisible != true) return false
+
+        val bound = Rect()
+        binding.recycler.getHitRect(bound)
+        return !headerBinding.buttonGroupCompose.getLocalVisibleRect(bound)
     }
 
     fun updateChapters() {
@@ -1292,10 +1302,13 @@ class MangaDetailsController :
         inflater.inflate(R.menu.manga_details, menu)
         colorToolbar(binding.recycler.canScrollVertically(-1))
         updateMenuVisibility(menu)
-        menu.findItem(R.id.action_migrate).title = view?.context?.getString(
-            MR.strings.migrate_,
-            presenter.manga.seriesType(view!!.context),
-        )
+        val manga = manga
+        if (manga != null) {
+            menu.findItem(R.id.action_migrate).title = view?.context?.getString(
+                MR.strings.migrate_,
+                manga.seriesType(view!!.context),
+            )
+        }
         menu.findItem(R.id.download_next).title =
             view?.context?.getString(MR.plurals.next_unread_chapters, 1, 1)
         menu.findItem(R.id.download_next_5).title =
@@ -1347,29 +1360,34 @@ class MangaDetailsController :
             }
             return
         }
+        val manga = manga
+        if (manga == null) {
+            for (i in 0 until menu.size()) {
+                val item = menu.getItem(i)
+                item.isVisible = item.itemId == R.id.action_search
+            }
+            return
+        }
         val editItem = menu.findItem(R.id.action_edit)
-        editItem?.isVisible = (presenter.manga.favorite || presenter.manga.isLocal()) && !presenter.isLockedFromSearch
-        val isNovel = presenter.manga.isNovel()
+        editItem?.isVisible = (manga.favorite || manga.isLocal()) && !presenter.isLockedFromSearch
+        val isNovel = manga.isNovel()
         menu.findItem(R.id.action_advanced_translation)?.isVisible =
-            !presenter.isLockedFromSearch && presenter.manga.favorite && isNovel
-        menu.findItem(R.id.action_quotes)?.isVisible = !presenter.isLockedFromSearch && isNovel
+            !presenter.isLockedFromSearch && manga.favorite && isNovel
         menu.findItem(R.id.action_download)?.isVisible = !presenter.isLockedFromSearch &&
-            !presenter.manga.isLocal()
+            !manga.isLocal()
         menu.findItem(R.id.action_mark_all_as_read)?.isVisible =
             presenter.getNextUnreadChapter() != null && !presenter.isLockedFromSearch
         menu.findItem(R.id.action_mark_all_as_unread)?.isVisible =
             presenter.anyRead() && !presenter.isLockedFromSearch
         menu.findItem(R.id.action_remove_downloads)?.isVisible =
             presenter.hasDownloads() && !presenter.isLockedFromSearch &&
-            !presenter.manga.isLocal()
+            !manga.isLocal()
         menu.findItem(R.id.remove_non_bookmarked)?.isVisible =
             presenter.hasBookmark() && !presenter.isLockedFromSearch
         menu.findItem(R.id.action_migrate)?.isVisible = !presenter.isLockedFromSearch &&
-            !presenter.manga.isLocal() && presenter.manga.favorite
+            !manga.isLocal() && manga.favorite
         menu.findItem(R.id.action_set_fetch_interval)?.isVisible = presenter.preferences.smartUpdateEnabled().get() &&
-            !presenter.isLockedFromSearch && !presenter.manga.isLocal() && presenter.manga.favorite
-        menu.findItem(R.id.action_color_from_cover)?.isChecked =
-            presenter.preferences.themeMangaDetails().get()
+            !presenter.isLockedFromSearch && !manga.isLocal() && manga.favorite
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -1389,13 +1407,6 @@ class MangaDetailsController :
                 )
             }
             R.id.action_advanced_translation -> showAdvancedTranslationSheet(this)
-            R.id.action_quotes -> openQuotesSheet()
-            R.id.action_color_from_cover -> {
-                val newValue = !presenter.preferences.themeMangaDetails().get()
-                presenter.preferences.themeMangaDetails().set(newValue)
-                item.isChecked = newValue
-                applyCoverColorTheming()
-            }
             R.id.action_open_in_web_view -> openInWebView()
             R.id.action_refresh_tracking -> presenter.refreshTracking(true)
             R.id.action_migrate ->
@@ -1434,7 +1445,29 @@ class MangaDetailsController :
         return true
     }
 
-    private fun openQuotesSheet() {
+    override fun openTranslationSettings() {
+        showAdvancedTranslationSheet(this)
+    }
+
+    override fun showChapterTranslationButton(): Boolean {
+        return presenter.isChapterTranslationAvailable()
+    }
+
+    override fun toggleChapterTranslation(position: Int) {
+        val item = adapter?.getItem(position) as? ChapterItem ?: return
+        presenter.toggleChapterTranslation(item)
+    }
+
+    fun refreshChapterTranslationState(chapterId: Long) {
+        val position = adapter?.indexOf(chapterId) ?: return
+        if (position >= 0) adapter?.notifyItemChanged(position)
+    }
+
+    fun showChapterTranslationMessage(message: StringResource) {
+        activity?.toast(message)
+    }
+
+    override fun openQuotesSheet() {
         val activity = activity ?: return
         val mangaId = presenter.manga.id ?: return
         showQuotesSheet(
@@ -1614,35 +1647,14 @@ class MangaDetailsController :
         val currentInterval = presenter.fetchIntervalDays.takeIf { it > 0 }?.let { days ->
             context.getString(MR.plurals.day_plural, days, days)
         } ?: context.getString(MR.strings.manga_interval_mode_automatic)
-        val releasePredictionApplies = presenter.manga.next_update > 0L &&
+        val releasePredictionApplies = presenter.manga.next_update.startOfDayMillis() >=
+            System.currentTimeMillis().startOfDayMillis() &&
             presenter.manga.status in setOf(SManga.ONGOING, SManga.PUBLISHING_FINISHED)
         val predictionMessage = if (releasePredictionApplies) {
-            val expected = if (DateUtils.isToday(presenter.manga.next_update)) {
-                context.getString(MR.strings.manga_interval_expected_update_soon)
-            } else {
-                presenter.manga.next_update.timeSpanFromNow(context)
-            }
-            val expectedDate = DateUtils.formatDateTime(
-                context,
-                presenter.manga.next_update,
-                DateUtils.FORMAT_SHOW_DATE or
-                    DateUtils.FORMAT_SHOW_TIME or
-                    DateUtils.FORMAT_SHOW_YEAR or
-                    DateUtils.FORMAT_ABBREV_MONTH,
-            )
-            val intervalMode = context.getString(
-                if (presenter.isUserIntervalMode) {
-                    MR.strings.custom_update_interval
-                } else {
-                    MR.strings.manga_interval_mode_automatic
-                },
-            )
             context.getString(
-                MR.strings.manga_interval_expected_update_details,
-                expected,
-                expectedDate,
+                MR.strings.manga_interval_expected_update,
+                presenter.manga.next_update.compactReleaseEstimate(context),
                 currentInterval,
-                intervalMode,
             )
         } else {
             context.getString(MR.strings.manga_interval_expected_update_null)
@@ -1657,6 +1669,47 @@ class MangaDetailsController :
             }
             .setNegativeButton(AR.string.cancel, null)
             .show()
+    }
+
+    private fun Long.compactReleaseEstimate(context: Context): String {
+        val todayStart = System.currentTimeMillis().startOfDayMillis()
+        val targetStart = startOfDayMillis()
+        val days = ((targetStart - todayStart) / DateUtils.DAY_IN_MILLIS).toInt()
+        return when {
+            days <= 0 -> context.getString(MR.strings.manga_interval_expected_update_soon)
+            days <= 60 -> context.getString(
+                MR.strings.manga_interval_expected_update_about,
+                context.getString(MR.plurals.day_plural, days, days).lowercase(Locale.ROOT),
+            )
+            else -> {
+                val yearFlag = if (isInCurrentYear()) {
+                    DateUtils.FORMAT_NO_YEAR
+                } else {
+                    DateUtils.FORMAT_SHOW_YEAR
+                }
+                DateUtils.formatDateTime(
+                    context,
+                    this,
+                    DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_NUMERIC_DATE or yearFlag,
+                )
+            }
+        }
+    }
+
+    private fun Long.startOfDayMillis(): Long {
+        return java.util.Calendar.getInstance().apply {
+            timeInMillis = this@startOfDayMillis
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    private fun Long.isInCurrentYear(): Boolean {
+        val current = java.util.Calendar.getInstance()
+        val target = java.util.Calendar.getInstance().apply { timeInMillis = this@isInCurrentYear }
+        return current.get(java.util.Calendar.YEAR) == target.get(java.util.Calendar.YEAR)
     }
 
     private fun updateToolbarTitleAlpha(@FloatRange(from = 0.0, to = 1.0) alpha: Float? = null, isScrollingDown: Boolean = false) {
@@ -2401,9 +2454,9 @@ class MangaDetailsController :
             },
         )
         // Consume insets at the host so the CoordinatorLayout can't re-dispatch them into the
-        // Compose subtree on every relayout. This overrides Compose's own WindowInsetsHolder
-        // listener, breaking the inset -> recompose -> relayout -> inset ANR loop. The nav-bar
-        // bottom inset is instead applied as static padding in setInsets().
+        // Compose subtree on every relayout. The bottom inset is passed as plain Dp content
+        // padding, keeping the visible surface attached to the navigation edge without using
+        // Compose WindowInsets inside AnimatedVisibility.
         ViewCompat.setOnApplyWindowInsetsListener(binding.actionBarCompose) { _, _ ->
             WindowInsetsCompat.CONSUMED
         }
@@ -2412,9 +2465,13 @@ class MangaDetailsController :
         )
         binding.actionBarCompose.setContent {
             yokai.presentation.theme.YokaiTheme {
+                val bottomInset = with(LocalDensity.current) {
+                    chapterActionBarBottomInsetPx.toDp()
+                }
                 MangaChapterActionBar(
                     state = actionBarState,
                     handlers = handlers,
+                    bottomInset = bottomInset,
                     containerColor = androidx.compose.ui.graphics.Color(selectionActionBarContainerColor()),
                     contentColor = androidx.compose.ui.graphics.Color(selectionActionBarContentColor()),
                 )

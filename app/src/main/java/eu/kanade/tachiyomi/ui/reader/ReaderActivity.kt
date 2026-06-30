@@ -2319,6 +2319,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      */
     fun isTranslationEnabled(): Boolean = translationService.isEnabled()
 
+    fun isTranslationGloballyEnabled(): Boolean = translationService.isGloballyEnabled()
+
     fun currentTranslationLanguage(): String = translationService.getLastTargetLanguage()
 
     /**
@@ -2330,13 +2332,18 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         chapterId: Long? = viewModel.state.value.viewerChapters?.currChapter?.chapter?.id,
         mangaId: Long? = viewModel.manga?.id,
         mangaTitle: String? = viewModel.manga?.title,
+        forceRetranslate: Boolean = false,
+        requireRealtime: Boolean = true,
     ): String {
-        if (!isTranslationEnabled()) return content
+        if (!isTranslationGloballyEnabled()) return content
+        if (requireRealtime && !isTranslationEnabled()) return content
         return translationService.translateChapterContent(
             content = content,
             chapterId = chapterId,
             mangaId = mangaId,
             mangaTitle = mangaTitle,
+            forceRetranslate = forceRetranslate,
+            requireRealtime = requireRealtime,
         )
     }
 

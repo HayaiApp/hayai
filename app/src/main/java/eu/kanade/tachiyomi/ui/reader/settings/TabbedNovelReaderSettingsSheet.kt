@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.settings
 
 import android.view.View
 import androidx.core.view.isVisible
+import com.google.android.material.tabs.TabLayout
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
@@ -59,5 +60,7 @@ class TabbedNovelReaderSettingsSheet(
         ttsView.activity = readerActivity
 
         binding.menu.isVisible = false
+        binding.tabs.tabMode = TabLayout.MODE_SCROLLABLE
+        binding.tabs.tabGravity = TabLayout.GRAVITY_START
     }
 }

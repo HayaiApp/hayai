@@ -4,11 +4,9 @@ import android.view.View
 import androidx.core.text.buildSpannedString
 import androidx.core.text.color
 import coil3.load
-import coil3.request.transformations
 import androidx.appcompat.R as appcompatR
 import com.google.android.material.R as materialR
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.coil.PaddedSourceIconTransformation
 import yokai.i18n.MR
 import yokai.util.lang.getString
 import dev.icerock.moko.resources.compose.stringResource
@@ -59,9 +57,7 @@ class SourceHolder(view: View, val adapter: SourceAdapter) :
                 icon != null -> binding.sourceImage.setImageDrawable(icon)
                 // NOVEL -->
                 source is NovelSource && !source.iconUrl.isNullOrBlank() -> {
-                    binding.sourceImage.load(source.iconUrl) {
-                        transformations(PaddedSourceIconTransformation())
-                    }
+                    binding.sourceImage.load(source.iconUrl)
                 }
                 source is NovelSource -> binding.sourceImage.setImageResource(R.drawable.ic_book_24dp)
                 // NOVEL <--

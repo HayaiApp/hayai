@@ -38,6 +38,13 @@ class ChapterHolder(
             adapter.delegate.startDownloadRange(flexibleAdapterPosition)
             true
         }
+        binding.translationButton.setOnClickListener {
+            adapter.delegate.toggleChapterTranslation(flexibleAdapterPosition)
+        }
+        binding.translationButton.setOnLongClickListener {
+            adapter.delegate.openTranslationSettings()
+            true
+        }
     }
 
     fun bind(item: ChapterItem, manga: Manga) {
@@ -47,8 +54,12 @@ class ChapterHolder(
         binding.chapterTitle.text =
             chapter.preferredChapterName(itemView.context, manga, adapter.preferences)
 
+        val isNovel = manga.isNovel()
         binding.downloadButton.downloadButton.isVisible = !manga.isLocal() && !isLocked
         localSource = manga.isLocal()
+        binding.translationButton.isVisible =
+            adapter.delegate.showChapterTranslationButton() && isNovel && !isLocked
+        bindTranslationButton(item)
 
         ChapterUtil.setTextViewForChapter(binding.chapterTitle, item, hideStatus = isLocked)
 
@@ -57,7 +68,6 @@ class ChapterHolder(
         ChapterUtil.relativeDate(chapter)?.let { statuses.add(it) }
 
         val showPagesLeft = !chapter.read && chapter.last_page_read > 0 && !isLocked
-        val isNovel = manga.isNovel()
 
         if (showPagesLeft) {
             statuses.add(
@@ -189,5 +199,33 @@ class ChapterHolder(
         }
         isVisible = !localSource
         setDownloadStatus(status, progress, animated)
+    }
+
+    private fun bindTranslationButton(item: ChapterItem) {
+        val button = binding.translationButton
+        if (!button.isVisible) return
+
+        val context = button.context
+        val icon = when {
+            item.isTranslating -> R.drawable.ic_sync_24dp
+            item.hasCachedTranslation -> R.drawable.ic_check_circle_24dp
+            else -> R.drawable.ic_translate_24dp
+        }
+        val label = when {
+            item.isTranslating -> MR.strings.chapter_translation_translating
+            item.hasCachedTranslation -> MR.strings.chapter_translation_clear
+            else -> MR.strings.chapter_translation_translate
+        }
+        val tint = when {
+            item.hasCachedTranslation -> adapter.delegate.accentColor()
+                ?: context.getResourceColor(materialR.attr.colorSecondary)
+            else -> context.getResourceColor(materialR.attr.colorSecondary)
+        }
+
+        button.setImageResource(icon)
+        button.contentDescription = context.getString(label)
+        button.imageTintList = ColorStateList.valueOf(tint)
+        button.isEnabled = !item.isTranslating
+        button.alpha = if (item.isTranslating) 0.6f else 1f
     }
 }

@@ -6,11 +6,13 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExtensionOff
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
+import androidx.core.view.isVisible
 import androidx.core.view.updatePaddingRelative
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -19,6 +21,7 @@ import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.ExtensionsBottomSheetBinding
+import eu.kanade.tachiyomi.databinding.ExtensionsTypePageBinding
 import eu.kanade.tachiyomi.databinding.RecyclerWithScrollerBinding
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
@@ -90,11 +93,6 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
     private var novelPluginAdapter: NovelPluginAdapter? = null
     // NOVEL <--
 
-    val adapters
-        // NOVEL -->
-        get() = listOf(extAdapter, novelPluginAdapter, migAdapter)
-        // NOVEL <--
-
     val presenter = ExtensionBottomPresenter()
     var currentSourceTitle: String? = null
 
@@ -107,19 +105,20 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
 
     lateinit var controller: BrowseController
     var boundViews = arrayListOf<RecyclerWithScrollerView>()
+    private var selectedExtensionTypeTab = EXTENSION_TYPE_MANGA
 
     val extensionFrameLayout: RecyclerWithScrollerView?
-        get() = binding.pager.findViewWithTag("TabbedRecycler0") as? RecyclerWithScrollerView
+        get() = findViewWithTag(EXTENSION_RECYCLER_TAG) as? RecyclerWithScrollerView
     // NOVEL -->
     val novelPluginFrameLayout: RecyclerWithScrollerView?
-        get() = binding.pager.findViewWithTag("TabbedRecycler1") as? RecyclerWithScrollerView
+        get() = findViewWithTag(NOVEL_RECYCLER_TAG) as? RecyclerWithScrollerView
     // NOVEL <--
     val migrationFrameLayout: RecyclerWithScrollerView?
-        get() = binding.pager.findViewWithTag("TabbedRecycler2") as? RecyclerWithScrollerView
+        get() = findViewWithTag(MIGRATION_RECYCLER_TAG) as? RecyclerWithScrollerView
 
     var isExpanding = false
 
-    // Shared across all 3 inner tab recyclers (Extensions, Novel, Migration) AND across
+    // Shared across the sheet recyclers (manga extensions, novel plugins, migration) AND across
     // BrowseController lifetimes so holders survive every nav swap. Without this, returning
     // to Browse re-inflates ~12 extension cards (~150ms/frame) on each entry.
     val sharedExtensionPool: RecyclerView.RecycledViewPool
@@ -134,6 +133,15 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
         // Defer non-essential tab-swap work (menu rebuild, migration adapter swap) past the
         // typical 300ms ViewPager settle so it lands after the swipe is visually complete.
         private const val SWAP_DEFER_MS = 350L
+        private const val OUTER_TAB_EXTENSIONS = 0
+        private const val OUTER_TAB_MIGRATION = 1
+        private const val EXTENSION_TYPE_MANGA = 0
+        private const val EXTENSION_TYPE_NOVELS = 1
+        private const val EXTENSION_RECYCLER_TAG = "TabbedRecycler0"
+        private const val NOVEL_RECYCLER_TAG = "TabbedRecycler1"
+        private const val MIGRATION_RECYCLER_TAG = "TabbedRecycler2"
+        private const val EXTENSION_PAGE_TAG = "TabbedSheetPageExtensions"
+        private const val MIGRATION_PAGE_TAG = "TabbedSheetPageMigration"
 
         // Process-static so holders are reused on every Browse re-entry; Views inside survive
         // BrowseController + ExtensionBottomSheet destruction.
@@ -188,7 +196,7 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
                     // swap; onTabReselected still triggers an explicit refresh.
                     // Defer the menu rebuild past the ViewPager settle. updateSheetMenu does
                     // toolbar.menu.clear() + inflateMenu(...) + SearchView wiring when crossing
-                    // between Migration (migration_main) and Extensions/Novel (extension_main) —
+                    // between Migration (migration_main) and Extensions (extension_main) —
                     // synchronous XML parsing on the swipe-critical frame.
                     binding.pager.postDelayed(
                         { this@ExtensionBottomSheet.controller.updateTitleAndMenu() },
@@ -198,7 +206,7 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
 
                 override fun onTabUnselected(tab: TabLayout.Tab?) {
                     getFrameLayoutForTab(tab?.position)?.binding?.recycler?.isNestedScrollingEnabled = false
-                    if (tab?.position == 2) {
+                    if (tab?.position == OUTER_TAB_MIGRATION) {
                         // setMigrationSources may swap the migration adapter
                         // (MangaAdapter -> SourceAdapter) which triggers a full layout pass on
                         // the still-attached migration recycler. View.post fires on the next
@@ -214,7 +222,9 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
                     this@ExtensionBottomSheet.sheetBehavior?.expand()
                     getFrameLayoutForTab(tab?.position)?.binding?.recycler?.isNestedScrollingEnabled = true
                     sheetBehavior?.isDraggable = true
-                    if (tab?.position == 1) {
+                    if (tab?.position == OUTER_TAB_EXTENSIONS &&
+                        selectedExtensionTypeTab == EXTENSION_TYPE_NOVELS
+                    ) {
                         presenter.refreshNovelPlugins()
                     }
                     if (!isExpanding) {
@@ -238,12 +248,14 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
     }
 
     fun isOnView(view: View): Boolean {
-        return "TabbedRecycler${binding.pager.currentItem}" == view.tag
+        return activeFrameLayout()?.let { view == it || view.tag == it.tag } == true
     }
 
     fun updatedNestedRecyclers() {
-        listOf(extensionFrameLayout, novelPluginFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
-            recyclerWithScrollerBinding?.binding?.recycler?.isNestedScrollingEnabled = binding.pager.currentItem == index
+        val activeFrameLayout = activeFrameLayout()
+        listOf(extensionFrameLayout, novelPluginFrameLayout, migrationFrameLayout).forEach { recyclerWithScrollerBinding ->
+            recyclerWithScrollerBinding?.binding?.recycler?.isNestedScrollingEnabled =
+                recyclerWithScrollerBinding == activeFrameLayout
         }
     }
 
@@ -336,7 +348,8 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
 
     override fun onItemClick(view: View?, position: Int): Boolean {
         when (binding.tabs.selectedTabPosition) {
-            0 -> {
+            OUTER_TAB_EXTENSIONS -> {
+                if (selectedExtensionTypeTab != EXTENSION_TYPE_MANGA) return false
                 val extension =
                     (extAdapter?.getItem(position) as? ExtensionItem)?.extension ?: return false
                 if (extension is Extension.Installed) {
@@ -345,7 +358,7 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
                     openTrustDialog(extension)
                 }
             }
-            2 -> {
+            OUTER_TAB_MIGRATION -> {
                 val item = migAdapter?.getItem(position) ?: return false
 
                 if (item is MangaItem) {
@@ -364,13 +377,12 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
 
     override fun onItemLongClick(position: Int) {
         when (binding.tabs.selectedTabPosition) {
-            0 -> {
+            OUTER_TAB_EXTENSIONS -> if (selectedExtensionTypeTab == EXTENSION_TYPE_MANGA) {
                 val extension = (extAdapter?.getItem(position) as? ExtensionItem)?.extension ?: return
                 if (extension is Extension.Installed || extension is Extension.Untrusted) {
                     uninstallExtension(extension.name, extension.pkgName)
                 }
-            }
-            1 -> {
+            } else {
                 val item = (novelPluginAdapter?.getItem(position) as? NovelPluginItem) ?: return
                 if (item.isInstalled) {
                     uninstallNovelPlugin(item.plugin.name, item.plugin.id)
@@ -460,12 +472,12 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
     }
 
     fun canStillGoBack(): Boolean {
-        return (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) ||
-            (binding.tabs.selectedTabPosition in 0..1 && binding.sheetToolbar.hasExpandedActionView())
+        return (binding.tabs.selectedTabPosition == OUTER_TAB_MIGRATION && migAdapter is MangaAdapter) ||
+            (binding.tabs.selectedTabPosition == OUTER_TAB_EXTENSIONS && binding.sheetToolbar.hasExpandedActionView())
     }
 
     fun canGoBack(): Boolean {
-        return if (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) {
+        return if (binding.tabs.selectedTabPosition == OUTER_TAB_MIGRATION && migAdapter is MangaAdapter) {
             presenter.deselectSource()
             false
         } else if (binding.sheetToolbar.hasExpandedActionView()) {
@@ -536,10 +548,38 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
     // NOVEL -->
     private fun getFrameLayoutForTab(position: Int?): RecyclerWithScrollerView? {
         return when (position) {
-            0 -> extensionFrameLayout
-            1 -> novelPluginFrameLayout
-            2 -> migrationFrameLayout
+            OUTER_TAB_EXTENSIONS -> activeExtensionFrameLayout()
+            OUTER_TAB_MIGRATION -> migrationFrameLayout
             else -> null
+        }
+    }
+
+    private fun activeFrameLayout(): RecyclerWithScrollerView? {
+        return when (binding.pager.currentItem) {
+            OUTER_TAB_EXTENSIONS -> activeExtensionFrameLayout()
+            OUTER_TAB_MIGRATION -> migrationFrameLayout
+            else -> null
+        }
+    }
+
+    private fun activeExtensionFrameLayout(): RecyclerWithScrollerView? {
+        return if (selectedExtensionTypeTab == EXTENSION_TYPE_NOVELS) {
+            novelPluginFrameLayout
+        } else {
+            extensionFrameLayout
+        }
+    }
+
+    private fun showExtensionTypeTab(position: Int) {
+        selectedExtensionTypeTab = position.coerceIn(EXTENSION_TYPE_MANGA, EXTENSION_TYPE_NOVELS)
+        val showNovels = selectedExtensionTypeTab == EXTENSION_TYPE_NOVELS
+        extensionFrameLayout?.isVisible = !showNovels
+        novelPluginFrameLayout?.isVisible = showNovels
+        updatedNestedRecyclers()
+        if (showNovels) {
+            updateNovelPluginsEmptyState(novelPluginAdapter?.mainItemCount == 0)
+        } else {
+            extensionFrameLayout?.hideEmptyState()
         }
     }
 
@@ -625,27 +665,100 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
     private inner class TabbedSheetAdapter : RecyclerViewPagerAdapter() {
 
         override fun getCount(): Int {
-            // NOVEL -->
-            return 3
-            // NOVEL <--
+            return 2
         }
 
         override fun getPageTitle(position: Int): CharSequence {
             return when (position) {
-                0 -> context.getString(MR.strings.extensions)
-                // NOVEL -->
-                1 -> context.getString(MR.strings.novels)
-                // NOVEL <--
+                OUTER_TAB_EXTENSIONS -> context.getString(MR.strings.extensions)
                 else -> context.getString(MR.strings.migration)
             }
         }
 
-        /**
-         * Creates a new view for this adapter.
-         *
-         * @return a new view.
-         */
         override fun createView(container: ViewGroup): View {
+            return FrameLayout(container.context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
+            }
+        }
+
+        override fun bindView(view: View, position: Int) {
+            val host = view as FrameLayout
+            unregisterBoundRecyclers(host)
+            host.removeAllViews()
+            when (position) {
+                OUTER_TAB_EXTENSIONS -> {
+                    host.tag = EXTENSION_PAGE_TAG
+                    host.addView(createExtensionsPage(host))
+                    showExtensionTypeTab(selectedExtensionTypeTab)
+                }
+                else -> {
+                    host.tag = MIGRATION_PAGE_TAG
+                    host.addView(createRecyclerPage(host, MIGRATION_RECYCLER_TAG, migAdapter!!))
+                    migrationFrameLayout?.hideEmptyState()
+                }
+            }
+        }
+
+        override fun recycleView(view: View, position: Int) {
+            unregisterBoundRecyclers(view)
+        }
+
+        override fun getItemPosition(obj: Any): Int {
+            return when ((obj as? View)?.tag) {
+                EXTENSION_PAGE_TAG -> OUTER_TAB_EXTENSIONS
+                MIGRATION_PAGE_TAG -> OUTER_TAB_MIGRATION
+                else -> POSITION_NONE
+            }
+        }
+
+        private fun createExtensionsPage(container: ViewGroup): View {
+            val pageBinding = ExtensionsTypePageBinding.inflate(
+                LayoutInflater.from(container.context),
+                container,
+                false,
+            )
+            pageBinding.extensionTypeTabs.addTab(
+                pageBinding.extensionTypeTabs.newTab().setText(context.getString(MR.strings.manga)),
+                selectedExtensionTypeTab == EXTENSION_TYPE_MANGA,
+            )
+            pageBinding.extensionTypeTabs.addTab(
+                pageBinding.extensionTypeTabs.newTab().setText(context.getString(MR.strings.novels)),
+                selectedExtensionTypeTab == EXTENSION_TYPE_NOVELS,
+            )
+            pageBinding.extensionTypeTabs.addOnTabSelectedListener(
+                object : TabLayout.OnTabSelectedListener {
+                    override fun onTabSelected(tab: TabLayout.Tab?) {
+                        showExtensionTypeTab(tab?.position ?: EXTENSION_TYPE_MANGA)
+                    }
+
+                    override fun onTabUnselected(tab: TabLayout.Tab?) = Unit
+
+                    override fun onTabReselected(tab: TabLayout.Tab?) {
+                        showExtensionTypeTab(tab?.position ?: EXTENSION_TYPE_MANGA)
+                        if (selectedExtensionTypeTab == EXTENSION_TYPE_NOVELS) {
+                            presenter.refreshNovelPlugins()
+                        }
+                        activeExtensionFrameLayout()?.binding?.recycler?.smoothScrollToTop()
+                    }
+                },
+            )
+            pageBinding.extensionTypeContent.addView(
+                createRecyclerPage(pageBinding.extensionTypeContent, EXTENSION_RECYCLER_TAG, extAdapter!!),
+            )
+            pageBinding.extensionTypeContent.addView(
+                createRecyclerPage(pageBinding.extensionTypeContent, NOVEL_RECYCLER_TAG, novelPluginAdapter!!),
+            )
+            return pageBinding.root
+        }
+
+        private fun createRecyclerPage(
+            container: ViewGroup,
+            tag: String,
+            adapter: FlexibleAdapter<IFlexible<*>>,
+        ): RecyclerWithScrollerView {
             val binding = RecyclerWithScrollerBinding.inflate(
                 LayoutInflater.from(container.context),
                 container,
@@ -654,46 +767,23 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
             val view: RecyclerWithScrollerView = binding.root
             val height = this@ExtensionBottomSheet.controller.activityBinding?.bottomNav?.height
                 ?: view.rootWindowInsetsCompat?.getInsets(systemBars())?.bottom ?: 0
+            view.tag = tag
             view.setUp(this@ExtensionBottomSheet, binding, height)
-
+            view.onBind(adapter)
+            boundViews.add(view)
             return view
         }
 
-        /**
-         * Binds a view with a position.
-         *
-         * @param view the view to bind.
-         * @param position the position in the adapter.
-         */
-        override fun bindView(view: View, position: Int) {
-            (view as RecyclerWithScrollerView).onBind(adapters[position]!!)
-            view.setTag("TabbedRecycler$position")
-            boundViews.add(view)
-            if (position == 1) {
-                updateNovelPluginsEmptyState(novelPluginAdapter?.mainItemCount == 0)
-            } else {
-                view.hideEmptyState()
+        private fun unregisterBoundRecyclers(view: View) {
+            if (view is RecyclerWithScrollerView) {
+                boundViews.remove(view)
+                return
             }
-        }
-
-        /**
-         * Recycles a view.
-         *
-         * @param view the view to recycle.
-         * @param position the position in the adapter.
-         */
-        override fun recycleView(view: View, position: Int) {
-            // (view as RecyclerWithScrollerView).onRecycle()
-            boundViews.remove(view)
-        }
-
-        /**
-         * Returns the position of the view.
-         */
-        override fun getItemPosition(obj: Any): Int {
-            val view = (obj as? RecyclerWithScrollerView) ?: return POSITION_NONE
-            val index = adapters.indexOfFirst { it == view.binding?.recycler?.adapter }
-            return if (index == -1) POSITION_NONE else index
+            if (view is ViewGroup) {
+                for (i in 0 until view.childCount) {
+                    unregisterBoundRecyclers(view.getChildAt(i))
+                }
+            }
         }
     }
 }

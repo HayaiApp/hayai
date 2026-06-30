@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.data.track.model.TrackContentType
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.data.translation.TranslationService
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.NetworkPreferences
@@ -73,11 +74,13 @@ import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.withIOContext
 import eu.kanade.tachiyomi.util.system.withUIContext
 import eu.kanade.tachiyomi.widget.TriStateCheckBox
+import hayai.novel.source.NovelSource
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
 import java.util.Locale
 import kotlin.math.absoluteValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -129,6 +132,7 @@ class MangaDetailsPresenter(
     private val insertTrack: InsertTrack by injectLazy()
     private val getHistory: GetHistory by injectLazy()
     private val seriesKnowledgeRepository: SeriesKnowledgeRepository by injectLazy()
+    private val translationService: TranslationService by injectLazy()
 
     private val networkPreferences: NetworkPreferences by injectLazy()
 
@@ -302,6 +306,10 @@ class MangaDetailsPresenter(
 
         // Find downloaded chapters
         setDownloadedChapters(chapters, queue)
+        annotateChapterTranslations(chapters)
+        if (allChapters !== chapters) {
+            annotateChapterTranslations(allChapters)
+        }
         allChapterScanlators = allChapters.mapNotNull { it.chapter.scanlator }.toSet()
 
         this.chapters = applyChapterFilters(chapters)
@@ -343,6 +351,78 @@ class MangaDetailsPresenter(
             model.download = download
         }
         return model
+    }
+
+    fun isChapterTranslationAvailable(): Boolean {
+        return !isLockedFromSearch && translationService.isGloballyEnabled() && source is NovelSource
+    }
+
+    private suspend fun annotateChapterTranslations(chapters: List<ChapterItem>) {
+        if (!isChapterTranslationAvailable()) return
+        val mangaId = manga.id ?: return
+        withContext(Dispatchers.IO) {
+            chapters.forEach { chapter ->
+                chapter.hasCachedTranslation = translationService.hasTranslation(chapter.id, mangaId)
+            }
+        }
+    }
+
+    fun toggleChapterTranslation(item: ChapterItem) {
+        if (item.isTranslating) return
+        val chapterId = item.id ?: return
+        val mangaId = manga.id ?: return
+        val novelSource = source as? NovelSource
+        if (!isChapterTranslationAvailable() || novelSource == null) {
+            view?.showChapterTranslationMessage(MR.strings.chapter_translation_unavailable)
+            return
+        }
+
+        presenterScope.launchIO {
+            val cached = translationService.hasTranslation(chapterId, mangaId)
+            if (cached) {
+                translationService.deleteTranslation(chapterId, mangaId)
+                item.hasCachedTranslation = false
+                item.isTranslating = false
+                withUIContext {
+                    view?.refreshChapterTranslationState(chapterId)
+                    view?.showChapterTranslationMessage(MR.strings.chapter_translation_cleared)
+                }
+                return@launchIO
+            }
+
+            item.isTranslating = true
+            withUIContext { view?.refreshChapterTranslationState(chapterId) }
+
+            val result = runCatching {
+                val html = novelSource.getChapterText(item.chapter.url)
+                val translated = translationService.translateChapterContent(
+                    content = html,
+                    chapterId = chapterId,
+                    mangaId = mangaId,
+                    mangaTitle = manga.title,
+                    forceRetranslate = true,
+                    requireRealtime = false,
+                )
+                translated != html && translationService.hasTranslation(chapterId, mangaId)
+            }
+            result.exceptionOrNull()?.let { error ->
+                if (error is CancellationException) throw error
+                Logger.e(error) { "Manual chapter translation failed" }
+            }
+
+            item.isTranslating = false
+            item.hasCachedTranslation = translationService.hasTranslation(chapterId, mangaId)
+            withUIContext {
+                view?.refreshChapterTranslationState(chapterId)
+                view?.showChapterTranslationMessage(
+                    when {
+                        result.getOrDefault(false) -> MR.strings.chapter_translation_saved
+                        item.hasCachedTranslation -> MR.strings.chapter_translation_saved
+                        else -> MR.strings.chapter_translation_failed
+                    },
+                )
+            }
+        }
     }
 
     /**
@@ -863,6 +943,7 @@ class MangaDetailsPresenter(
         status: Int?,
         seriesType: Int?,
         lang: String?,
+        selectedCoverUrl: String? = null,
         resetCover: Boolean = false,
     ) {
         if (manga.isLocal()) {
@@ -930,6 +1011,20 @@ class MangaDetailsPresenter(
         } else if (resetCover) {
             coverCache.deleteCustomCover(manga)
             presenterScope.launchIO { manga.updateCoverLastModified() }
+            view?.setPaletteColor()
+        } else if (!manga.isLocal() && !selectedCoverUrl.isNullOrBlank() && selectedCoverUrl != manga.thumbnail_url) {
+            coverCache.deleteFromCache(manga, true)
+            manga.thumbnail_url = selectedCoverUrl
+            manga.cover_last_modified = System.currentTimeMillis()
+            presenterScope.launchNonCancellableIO {
+                updateManga.await(
+                    MangaUpdate(
+                        manga.id!!,
+                        thumbnailUrl = manga.thumbnail_url,
+                        coverLastModified = manga.cover_last_modified,
+                    ),
+                )
+            }
             view?.setPaletteColor()
         }
         view?.updateHeader()

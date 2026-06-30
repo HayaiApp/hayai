@@ -122,20 +122,18 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
             activity.openInBrowser(item.trackSearch.tracking_url)
         }
 
+        binding.searchSubmitButton.setOnClickListener {
+            submitSearch()
+        }
+
         binding.trackSearch.setOnEditorActionListener { _, actionId, keyEvent ->
-            if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_SEARCH ||
-                keyEvent.keyCode == KeyEvent.KEYCODE_ENTER
-            ) {
-                val text = binding.trackSearch.text?.toString() ?: ""
-                if (text.isNotBlank()) {
-                    startTransition()
-                    val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                    imm?.hideSoftInputFromWindow(binding.trackSearch.windowToken, 0)
-                    binding.trackSearch.clearFocus()
-                    search(text)
-                }
+            val isSubmit = actionId == EditorInfo.IME_ACTION_DONE ||
+                actionId == EditorInfo.IME_ACTION_SEARCH ||
+                (keyEvent?.keyCode == KeyEvent.KEYCODE_ENTER && keyEvent.action == KeyEvent.ACTION_UP)
+            if (isSubmit) {
+                submitSearch()
             }
-            true
+            isSubmit
         }
 
         binding.displayBottomSheet.checkHeightThen {
@@ -284,6 +282,16 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
         binding.trackSearchConstraintLayout.isVisible = false
         searchingItem = null
         backCallback.isEnabled = false
+    }
+
+    private fun submitSearch() {
+        val text = binding.trackSearch.text?.toString()?.trim().orEmpty()
+        if (text.isBlank()) return
+        startTransition()
+        val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(binding.trackSearch.windowToken, 0)
+        binding.trackSearch.clearFocus()
+        search(text)
     }
 
     private fun search(query: String) {

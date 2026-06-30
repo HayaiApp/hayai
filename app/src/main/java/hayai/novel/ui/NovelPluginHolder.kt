@@ -8,10 +8,8 @@ import androidx.core.view.isVisible
 import coil3.asImage
 import coil3.dispose
 import coil3.load
-import coil3.request.transformations
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.coil.CoverViewTarget
-import eu.kanade.tachiyomi.data.coil.PaddedSourceIconTransformation
 import eu.kanade.tachiyomi.databinding.ExtensionCardItemBinding
 import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
 import eu.kanade.tachiyomi.util.system.getResourceColor
@@ -60,7 +58,6 @@ class NovelPluginHolder(view: View, val adapter: NovelPluginAdapter) :
             !plugin.iconUrl.isNullOrBlank() -> {
                 binding.sourceImage.load(plugin.iconUrl) {
                     target(CoverViewTarget(binding.sourceImage))
-                    transformations(PaddedSourceIconTransformation())
                     placeholderImage?.let {
                         placeholder(it)
                         error(it)

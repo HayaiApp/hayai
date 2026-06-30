@@ -13,6 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:paddingTop="5dp"
+        android:paddingBottom="24dp"
         android:clipToPadding="false"
         tools:visibility="visible"
         tools:itemCount="3"
@@ -88,12 +89,12 @@
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/text_input_layout"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
+            android:layout_marginEnd="8dp"
             android:layout_marginTop="4dp"
-            android:hint="@string/search_chapters"
+            android:hint="@string/search_tracking"
             app:boxStrokeColor="@color/text_box_stroke_selector"
             app:endIconMode="clear_text"
             app:hintEnabled="true"
@@ -101,7 +102,7 @@
             app:startIconDrawable="@drawable/ic_search_24dp"
             app:startIconTint="?actionBarTintColor"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/search_submit_button"
             app:layout_constraintTop_toBottomOf="@id/title_layout">
 
             <eu.kanade.tachiyomi.widget.TachiyomiTextInputEditText
@@ -114,6 +115,20 @@
                 android:maxLines="1" />
 
         </com.google.android.material.textfield.TextInputLayout>
+
+        <ImageButton
+            android:id="@+id/search_submit_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="16dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:contentDescription="@string/search"
+            android:tooltipText="@string/search"
+            app:layout_constraintBottom_toBottomOf="@id/text_input_layout"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/text_input_layout"
+            app:srcCompat="@drawable/ic_search_24dp"
+            app:tint="?actionBarTintColor" />
 
         <View
             android:id="@+id/divider"
@@ -157,7 +172,7 @@
                 android:nestedScrollingEnabled="true"
                 android:clipToPadding="false"
                 android:paddingTop="4dp"
-                android:paddingBottom="8dp"
+                android:paddingBottom="24dp"
                 android:scrollbars="none"
                 android:visibility="invisible"
                 tools:itemCount="50"

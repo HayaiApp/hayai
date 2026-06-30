@@ -10,9 +10,12 @@ import eu.kanade.tachiyomi.ui.setting.infoPreference
 import eu.kanade.tachiyomi.ui.setting.listPreference
 import eu.kanade.tachiyomi.ui.setting.multiSelectListPreferenceMat
 import eu.kanade.tachiyomi.ui.setting.onChange
+import eu.kanade.tachiyomi.ui.setting.onClick
+import eu.kanade.tachiyomi.ui.setting.preference
 import eu.kanade.tachiyomi.ui.setting.preferenceCategory
 import eu.kanade.tachiyomi.ui.setting.seekBarPreference
 import eu.kanade.tachiyomi.ui.setting.switchPreference
+import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import eu.kanade.tachiyomi.data.translation.TranslationEngineManager
 import tachiyomi.domain.translation.model.LanguageCodes
 import tachiyomi.domain.translation.service.TranslationPreferences
@@ -43,11 +46,16 @@ class SettingsNovelReaderController : SettingsLegacyController() {
     }
 }
 
+class SettingsTranslationController : SettingsLegacyController() {
+
+    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
+        titleRes = MR.strings.pref_category_translation
+        populateTranslationPreferences(this)
+    }
+}
+
 fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceScreen) {
     val readerPreferences: ReaderPreferences = get()
-    val translationPreferences: TranslationPreferences = get()
-    val seriesPreferences: SeriesPreferences = get()
-    val translationEngineManager: TranslationEngineManager = get()
 
     screen.apply {
         preferenceCategory {
@@ -219,6 +227,91 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
             }
         }
 
+        preferenceCategory {
+            titleRes = MR.strings.pref_category_translation
+
+            preference {
+                titleRes = MR.strings.pref_category_translation
+                summaryRes = MR.strings.pref_translation_settings_summary
+                onClick {
+                    router.pushController(SettingsTranslationController().withFadeTransaction())
+                }
+            }
+        }
+
+        preferenceCategory {
+            titleRes = MR.strings.text_to_speech
+
+            // Speed/pitch are Float-typed prefs. SeekBarPreference is Int-only and
+            // would crash calling getPersistedInt on the Float key, so we run the
+            // bar non-persistent in 0.1 steps (5..20 ↔ 0.5x..2.0x) and forward
+            // changes to the Float pref ourselves.
+            seekBarPreference {
+                isPersistent = false
+                titleRes = MR.strings.novel_tts_speed
+                min = 5
+                max = 20
+                showSeekBarValue = false
+                val initial = (readerPreferences.novelTtsSpeed.get() * 10).toInt().coerceIn(5, 20)
+                defaultValue = initial
+                summary = "%.1fx".format(initial / 10f)
+                onChange { newValue ->
+                    val v = (newValue as Int).coerceIn(5, 20)
+                    readerPreferences.novelTtsSpeed.set(v / 10f)
+                    summary = "%.1fx".format(v / 10f)
+                    true
+                }
+            }
+
+            seekBarPreference {
+                isPersistent = false
+                titleRes = MR.strings.novel_tts_pitch
+                min = 5
+                max = 20
+                showSeekBarValue = false
+                val initial = (readerPreferences.novelTtsPitch.get() * 10).toInt().coerceIn(5, 20)
+                defaultValue = initial
+                summary = "%.1fx".format(initial / 10f)
+                onChange { newValue ->
+                    val v = (newValue as Int).coerceIn(5, 20)
+                    readerPreferences.novelTtsPitch.set(v / 10f)
+                    summary = "%.1fx".format(v / 10f)
+                    true
+                }
+            }
+
+            switchPreference {
+                bindTo(readerPreferences.novelTtsAutoNextChapter)
+                titleRes = MR.strings.novel_tts_auto_next_chapter
+            }
+
+            switchPreference {
+                bindTo(readerPreferences.novelTtsEnableHighlight)
+                titleRes = MR.strings.novel_tts_enable_highlight
+            }
+
+            switchPreference {
+                bindTo(readerPreferences.novelTtsKeepHighlightInView)
+                titleRes = MR.strings.novel_tts_keep_highlight_in_view
+            }
+
+            switchPreference {
+                bindTo(readerPreferences.novelTtsBackgroundPlayback)
+                titleRes = MR.strings.novel_tts_background_playback
+                summaryRes = MR.strings.novel_tts_background_playback_summary
+            }
+
+            infoPreference(MR.strings.novel_tts_more_in_reader)
+        }
+    }
+}
+
+fun SettingsLegacyController.populateTranslationPreferences(screen: PreferenceScreen) {
+    val translationPreferences: TranslationPreferences = get()
+    val seriesPreferences: SeriesPreferences = get()
+    val translationEngineManager: TranslationEngineManager = get()
+
+    screen.apply {
         preferenceCategory {
             titleRes = MR.strings.pref_category_translation
 
@@ -477,71 +570,6 @@ fun SettingsLegacyController.populateNovelReaderPreferences(screen: PreferenceSc
                 bindTo(translationPreferences.customHttpResponsePath())
                 titleRes = MR.strings.pref_translation_custom_http_response_path
             }
-        }
-
-        preferenceCategory {
-            titleRes = MR.strings.text_to_speech
-
-            // Speed/pitch are Float-typed prefs. SeekBarPreference is Int-only and
-            // would crash calling getPersistedInt on the Float key, so we run the
-            // bar non-persistent in 0.1 steps (5..20 ↔ 0.5x..2.0x) and forward
-            // changes to the Float pref ourselves.
-            seekBarPreference {
-                isPersistent = false
-                titleRes = MR.strings.novel_tts_speed
-                min = 5
-                max = 20
-                showSeekBarValue = false
-                val initial = (readerPreferences.novelTtsSpeed.get() * 10).toInt().coerceIn(5, 20)
-                defaultValue = initial
-                summary = "%.1fx".format(initial / 10f)
-                onChange { newValue ->
-                    val v = (newValue as Int).coerceIn(5, 20)
-                    readerPreferences.novelTtsSpeed.set(v / 10f)
-                    summary = "%.1fx".format(v / 10f)
-                    true
-                }
-            }
-
-            seekBarPreference {
-                isPersistent = false
-                titleRes = MR.strings.novel_tts_pitch
-                min = 5
-                max = 20
-                showSeekBarValue = false
-                val initial = (readerPreferences.novelTtsPitch.get() * 10).toInt().coerceIn(5, 20)
-                defaultValue = initial
-                summary = "%.1fx".format(initial / 10f)
-                onChange { newValue ->
-                    val v = (newValue as Int).coerceIn(5, 20)
-                    readerPreferences.novelTtsPitch.set(v / 10f)
-                    summary = "%.1fx".format(v / 10f)
-                    true
-                }
-            }
-
-            switchPreference {
-                bindTo(readerPreferences.novelTtsAutoNextChapter)
-                titleRes = MR.strings.novel_tts_auto_next_chapter
-            }
-
-            switchPreference {
-                bindTo(readerPreferences.novelTtsEnableHighlight)
-                titleRes = MR.strings.novel_tts_enable_highlight
-            }
-
-            switchPreference {
-                bindTo(readerPreferences.novelTtsKeepHighlightInView)
-                titleRes = MR.strings.novel_tts_keep_highlight_in_view
-            }
-
-            switchPreference {
-                bindTo(readerPreferences.novelTtsBackgroundPlayback)
-                titleRes = MR.strings.novel_tts_background_playback
-                summaryRes = MR.strings.novel_tts_background_playback_summary
-            }
-
-            infoPreference(MR.strings.novel_tts_more_in_reader)
         }
     }
 }

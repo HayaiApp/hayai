@@ -225,6 +225,7 @@ interface Manga : SManga {
             dateAdded = date_added,
             filteredScanlators = filtered_scanlators,
             updateStrategy = update_strategy,
+            coverLastModified = cover_last_modified,
             nextUpdate = next_update,
             fetchInterval = fetch_interval,
         )

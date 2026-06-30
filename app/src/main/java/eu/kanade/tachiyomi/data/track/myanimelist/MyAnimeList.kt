@@ -199,7 +199,6 @@ class MyAnimeList(private val context: Context, id: Long) : TrackService(id) {
             value(SeriesMetadataField.DESCRIPTION, synopsis),
             value(SeriesMetadataField.STATUS, status.replace("_", " ")),
             value(SeriesMetadataField.GENRES, genreText, confidence = 0.8),
-            value(SeriesMetadataField.EXTERNAL_LINKS, MyAnimeListApi.webMangaUrl(id), confidence = 0.85),
         )
     }
 

@@ -133,6 +133,7 @@ class MangaDetailsAdapter(
     interface MangaHeaderInterface {
         fun coverColor(): Int?
         fun accentColor(): Int?
+        fun useCoverColorTheming(): Boolean
         fun mangaPresenter(): MangaDetailsPresenter
         fun prepareToShareManga()
         fun openInWebView()
@@ -148,6 +149,10 @@ class MangaDetailsAdapter(
         fun copyContentToClipboard(content: String, label: String?, useToast: Boolean = false)
         fun zoomImageFromThumb(thumbView: View)
         fun showTrackingSheet()
+        fun openQuotesSheet()
+        fun openTranslationSettings()
+        fun showChapterTranslationButton(): Boolean
+        fun toggleChapterTranslation(position: Int)
         fun showFetchIntervalDialog()
         fun updateScroll()
         fun setFavButtonPopup(popupView: View)

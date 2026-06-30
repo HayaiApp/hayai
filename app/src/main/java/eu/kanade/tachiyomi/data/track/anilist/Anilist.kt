@@ -277,10 +277,6 @@ class Anilist(private val context: Context, id: Long) : TrackService(id) {
             .mapNotNull { it.trim().takeIf(String::isNotBlank) }
             .distinctBy { it.lowercase() }
             .joinToString(", ")
-        val links = (listOfNotNull(siteUrl, AnilistApi.mangaUrl(remoteId)) + externalLinks)
-            .mapNotNull { it.trim().takeIf(String::isNotBlank) }
-            .distinct()
-            .joinToString("\n")
 
         return listOfNotNull(
             value(SeriesMetadataField.TITLE, title),
@@ -289,7 +285,6 @@ class Anilist(private val context: Context, id: Long) : TrackService(id) {
             value(SeriesMetadataField.DESCRIPTION, description?.htmlDecode()),
             value(SeriesMetadataField.STATUS, publishingStatus),
             value(SeriesMetadataField.GENRES, tagsAndGenres, confidence = 0.8),
-            value(SeriesMetadataField.EXTERNAL_LINKS, links, confidence = 0.85),
         )
     }
 

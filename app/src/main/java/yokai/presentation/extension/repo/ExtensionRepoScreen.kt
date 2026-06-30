@@ -103,7 +103,7 @@ class ExtensionRepoScreen(
                             if (ReducedMotion.isEnabled()) pagerState.scrollToPage(0)
                             else pagerState.animateScrollToPage(0)
                         } },
-                        text = { Text(stringResource(MR.strings.extensions)) },
+                        text = { Text(stringResource(MR.strings.manga)) },
                     )
                     Tab(
                         selected = pagerState.currentPage == 1,

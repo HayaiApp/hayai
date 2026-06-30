@@ -1964,7 +1964,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
      * Reload content with current translation state.
      * Re-renders the WebView with or without translation.
      */
-    fun reloadWithTranslation() {
+    fun reloadWithTranslation(forceTranslate: Boolean = false) {
         val page = currentPage ?: return
         val chapter = currentChapters?.currChapter ?: return
         val chapterId = chapter.chapter.id
@@ -1976,7 +1976,12 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
         }
 
         val originalContent = content
-        if (activity.isTranslationEnabled()) {
+        val translationEnabled = if (forceTranslate) {
+            activity.isTranslationGloballyEnabled()
+        } else {
+            activity.isTranslationEnabled()
+        }
+        if (translationEnabled) {
             // Show loading indicator while translating
             loadingIndicator?.show()
             scope.launch {
@@ -1988,9 +1993,11 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                 var translatedContent = activity.translateContentIfEnabled(
                     content = originalContent,
                     chapterId = chapterId,
+                    forceRetranslate = forceTranslate,
+                    requireRealtime = !forceTranslate,
                 )
                 val translationState = NovelDisplayedText.translationState(
-                    translationEnabled = activity.isTranslationEnabled(),
+                    translationEnabled = translationEnabled,
                     originalContent = originalContent,
                     displayedContent = translatedContent,
                     language = activity.currentTranslationLanguage(),

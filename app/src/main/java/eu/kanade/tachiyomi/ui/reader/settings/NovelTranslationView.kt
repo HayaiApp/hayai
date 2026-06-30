@@ -48,7 +48,18 @@ class NovelTranslationView @JvmOverloads constructor(context: Context, attrs: At
             cacheTranslations.bindToPreference(translationPreferences.cacheTranslations())
 
             applyTranslationNow.setOnClickListener {
-                reloadCurrentChapter()
+                val engine = translationEngineManager.getSelectedEngine()
+                when {
+                    !translationPreferences.translationEnabled().get() -> {
+                        context.toast(context.getString(MR.strings.chapter_translation_unavailable))
+                    }
+                    !engine.isConfigured() -> {
+                        context.toast(context.getString(MR.strings.pref_translation_provider_not_configured, engine.name))
+                    }
+                    else -> {
+                        reloadCurrentChapter(forceTranslate = true)
+                    }
+                }
             }
 
             bindEngineSpinner()
@@ -290,8 +301,8 @@ class NovelTranslationView @JvmOverloads constructor(context: Context, attrs: At
         else -> emptyList()
     }
 
-    private fun reloadCurrentChapter() {
-        ((context as? ReaderActivity)?.viewer as? NovelWebViewViewer)?.reloadWithTranslation()
+    private fun reloadCurrentChapter(forceTranslate: Boolean = false) {
+        ((context as? ReaderActivity)?.viewer as? NovelWebViewViewer)?.reloadWithTranslation(forceTranslate)
     }
 
     private data class ProviderField(

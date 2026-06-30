@@ -181,6 +181,21 @@ class SettingsLibraryController : SettingsLegacyController() {
                     true
                 }
             }
+            seekBarPreference {
+                bindTo(preferences.libraryUpdateParallelism())
+                titleRes = MR.strings.pref_library_update_parallel
+                min = 1
+                max = 10
+                showSeekBarValue = true
+                summary = context.getString(
+                    MR.strings.pref_library_update_parallel_summary,
+                    preferences.libraryUpdateParallelism().get(),
+                )
+                onChange { newValue ->
+                    summary = context.getString(MR.strings.pref_library_update_parallel_summary, newValue as Int)
+                    true
+                }
+            }
             multiSelectListPreferenceMat(activity) {
                 bindTo(preferences.libraryUpdateDeviceRestriction())
                 titleRes = MR.strings.library_update_restriction

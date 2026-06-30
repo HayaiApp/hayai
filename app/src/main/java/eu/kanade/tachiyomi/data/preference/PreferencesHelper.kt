@@ -210,6 +210,8 @@ class PreferencesHelper(val context: Context, val preferenceStore: PreferenceSto
 
     fun libraryUpdateInterval() = preferenceStore.getInt(Keys.libraryUpdateInterval, 24)
 
+    fun libraryUpdateParallelism() = preferenceStore.getInt("library_update_parallelism", 5)
+
     fun libraryUpdateLastTimestamp() = preferenceStore.getLong("library_update_last_timestamp", 0L)
 
     fun libraryUpdateDeviceRestriction() = preferenceStore.getStringSet("library_update_restriction", setOf(DEVICE_ONLY_ON_WIFI))
@@ -427,6 +429,36 @@ class PreferencesHelper(val context: Context, val preferenceStore: PreferenceSto
     fun showNsfwSources() = preferenceStore.getBoolean(Keys.showNsfwSource, true)
 
     fun themeMangaDetails() = preferenceStore.getBoolean(Keys.themeMangaDetails, true)
+
+    fun themeMangaDetailsOverrides() = preferenceStore.getStringSet(Keys.themeMangaDetailsOverrides, emptySet())
+
+    fun themeMangaDetailsOverride(mangaId: Long?): Boolean? {
+        mangaId ?: return null
+        val prefix = "$mangaId|"
+        return themeMangaDetailsOverrides().get()
+            .firstOrNull { it.startsWith(prefix) }
+            ?.substringAfter('|')
+            ?.let {
+                when (it) {
+                    "true" -> true
+                    "false" -> false
+                    else -> null
+                }
+            }
+    }
+
+    fun setThemeMangaDetailsOverride(mangaId: Long?, enabled: Boolean?) {
+        mangaId ?: return
+        val prefix = "$mangaId|"
+        val updated = themeMangaDetailsOverrides().get()
+            .filterNot { it.startsWith(prefix) }
+            .toMutableSet()
+        enabled?.let { updated.add("$prefix$it") }
+        themeMangaDetailsOverrides().set(updated)
+    }
+
+    fun themeMangaDetailsFor(mangaId: Long?): Boolean =
+        themeMangaDetailsOverride(mangaId) ?: themeMangaDetails().get()
 
     fun useLargeToolbar() = preferenceStore.getBoolean("use_large_toolbar", true)
 

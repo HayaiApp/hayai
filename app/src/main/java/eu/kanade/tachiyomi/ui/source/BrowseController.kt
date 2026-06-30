@@ -267,7 +267,7 @@ class BrowseController :
      * Heavy bottom-sheet wiring deferred off the Browse cold-entry frame.
      *
      * Costs absorbed here (~80–150ms total on Samsung A35 cold):
-     * - `ExtensionBottomSheet.onCreate(this)` — instantiates the three adapters and
+     * - `ExtensionBottomSheet.onCreate(this)` — instantiates the sheet adapters and
      *   assigns `pager.adapter = TabbedSheetAdapter()`, which immediately inflates
      *   ViewPager pages 0 + 1 (offscreen-page-limit defaults to 1).
      * - `addBottomSheetCallback(...)` — slide callback allocates closures over
@@ -312,10 +312,6 @@ class BrowseController :
                                 val scaleProgress = ((1f - progress) * (1f - lastScale)) + lastScale
                                 scaleX = scaleProgress
                                 scaleY = scaleProgress
-                                for (i in 0 until childCount) {
-                                    val childView = getChildAt(i)
-                                    childView.scaleY = scaleProgress
-                                }
                             }
                         }
                         binding.bottomSheet.sheetToolbar.isVisible = true
@@ -342,10 +338,6 @@ class BrowseController :
                                 scaleY = 1f
                                 pivotY = 0f
                                 translationX = 0f
-                                for (i in 0 until childCount) {
-                                    val childView = getChildAt(i)
-                                    childView.scaleY = 1f
-                                }
                                 lastScale = 1f
                             }
                         }
@@ -394,25 +386,22 @@ class BrowseController :
 
     private fun updateSheetMenu() {
         val tabPosition = binding.bottomSheet.tabs.selectedTabPosition
-        val onMigrationTab = tabPosition == 2
+        val onMigrationTab = tabPosition == 1
         binding.bottomSheet.sheetToolbar.title =
             if (onMigrationTab) {
                 binding.bottomSheet.root.currentSourceTitle
                     ?: view?.context?.getString(MR.strings.source_migration)
-            } else if (tabPosition == 1) {
-                view?.context?.getString(MR.strings.novels)
             } else {
                 view?.context?.getString(MR.strings.extensions)
             }
-        val onExtensionOrNovelTab = tabPosition == 0 || tabPosition == 1
-        if (binding.bottomSheet.sheetToolbar.menu.findItem(if (onExtensionOrNovelTab) R.id.action_search else R.id.action_migration_guide) != null) {
+        if (binding.bottomSheet.sheetToolbar.menu.findItem(if (!onMigrationTab) R.id.action_search else R.id.action_migration_guide) != null) {
             return
         }
         val oldSearchView = binding.bottomSheet.sheetToolbar.menu.findItem(R.id.action_search)?.actionView as? SearchView
         oldSearchView?.setOnQueryTextListener(null)
         binding.bottomSheet.sheetToolbar.menu.clear()
         binding.bottomSheet.sheetToolbar.inflateMenu(
-            if (onExtensionOrNovelTab) {
+            if (!onMigrationTab) {
                 R.menu.extension_main
             } else {
                 R.menu.migration_main
@@ -590,6 +579,9 @@ class BrowseController :
         )
         binding.bottomSheet.root.sheetBehavior?.peekHeight = 56.spToPx + padding
         binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            bottomMargin = -pad.toInt()
+        }
+        binding.bottomSheet.root.novelPluginFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
             bottomMargin = -pad.toInt()
         }
         binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {

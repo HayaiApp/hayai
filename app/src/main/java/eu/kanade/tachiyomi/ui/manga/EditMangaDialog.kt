@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.manga
 import yokai.util.koin.get
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import android.text.format.DateUtils
@@ -10,10 +11,16 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.core.view.WindowInsetsCompat.Type.ime
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.children
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import coil3.load
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
@@ -39,6 +46,8 @@ import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.getResourceColor
 import eu.kanade.tachiyomi.util.system.isInNightMode
 import eu.kanade.tachiyomi.util.system.launchNow
+import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
+import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
 import eu.kanade.tachiyomi.util.view.liftAppbarWith
 import eu.kanade.tachiyomi.widget.TachiyomiTextInputEditText
 import kotlinx.coroutines.Dispatchers
@@ -74,6 +83,7 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
     private val languages = mutableListOf<String>()
     private var metadataSourceOptions: Map<String, List<MetadataSourceOption>> = emptyMap()
     private var resetDisplayOptionsToGlobal = false
+    private var coverColorThemeOverride: Boolean? = null
     private val metadataSourceFields = SeriesMetadataField.editable + listOf(
         SeriesMetadataField.COVER,
         SeriesMetadataField.BANNER,
@@ -115,6 +125,7 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
         liftAppbarWith(binding.scrollView, true)
+        bindBottomActionInsets()
         infoController.setActiveEditController(this)
         binding.cancelEdit.setOnClickListener { router.popCurrentController() }
         binding.saveEdit.setOnClickListener { onPositiveButtonClick() }
@@ -263,6 +274,76 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
             willResetCover = true
         }
         setupSeriesEnrichmentControls(context)
+        bindCoverColorThemeControl(context)
+    }
+
+    private fun bindBottomActionInsets() {
+        fun updateScrollIndicators() {
+            binding.scrollIndicatorDown.isVisible = binding.scrollView.canScrollVertically(1)
+        }
+
+        fun sync(bottomInset: Int) {
+            binding.editActionBar.updatePadding(bottom = 10.dpToPx + bottomInset)
+            binding.editActionBar.doOnLayout {
+                val actionBarHeight = binding.editActionBar.height
+                binding.scrollView.updatePadding(bottom = actionBarHeight + 24.dpToPx)
+                binding.scrollIndicatorDown.updateLayoutParams<FrameLayout.LayoutParams> {
+                    bottomMargin = actionBarHeight
+                }
+                updateScrollIndicators()
+                ensureFocusedFieldVisible(actionBarHeight)
+            }
+        }
+
+        binding.root.doOnApplyWindowInsetsCompat { _, insets, _ ->
+            sync(insets.getInsets(systemBars() or ime()).bottom)
+        }
+        binding.editActionBar.doOnLayout {
+            val bottomInset = binding.root.rootWindowInsetsCompat
+                ?.getInsets(systemBars() or ime())?.bottom ?: 0
+            sync(bottomInset)
+        }
+    }
+
+    private fun ensureFocusedFieldVisible(actionBarHeight: Int) {
+        val focused = binding.root.findFocus()
+            ?.takeIf { it.isDescendantOf(binding.scrollView) }
+            ?: return
+        binding.scrollView.post {
+            val rect = Rect()
+            focused.getDrawingRect(rect)
+            binding.scrollView.offsetDescendantRectToMyCoords(focused, rect)
+            val visibleBottom = binding.scrollView.scrollY + binding.scrollView.height - actionBarHeight - 16.dpToPx
+            if (rect.bottom > visibleBottom) {
+                val targetScroll = rect.bottom - (binding.scrollView.height - actionBarHeight - 16.dpToPx)
+                binding.scrollView.smoothScrollTo(0, targetScroll.coerceAtLeast(0))
+            }
+        }
+    }
+
+    private fun bindCoverColorThemeControl(context: Context) {
+        coverColorThemeOverride = infoController.presenter.preferences.themeMangaDetailsOverride(manga.id)
+        binding.coverColorTheme.setEntries(
+            listOf(
+                context.getString(MR.strings.cover_color_follow_global),
+                context.getString(MR.strings.cover_color_enabled),
+                context.getString(MR.strings.cover_color_disabled),
+            ),
+        )
+        binding.coverColorTheme.setSelection(
+            when (coverColorThemeOverride) {
+                true -> 1
+                false -> 2
+                null -> 0
+            },
+        )
+        binding.coverColorTheme.onItemSelectedListener = { position ->
+            coverColorThemeOverride = when (position) {
+                1 -> true
+                2 -> false
+                else -> null
+            }
+        }
     }
 
     override fun onDestroyView(view: View) {
@@ -594,19 +675,69 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
     private fun onPositiveButtonClick() {
         addTags()
         persistSeriesEnrichmentChoices()
+        infoController.presenter.preferences.setThemeMangaDetailsOverride(manga.id, coverColorThemeOverride)
         infoController.presenter.updateManga(
-            binding.title.text.toString(),
-            binding.mangaAuthor.text.toString(),
-            binding.mangaArtist.text.toString(),
+            resolvedTextForSave(SeriesMetadataField.TITLE, binding.title.text?.toString()),
+            resolvedTextForSave(SeriesMetadataField.AUTHOR, binding.mangaAuthor.text?.toString()),
+            resolvedTextForSave(SeriesMetadataField.ARTIST, binding.mangaArtist.text?.toString()),
             customCoverUri,
-            binding.mangaDescription.text.toString(),
-            binding.mangaGenresTags.tags,
-            binding.mangaStatus.selectedPosition,
+            resolvedTextForSave(SeriesMetadataField.DESCRIPTION, binding.mangaDescription.text?.toString()),
+            resolvedGenresForSave(),
+            resolvedStatusForSave(),
             if (binding.resetsReadingMode.isVisible) binding.seriesType.selectedPosition + 1 else null,
             languages.getOrNull(binding.mangaLang.selectedPosition),
+            selectedCoverUrlForSave(),
             willResetCover,
         )
+        infoController.refreshCoverColorTheming()
         router.popCurrentController()
+    }
+
+    private fun resolvedTextForSave(field: SeriesMetadataField, fallback: String?): String? {
+        val position = when (field) {
+            SeriesMetadataField.TITLE -> binding.titleSource.selectedPosition
+            SeriesMetadataField.AUTHOR -> binding.authorSource.selectedPosition
+            SeriesMetadataField.ARTIST -> binding.artistSource.selectedPosition
+            SeriesMetadataField.DESCRIPTION -> binding.descriptionSource.selectedPosition
+            else -> return fallback
+        }
+        val option = selectedOption(field, position) ?: return fallback
+        return if (option.providerType == MetadataProviderType.SOURCE) "" else option.value
+    }
+
+    private fun resolvedGenresForSave(): Array<String>? {
+        val option = selectedOption(SeriesMetadataField.GENRES, binding.genresSource.selectedPosition)
+            ?: return binding.mangaGenresTags.tags
+        return if (option.providerType == MetadataProviderType.SOURCE) {
+            manga.getOriginalGenres().orEmpty().toTypedArray()
+        } else {
+            option.value
+                .split(",", ";", "\n")
+                .mapNotNull { it.trim().takeUnless(String::isBlank) }
+                .toTypedArray()
+        }
+    }
+
+    private fun resolvedStatusForSave(): Int {
+        val option = selectedOption(SeriesMetadataField.STATUS, binding.statusSource.selectedPosition)
+            ?: return binding.mangaStatus.selectedPosition
+        return if (option.providerType == MetadataProviderType.SOURCE) {
+            manga.originalStatus
+        } else {
+            option.value.toIntOrNull()?.coerceIn(SManga.UNKNOWN, SManga.ON_HIATUS)
+                ?: binding.mangaStatus.selectedPosition
+        }
+    }
+
+    private fun selectedCoverUrlForSave(): String? {
+        if (customCoverUri != null || willResetCover) return null
+        val option = selectedOption(SeriesMetadataField.COVER, binding.coverSource.selectedPosition)
+            ?: return null
+        return option.value
+            .trim()
+            .takeIf { option.providerType != MetadataProviderType.SOURCE }
+            ?.takeIf(String::isSupportedPersistedCoverUrl)
+            ?.takeIf { it != manga.thumbnail_url }
     }
 
     private fun persistSeriesEnrichmentChoices() {
@@ -726,4 +857,22 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
             updated,
         )
     }
+}
+
+private fun String.isSupportedPersistedCoverUrl(): Boolean {
+    val normalized = trim().lowercase()
+    return normalized.startsWith("http://") ||
+        normalized.startsWith("https://") ||
+        normalized.startsWith("file://") ||
+        normalized.startsWith("content://") ||
+        normalized.startsWith("/")
+}
+
+private fun View.isDescendantOf(parent: View): Boolean {
+    var current: View? = this
+    while (current != null) {
+        if (current == parent) return true
+        current = current.parent as? View
+    }
+    return false
 }

@@ -43,6 +43,8 @@ class TranslationService(
     fun isEnabled(): Boolean =
         preferences.translationEnabled().get() && preferences.realTimeTranslation().get()
 
+    fun isGloballyEnabled(): Boolean = preferences.translationEnabled().get()
+
     fun getLastTargetLanguage(): String = preferences.targetLanguage().get()
 
     fun setTargetLanguage(language: String) {
@@ -75,8 +77,10 @@ class TranslationService(
         mangaId: Long?,
         mangaTitle: String? = null,
         forceRetranslate: Boolean = false,
+        requireRealtime: Boolean = true,
     ): String = withContext(Dispatchers.IO) {
-        if (!isEnabled()) return@withContext content
+        if (!isGloballyEnabled()) return@withContext content
+        if (requireRealtime && !preferences.realTimeTranslation().get()) return@withContext content
 
         val engine = engineManager.getEngine() ?: run {
             Logger.w { "Translation requested but no configured engine is available" }
@@ -198,10 +202,15 @@ class TranslationService(
             val textToTranslate = buildTranslationInput(chunk, translatedChunks, advancedPrompt)
             val result = engine.translate(listOf(textToTranslate), sourceLanguage, targetLanguage)
             val translated = when (result) {
-                is TranslationResult.Success -> result.translatedTexts.firstOrNull().orEmpty()
+                is TranslationResult.Success -> result.translatedTexts.firstOrNull()?.takeIf { it.isNotBlank() } ?: run {
+                    Logger.w { "Translation error from ${engine.name}: empty response" }
+                    _progressState.value = TranslationProgress()
+                    return content
+                }
                 is TranslationResult.Error -> {
                     Logger.w { "Translation error from ${engine.name}: ${result.message}" }
-                    chunk
+                    _progressState.value = TranslationProgress()
+                    return content
                 }
             }
             translatedChunks += TranslationHtmlUtils.stripContextLeakage(translated)

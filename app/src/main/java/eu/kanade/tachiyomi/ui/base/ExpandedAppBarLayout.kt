@@ -169,6 +169,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         )
 
     private var dontFullyHideToolbar = false
+    private var collapsedBackgroundVisible = false
 
     /** Small toolbar height + top system insets, same size as a collapsed appbar */
     private val compactAppBarHeight: Float
@@ -642,12 +643,20 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
      * elevated background while the large title/search area is still visible.
      */
     fun backgroundProgressForScroll(notAtTop: Boolean): Float {
-        if (!notAtTop) return 0f
+        if (!notAtTop) {
+            collapsedBackgroundVisible = false
+            return 0f
+        }
 
         val collapsedY = yNeededForSmallToolbar.toFloat()
         return if (collapsedY < 0f) {
-            val collapseProgress = MathUtils.clamp(y / collapsedY, 0f, 1f)
-            if (collapseProgress >= 0.99f) 1f else 0f
+            val collapseEdge = collapsedY + 1.dpToPx
+            val expandResetEdge = collapsedY + 4.dpToPx
+            when {
+                y <= collapseEdge -> collapsedBackgroundVisible = true
+                y > expandResetEdge -> collapsedBackgroundVisible = false
+            }
+            if (collapsedBackgroundVisible) 1f else 0f
         } else {
             1f
         }

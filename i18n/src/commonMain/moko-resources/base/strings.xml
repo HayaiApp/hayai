@@ -252,6 +252,8 @@
 
     <!-- Library settings -->
     <string name="library_update_frequency">Library update frequency</string>
+    <string name="pref_library_update_parallel">Parallel library updates</string>
+    <string name="pref_library_update_parallel_summary">Sources updated simultaneously: %1$d</string>
     <string name="pref_library_update_manga_restriction">Skip updating titles</string>
     <string name="pref_update_only_completely_read">With unread chapter(s)</string>
     <string name="pref_update_only_non_completed">With \"Completed\" status</string>
@@ -594,6 +596,7 @@
     <string name="select_starting_chapter">Select starting chapter</string>
     <string name="select_ending_chapter">Select ending chapter</string>
     <string name="search_chapters">Search chapters</string>
+    <string name="search_tracking">Search tracking</string>
     <string name="custom_range">Custom range</string>
     <string name="all_chapters">All chapters</string>
     <string name="all_unread_chapters">All unread chapters</string>
@@ -791,6 +794,9 @@
     <string name="theme_buttons_based_on_cover">Theme buttons based on cover</string>
     <string name="color_details_from_cover">Color details from cover</string>
     <string name="color_details_from_cover_summary">Tint the manga page accent, header and chapter colors using the cover\'s palette</string>
+    <string name="cover_color_follow_global">Follow global setting</string>
+    <string name="cover_color_enabled">Enabled for this entry</string>
+    <string name="cover_color_disabled">Disabled for this entry</string>
     <string name="expanded_toolbar">Expanded toolbar</string>
     <string name="show_larger_toolbar">Show a larger, expanded toolbar at the top of most pages (does not show on smaller devices regardless of setting)</string>
     <string name="motion">Motion</string>
@@ -1839,6 +1845,7 @@
     <string name="novel_translation_tab">Translation</string>
     <string name="pref_translation_enabled">Enable translation</string>
     <string name="pref_translation_enabled_summary">Allow novel chapters to be translated</string>
+    <string name="pref_translation_settings_summary">Manage engines, languages, cache, and provider setup</string>
     <string name="pref_translation_realtime">Translate while reading</string>
     <string name="pref_translation_realtime_summary">Render translated chapter text in the novel reader</string>
     <string name="pref_translation_cache">Cache translations</string>
@@ -1897,6 +1904,13 @@
     <string name="pref_translation_provider_setup_saved">%1$s setup saved</string>
     <string name="pref_translation_subscription_note">ChatGPT Plus/Pro and Google AI subscriptions do not provide API access to Hayai. Use an API key, an OpenAI-compatible endpoint, or a local engine such as Ollama.</string>
     <string name="pref_translation_apply_now">Apply to current chapter</string>
+    <string name="chapter_translation_translate">Translate chapter</string>
+    <string name="chapter_translation_translating">Translating chapter</string>
+    <string name="chapter_translation_clear">Clear chapter translation</string>
+    <string name="chapter_translation_saved">Chapter translated</string>
+    <string name="chapter_translation_cleared">Chapter translation cleared</string>
+    <string name="chapter_translation_failed">Could not translate chapter</string>
+    <string name="chapter_translation_unavailable">Chapter translation is unavailable</string>
     <string name="advanced_translation_memory">Translation memory</string>
     <string name="advanced_translation_canon">Series canon</string>
     <string name="advanced_translation_summary">Summary</string>
@@ -1951,7 +1965,6 @@
     <string name="series_display_trackers">Tracker metadata</string>
     <string name="series_display_quotes_translation">Quotes and translation</string>
     <string name="series_display_extra_images">Extra images</string>
-    <string name="series_display_external_links">External links</string>
     <string name="series_enrichment_more_count_format">%1$d more</string>
     <string name="series_details_show_more">Show more</string>
     <string name="series_details_show_less">Show less</string>
@@ -1963,12 +1976,10 @@
     <string name="series_metadata_alias_count_format">%1$d aliases</string>
     <string name="series_metadata_genre_count_format">%1$d genres</string>
     <string name="series_metadata_image_count_format">%1$d images</string>
-    <string name="series_metadata_external_link_count_format">%1$d links</string>
     <string name="series_metadata_tracker_summary_count_format">%1$d tracker summaries</string>
     <string name="series_metadata_extra_image_description_format">Extra image %1$d</string>
     <string name="series_translation_quote_count_format">%1$d quotes</string>
     <string name="series_translation_mode_status_format">Mode: %1$s</string>
-    <string name="series_translation_cache_status_format">Cache: %1$s</string>
     <string name="series_translation_entities_count_format">%1$d glossary entries</string>
     <string name="series_translation_nudges_count_format">%1$d nudges</string>
     <string name="series_metadata_sources">Metadata sources</string>
@@ -2124,10 +2135,10 @@
     <string name="novel_no_more_chapters">No more chapters</string>
 
     <!-- Smart updater (fetch-interval prediction) -->
-    <string name="manga_next_update_">Next: %1$s</string>
+    <string name="manga_next_update_">%1$s</string>
     <string name="manga_interval_expected_update">New chapters are predicted around %1$s, checking around every %2$s.</string>
-    <string name="manga_interval_expected_update_details">New chapters are predicted around %1$s.&#10;Exact estimate: %2$s&#10;Check interval: %3$s&#10;Mode: %4$s</string>
     <string name="manga_interval_expected_update_null">This series is completed or does not have a predicted release date yet.</string>
+    <string name="manga_interval_expected_update_about">about %1$s</string>
     <string name="manga_interval_expected_update_soon">Soon</string>
     <string name="manga_interval_custom_amount">Predicted update interval</string>
     <string name="manga_interval_mode_automatic">Automatic</string>
@@ -2146,6 +2157,7 @@
     <string name="upcoming_calendar_next">Next month</string>
     <string name="upcoming_calendar_prev">Previous month</string>
     <string name="upcoming_empty">No predicted releases yet</string>
+    <string name="upcoming_empty_month">No predicted releases this month</string>
     <string name="upcoming_empty_smart_disabled">Smart release prediction is turned off</string>
     <string name="upcoming_today">Today</string>
     <string name="upcoming_tomorrow">Tomorrow</string>

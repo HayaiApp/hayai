@@ -254,7 +254,7 @@ fun <T> Controller.liftAppbarWith(
             setAppBarBG(0f)
             return@f
         }
-        toolbarColorAnim = ValueAnimator.ofFloat(percent, isColored.toInt().toFloat())
+        toolbarColorAnim = ValueAnimator.ofFloat(percent, appBar()!!.backgroundProgressForScroll(isColored))
         toolbarColorAnim?.addUpdateListener { valueAnimator ->
             setAppBarBG(valueAnimator.animatedValue as Float)
         }

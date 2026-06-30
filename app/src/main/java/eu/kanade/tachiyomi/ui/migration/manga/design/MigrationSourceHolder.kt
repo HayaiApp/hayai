@@ -3,9 +3,7 @@ package eu.kanade.tachiyomi.ui.migration.manga.design
 import android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
 import android.view.View
 import coil3.load
-import coil3.request.transformations
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.coil.PaddedSourceIconTransformation
 import eu.kanade.tachiyomi.databinding.MigrationSourceItemBinding
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.icon
@@ -32,9 +30,7 @@ class MigrationSourceHolder(view: View, val adapter: MigrationSourceAdapter) :
                 icon != null -> binding.sourceImage.setImageDrawable(icon)
                 // NOVEL -->
                 source is NovelSource && !source.iconUrl.isNullOrBlank() -> {
-                    binding.sourceImage.load(source.iconUrl) {
-                        transformations(PaddedSourceIconTransformation())
-                    }
+                    binding.sourceImage.load(source.iconUrl)
                 }
                 source is NovelSource -> binding.sourceImage.setImageResource(R.drawable.ic_book_24dp)
                 // NOVEL <--

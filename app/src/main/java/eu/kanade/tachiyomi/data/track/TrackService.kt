@@ -122,7 +122,6 @@ abstract class TrackService(val id: Long) : TrackerMetadataProvider {
 
         return listOfNotNull(
             value(SeriesMetadataField.TITLE, track.title),
-            value(SeriesMetadataField.EXTERNAL_LINKS, track.tracking_url),
             value(SeriesMetadataField.TRACKER_SUMMARY, trackerSummary, confidence = 0.65),
         )
     }
@@ -169,7 +168,6 @@ abstract class TrackService(val id: Long) : TrackerMetadataProvider {
             value(SeriesMetadataField.COVER, search.cover_url),
             value(SeriesMetadataField.DESCRIPTION, search.summary),
             value(SeriesMetadataField.STATUS, search.publishing_status),
-            value(SeriesMetadataField.EXTERNAL_LINKS, safeText { search.tracking_url }),
             value(SeriesMetadataField.TRACKER_SUMMARY, trackerSummary, confidence = 0.7),
         )
     }

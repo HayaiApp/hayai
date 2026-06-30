@@ -82,6 +82,12 @@ class SettingsMainController : SettingsLegacyController(), FloatingSearchInterfa
             onClick { navigateTo(SettingsReaderHubController()) }
         }
         preference {
+            iconRes = R.drawable.ic_translate_24dp
+            iconTint = tintColor
+            titleRes = MR.strings.pref_category_translation
+            onClick { navigateTo(SettingsTranslationController()) }
+        }
+        preference {
             iconRes = R.drawable.ic_history_24dp
             iconTint = tintColor
             titleRes = MR.strings.recents
