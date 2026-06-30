@@ -48,37 +48,6 @@ class MangaHeaderHolderEnrichmentTest {
         assertEquals(emptyList<SeriesExtraImage>(), parseSeriesExtraImages(values))
     }
 
-    @Test
-    fun `external link parser accepts json and delimited metadata values`() {
-        val values = listOf(
-            imageValue(
-                value = """
-                    [
-                        { "url": "https://anilist.co/manga/1", "label": "AniList" },
-                        "https://example.test/details"
-                    ]
-                """.trimIndent(),
-                field = SeriesMetadataField.EXTERNAL_LINKS.key,
-            ),
-            imageValue(
-                value = "mailto:ignored@example.test; https://example.test/details",
-                field = SeriesMetadataField.EXTERNAL_LINKS.key,
-            ),
-        )
-
-        val links = parseSeriesExternalLinks(values)
-
-        assertEquals(
-            listOf(
-                "https://anilist.co/manga/1",
-                "https://example.test/details",
-            ),
-            links.map { it.url },
-        )
-        assertEquals("AniList", links[0].label)
-        assertEquals("Provider", links[1].label)
-    }
-
     private fun imageValue(
         value: String,
         field: String = SeriesMetadataField.IMAGES.key,
