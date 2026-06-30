@@ -5,6 +5,8 @@ import android.view.ViewGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +48,8 @@ fun NovelFindReplaceSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 600.dp)
+                .navigationBarsPadding()
+                .imePadding()
                 .verticalScroll(rememberScrollState()),
         ) {
             RegexReplacementSection(preferences)
@@ -67,5 +71,11 @@ fun showNovelFindReplaceSheet(activity: ReaderActivity) {
             )
         }
     }
-    rootView.addView(composeView)
+    rootView.addView(
+        composeView,
+        ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        ),
+    )
 }

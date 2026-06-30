@@ -375,7 +375,7 @@ private fun AutoCompleteTagRow(
             text = tag,
             style = MaterialTheme.typography.bodyMedium,
             color = visual.contentColor,
-            fontWeight = if (state == AutoCompleteTagState.Off) FontWeight.Normal else FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),

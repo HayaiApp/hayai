@@ -307,7 +307,7 @@ private fun DropdownItemText(text: String, selected: Boolean) {
     Text(
         text = text,
         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-        fontWeight = if (selected) FontWeight.SemiBold else null,
+        fontWeight = FontWeight.Medium,
     )
 }
 

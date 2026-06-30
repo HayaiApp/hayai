@@ -285,7 +285,6 @@ private fun FilterSheetTabRow(
             text = {
                 TabLabel(
                     text = stringResource(MR.strings.filter),
-                    active = selected == FilterSheetTab.Filters,
                 )
             },
         )
@@ -301,7 +300,6 @@ private fun FilterSheetTabRow(
                 ) {
                     TabLabel(
                         text = stringResource(MR.strings.saved_searches),
-                        active = selected == FilterSheetTab.Saved,
                     )
                     if (savedSearchCount > 0) {
                         Badge(
@@ -321,11 +319,11 @@ private fun FilterSheetTabRow(
 }
 
 @Composable
-private fun TabLabel(text: String, active: Boolean) {
+private fun TabLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleSmall,
-        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+        fontWeight = FontWeight.SemiBold,
     )
 }
 

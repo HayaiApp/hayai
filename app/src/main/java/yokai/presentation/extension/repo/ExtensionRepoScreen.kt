@@ -90,12 +90,7 @@ class ExtensionRepoScreen(
                     )
                 }
             },
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-            ) {
+            appBarBottomContent = {
                 TabRow(selectedTabIndex = pagerState.currentPage) {
                     Tab(
                         selected = pagerState.currentPage == 0,
@@ -114,7 +109,13 @@ class ExtensionRepoScreen(
                         text = { Text(stringResource(MR.strings.novels)) },
                     )
                 }
-
+            },
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),

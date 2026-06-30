@@ -124,7 +124,7 @@ internal fun ValueChip(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium,
                 color = contentColor,
-                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = if (constrainValueWidth) {

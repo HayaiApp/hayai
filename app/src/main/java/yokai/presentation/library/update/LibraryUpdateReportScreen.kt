@@ -125,12 +125,7 @@ class LibraryUpdateReportScreen(
                     },
                 )
             },
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-            ) {
+            appBarBottomContent = {
                 val errorCount = (state as? LibraryUpdateReportScreenModel.State.Loaded)
                     ?.errorGroups?.sumOf { it.entries.size } ?: 0
                 val skippedCount = (state as? LibraryUpdateReportScreenModel.State.Loaded)
@@ -164,6 +159,13 @@ class LibraryUpdateReportScreen(
                         },
                     )
                 }
+            },
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
 
                 (state as? LibraryUpdateReportScreenModel.State.Loaded)?.report?.timestampMs?.let { ts ->
                     val formatted = remember(ts) {

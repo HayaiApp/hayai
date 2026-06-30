@@ -77,6 +77,7 @@ fun YokaiScaffold(
     snackbarHost: @Composable () -> Unit = {},
     textFieldState: TextFieldState? = null,
     searchResult: @Composable (ColumnScope.() -> Unit)? = null,
+    appBarBottomContent: @Composable ColumnScope.() -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val behavior = scrollBehavior ?: pinnedAppBarScrollBehavior()
@@ -277,6 +278,8 @@ fun YokaiScaffold(
                             )
                         }
                     }
+
+                    appBarBottomContent()
                 }
             }
         },

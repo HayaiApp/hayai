@@ -283,10 +283,10 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
         }
 
         fun sync(bottomInset: Int) {
-            binding.editActionBar.updatePadding(bottom = 10.dpToPx + bottomInset)
+            binding.editActionBar.updatePadding(bottom = 16.dpToPx + bottomInset)
             binding.editActionBar.doOnLayout {
                 val actionBarHeight = binding.editActionBar.height
-                binding.scrollView.updatePadding(bottom = actionBarHeight + 24.dpToPx)
+                binding.scrollView.updatePadding(bottom = actionBarHeight + 48.dpToPx)
                 binding.scrollIndicatorDown.updateLayoutParams<FrameLayout.LayoutParams> {
                     bottomMargin = actionBarHeight
                 }

@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.reader.settings
 import android.content.Context
 import android.text.InputType
 import android.util.AttributeSet
+import android.view.View
 import android.widget.LinearLayout
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
@@ -37,6 +38,7 @@ class NovelTranslationView @JvmOverloads constructor(context: Context, attrs: At
         with(binding) {
             translationEnabled.bindToPreference(translationPreferences.translationEnabled()) {
                 reloadCurrentChapter()
+                updateTranslationControls()
                 updateProviderStatus()
             }
             translationRealtime.bindToPreference(translationPreferences.realTimeTranslation()) {
@@ -70,7 +72,30 @@ class NovelTranslationView @JvmOverloads constructor(context: Context, attrs: At
             configureProvider.setOnClickListener { showProviderSetupDialog() }
 
             updateSourceLanguageFilterSummary()
+            updateTranslationControls()
             updateProviderStatus()
+        }
+    }
+
+    private fun updateTranslationControls() {
+        val enabled = translationPreferences.translationEnabled().get()
+        val alpha = if (enabled) 1f else 0.5f
+        listOf<View>(
+            binding.translationRealtime,
+            binding.applyTranslationNow,
+            binding.translationEngine,
+            binding.providerStatus,
+            binding.configureProvider,
+            binding.sourceLanguage,
+            binding.targetLanguage,
+            binding.sourceLanguageFilter,
+            binding.sourceLanguageFilterSummary,
+            binding.translationMode,
+            binding.smartAutoTranslate,
+            binding.cacheTranslations,
+        ).forEach { view ->
+            view.isEnabled = enabled
+            view.alpha = alpha
         }
     }
 

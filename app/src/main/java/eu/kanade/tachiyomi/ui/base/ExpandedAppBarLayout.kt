@@ -649,6 +649,10 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         }
 
         val collapsedY = yNeededForSmallToolbar.toFloat()
+        if (toolbarMode == ToolbarState.EXPANDED && collapsedY >= 0f) {
+            collapsedBackgroundVisible = false
+            return 0f
+        }
         return if (collapsedY < 0f) {
             val collapseEdge = collapsedY + 1.dpToPx
             val expandResetEdge = collapsedY + 4.dpToPx

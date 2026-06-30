@@ -25,6 +25,7 @@ import androidx.core.net.toUri
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.transition.TransitionManager
@@ -105,6 +106,9 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
         sheetBehavior.peekHeight = 525.dpToPx + height
         sheetBehavior.expand()
         sheetBehavior.skipCollapsed = true
+        val contentBottomPadding = 32.dpToPx + height
+        binding.trackRecycler.updatePadding(bottom = contentBottomPadding)
+        binding.trackSearchRecycler.updatePadding(bottom = contentBottomPadding)
 
         binding.searchCloseButton.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
@@ -122,7 +126,7 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
             activity.openInBrowser(item.trackSearch.tracking_url)
         }
 
-        binding.searchSubmitButton.setOnClickListener {
+        binding.textInputLayout.setEndIconOnClickListener {
             submitSearch()
         }
 
