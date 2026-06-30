@@ -40,8 +40,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
@@ -79,6 +77,7 @@ import yokai.domain.manga.interactor.GetUpcomingManga
 import yokai.domain.manga.models.cover
 import yokai.i18n.MR
 import yokai.presentation.AppBarType
+import yokai.presentation.YokaiAppBarTabs
 import yokai.presentation.YokaiScaffold
 import yokai.presentation.component.EmptyScreen
 import yokai.presentation.manga.components.MangaCover
@@ -172,7 +171,7 @@ private fun UpcomingScreen(
             .eachCount()
     }
     val headerIndexes = remember(monthItems) {
-        var index = 2 // Tabs and calendar are the first two LazyColumn items.
+        var index = 1 // Calendar is the first LazyColumn item; tabs live in the app bar.
         monthItems.mapValues { (_, entries) ->
             index.also { index += entries.size + 1 }
         }
@@ -189,6 +188,12 @@ private fun UpcomingScreen(
                     contentDescription = stringResource(MR.strings.upcoming_guide),
                 )
             }
+        },
+        appBarBottomContent = {
+            UpcomingTypeTabs(
+                selected = selectedType,
+                onSelected = { selectedType = it },
+            )
         },
     ) { padding ->
         when {
@@ -224,12 +229,6 @@ private fun UpcomingScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    item("tabs") {
-                        UpcomingTypeTabs(
-                            selected = selectedType,
-                            onSelected = { selectedType = it },
-                        )
-                    }
                     item("calendar") {
                         UpcomingCalendar(
                             selectedMonth = selectedMonth,
@@ -298,25 +297,11 @@ private fun UpcomingTypeTabs(
         UpcomingType.MANGA to stringResource(MR.strings.manga),
         UpcomingType.NOVELS to stringResource(MR.strings.novels),
     )
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        TabRow(
-            selectedTabIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0),
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.primary,
-        ) {
-            tabs.forEach { (type, label) ->
-                Tab(
-                    selected = selected == type,
-                    onClick = { onSelected(type) },
-                    text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                )
-            }
-        }
-    }
+    YokaiAppBarTabs(
+        labels = tabs.map { it.second },
+        selectedIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0),
+        onSelected = { index -> onSelected(tabs[index].first) },
+    )
 }
 
 @Composable

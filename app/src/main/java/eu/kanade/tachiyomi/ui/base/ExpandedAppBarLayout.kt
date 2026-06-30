@@ -654,8 +654,8 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
             return 0f
         }
         return if (collapsedY < 0f) {
-            val collapseEdge = collapsedY + 1.dpToPx
-            val expandResetEdge = collapsedY + 4.dpToPx
+            val collapseEdge = collapsedY
+            val expandResetEdge = collapsedY + 12.dpToPx
             when {
                 y <= collapseEdge -> collapsedBackgroundVisible = true
                 y > expandResetEdge -> collapsedBackgroundVisible = false

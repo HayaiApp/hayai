@@ -30,8 +30,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +66,7 @@ import yokai.presentation.theme.Size
 import yokai.presentation.theme.header
 import yokai.presentation.theme.isReducedMotion
 import yokai.presentation.AppBarType
+import yokai.presentation.YokaiAppBarTabs
 import yokai.presentation.YokaiScaffold
 import yokai.presentation.core.enterAlwaysAppBarScrollBehavior
 import yokai.presentation.component.EmptyScreen
@@ -131,34 +130,23 @@ class LibraryUpdateReportScreen(
                 val skippedCount = (state as? LibraryUpdateReportScreenModel.State.Loaded)
                     ?.skippedGroups?.sumOf { it.entries.size } ?: 0
 
-                TabRow(selectedTabIndex = pagerState.currentPage) {
-                    Tab(
-                        selected = pagerState.currentPage == 0,
-                        onClick = { scope.launch {
-                            if (ReducedMotion.isEnabled()) pagerState.scrollToPage(0)
-                            else pagerState.animateScrollToPage(0)
-                        } },
-                        text = {
-                            TabLabel(
-                                label = stringResource(MR.strings.library_update_report_errors),
-                                count = errorCount,
-                            )
-                        },
-                    )
-                    Tab(
-                        selected = pagerState.currentPage == 1,
-                        onClick = { scope.launch {
-                            if (ReducedMotion.isEnabled()) pagerState.scrollToPage(1)
-                            else pagerState.animateScrollToPage(1)
-                        } },
-                        text = {
-                            TabLabel(
-                                label = stringResource(MR.strings.library_update_report_skipped),
-                                count = skippedCount,
-                            )
-                        },
-                    )
-                }
+                YokaiAppBarTabs(
+                    labels = listOf(
+                        stringResource(MR.strings.library_update_report_errors),
+                        stringResource(MR.strings.library_update_report_skipped),
+                    ),
+                    selectedIndex = pagerState.currentPage,
+                    counts = listOf(
+                        errorCount.takeIf { it > 0 },
+                        skippedCount.takeIf { it > 0 },
+                    ),
+                    onSelected = { page ->
+                        scope.launch {
+                            if (ReducedMotion.isEnabled()) pagerState.scrollToPage(page)
+                            else pagerState.animateScrollToPage(page)
+                        }
+                    },
+                )
             },
         ) { innerPadding ->
             Column(
@@ -200,19 +188,6 @@ class LibraryUpdateReportScreen(
         LaunchedEffect(initialTab) {
             // Re-load on entry; the underlying file may have been replaced by a more recent run.
             screenModel.load()
-        }
-    }
-}
-
-@Composable
-private fun TabLabel(label: String, count: Int) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Size.small),
-    ) {
-        Text(text = label)
-        if (count > 0) {
-            CountBadge(count = count)
         }
     }
 }

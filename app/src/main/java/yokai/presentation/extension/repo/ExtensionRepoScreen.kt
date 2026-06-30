@@ -13,8 +13,6 @@ import androidx.compose.material.icons.filled.ExtensionOff
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,6 +42,7 @@ import yokai.domain.extension.repo.model.ExtensionRepo
 import yokai.i18n.MR
 import yokai.presentation.theme.ReducedMotion
 import yokai.presentation.AppBarType
+import yokai.presentation.YokaiAppBarTabs
 import yokai.presentation.YokaiScaffold
 import yokai.presentation.component.EmptyScreen
 import yokai.presentation.component.ToolTipButton
@@ -91,24 +90,20 @@ class ExtensionRepoScreen(
                 }
             },
             appBarBottomContent = {
-                TabRow(selectedTabIndex = pagerState.currentPage) {
-                    Tab(
-                        selected = pagerState.currentPage == 0,
-                        onClick = { scope.launch {
-                            if (ReducedMotion.isEnabled()) pagerState.scrollToPage(0)
-                            else pagerState.animateScrollToPage(0)
-                        } },
-                        text = { Text(stringResource(MR.strings.manga)) },
-                    )
-                    Tab(
-                        selected = pagerState.currentPage == 1,
-                        onClick = { scope.launch {
-                            if (ReducedMotion.isEnabled()) pagerState.scrollToPage(1)
-                            else pagerState.animateScrollToPage(1)
-                        } },
-                        text = { Text(stringResource(MR.strings.novels)) },
-                    )
-                }
+                val labels = listOf(
+                    stringResource(MR.strings.manga),
+                    stringResource(MR.strings.novels),
+                )
+                YokaiAppBarTabs(
+                    labels = labels,
+                    selectedIndex = pagerState.currentPage,
+                    onSelected = { page ->
+                        scope.launch {
+                            if (ReducedMotion.isEnabled()) pagerState.scrollToPage(page)
+                            else pagerState.animateScrollToPage(page)
+                        }
+                    },
+                )
             },
         ) { innerPadding ->
             Column(

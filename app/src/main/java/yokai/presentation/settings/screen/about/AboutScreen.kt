@@ -41,7 +41,6 @@ import dev.icerock.moko.resources.compose.stringResource
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.core.storage.preference.asDateFormat
-import eu.kanade.tachiyomi.core.storage.preference.collectAsState
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
 import eu.kanade.tachiyomi.data.updater.AppUpdateNotifier
@@ -69,7 +68,6 @@ import yokai.i18n.MR
 import yokai.presentation.AppBarType
 import yokai.presentation.component.preference.widget.TextPreferenceWidget
 import yokai.presentation.core.components.LinkIcon
-import yokai.presentation.core.enterAlwaysCollapsedAppBarScrollBehavior
 import yokai.presentation.core.icons.CustomIcons
 import yokai.presentation.core.icons.Discord
 import yokai.presentation.core.icons.GitHub
@@ -114,18 +112,13 @@ class AboutScreen : Screen() {
         }
 
         val dateFormat by lazy { preferences.dateFormatRaw().get().asDateFormat() }
-        val useLargeAppBar by preferences.useLargeToolbar().collectAsState()
 
         SettingsScaffold(
             title = stringResource(MR.strings.about),
-            appBarType = if (useLargeAppBar) AppBarType.LARGE else AppBarType.SMALL,
+            appBarType = AppBarType.SMALL,
             snackbarHost = {
                 SnackbarHost(hostState = snackbarHostState)
             },
-            appBarScrollBehavior = if (useLargeAppBar) enterAlwaysCollapsedAppBarScrollBehavior(
-                canScroll = { listState.canScrollForward || listState.canScrollBackward },
-                isAtTop = { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 },
-            ) else null,
             content = { contentPadding ->
                 LazyColumn(
                     contentPadding = contentPadding,
