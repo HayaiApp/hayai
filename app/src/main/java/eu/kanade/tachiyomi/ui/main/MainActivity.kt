@@ -752,10 +752,9 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             extensionManager.getExtensionUpdates(true)
         }
 
-        // Pay the XML parse + classloader cost for the Browse cold path on an IO
-        // thread now, while the user is still looking at Library. First Browse tap
-        // then only pays the on-frame view construction.
-        eu.kanade.tachiyomi.ui.source.BrowseWarmup.primeAsync(resources)
+        // Pay root-tab XML parse + classloader cost on IO. View construction remains on main,
+        // but first Recents/Browse attach and delayed Library rows skip binary XML decoding.
+        eu.kanade.tachiyomi.ui.source.RootTabWarmup.primeAsync(resources)
 
         preferences.extensionUpdatesCount()
             .changesIn(lifecycleScope) {

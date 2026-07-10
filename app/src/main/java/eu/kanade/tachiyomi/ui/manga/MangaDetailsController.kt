@@ -338,6 +338,8 @@ class MangaDetailsController :
         if (!pendingMangaInitSetup) return
         if (view == null) return
         pendingMangaInitSetup = false
+        adapter?.notifyItemChanged(0)
+        tabletAdapter?.notifyItemChanged(0)
         setPaletteColor()
         presenter.onCreateLate()
         if (isControllerVisible) setTitle()

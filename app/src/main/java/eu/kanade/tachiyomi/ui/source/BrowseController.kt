@@ -273,7 +273,7 @@ class BrowseController :
      * - `addBottomSheetCallback(...)` — slide callback allocates closures over
      *   `binding`; cheap on its own but stacks with the above on first frame.
      * - `setSheetToolbar()` — `inflateMenu(R.menu.extension_main)` parses + builds
-     *   a Menu (parse already cached by [BrowseWarmup], but Menu construction
+     *   a Menu (parse already cached by [RootTabWarmup], but Menu construction
      *   still costs).
      *
      * Idempotent — guarded by [bottomSheetReady], reset in [onDestroyView] so a

@@ -12,8 +12,6 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 // NOVEL -->
 import hayai.novel.reader.NovelDownloadPageLoader
 import hayai.novel.reader.NovelPageLoader
-import hayai.novel.source.NovelSource
-import hayai.novel.source.TextSource
 // NOVEL <--
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.util.system.withIOContext
@@ -89,7 +87,7 @@ class ChapterLoader(
         val isDownloaded = downloadManager.isChapterDownloaded(dbChapter, manga, skipCache = true)
         return when {
             // NOVEL -->
-            source is TextSource && source is NovelSource -> {
+            source.isNovelSource() -> {
                 if (isDownloaded) NovelDownloadPageLoader(chapter, manga, source, downloadProvider)
                 else NovelPageLoader(chapter, source)
             }

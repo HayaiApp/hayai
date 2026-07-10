@@ -16,8 +16,6 @@ import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.UnmeteredSource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
-import hayai.novel.source.NovelSource
-import hayai.novel.source.TextSource
 import eu.kanade.tachiyomi.util.chapter.ChapterUtil.Companion.preferredChapterName
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.DiskUtil.NOMEDIA_FILE
@@ -339,9 +337,10 @@ class Downloader(
         val tmpDir = mangaDir.createDirectory(chapterDirname + TMP_DIR_SUFFIX)!!
 
         try {
-            when (val source = download.source) {
-                is NovelSource -> downloadNovelChapter(download, tmpDir, chapterDirname, mangaDir)
-                is HttpSource -> downloadImageChapter(download, tmpDir, chapterDirname, mangaDir)
+            val source = download.source
+            when {
+                source.isNovelSource -> downloadNovelChapter(download, tmpDir, chapterDirname, mangaDir)
+                source is HttpSource -> downloadImageChapter(download, tmpDir, chapterDirname, mangaDir)
                 else -> error("Cannot download from unsupported source type: ${source::class.simpleName}")
             }
         } catch (error: Throwable) {
@@ -364,11 +363,14 @@ class Downloader(
     ) {
         download.status = Download.State.DOWNLOADING
 
-        val source = download.source as NovelSource
-        val html = source.getChapterText(download.chapter.url)
+        val source = download.source
+        val html = source.fetchPageText(Page(0, download.chapter.url))
+        check(html.isNotBlank()) { "Source returned an empty novel chapter" }
 
-        // Save chapter text
-        tmpDir.createFile("chapter.html")!!.writeText(html)
+        val chapterFile = tmpDir.findFile(NOVEL_CHAPTER_FILE)
+            ?: tmpDir.createFile(NOVEL_CHAPTER_FILE)
+            ?: error("Unable to create the novel chapter file")
+        chapterFile.writeText(html)
 
         // Set single page as complete for progress tracking
         val page = Page(0).apply {
@@ -381,7 +383,9 @@ class Downloader(
         // Write .nomedia BEFORE the rename: UniFile.renameTo invalidates the SAF DocumentFile
         // handle on many devices, so `tmpDir` cannot be relied on after the rename returns.
         DiskUtil.createNoMediaFile(tmpDir, context)
-        tmpDir.renameTo(chapterDirname)
+        check(tmpDir.renameTo(chapterDirname)) { "Unable to finalize the novel chapter download" }
+        val finalChapterFile = mangaDir.findFile(chapterDirname)?.findFile(NOVEL_CHAPTER_FILE)
+        check(finalChapterFile?.isFile == true) { "Novel chapter file was not saved" }
         cache.addChapter(chapterDirname, mangaDir, download.manga)
         download.status = Download.State.DOWNLOADED
     }
@@ -771,6 +775,7 @@ class Downloader(
     }
 
     companion object {
+        const val NOVEL_CHAPTER_FILE = "chapter.html"
         const val TMP_DIR_SUFFIX = "_tmp"
         const val CHAPTERS_PER_SOURCE_QUEUE_WARNING_THRESHOLD = 15
         private const val DOWNLOADS_QUEUED_WARNING_THRESHOLD = 30

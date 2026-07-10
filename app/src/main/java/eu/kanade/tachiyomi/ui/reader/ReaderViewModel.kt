@@ -30,9 +30,9 @@ import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
-import hayai.novel.source.TextSource
 import eu.kanade.tachiyomi.ui.manga.chapter.ChapterItem
 import eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterItem
 import eu.kanade.tachiyomi.ui.reader.loader.ChapterLoader
@@ -205,7 +205,7 @@ class ReaderViewModel(
             .drop(1)
             .onEach { currentChapter ->
                 chapterId = currentChapter.chapter.id!!
-                if (source !is TextSource) {
+                if (source?.isNovelSource() != true) {
                     currentChapter.requestedPage = currentChapter.chapter.last_page_read
                 }
             }
@@ -312,7 +312,7 @@ class ReaderViewModel(
     }
 
     fun refreshNovelReaderChapterList() {
-        if (source !is TextSource || !::chapterList.isInitialized) return
+        if (source?.isNovelSource() != true || !::chapterList.isInitialized) return
         val visibleChapter = state.value.viewerChapters?.currChapter ?: return
         val visibleChapterId = visibleChapter.chapter.id ?: return
 
@@ -508,7 +508,7 @@ class ReaderViewModel(
         val loader = loader ?: return -1
 
         Logger.d { "Loading adjacent ${chapter.chapter.url}" }
-        val isTextSource = source is TextSource
+        val isTextSource = source?.isNovelSource() == true
         var lastPage: Int? = if (isTextSource) 0 else if (chapter.chapter.pages_left <= 1) 0 else chapter.chapter.last_page_read
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
         try {
@@ -696,7 +696,7 @@ class ReaderViewModel(
     }
 
     fun onNovelScrollProgress(page: ReaderPage) {
-        if (source !is TextSource) return
+        if (source?.isNovelSource() != true) return
         viewModelScope.launchNonCancellableIO {
             saveChapterProgress(page.chapter, page, hasExtraPage = false, sessionScrollAdvance = true)
         }
@@ -708,7 +708,7 @@ class ReaderViewModel(
      * flag short-circuits the mark-read gate inside `saveChapterProgress`.
      */
     fun onNovelTeardownProgress(page: ReaderPage) {
-        if (source !is TextSource) return
+        if (source?.isNovelSource() != true) return
         viewModelScope.launchNonCancellableIO {
             saveChapterProgress(page.chapter, page, hasExtraPage = false, sessionScrollAdvance = false)
         }
@@ -954,7 +954,7 @@ class ReaderViewModel(
         hasExtraPage: Boolean,
         sessionScrollAdvance: Boolean = true,
     ) {
-        val isTextSource = source is TextSource
+        val isTextSource = source?.isNovelSource() == true
         val chapterIdLog = readerChapter.chapter.id
         val incognito = preferences.incognitoMode().get()
         val shouldTrack = !incognito || hasTrackers
@@ -1063,7 +1063,7 @@ class ReaderViewModel(
      * stats later SUM the recorded values via SQL. No-op for image sources or unloaded text.
      */
     private suspend fun recordNovelWordCount(readerChapter: ReaderChapter) {
-        if (source !is TextSource) return
+        if (source?.isNovelSource() != true) return
         val chapterId = readerChapter.chapter.id ?: return
         val html = readerChapter.pages?.firstOrNull()?.text ?: return
         if (html.isBlank()) return
@@ -1106,7 +1106,7 @@ class ReaderViewModel(
      */
     fun flushReadTimer(activeChapter: ReaderChapter? = null) {
         val chapter = activeChapter
-            ?: state.value.viewerChapters?.currChapter?.takeIf { source is TextSource }
+            ?: state.value.viewerChapters?.currChapter?.takeIf { source?.isNovelSource() == true }
             ?: getCurrentChapter()
             ?: return
         viewModelScope.launchNonCancellableIO {
@@ -1175,7 +1175,7 @@ class ReaderViewModel(
         // NOVEL -->
         // Auto-detect novel sources and force novel reading mode
         val source = sourceManager.get(manga.source)
-        if (source is hayai.novel.source.TextSource) {
+        if (source?.isNovelSource() == true) {
             if (firstOpen) {
                 viewModelScope.launchIO { updateManga.await(MangaUpdate(manga.id!!, viewerFlags = manga.viewer_flags)) }
             }
@@ -1209,7 +1209,7 @@ class ReaderViewModel(
             if (currChapters != null) {
                 // Save current page
                 val currChapter = currChapters.currChapter
-                currChapter.requestedPage = if (source is TextSource) 0 else currChapter.chapter.last_page_read
+                currChapter.requestedPage = if (source?.isNovelSource() == true) 0 else currChapter.chapter.last_page_read
 
                 mutableState.update {
                     it.copy(

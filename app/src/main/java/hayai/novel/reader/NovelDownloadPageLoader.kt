@@ -2,12 +2,13 @@ package hayai.novel.reader
 
 import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.data.download.DownloadProvider
+import eu.kanade.tachiyomi.data.download.Downloader
 import eu.kanade.tachiyomi.domain.manga.models.Manga
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.loader.PageLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
-import hayai.novel.source.NovelSource
 import kotlinx.coroutines.CancellationException
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -19,14 +20,14 @@ import java.io.File
 class NovelDownloadPageLoader(
     private val chapter: ReaderChapter,
     private val manga: Manga,
-    private val source: NovelSource,
+    private val source: Source,
     private val downloadProvider: DownloadProvider,
 ) : PageLoader(), NovelImageUrlResolver {
 
     override val isLocal: Boolean = true
 
     override suspend fun getPages(): List<ReaderPage> {
-        return listOf(ReaderPage(index = 0, url = source.resolveUrl(chapter.chapter.url)).apply {
+        return listOf(ReaderPage(index = 0, url = resolveSourceUrl(source, chapter.chapter.url)).apply {
             this.chapter = this@NovelDownloadPageLoader.chapter
         })
     }
@@ -41,7 +42,7 @@ class NovelDownloadPageLoader(
                 manga,
                 source,
             )
-            val htmlFile = chapterDir?.listFiles()?.firstOrNull { it.name == "chapter.html" }
+            val htmlFile = chapterDir?.findFile(Downloader.NOVEL_CHAPTER_FILE)?.takeIf { it.isFile }
                 ?: throw Exception("Downloaded chapter file not found")
 
             val bytes = htmlFile.openInputStream().readBytes()
@@ -63,6 +64,6 @@ class NovelDownloadPageLoader(
     }
 
     override fun resolveNovelImageUrl(url: String): String {
-        return source.resolveUrl(url)
+        return resolveSourceUrl(source, url)
     }
 }

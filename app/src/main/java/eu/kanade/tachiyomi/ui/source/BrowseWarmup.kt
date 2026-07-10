@@ -7,7 +7,7 @@ import org.xmlpull.v1.XmlPullParser
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Background prefetch for the Browse cold path.
+ * Background prefetch for root-tab cold paths.
  *
  * Browse is the heaviest of the three root tabs to cold-enter: it inflates the
  * source list AND the bottom-sheet ViewPager (extensions / novel plugins /
@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Idempotent — only ever runs once per process. Failures are swallowed (we
  * don't want a warmup miss to crash the activity).
  */
-object BrowseWarmup {
+object RootTabWarmup {
 
     private val primed = AtomicBoolean(false)
 
@@ -70,10 +70,21 @@ object BrowseWarmup {
         }
     }
 
-    // Layouts + menus on the Browse cold path. Each layout includes / row that
-    // would land in a long first-attach frame is listed so the parse cost is
-    // paid here instead.
+    // Root layouts and expensive rows identified in first-attach traces. View construction
+    // remains on main; only binary XML decoding is paid here.
     private val XML_IDS = intArrayOf(
+        R.layout.library_controller,
+        R.layout.library_pager_page,
+        R.layout.manga_grid_item,
+        R.layout.manga_list_item,
+        R.layout.library_category_header_item,
+        R.layout.recents_controller,
+        R.layout.recent_manga_item,
+        R.layout.recent_sub_chapter_item,
+        R.layout.recent_chapters_section_item,
+        R.layout.recents_header_item,
+        R.layout.recents_source_header_item,
+        R.layout.recents_footer_item,
         R.layout.browse_controller,
         R.layout.extensions_bottom_sheet,
         R.layout.recycler_with_scroller,
@@ -86,9 +97,18 @@ object BrowseWarmup {
         R.menu.catalogue_main,
     )
 
-    // Classes the cold path lazy-loads. Class.forName here triggers dexopt +
+    // Classes the root paths lazy-load. Class.forName here triggers dexopt +
     // verification on the IO thread so the UI thread doesn't pay it.
     private val CLASS_NAMES = listOf(
+        "eu.kanade.tachiyomi.ui.library.LibraryController",
+        "eu.kanade.tachiyomi.ui.library.LibraryCategoryAdapter",
+        "eu.kanade.tachiyomi.ui.library.LibraryPagerAdapter",
+        "eu.kanade.tachiyomi.ui.library.LibraryGridHolder",
+        "eu.kanade.tachiyomi.ui.library.LibraryListHolder",
+        "eu.kanade.tachiyomi.ui.recents.RecentsController",
+        "eu.kanade.tachiyomi.ui.recents.RecentMangaAdapter",
+        "eu.kanade.tachiyomi.ui.recents.RecentMangaHolder",
+        "eu.kanade.tachiyomi.ui.recents.DateItem",
         "eu.kanade.tachiyomi.ui.extension.ExtensionBottomSheet",
         "eu.kanade.tachiyomi.ui.extension.ExtensionAdapter",
         "eu.kanade.tachiyomi.ui.extension.ExtensionBottomPresenter",

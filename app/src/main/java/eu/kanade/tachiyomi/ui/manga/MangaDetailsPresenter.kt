@@ -140,6 +140,9 @@ class MangaDetailsPresenter(
 //    val currentManga get() = currentMangaInternal.asStateFlow()
 
     lateinit var manga: Manga
+    val mangaOrNull: Manga?
+        get() = if (::manga.isInitialized) manga else null
+
     fun isMangaLateInitInitialized() = ::manga.isInitialized
 
     private val customMangaManager: CustomMangaManager by injectLazy()

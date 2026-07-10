@@ -927,11 +927,12 @@ Carrying forward — pick any of these next session.
 
 ### Cold-path improvements (extends today's Browse work)
 
-- **Apply the BrowseWarmup pattern to Recents and Library cold paths**. Same
-  template: enumerate the layouts + menus + classes loaded by each tab's cold
-  entry, drain XML once on IO at MainActivity startup, `Class.forName` the
-  adapters. Library has multiple display-mode layouts; Recents has the recent_*
-  family.
+- **Done 2026-07-10 — apply the BrowseWarmup pattern to Recents and Library cold paths.**
+  `BrowseWarmup` is now `RootTabWarmup` and primes the Library controller/pager,
+  grid/list/header rows, plus the Recents controller and its manga/subchapter/
+  section/header/footer rows. It also class-loads their controllers, adapters,
+  holders, and pager adapter on IO. This extends the existing trace-backed XML
+  parse mitigation; no new frame-time claim is made because no device was attached.
 - **Defer Library's `applyDisplayMode`** out of `onChangeStarted.enter`. It's
   the only root controller's enter hook over 30 ms (~35 ms each). Candidates
   inside: `setupTabbedView` / `teardownTabbedView`.

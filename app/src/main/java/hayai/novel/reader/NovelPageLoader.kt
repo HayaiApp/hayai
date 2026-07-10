@@ -1,17 +1,19 @@
 package hayai.novel.reader
 
 import co.touchlab.kermit.Logger
+import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.ui.reader.loader.PageLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
-import eu.kanade.tachiyomi.source.model.Page
-import hayai.novel.source.NovelSource
 import kotlinx.coroutines.CancellationException
 import java.io.ByteArrayInputStream
+import java.net.URI
 
 /**
  * PageLoader for online novel chapters.
- * Fetches chapter text via NovelSource.getChapterText() and serves it
+ * Fetches chapter text via Source.fetchPageText() and serves it
  * as a single-page stream (UTF-8 encoded HTML).
  */
 interface NovelImageUrlResolver {
@@ -20,13 +22,13 @@ interface NovelImageUrlResolver {
 
 class NovelPageLoader(
     private val chapter: ReaderChapter,
-    private val source: NovelSource,
+    private val source: Source,
 ) : PageLoader(), NovelImageUrlResolver {
 
     override val isLocal: Boolean = false
 
     override suspend fun getPages(): List<ReaderPage> {
-        return listOf(ReaderPage(index = 0, url = source.resolveUrl(chapter.chapter.url)).apply {
+        return listOf(ReaderPage(index = 0, url = resolveSourceUrl(source, chapter.chapter.url)).apply {
             this.chapter = this@NovelPageLoader.chapter
         })
     }
@@ -36,7 +38,7 @@ class NovelPageLoader(
 
         page.status = Page.State.LoadPage
         try {
-            val html = source.getChapterText(chapter.chapter.url)
+            val html = source.fetchPageText(Page(0, chapter.chapter.url))
             val bytes = html.toByteArray(Charsets.UTF_8)
             page.text = html
             page.stream = { ByteArrayInputStream(bytes) }
@@ -56,6 +58,17 @@ class NovelPageLoader(
     }
 
     override fun resolveNovelImageUrl(url: String): String {
-        return source.resolveUrl(url)
+        return resolveSourceUrl(source, url)
     }
+}
+
+internal fun resolveSourceUrl(source: Source, url: String): String {
+    runCatching { source.getChapterUrl(SChapter.create().apply { this.url = url }) }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { return it }
+    return runCatching { URI(source.webViewUrl.orEmpty()).resolve(url).toString() }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?: url
 }

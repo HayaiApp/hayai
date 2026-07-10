@@ -12,7 +12,6 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.util.system.ImageUtil
-import hayai.novel.source.TextSource
 import eu.kanade.tachiyomi.util.system.launchIO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
@@ -164,7 +163,7 @@ class DownloadManager(
         // Novel chapters are stored as a single chapter.html file, not images. The image-only
         // filter below would always return empty for them and surface a misleading "no pages
         // found" error. Callers for novels go through NovelDownloadPageLoader instead.
-        check(source !is TextSource) {
+        check(!source.isNovelSource) {
             "buildPageList does not support text/novel sources — use NovelDownloadPageLoader"
         }
         val chapterDir = provider.findChapterDir(chapter, manga, source)

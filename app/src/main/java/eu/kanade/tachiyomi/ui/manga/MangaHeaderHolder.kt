@@ -415,7 +415,12 @@ class MangaHeaderHolder(
     @SuppressLint("SetTextI18n", "StringFormatInvalid")
     fun bind(item: MangaHeaderItem) {
         val presenter = adapter.delegate.mangaPresenter()
-        val manga = presenter.manga
+        val manga = presenter.mangaOrNull
+        if (manga == null) {
+            itemView.isVisible = false
+            return
+        }
+        itemView.isVisible = true
 
         if (binding == null) {
             if (chapterBinding != null) {
