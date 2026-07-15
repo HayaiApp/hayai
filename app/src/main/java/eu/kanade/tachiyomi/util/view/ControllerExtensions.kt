@@ -1076,6 +1076,12 @@ val Router.isCompose: Boolean
     get() = backstack.lastOrNull()?.controller is BaseComposeController
 
 interface BackHandlerControllerInterface {
+    /**
+     * Whether gesture progress should preview a navigation pop. A controller can return false
+     * while a local dismissible state owns back; the committed press is still delivered normally.
+     */
+    fun shouldAnimatePredictiveBack(): Boolean = true
+
     fun handleOnBackStarted(backEvent: BackEventCompat) {
         if (this !is Controller) return
         view?.animate()?.cancel()

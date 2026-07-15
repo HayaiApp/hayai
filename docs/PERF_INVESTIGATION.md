@@ -141,10 +141,31 @@ current implementation and the validation performed after removing it.
   Header structural content is snapshotted too, so live queue/selection ticks can update their status
   without rewriting margins, labels, icons, sort controls, and collapse drawables.
 
+### MangaDetails predictive back, chapter binding, and selection motion
+
+- Predictive-back progress previously transformed MangaDetails before the controller could consume
+  the committed press to close chapter selection. The selection cleared, but no pop or cancellation
+  restored the transform, leaving the screen half-transparent and partially translated. Controllers
+  now expose whether gesture progress represents navigation; active MangaDetails selection suppresses
+  only the navigation preview, consumes the committed back normally, and leaves the screen at rest.
+- `MangaDetailsAdapter` now snapshots every chapter field rendered by `ChapterHolder`, plus filter,
+  title-display, and translation-button state. Equivalent presenter emissions stop before
+  `FlexibleAdapter.updateDataSet()` and avoid a complete visible-row binding/layout pass.
+- Chapter holders independently gate full row content and download/status visuals. Theme tint lookup,
+  status-string construction, bookmark drawable work, and download-button updates only run when their
+  inputs change. Recycled holders cancel the swipe tutorial and clear all render state.
+- Download progress averaging no longer allocates an intermediate page-progress list. Exiting chapter
+  selection repaints FlexibleAdapter's bounded attached/cached holder set instead of scanning every
+  chapter and performing a RecyclerView lookup for each.
+- The chapter action bar replaced expanding/shrinking size and animated row weights with fade/slide
+  render motion. This avoids per-frame sibling remeasurement and follows app/system reduced-motion.
+  The swipe tutorial similarly switches its midpoint state at an animator boundary instead of using
+  a Kotlin update listener every frame, and duplicate tutorial animators are prevented.
+
 ### Verification
 
 - `:app:compileStandardDebugKotlin` — passed.
-- `:app:testStandardDebugUnitTest` — passed, 82 tests, 0 failures/errors/skips.
+- `:app:testStandardDebugUnitTest` — passed, 88 tests, 0 failures/errors/skips.
 - `git diff --check` — passed.
 - A full `lintStandardDebug` analysis exceeded the 15-minute validation window without
   producing a report or diagnostic; it was stopped, and is not represented as passing.

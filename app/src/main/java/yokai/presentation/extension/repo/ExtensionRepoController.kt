@@ -18,7 +18,7 @@ class ExtensionRepoController(private val repoUrl: String? = null) :
     override fun ScreenContent() {
         Navigator(
             screen = ExtensionRepoScreen(
-                title = stringResource(MR.strings.repos),
+                title = stringResource(MR.strings.repositories),
                 repoUrl = repoUrl,
             ),
             content = { navigator ->

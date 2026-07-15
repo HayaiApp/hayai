@@ -388,26 +388,23 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             override fun handleOnBackStarted(backEvent: BackEventCompat) {
                 controllerHandlesBackPress = false
                 val controller by lazy { router.backstack.lastOrNull()?.controller }
-                if (!(
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        ViewCompat.getRootWindowInsets(window.decorView)
+                val predictiveBackHandler = controller as? BackHandlerControllerInterface
+                val imeOwnsBack = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ViewCompat.getRootWindowInsets(window.decorView)
                         ?.isVisible(WindowInsetsCompat.Type.ime()) == true
-                    ) &&
+                val searchOwnsBack = binding.searchToolbar.hasExpandedActionView() &&
+                    binding.cardFrame.isVisible && controller !is SearchControllerInterface
+                controllerHandlesBackPress = !imeOwnsBack &&
                     actionMode == null &&
-                    !(
-                        binding.searchToolbar.hasExpandedActionView() && binding.cardFrame.isVisible &&
-                            controller !is SearchControllerInterface
-                        )
-                ) {
-                    controllerHandlesBackPress = true
-                }
+                    !searchOwnsBack &&
+                    predictiveBackHandler?.shouldAnimatePredictiveBack() != false
                 if (controllerHandlesBackPress) {
                     startTime = SystemClock.uptimeMillis()
                     velocityTracker.clear()
                     val motionEvent = MotionEvent.obtain(startTime, startTime, MotionEvent.ACTION_DOWN, backEvent.touchX, backEvent.touchY, 0)
                     velocityTracker.addMovement(motionEvent)
                     motionEvent.recycle()
-                    (controller as? BackHandlerControllerInterface)?.handleOnBackStarted(backEvent)
+                    predictiveBackHandler?.handleOnBackStarted(backEvent)
                 }
             }
 

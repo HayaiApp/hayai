@@ -238,9 +238,11 @@ class MangaDetailsPresenter(
             downloadManager.queueState.collectLatest(::onQueueUpdate)
         }
 
-        // Tracks default to emptyList(); fetch async so push isn't gated on DB.
-        presenterScope.launchIO {
-            tracks = getTrack.awaitAllByMangaId(mangaId)
+        // Tracks default to emptyList(); fetch async so push isn't gated on DB. Always rebuild
+        // the service rows when the DB read completes so a sheet opened during startup cannot
+        // retain an empty adapter snapshot.
+        presenterScope.launch {
+            fetchTracks()
         }
     }
 
@@ -1116,17 +1118,21 @@ class MangaDetailsPresenter(
     fun isTracked(): Boolean =
         loggedServices.any { service -> tracks.any { it.sync_id == service.id } }
 
-    fun hasTrackers(): Boolean = loggedServices.isNotEmpty()
+    fun hasTrackers(): Boolean = availableTrackServices().isNotEmpty()
 
     // Tracking
-    private fun setTrackItems() {
+    private fun availableTrackServices(): List<TrackService> {
         // Filter by content type so manga only see manga trackers and novels only see novel trackers.
         val contentType = if (source.isNovelSource()) TrackContentType.NOVEL else TrackContentType.MANGA
-        trackList = loggedServices.filter { service ->
+        return loggedServices.filter { service ->
             if (contentType !in service.supportedContentTypes) return@filter false
             if (service !is EnhancedTrackService) return@filter true
             service.accept(source)
-        }.map { service ->
+        }
+    }
+
+    private fun setTrackItems() {
+        trackList = availableTrackServices().map { service ->
             TrackItem(tracks.find { it.sync_id == service.id }, service)
         }
     }

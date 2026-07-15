@@ -171,6 +171,11 @@ import yokai.presentation.core.Constants
 import yokai.util.lang.getString
 import android.R as AR
 
+internal fun shouldAnimateMangaDetailsPredictiveBack(
+    selectionMode: Boolean,
+    selectedChapterCount: Int,
+): Boolean = !selectionMode || selectedChapterCount == 0
+
 class MangaDetailsController :
     BaseCoroutineController<MangaDetailsControllerBinding, MangaDetailsPresenter>,
     FlexibleAdapter.OnItemClickListener,
@@ -264,7 +269,7 @@ class MangaDetailsController :
     private var pendingMangaInitSetup = false
 
     override fun getTitle(): String? {
-        val selectedCount = selectedChapters().size
+        val selectedCount = selectedChapterCount()
         if (isSelectionMode && selectedCount > 0) {
             return selectedCount.toString()
         }
@@ -1108,7 +1113,7 @@ class MangaDetailsController :
         val chapter = chapterItem.chapter
         // mihon-style multi-select: a tap toggles this chapter's selection (no range anchor).
         // Single source of truth: any selected chapter means taps toggle selection.
-        if (isSelectionMode || selectedChapters().isNotEmpty()) {
+        if (isSelectionMode || selectedChapterCount() > 0) {
             toggleChapterSelection(position)
             return false
         }
@@ -1350,7 +1355,7 @@ class MangaDetailsController :
 
     private fun updateMenuVisibility(menu: Menu?) {
         menu ?: return
-        val isSelecting = isSelectionMode && selectedChapters().isNotEmpty()
+        val isSelecting = isSelectionMode && selectedChapterCount() > 0
         menu.findItem(R.id.action_select_all)?.isVisible = isSelecting
         menu.findItem(R.id.action_select_inverse)?.isVisible = isSelecting
         if (isSelecting) {
@@ -2182,8 +2187,14 @@ class MangaDetailsController :
 
     //region Selection/action mode methods
     // Mihon parity: back cancels chapter multi-select before leaving the screen.
+    override fun shouldAnimatePredictiveBack(): Boolean {
+        // This back action clears selection instead of popping the controller. Starting the
+        // navigation preview here would leave the view at a partial-pop transform after commit.
+        return shouldAnimateMangaDetailsPredictiveBack(isSelectionMode, selectedChapterCount())
+    }
+
     override fun handleBack(): Boolean {
-        if (isSelectionMode && selectedChapters().isNotEmpty()) {
+        if (isSelectionMode && selectedChapterCount() > 0) {
             destroyActionModeIfNeeded()
             return true
         }
@@ -2359,7 +2370,7 @@ class MangaDetailsController :
         val nowSelected = !(adapter?.isSelected(position) ?: false)
         setChapterSelected(position, nowSelected)
         lastSelectionPosition = if (nowSelected) position else null
-        if (selectedChapters().isEmpty()) {
+        if (selectedChapterCount() == 0) {
             destroyActionModeIfNeeded()
         } else {
             refreshActionBar()
@@ -2372,16 +2383,14 @@ class MangaDetailsController :
         val alreadySelected = adapter.isSelected(position)
         if (selected == alreadySelected) return
         if (selected) adapter.addSelection(position) else adapter.removeSelection(position)
-        (binding.recycler.findViewHolderForAdapterPosition(position) as? BaseFlexibleViewHolder)
-            ?.itemView
-            ?.isActivated = selected
         val item = adapter.getItem(position) as? ChapterItem
-        (binding.recycler.findViewHolderForAdapterPosition(position) as? ChapterHolder)
-            ?.notifyStatus(
-                if (selected) Download.State.CHECKED else item?.status ?: Download.State.NOT_DOWNLOADED,
-                false,
-                item?.progress ?: 0,
-            )
+        val holder = binding.recycler.findViewHolderForAdapterPosition(position) as? ChapterHolder
+        holder?.itemView?.isActivated = selected
+        holder?.notifyStatus(
+            if (selected) Download.State.CHECKED else item?.status ?: Download.State.NOT_DOWNLOADED,
+            false,
+            item?.progress ?: 0,
+        )
     }
 
     private fun selectAllChapters() {
@@ -2399,7 +2408,7 @@ class MangaDetailsController :
             if (adapter.getItem(i) is ChapterItem) setChapterSelected(i, !adapter.isSelected(i))
         }
         lastSelectionPosition = null
-        if (selectedChapters().isEmpty()) {
+        if (selectedChapterCount() == 0) {
             destroyActionModeIfNeeded()
         } else {
             refreshActionBar()
@@ -2408,6 +2417,8 @@ class MangaDetailsController :
     }
 
     /** Selected chapters mapped from the adapter's current selection positions. */
+    private fun selectedChapterCount(): Int = adapter?.selectedItemCount ?: 0
+
     private fun selectedChapters(): List<ChapterItem> {
         val adapter = adapter ?: return emptyList()
         return adapter.selectedPositions.mapNotNull { adapter.getItem(it) as? ChapterItem }
@@ -2415,9 +2426,15 @@ class MangaDetailsController :
 
     /** Repaints visible chapter rows to their non-selected status (clears CHECKED highlight). */
     private fun refreshSelectionHighlights() {
-        presenter.chapters.forEach { chapter ->
-            val holder = binding.recycler.findViewHolderForItemId(chapter.id!!) as? ChapterHolder
-                ?: return@forEach
+        val adapter = adapter ?: return
+        // FlexibleAdapter already tracks attached/cached holders. Walking every chapter and doing
+        // a RecyclerView lookup for each made leaving selection O(total chapters), even though only
+        // bound rows can have stale pixels. Repaint that bounded set directly.
+        adapter.allBoundViewHolders.forEach { boundHolder ->
+            val holder = boundHolder as? ChapterHolder ?: return@forEach
+            val position = holder.flexibleAdapterPosition
+            if (position == RecyclerView.NO_POSITION) return@forEach
+            val chapter = adapter.getItem(position) as? ChapterItem ?: return@forEach
             holder.itemView.isActivated = false
             holder.notifyStatus(chapter.status, isLocked(), chapter.progress)
         }

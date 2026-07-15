@@ -11,6 +11,7 @@ import yokai.i18n.MR
 import yokai.util.lang.getString
 import dev.icerock.moko.resources.compose.stringResource
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.data.database.models.hideChapterTitle
 import eu.kanade.tachiyomi.ui.manga.chapter.BaseChapterAdapter
 import eu.kanade.tachiyomi.ui.manga.chapter.ChapterItem
 import eu.kanade.tachiyomi.util.chapter.ChapterUtil
@@ -30,6 +31,7 @@ class MangaDetailsAdapter(
 
     var items: List<ChapterItem> = emptyList()
         private set
+    private var submittedSnapshot: SubmittedSnapshot? = null
 
     val delegate: MangaDetailsInterface = controller
     val presenter = controller.presenter
@@ -55,14 +57,28 @@ class MangaDetailsAdapter(
 
     fun performFilter() {
         val s = getFilter(String::class.java)
-        if (s.isNullOrBlank()) {
-            updateDataSet(items)
+        val filteredItems = if (s.isNullOrBlank()) {
+            items
         } else {
-            updateDataSet(
-                items.filter { it.name.contains(s, true) },
-            )
+            items.filter { it.name.contains(s, true) }
         }
+        val snapshot = SubmittedSnapshot(
+            itemSignatures = filteredItems.map(ChapterItem::bindingContentSignature),
+            query = s.orEmpty(),
+            hideChapterTitles = presenter.manga.hideChapterTitle(preferences),
+            showTranslation = controller.showChapterTranslationButton(),
+        )
+        if (snapshot == submittedSnapshot) return
+        submittedSnapshot = snapshot
+        updateDataSet(filteredItems)
     }
+
+    private data class SubmittedSnapshot(
+        val itemSignatures: List<Int>,
+        val query: String,
+        val hideChapterTitles: Boolean,
+        val showTranslation: Boolean,
+    )
 
     override fun onItemSwiped(position: Int, direction: Int) {
         super.onItemSwiped(position, direction)

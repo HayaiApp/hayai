@@ -45,11 +45,45 @@ class ChapterItem(chapter: Chapter, val manga: Manga) :
         holder.bind(this, manga)
     }
 
+    /** Full snapshot of state consumed by [ChapterHolder]. Identity equality only compares ids. */
+    internal fun bindingContentSignature(progress: Int = this.progress): Int {
+        var result = javaClass.hashCode()
+        fun include(value: Any?) {
+            result = 31 * result + (value?.hashCode() ?: 0)
+        }
+
+        include(id)
+        include(manga_id)
+        include(url)
+        include(name)
+        include(scanlator)
+        include(read)
+        include(bookmark)
+        include(last_page_read)
+        include(pages_left)
+        include(date_fetch)
+        include(date_upload)
+        include(source_order)
+        include(chapter_number)
+        include(status)
+        include(progress)
+        include(isLocked)
+        include(hasCachedTranslation)
+        include(isTranslating)
+        include(manga.id)
+        include(manga.source)
+        include(manga.genre)
+        include(manga.hide_title)
+        include(manga.chapter_flags)
+        return result
+    }
+
     override fun unbindViewHolder(
         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>?,
         holder: ChapterHolder?,
         position: Int,
     ) {
+        holder?.recycle()
         super.unbindViewHolder(adapter, holder, position)
         (adapter as MangaDetailsAdapter).controller.dismissPopup(position)
     }

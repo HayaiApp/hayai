@@ -4,7 +4,6 @@ import eu.davidea.flexibleadapter.items.AbstractHeaderItem
 import eu.davidea.flexibleadapter.items.AbstractSectionableItem
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.download.model.Download
-import eu.kanade.tachiyomi.source.model.Page
 
 abstract class BaseChapterItem<T : BaseChapterHolder, H : AbstractHeaderItem<*>>(
     val chapter: Chapter,
@@ -18,7 +17,10 @@ abstract class BaseChapterItem<T : BaseChapterHolder, H : AbstractHeaderItem<*>>
     val progress: Int
         get() {
             val pages = download?.pages ?: return 0
-            return pages.map(Page::progress).average().toInt()
+            if (pages.isEmpty()) return 0
+            var total = 0
+            pages.forEach { total += it.progress }
+            return total / pages.size
         }
 
     var status: Download.State

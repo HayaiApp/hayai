@@ -1,72 +1,84 @@
 package yokai.presentation.extension.repo.component
 
 import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TextFieldDefaults.indicatorLine
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import eu.kanade.tachiyomi.util.compose.textHint
 import yokai.domain.extension.repo.model.ExtensionRepo
-import yokai.presentation.component.Gap
-import yokai.presentation.theme.Size
-import yokai.util.secondaryItemAlpha
 
 @Composable
 fun ExtensionRepoItem(
-    modifier: Modifier = Modifier,
     extensionRepo: ExtensionRepo,
+    removeLabel: String,
+    modifier: Modifier = Modifier,
     onDeleteClick: (String) -> Unit = {},
 ) {
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f),
+            .padding(horizontal = 16.dp, vertical = 5.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(start = 14.dp, top = 12.dp, end = 6.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.Label,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.secondary,
-            )
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.Link,
+                        contentDescription = null,
+                        modifier = Modifier.size(21.dp),
+                    )
+                }
+            }
             Column(
-                modifier = Modifier.weight(1.0f),
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     modifier = Modifier
@@ -79,26 +91,23 @@ fun ExtensionRepoItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Gap(Size.extraTiny)
                 Text(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .secondaryItemAlpha(),
+                    modifier = Modifier.fillMaxWidth(),
                     text = extensionRepo.baseUrl,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             IconButton(
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(48.dp),
                 onClick = { onDeleteClick(extensionRepo.baseUrl) },
             ) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    contentDescription = removeLabel,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -107,78 +116,137 @@ fun ExtensionRepoItem(
 
 @Composable
 fun ExtensionRepoInput(
-    inputHint: String,
+    title: String,
+    description: String,
+    inputLabel: String,
+    placeholder: String,
+    actionLabel: String,
+    pasteLabel: String,
+    clearLabel: String,
     modifier: Modifier = Modifier,
     inputText: String = "",
+    errorMessage: String? = null,
     onInputChange: (String) -> Unit = {},
     onAddClick: (String) -> Unit = {},
     isLoading: Boolean = false,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
+    val clipboard = LocalClipboardManager.current
+    val trimmedInput = inputText.trim()
+    val canSubmit = trimmedInput.isNotEmpty() && !isLoading
 
-    val colors = TextFieldDefaults.colors().copy(
-        cursorColor = MaterialTheme.colorScheme.secondary,
-        focusedPlaceholderColor = MaterialTheme.colorScheme.textHint,
-        unfocusedPlaceholderColor = MaterialTheme.colorScheme.textHint,
-        errorPlaceholderColor = MaterialTheme.colorScheme.textHint,
-        focusedTextColor = MaterialTheme.colorScheme.onBackground,
-        unfocusedTextColor = MaterialTheme.colorScheme.onBackground,
-        errorTextColor = MaterialTheme.colorScheme.onBackground,
-        focusedIndicatorColor = Color.Transparent,
-        unfocusedIndicatorColor = Color.Transparent,
-        errorIndicatorColor = Color.Transparent,
-        disabledIndicatorColor = Color.Transparent,
-    )
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Row(
-            modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.secondary,
-            )
-            TextField(
-                modifier = Modifier
-                    .indicatorLine(
-                        enabled = false,
-                        colors = colors,
-                        interactionSource = interactionSource,
-                        isError = true,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Surface(
+                    modifier = Modifier.size(44.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                    .weight(1.0f),
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
                 value = inputText,
                 onValueChange = onInputChange,
                 enabled = !isLoading,
-                placeholder = { Text(text = inputHint, fontSize = 16.sp) },
                 singleLine = true,
-                textStyle = TextStyle(fontSize = 16.sp),
-                colors = colors,
+                isError = errorMessage != null,
+                label = { Text(inputLabel) },
+                placeholder = {
+                    Text(
+                        text = placeholder,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Filled.Link, contentDescription = null)
+                },
+                trailingIcon = {
+                    if (inputText.isBlank()) {
+                        IconButton(
+                            onClick = {
+                                clipboard.getText()?.text?.trim()?.takeIf(String::isNotEmpty)?.let(onInputChange)
+                            },
+                        ) {
+                            Icon(imageVector = Icons.Filled.ContentPaste, contentDescription = pasteLabel)
+                        }
+                    } else {
+                        IconButton(onClick = { onInputChange("") }) {
+                            Icon(imageVector = Icons.Filled.Clear, contentDescription = clearLabel)
+                        }
+                    }
+                },
+                supportingText = errorMessage?.let { message ->
+                    { Text(text = message) }
+                },
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { if (canSubmit) onAddClick(trimmedInput) },
+                ),
             )
-            IconButton(
-                modifier = Modifier.size(40.dp),
-                onClick = { onAddClick(inputText) },
-                enabled = inputText.isNotEmpty(),
+
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canSubmit,
+                onClick = { onAddClick(trimmedInput) },
             ) {
-                if (!isLoading) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp,
                     )
                 } else {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary,
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
+                Text(
+                    modifier = Modifier.padding(start = 8.dp),
+                    text = actionLabel,
+                )
             }
         }
     }
@@ -186,14 +254,24 @@ fun ExtensionRepoInput(
 
 @Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO, showBackground = true)
 @Composable
-fun ExtensionRepoItemPreview() {
-    val input = "https://raw.githubusercontent.com/null2264/totally-real-extensions/repo/index.min.json"
-    Surface {
+private fun ExtensionRepoItemPreview() {
+    val input = "https://raw.githubusercontent.com/example/extensions/repo/index.min.json"
+    MaterialTheme {
         Column {
-            ExtensionRepoItem(extensionRepo = ExtensionRepo("", "", "", "", ""))
-            ExtensionRepoInput(inputHint = "Input")
-            ExtensionRepoInput(inputHint = "", inputText = input)
-            ExtensionRepoInput(inputHint = "", inputText = input, isLoading = true)
+            ExtensionRepoInput(
+                title = "Add a manga repository",
+                description = "Paste the full repository index URL.",
+                inputLabel = "Repository URL",
+                placeholder = "https://example.org/repo/index.min.json",
+                actionLabel = "Add repository",
+                pasteLabel = "Paste",
+                clearLabel = "Clear",
+                inputText = input,
+            )
+            ExtensionRepoItem(
+                extensionRepo = ExtensionRepo(input, "Example extensions", null, "", ""),
+                removeLabel = "Remove repository",
+            )
         }
     }
 }

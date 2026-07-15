@@ -3,6 +3,7 @@ package yokai.presentation.extension.repo
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.util.system.launchIO
 import hayai.novel.repo.interactor.CreateNovelRepo
 import hayai.novel.repo.interactor.DeleteNovelRepo
@@ -10,8 +11,11 @@ import hayai.novel.repo.interactor.GetNovelRepo
 import hayai.novel.repo.model.NovelRepo
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
@@ -25,8 +29,10 @@ class NovelRepoScreenModel : StateScreenModel<NovelRepoScreenModel.State>(State.
     private val createNovelRepo: CreateNovelRepo by inject()
     private val deleteNovelRepo: DeleteNovelRepo by inject()
 
-    private val internalEvent: MutableStateFlow<ExtensionRepoEvent> = MutableStateFlow(ExtensionRepoEvent.NoOp)
-    val event: StateFlow<ExtensionRepoEvent> = internalEvent.asStateFlow()
+    private val internalEvent = MutableSharedFlow<ExtensionRepoEvent>()
+    val event: SharedFlow<ExtensionRepoEvent> = internalEvent.asSharedFlow()
+    private val mutableIsAdding = MutableStateFlow(false)
+    val isAdding: StateFlow<Boolean> = mutableIsAdding.asStateFlow()
 
     init {
         screenModelScope.launchIO {
@@ -37,23 +43,31 @@ class NovelRepoScreenModel : StateScreenModel<NovelRepoScreenModel.State>(State.
     }
 
     fun addRepo(url: String) {
+        if (!mutableIsAdding.compareAndSet(expect = false, update = true)) return
         screenModelScope.launchIO {
-            when (createNovelRepo.await(url)) {
-                is CreateNovelRepo.Result.Success -> {
-                    internalEvent.value = ExtensionRepoEvent.Success
+            try {
+                when (createNovelRepo.await(url.trim())) {
+                    is CreateNovelRepo.Result.Success -> {
+                        internalEvent.emit(ExtensionRepoEvent.Success)
+                    }
+                    is CreateNovelRepo.Result.InvalidUrl -> {
+                        internalEvent.emit(ExtensionRepoEvent.InvalidUrl)
+                    }
+                    is CreateNovelRepo.Result.InvalidIndex -> {
+                        internalEvent.emit(NovelRepoEvent.InvalidIndex)
+                    }
+                    is CreateNovelRepo.Result.EmptyRepo -> {
+                        internalEvent.emit(NovelRepoEvent.EmptyRepo)
+                    }
+                    is CreateNovelRepo.Result.RepoAlreadyExists -> {
+                        internalEvent.emit(ExtensionRepoEvent.RepoAlreadyExists)
+                    }
                 }
-                is CreateNovelRepo.Result.InvalidUrl -> {
-                    internalEvent.value = ExtensionRepoEvent.InvalidUrl
-                }
-                is CreateNovelRepo.Result.InvalidIndex -> {
-                    internalEvent.value = NovelRepoEvent.InvalidIndex
-                }
-                is CreateNovelRepo.Result.EmptyRepo -> {
-                    internalEvent.value = NovelRepoEvent.EmptyRepo
-                }
-                is CreateNovelRepo.Result.RepoAlreadyExists -> {
-                    internalEvent.value = ExtensionRepoEvent.RepoAlreadyExists
-                }
+            } catch (error: Exception) {
+                Logger.e(error) { "Failed to add novel repository" }
+                internalEvent.emit(ExtensionRepoEvent.AddFailed)
+            } finally {
+                mutableIsAdding.value = false
             }
         }
     }

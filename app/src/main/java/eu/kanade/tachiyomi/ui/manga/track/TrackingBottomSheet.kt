@@ -70,6 +70,7 @@ import eu.kanade.tachiyomi.widget.E2EBottomSheetDialog
 import eu.kanade.tachiyomi.widget.EmptyView
 import java.text.DateFormat
 import java.util.Calendar
+import kotlinx.coroutines.launch
 import yokai.i18n.MR
 import yokai.util.lang.getString
 import android.R as AR
@@ -191,6 +192,11 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
         binding.trackSearchRecycler.itemAnimator = null
 
         adapter?.items = presenter.trackList
+        // The sheet can be opened before MangaDetailsPresenter's initial async DB read finishes.
+        // Refresh on every open so both online and offline flows receive the final service rows.
+        controller.viewScope.launch {
+            presenter.fetchTracks()
+        }
     }
 
     fun onNextTrackersUpdate(trackers: List<TrackItem>) {

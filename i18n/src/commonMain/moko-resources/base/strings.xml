@@ -977,20 +977,33 @@
 
     <!-- Extension repos -->
     <string name="repos">Repos</string>
+    <string name="repositories">Repositories</string>
     <string name="source_repos">Extension Repos</string>
-    <string name="label_add_repo">Add new repo</string>
-    <string name="action_add_repo">Add repo</string>
-    <string name="invalid_repo_url">Invalid repo url</string>
-    <string name="repo_already_exists">Repo already exists!</string>
-    <string name="information_empty_repos">You haven\'t added any repos yet.</string>
-    <string name="information_empty_novel_repos">You haven\'t added any novel repos yet. Add one below to browse novel sources.</string>
+    <string name="label_add_repo">Repository URL</string>
+    <string name="action_add_repo">Add repository</string>
+    <string name="invalid_repo_url">Enter a valid repository URL.</string>
+    <string name="repo_already_exists">This repository is already added.</string>
+    <string name="repo_add_failed">Couldn’t add this repository. Check the URL and your connection, then try again.</string>
+    <string name="repo_refresh_failed">Couldn’t refresh repositories. Check your connection and try again.</string>
+    <string name="add_manga_repo">Add a manga repository</string>
+    <string name="add_novel_repo">Add a novel repository</string>
+    <string name="manga_repo_add_description">Paste the full index.min.json URL supplied by the repository maintainer.</string>
+    <string name="novel_repo_add_description">Paste a repository URL to validate its index and make its novel sources available.</string>
+    <string name="repository_url">Repository URL</string>
+    <string name="repository_url_placeholder">https://example.org/repo/index.min.json</string>
+    <string name="paste">Paste</string>
+    <string name="your_repositories">Your repositories</string>
+    <string name="repository_count">%1$d added</string>
+    <string name="remove_repository">Remove repository</string>
+    <string name="information_empty_repos">No manga repositories yet. Add one above to browse more extensions.</string>
+    <string name="information_empty_novel_repos">No novel repositories yet. Add one above to browse novel sources.</string>
     <string name="novel_repo_invalid">Novel repo index is invalid.</string>
     <string name="novel_repo_empty">Novel repo is empty. Add a repo that contains novel sources.</string>
-    <string name="confirm_delete_repo_title">Delete repo?</string>
-    <string name="confirm_delete_repo">Are you sure you wish to delete the repo \"%s\"?</string>
-    <string name="action_replace_repo">Replace</string>
-    <string name="action_replace_repo_title">Signing Key Fingerprint Already Exists</string>
-    <string name="action_replace_repo_message">Repository %1$s has the same Signing Key Fingerprint as %2$s.\nIf this is expected, %2$s will be replaced, otherwise contact your repo maintainer.</string>
+    <string name="confirm_delete_repo_title">Remove repository?</string>
+    <string name="confirm_delete_repo">Remove “%s” from this device? You can add it again later.</string>
+    <string name="action_replace_repo">Replace repository</string>
+    <string name="action_replace_repo_title">Repository signing key already in use</string>
+    <string name="action_replace_repo_message">“%1$s” uses the same signing key as “%2$s”. Replace “%2$s” only if you trust “%1$s” as its intended successor.</string>
 
     <!-- About section -->
     <string name="version">Version</string>

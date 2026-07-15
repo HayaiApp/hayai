@@ -6,7 +6,8 @@
     android:animateLayoutChanges="true"
     android:layout_width="match_parent"
     android:background="@drawable/bottom_sheet_rounded_background"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:minHeight="525dp">
 
     <LinearLayout
         android:id="@+id/tracking_header"

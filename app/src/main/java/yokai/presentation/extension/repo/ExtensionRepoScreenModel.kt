@@ -3,13 +3,17 @@ package yokai.presentation.extension.repo
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import co.touchlab.kermit.Logger
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.util.system.launchIO
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
@@ -33,8 +37,12 @@ class ExtensionRepoScreenModel : StateScreenModel<ExtensionRepoScreenModel.State
     private val replaceExtensionRepo: ReplaceExtensionRepo by inject()
     private val updateExtensionRepo: UpdateExtensionRepo by inject()
 
-    private val internalEvent: MutableStateFlow<ExtensionRepoEvent> = MutableStateFlow(ExtensionRepoEvent.NoOp)
-    val event: StateFlow<ExtensionRepoEvent> = internalEvent.asStateFlow()
+    private val internalEvent = MutableSharedFlow<ExtensionRepoEvent>()
+    val event: SharedFlow<ExtensionRepoEvent> = internalEvent.asSharedFlow()
+    private val mutableIsAdding = MutableStateFlow(false)
+    val isAdding: StateFlow<Boolean> = mutableIsAdding.asStateFlow()
+    private val mutableIsRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = mutableIsRefreshing.asStateFlow()
 
     init {
         screenModelScope.launchIO {
@@ -46,18 +54,26 @@ class ExtensionRepoScreenModel : StateScreenModel<ExtensionRepoScreenModel.State
     }
 
     fun addRepo(url: String) {
+        if (!mutableIsAdding.compareAndSet(expect = false, update = true)) return
         screenModelScope.launchIO {
-            when (val result = createExtensionRepo.await(url)) {
-                is CreateExtensionRepo.Result.Success -> {
-                    internalEvent.value = ExtensionRepoEvent.Success
-                    extensionManager.findAvailableExtensions()
+            try {
+                when (val result = createExtensionRepo.await(url.trim())) {
+                    is CreateExtensionRepo.Result.Success -> {
+                        internalEvent.emit(ExtensionRepoEvent.Success)
+                        extensionManager.findAvailableExtensions()
+                    }
+                    is CreateExtensionRepo.Result.Error -> internalEvent.emit(ExtensionRepoEvent.AddFailed)
+                    is CreateExtensionRepo.Result.InvalidUrl -> internalEvent.emit(ExtensionRepoEvent.InvalidUrl)
+                    is CreateExtensionRepo.Result.RepoAlreadyExists -> internalEvent.emit(ExtensionRepoEvent.RepoAlreadyExists)
+                    is CreateExtensionRepo.Result.DuplicateFingerprint -> {
+                        internalEvent.emit(ExtensionRepoEvent.ShowDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo)))
+                    }
                 }
-                is CreateExtensionRepo.Result.Error -> internalEvent.value = ExtensionRepoEvent.InvalidUrl
-                is CreateExtensionRepo.Result.RepoAlreadyExists -> internalEvent.value = ExtensionRepoEvent.RepoAlreadyExists
-                is CreateExtensionRepo.Result.DuplicateFingerprint -> {
-                    internalEvent.value = ExtensionRepoEvent.ShowDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo))
-                }
-                else -> internalEvent.value = ExtensionRepoEvent.NoOp
+            } catch (error: Exception) {
+                Logger.e(error) { "Failed to add extension repository" }
+                internalEvent.emit(ExtensionRepoEvent.AddFailed)
+            } finally {
+                mutableIsAdding.value = false
             }
         }
     }
@@ -71,9 +87,16 @@ class ExtensionRepoScreenModel : StateScreenModel<ExtensionRepoScreenModel.State
     fun refreshRepos() {
         val status = state.value
 
-        if (status is State.Success) {
+        if (status is State.Success && mutableIsRefreshing.compareAndSet(expect = false, update = true)) {
             screenModelScope.launchIO {
-                updateExtensionRepo.awaitAll()
+                try {
+                    updateExtensionRepo.awaitAll()
+                } catch (error: Exception) {
+                    Logger.e(error) { "Failed to refresh extension repositories" }
+                    internalEvent.emit(ExtensionRepoEvent.RefreshFailed)
+                } finally {
+                    mutableIsRefreshing.value = false
+                }
             }
         }
     }
@@ -109,8 +132,9 @@ sealed class ExtensionRepoEvent {
     sealed class LocalizedMessage(val stringRes: StringResource) : ExtensionRepoEvent()
     data object InvalidUrl : LocalizedMessage(MR.strings.invalid_repo_url)
     data object RepoAlreadyExists : LocalizedMessage(MR.strings.repo_already_exists)
+    data object AddFailed : LocalizedMessage(MR.strings.repo_add_failed)
+    data object RefreshFailed : LocalizedMessage(MR.strings.repo_refresh_failed)
     data class ShowDialog(val dialog: RepoDialog) : ExtensionRepoEvent()
     data object NoOp : ExtensionRepoEvent()
     data object Success : ExtensionRepoEvent()
 }
-

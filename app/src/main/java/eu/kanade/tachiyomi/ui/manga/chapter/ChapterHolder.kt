@@ -5,13 +5,14 @@ import android.animation.ObjectAnimator
 import android.content.res.ColorStateList
 import android.view.View
 import androidx.core.animation.doOnEnd
+import androidx.core.animation.doOnCancel
 import androidx.core.animation.doOnStart
 import androidx.core.view.isVisible
 import androidx.core.widget.TextViewCompat
 import com.google.android.material.R as materialR
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.database.models.hideChapterTitle
 import eu.kanade.tachiyomi.data.database.models.isNovel
-import eu.kanade.tachiyomi.data.database.models.seriesType
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.databinding.ChaptersItemBinding
 import eu.kanade.tachiyomi.domain.manga.models.Manga
@@ -32,6 +33,26 @@ class ChapterHolder(
 
     private val binding = ChaptersItemBinding.bind(view)
     private var localSource = false
+    private var boundContent: BindingContent? = null
+    private var statusVisual: StatusVisual? = null
+    private var swipeTutorialAnimator: AnimatorSet? = null
+
+    private data class BindingContent(
+        val itemSignature: Int,
+        val selected: Boolean,
+        val accentColor: Int?,
+        val hideChapterTitle: Boolean,
+        val showTranslation: Boolean,
+    )
+
+    private data class StatusVisual(
+        val status: Download.State,
+        val locked: Boolean,
+        val progress: Int,
+        val accentColor: Int?,
+        val localSource: Boolean,
+        val animated: Boolean,
+    )
 
     init {
         binding.downloadButton.downloadButton.setOnLongClickListener {
@@ -48,6 +69,20 @@ class ChapterHolder(
     }
 
     fun bind(item: ChapterItem, manga: Manga) {
+        val progress = item.progress
+        val content = BindingContent(
+            itemSignature = item.bindingContentSignature(progress),
+            selected = adapter.isSelected(flexibleAdapterPosition),
+            accentColor = adapter.delegate.accentColor(),
+            hideChapterTitle = manga.hideChapterTitle(adapter.preferences),
+            showTranslation = adapter.delegate.showChapterTranslationButton(),
+        )
+        if (content == boundContent) {
+            resetFrontView()
+            return
+        }
+        boundContent = content
+
         val chapter = item.chapter
         val isLocked = item.isLocked
         itemView.transitionName = "details chapter ${chapter.id ?: 0L} transition"
@@ -57,8 +92,7 @@ class ChapterHolder(
         val isNovel = manga.isNovel()
         binding.downloadButton.downloadButton.isVisible = !manga.isLocal() && !isLocked
         localSource = manga.isLocal()
-        binding.translationButton.isVisible =
-            adapter.delegate.showChapterTranslationButton() && isNovel && !isLocked
+        binding.translationButton.isVisible = content.showTranslation && isNovel && !isLocked
         bindTranslationButton(item)
 
         ChapterUtil.setTextViewForChapter(binding.chapterTitle, item, hideStatus = isLocked)
@@ -107,7 +141,7 @@ class ChapterHolder(
         )
         binding.chapterScanlator.text = statuses.joinToString(" • ")
 
-        val isSelected = adapter.isSelected(flexibleAdapterPosition)
+        val isSelected = content.selected
         // Data-drive the row highlight so it survives notifyDataSetChanged instead of relying on
         // imperative toggleActivation push-only updates that desync from the selection.
         itemView.isActivated = isSelected
@@ -116,7 +150,7 @@ class ChapterHolder(
             else -> item.status
         }
 
-        notifyStatus(status, item.isLocked, item.progress)
+        notifyStatus(status, item.isLocked, progress)
         resetFrontView()
         if (flexibleAdapterPosition == 1) {
             if (!adapter.hasShownSwipeTut.get()) showSlideAnimation()
@@ -124,24 +158,28 @@ class ChapterHolder(
     }
 
     private fun showSlideAnimation() {
+        if (swipeTutorialAnimator?.isRunning == true) return
         val slide = 100f.dpToPx
         val animatorSet = AnimatorSet()
         val anim1 = slideAnimation(0f, slide)
         anim1.startDelay = 1000
         anim1.doOnStart { binding.startView.isVisible = true }
-        val anim2 = slideAnimation(slide, -slide)
-        anim2.duration = 600
-        anim2.startDelay = 500
-        anim2.addUpdateListener {
-            if (binding.startView.isVisible && binding.frontView.translationX <= 0) {
+        val anim2 = slideAnimation(slide, 0f).apply { startDelay = 500 }
+        val anim3 = slideAnimation(0f, -slide).apply {
+            doOnStart {
                 binding.startView.isVisible = false
                 binding.endView.isVisible = true
             }
         }
-        val anim3 = slideAnimation(-slide, 0f)
-        anim3.startDelay = 750
-        animatorSet.playSequentially(anim1, anim2, anim3)
-        animatorSet.doOnEnd { adapter.hasShownSwipeTut.set(true) }
+        val anim4 = slideAnimation(-slide, 0f).apply { startDelay = 750 }
+        var cancelled = false
+        animatorSet.playSequentially(anim1, anim2, anim3, anim4)
+        animatorSet.doOnCancel { cancelled = true }
+        animatorSet.doOnEnd {
+            if (!cancelled) adapter.hasShownSwipeTut.set(true)
+            swipeTutorialAnimator = null
+        }
+        swipeTutorialAnimator = animatorSet
         animatorSet.start()
     }
 
@@ -173,6 +211,9 @@ class ChapterHolder(
 
     fun notifyStatus(status: Download.State, locked: Boolean, progress: Int, animated: Boolean = false): Unit = with(binding.downloadButton.downloadButton) {
         val delegateAccent = adapter.delegate.accentColor()
+        val visual = StatusVisual(status, locked, progress, delegateAccent, localSource, animated)
+        if (visual == statusVisual) return@with
+        statusVisual = visual
         if (delegateAccent != null) {
             binding.startView.backgroundTintList = ColorStateList.valueOf(delegateAccent)
             binding.bookmark.imageTintList = ColorStateList.valueOf(
@@ -199,6 +240,17 @@ class ChapterHolder(
         }
         isVisible = !localSource
         setDownloadStatus(status, progress, animated)
+    }
+
+    fun recycle() {
+        swipeTutorialAnimator?.cancel()
+        swipeTutorialAnimator = null
+        binding.frontView.animate().cancel()
+        binding.frontView.translationX = 0f
+        binding.startView.isVisible = false
+        binding.endView.isVisible = false
+        boundContent = null
+        statusVisual = null
     }
 
     private fun bindTranslationButton(item: ChapterItem) {
