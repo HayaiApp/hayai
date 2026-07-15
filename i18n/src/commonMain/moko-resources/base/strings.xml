@@ -597,6 +597,14 @@
     <string name="select_ending_chapter">Select ending chapter</string>
     <string name="search_chapters">Search chapters</string>
     <string name="search_tracking">Search tracking</string>
+    <string name="tracking_sheet_summary">Sync your reading progress with your services</string>
+    <string name="tracker_searching_service">Searching %1$s…</string>
+    <string name="tracker_search_empty">No matches in %1$s for “%2$s”</string>
+    <string name="tracker_search_failed">Couldn’t search %1$s. Check your connection and try again.</string>
+    <string name="tracker_session_expired">Your %1$s session has expired. Sign in again to keep tracking.</string>
+    <string name="tracker_search_enter_title">Enter a title to search</string>
+    <string name="find_tracker_entry">Find an entry</string>
+    <string name="find_tracker_entry_on">Find an entry on %1$s</string>
     <string name="custom_range">Custom range</string>
     <string name="all_chapters">All chapters</string>
     <string name="all_unread_chapters">All unread chapters</string>

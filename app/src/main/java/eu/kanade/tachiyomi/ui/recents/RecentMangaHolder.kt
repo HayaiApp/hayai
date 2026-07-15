@@ -355,7 +355,7 @@ class RecentMangaHolder(
         // Animator, and AnimatorInflater throws "Animators may only be run on Looper
         // threads" off the main thread — the row would silently fail to render, making
         // Recents look empty after a tab swap. RecyclerView pools these holders across
-        // every Recents re-entry (persistentRecentsPool), so the inflate cost is paid
+        // every Recents re-entry while its persistent root view remains alive, so the inflate cost is paid
         // once on first bind and never again.
         val layoutInflater = LayoutInflater.from(context)
         for (offset in 0 until deficit) {

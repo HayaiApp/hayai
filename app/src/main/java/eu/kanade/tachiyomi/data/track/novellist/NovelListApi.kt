@@ -226,7 +226,7 @@ class NovelListApi(
             }
         } catch (e: Exception) {
             Logger.e(e) { "NovelList: search failed" }
-            emptyList()
+            throw e
         }
     }
 

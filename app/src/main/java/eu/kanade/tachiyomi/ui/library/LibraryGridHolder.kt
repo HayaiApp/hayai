@@ -45,6 +45,21 @@ class LibraryGridHolder(
 ) : LibraryHolder(view, adapter) {
 
     private val binding = MangaGridItemBinding.bind(view)
+    private var titleLayoutTask: Runnable? = null
+    private var boundSignature: Int? = null
+    private var boundCover: CoverContent? = null
+    private var appliedOutline = adapter.showOutline
+    private var appliedRatioLayout: RatioLayout? = null
+
+    private data class CoverContent(
+        val mangaId: Long?,
+        val sourceId: Long,
+        val url: String?,
+        val lastModified: Long,
+        val inLibrary: Boolean,
+    )
+
+    private data class RatioLayout(val ratio: Float?, val itemWidth: Int)
     init {
         binding.playLayout.setOnClickListener { playButtonClicked() }
         binding.playLayout.setOnLongClickListener { itemView.performLongClick() }
@@ -69,9 +84,16 @@ class LibraryGridHolder(
      */
     override fun onSetValues(item: LibraryItem) {
         if (item !is LibraryMangaItem) throw IllegalStateException("Only LibraryMangaItem can use grid holder")
-        // Update the title and subtitle of the manga.
-        setCards(adapter.showOutline, binding.card, binding.unreadDownloadBadge.root)
         binding.playButton.transitionName = "library chapter $bindingAdapterPosition transition"
+        val signature = item.bindingContentSignature()
+        if (signature == boundSignature && appliedOutline == adapter.showOutline) return
+        boundSignature = signature
+
+        // Update the title and subtitle of the manga.
+        if (appliedOutline != adapter.showOutline) {
+            appliedOutline = adapter.showOutline
+            setCards(appliedOutline, binding.card, binding.unreadDownloadBadge.root)
+        }
         binding.constraintLayout.isVisible = item.manga.manga.id != Long.MIN_VALUE
         binding.title.text = item.manga.manga.title.highlightText(item.filter, color)
         binding.behindTitle.text = item.manga.manga.title
@@ -107,21 +129,23 @@ class LibraryGridHolder(
             }
             )?.toString()?.highlightText(item.filter, color)
 
-        binding.title.post {
+        titleLayoutTask?.let(binding.title::removeCallbacks)
+        val layoutTask = Runnable {
             val hasAuthorInFilter =
                 item.filter.isNotBlank() && authorArtist.contains(item.filter, true)
             binding.subtitle.isVisible =
                 subtitle.isNotBlank() && (binding.title.lineCount <= 1 || hasAuthorInFilter || item.manga.manga.isNovel())
             binding.title.maxLines = if (hasAuthorInFilter) 1 else 2
         }
+        titleLayoutTask = layoutTask
+        binding.title.post(layoutTask)
 
         setUnreadBadge(binding.unreadDownloadBadge.badgeView, item)
         setReadingButton(item)
         setSelected(adapter.isSelected(flexibleAdapterPosition))
 
         // Update the cover.
-        binding.coverThumbnail.dispose()
-        setCover(item.manga.manga)
+        setCoverIfChanged(item.manga.manga)
     }
 
     override fun toggleActivation() {
@@ -142,8 +166,18 @@ class LibraryGridHolder(
         }
     }
 
-    private fun setCover(manga: Manga) {
+    private fun setCoverIfChanged(manga: Manga) {
+        val cover = CoverContent(
+            mangaId = manga.id,
+            sourceId = manga.source,
+            url = manga.thumbnail_url,
+            lastModified = manga.cover_last_modified,
+            inLibrary = manga.favorite,
+        )
+        if (cover == boundCover) return
+        boundCover = cover
         if ((adapter.recyclerView.context as? Activity)?.isDestroyed == true) return
+        binding.coverThumbnail.dispose()
         binding.coverThumbnail.loadManga(manga) {
             val hasRatio = binding.coverThumbnail.layoutParams.height != ViewGroup.LayoutParams.WRAP_CONTENT
             if (!fixedSize && !hasRatio) {
@@ -160,7 +194,22 @@ class LibraryGridHolder(
     }
 
     fun setFreeformCoverRatio(manga: Manga, parent: AutofitRecyclerView? = null) {
+        val ratioLayout = RatioLayout(
+            ratio = MangaCoverMetadata.getRatio(manga),
+            itemWidth = parent?.itemWidth ?: binding.root.width,
+        )
+        if (ratioLayout == appliedRatioLayout) return
+        appliedRatioLayout = ratioLayout
         binding.setFreeformCoverRatio(manga, parent)
+    }
+
+    override fun recycle() {
+        titleLayoutTask?.let(binding.title::removeCallbacks)
+        titleLayoutTask = null
+        binding.coverThumbnail.dispose()
+        boundSignature = null
+        boundCover = null
+        appliedRatioLayout = null
     }
 
     private fun playButtonClicked() {

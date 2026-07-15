@@ -12,6 +12,7 @@ import yokai.util.lang.getString
 import dev.icerock.moko.resources.compose.stringResource
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.LocalSource
+import hayai.novel.source.NovelSource
 import yokai.domain.ui.UiPreferences
 
 /**
@@ -69,6 +70,28 @@ class SourceItem(val source: CatalogueSource, header: LangItem? = null, val isPi
         var result = source.id.hashCode()
         result = 31 * result + (header?.hashCode() ?: 0)
         result = 31 * result + isPinned.hashCode()
+        return result
+    }
+
+    /** Complete state consumed by [SourceHolder], separate from list-item identity. */
+    internal fun bindingContentSignature(): Int {
+        var result = getLayoutRes()
+        fun include(value: Any?) {
+            result = 31 * result + (value?.hashCode() ?: 0)
+        }
+        include(source::class)
+        include(source.id)
+        include(source.name)
+        include(source.toString())
+        include(source.lang)
+        include(source.supportsLatest)
+        include(header?.code)
+        include(isPinned)
+        if (source is NovelSource) {
+            include(source.iconFile?.path)
+            include(source.iconFile?.lastModified())
+            include(source.iconUrl)
+        }
         return result
     }
 }

@@ -50,6 +50,9 @@ class SourcePresenter(
     var lastUsedJob: Job? = null
 
     fun onCreate() {
+        // SourceHolder.icon() falls back to PackageManager.loadIcon(), a Binder call. Warm
+        // ExtensionManager's process cache from IO before the Browse rows reach first bind.
+        extensionManager.preloadInstalledIcons()
         if (lastSources != null) {
             if (sourceItems.isEmpty()) {
                 sourceItems = lastSources ?: emptyList()

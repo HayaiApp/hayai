@@ -243,6 +243,8 @@ open class BrowseSourceController(bundle: Bundle) :
     }
 
     override fun onDestroyView(view: View) {
+        recycler?.adapter = null
+        recycler?.recycledViewPool?.clear()
         adapter = null
         snack = null
         recycler = null
@@ -259,6 +261,7 @@ open class BrowseSourceController(bundle: Bundle) :
                 ?: (oldRecycler.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
             oldOffset = oldRecycler.layoutManager?.findViewByPosition(oldPosition)?.y?.minus(oldRecycler.paddingTop) ?: 0f
             oldRecycler.adapter = null
+            oldRecycler.recycledViewPool.clear()
 
             binding.catalogueView.removeView(oldRecycler)
         }

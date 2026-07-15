@@ -18,7 +18,6 @@ import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.icon
 import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
-import eu.kanade.tachiyomi.ui.library.LibraryHeaderItem
 import eu.kanade.tachiyomi.util.view.setText
 import hayai.novel.source.NovelSource
 import yokai.i18n.MR
@@ -59,9 +58,6 @@ class RecentMangaHeaderItem(
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (other is LibraryHeaderItem) {
-            return recentsType == recentsType
-        }
         if (other is RecentMangaHeaderItem) {
             // Source headers are distinguished by the source id so the same
             // source under History vs Updates collapses to one header per tab,
@@ -83,6 +79,13 @@ class RecentMangaHeaderItem(
         var result = recentsType.hashCode()
         if (sourceId != null) result = 31 * result + sourceId.hashCode()
         return result
+    }
+
+    override fun shouldNotifyChange(newItem: IFlexible<*>): Boolean {
+        val other = newItem as? RecentMangaHeaderItem ?: return true
+        return recentsType != other.recentsType ||
+            sourceId != other.sourceId ||
+            sourceName != other.sourceName
     }
 
     class Holder(

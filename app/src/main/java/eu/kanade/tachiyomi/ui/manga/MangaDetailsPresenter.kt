@@ -158,7 +158,11 @@ class MangaDetailsPresenter(
     var isLoading = false
     var scrollType = 0
 
-    private val loggedServices by lazy { get<TrackManager>().services.filter { it.isLogged } }
+    private val trackManager by lazy { get<TrackManager>() }
+    private val loggedServices
+        get() = trackManager.services.filter { it.isLogged }
+
+    private var trackSearchJob: Job? = null
     private var tracks = emptyList<Track>()
 
     var trackList: List<TrackItem> = emptyList()
@@ -1160,18 +1164,28 @@ class MangaDetailsPresenter(
         }
     }
 
-    fun trackSearch(query: String, service: TrackService) {
-        if (view?.isNotOnline() == false) {
-            presenterScope.launch(Dispatchers.IO) {
-                val results = try {
-                    service.search(query)
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) { view?.trackSearchError(e) }
-                    return@launch
-                }
-                withContext(Dispatchers.Main) { view?.onTrackSearchResults(results) }
+    fun trackSearch(query: String, service: TrackService): Boolean {
+        val currentView = view ?: return false
+        if (currentView.isNotOnline(showSnackbar = false)) return false
+
+        trackSearchJob?.cancel()
+        trackSearchJob = presenterScope.launch(Dispatchers.IO) {
+            val results = try {
+                service.search(query)
+            } catch (_: CancellationException) {
+                return@launch
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { view?.trackSearchError(e) }
+                return@launch
             }
+            withContext(Dispatchers.Main) { view?.onTrackSearchResults(results) }
         }
+        return true
+    }
+
+    fun cancelTrackSearch() {
+        trackSearchJob?.cancel()
+        trackSearchJob = null
     }
 
     fun registerTracking(item: Track?, service: TrackService) {

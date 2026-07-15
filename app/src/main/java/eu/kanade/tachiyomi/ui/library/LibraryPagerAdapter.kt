@@ -55,6 +55,7 @@ class LibraryPagerAdapter(
     }
 
     override fun destroyView(container: ViewGroup, position: Int, view: View) {
+        (view as? RecyclerView)?.adapter = null
         super.destroyView(container, position, view)
         pageAdapters.remove(position)
         pageRecyclers.remove(position)

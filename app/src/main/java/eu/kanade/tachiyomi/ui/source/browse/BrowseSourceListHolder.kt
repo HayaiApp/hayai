@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.source.browse
 
+import android.app.Activity
 import android.view.View
+import android.widget.ImageView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import coil3.dispose
@@ -33,6 +35,22 @@ class BrowseSourceListHolder(
     BrowseSourceHolder(view, adapter) {
 
     private val binding = MangaListItemBinding.bind(view)
+    private var boundContent: BindingContent? = null
+    private var boundCover: CoverContent? = null
+
+    private data class BindingContent(
+        val title: String,
+        val favorite: Boolean,
+        val subtitle: String?,
+    )
+
+    private data class CoverContent(
+        val mangaId: Long?,
+        val sourceId: Long,
+        val url: String?,
+        val lastModified: Long,
+        val inLibrary: Boolean,
+    )
 
     init {
         setCards(showOutline, binding.card, binding.unreadDownloadBadge.badgeView)
@@ -45,16 +63,20 @@ class BrowseSourceListHolder(
      * @param manga the manga to bind.
      */
     override fun onSetValues(manga: Manga) {
-        binding.title.text = manga.title
-        binding.inLibraryBadge.badge.isVisible = manga.favorite
-
         val subtitleText = when {
             manga.isNovel() -> view.context.getString(MR.strings.novel)
             manga.isEhBasedManga() -> ehCategoryLabel(manga)
             else -> null
         }
-        binding.subtitle.isVisible = !subtitleText.isNullOrEmpty()
-        binding.subtitle.text = subtitleText
+        val content = BindingContent(manga.title, manga.favorite, subtitleText)
+        if (content != boundContent) {
+            boundContent = content
+            binding.title.text = content.title
+            binding.inLibraryBadge.badge.isVisible = content.favorite
+            binding.subtitle.isVisible = !content.subtitle.isNullOrEmpty()
+            binding.subtitle.text = content.subtitle
+            binding.coverThumbnail.alpha = if (content.favorite) 0.34f else 1.0f
+        }
 
         setImage(manga)
     }
@@ -66,13 +88,28 @@ class BrowseSourceListHolder(
     }
 
     override fun setImage(manga: Manga) {
-        // Update the cover.
-        if (manga.thumbnail_url == null) {
-            binding.coverThumbnail.dispose()
-        } else {
-            manga.id ?: return
+        val cover = CoverContent(
+            mangaId = manga.id,
+            sourceId = manga.source,
+            url = manga.thumbnail_url,
+            lastModified = manga.cover_last_modified,
+            inLibrary = manga.favorite,
+        )
+        if (cover == boundCover) return
+        boundCover = cover
+        if ((view.context as? Activity)?.isDestroyed == true) return
+
+        binding.coverThumbnail.dispose()
+        binding.coverThumbnail.scaleType = ImageView.ScaleType.CENTER_CROP
+        binding.coverThumbnail.setImageDrawable(null)
+        if (!cover.url.isNullOrEmpty() && cover.mangaId != null) {
             binding.coverThumbnail.loadManga(manga.cover())
-            binding.coverThumbnail.alpha = if (manga.favorite) 0.34f else 1.0f
         }
+    }
+
+    override fun recycle() {
+        binding.coverThumbnail.dispose()
+        boundContent = null
+        boundCover = null
     }
 }

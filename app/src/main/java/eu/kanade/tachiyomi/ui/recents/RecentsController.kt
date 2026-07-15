@@ -185,6 +185,7 @@ class RecentsController(bundle: Bundle? = null) :
 
     /** Adapter containing the recent manga. */
     private lateinit var adapter: RecentMangaAdapter
+    private var recentsRecyclerPool: RecyclerView.RecycledViewPool? = null
     var displaySheet: TabbedRecentsOptionsSheet? = null
 
     private var progressItem: ProgressItem? = null
@@ -253,12 +254,15 @@ class RecentsController(bundle: Bundle? = null) :
         binding.recycler.setHasFixedSize(true)
         binding.recycler.setItemViewCacheSize(8)
         binding.recycler.itemAnimator = null
-        // Process-static pool so recent_manga_item holders are reused on every Recents
-        // re-entry. Without it, root-nav back to Recents re-inflates rows + their
-        // sub-chapter children (the dominant frame cost in perfetto).
-        binding.recycler.setRecycledViewPool(persistentRecentsPool)
-        persistentRecentsPool.setMaxRecycledViews(R.layout.recent_manga_item, 30)
-        persistentRecentsPool.setMaxRecycledViews(R.layout.recent_chapters_section_item, 8)
+        // Persistent root tabs keep this view/pool hot during normal swaps. Scope the pool
+        // to the view because RecentMangaHolder captures this newly-created adapter; a static
+        // pool could hand the new RecyclerView a holder still calling the destroyed controller.
+        val recyclerPool = RecyclerView.RecycledViewPool().also {
+            it.setMaxRecycledViews(R.layout.recent_manga_item, 30)
+            it.setMaxRecycledViews(R.layout.recent_chapters_section_item, 8)
+        }
+        recentsRecyclerPool = recyclerPool
+        binding.recycler.setRecycledViewPool(recyclerPool)
         binding.recycler.addItemDecoration(RecentMangaDivider(view.context))
         binding.recycler.onAnimationsFinished {
             (activity as? MainActivity)?.releaseSplash()
@@ -351,7 +355,7 @@ class RecentsController(bundle: Bundle? = null) :
         }
 
         if (presenter.recentItems.isNotEmpty()) {
-            adapter.updateDataSet(presenter.recentItems)
+            adapter.updateDataSetIfChanged(presenter.recentItems)
         } else {
             binding.recentsFrameLayout.alpha = 0f
         }
@@ -650,12 +654,15 @@ class RecentsController(bundle: Bundle? = null) :
     }
 
     override fun onDestroyView(view: View) {
-        super.onDestroyView(view)
         // Drop the action mode before the underlying view is torn down so we
         // don't leak the activity reference.
         destroyActionModeIfNeeded()
         displaySheet?.dismissSafely()
         displaySheet = null
+        binding.recycler.adapter = null
+        recentsRecyclerPool?.clear()
+        recentsRecyclerPool = null
+        super.onDestroyView(view)
     }
 
     fun refresh() = presenter.getRecents()
@@ -672,7 +679,7 @@ class RecentsController(bundle: Bundle? = null) :
         binding.progress.isVisible = false
         binding.recentsFrameLayout.alpha = 1f
         adapter.removeAllScrollableHeaders()
-        adapter.updateDataSet(recents)
+        adapter.updateDataSetIfChanged(recents)
         adapter.onLoadMoreComplete(null)
         if (isControllerVisible) {
             appBar()?.lockYPos = false
@@ -1458,9 +1465,4 @@ class RecentsController(bundle: Bundle? = null) :
     }
     // endregion
 
-    companion object {
-        // Shared across RecentsController lifetimes so recent_manga_item holders are
-        // reused on every Recents re-entry. Survives controller destruction.
-        private val persistentRecentsPool = androidx.recyclerview.widget.RecyclerView.RecycledViewPool()
-    }
 }

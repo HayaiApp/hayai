@@ -60,6 +60,8 @@ class TrackSearchItem(val trackSearch: TrackSearch) : AbstractItem<TrackSearchIt
                 binding.trackSearchStatus.isVisible = false
                 binding.trackSearchStatusResult.isVisible = false
             } else {
+                binding.trackSearchStatus.isVisible = true
+                binding.trackSearchStatusResult.isVisible = true
                 binding.trackSearchStatusResult.text = track.publishing_status.replaceFirstChar {
                     it.titlecase(Locale.getDefault())
                 }
@@ -69,6 +71,8 @@ class TrackSearchItem(val trackSearch: TrackSearch) : AbstractItem<TrackSearchIt
                 binding.trackSearchType.isVisible = false
                 binding.trackSearchTypeResult.isVisible = false
             } else {
+                binding.trackSearchType.isVisible = true
+                binding.trackSearchTypeResult.isVisible = true
                 binding.trackSearchTypeResult.text = track.publishing_type.replaceFirstChar {
                     it.titlecase(Locale.getDefault())
                 }
@@ -78,6 +82,8 @@ class TrackSearchItem(val trackSearch: TrackSearch) : AbstractItem<TrackSearchIt
                 binding.trackSearchStart.isVisible = false
                 binding.trackSearchStartResult.isVisible = false
             } else {
+                binding.trackSearchStart.isVisible = true
+                binding.trackSearchStartResult.isVisible = true
                 binding.trackSearchStartResult.text = track.start_date
             }
         }

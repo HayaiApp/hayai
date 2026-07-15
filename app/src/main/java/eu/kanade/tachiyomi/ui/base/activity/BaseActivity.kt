@@ -1,13 +1,11 @@
 package eu.kanade.tachiyomi.ui.base.activity
 
-import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.res.Resources
 import android.os.Build
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.animation.doOnEnd
 import androidx.core.splashscreen.SplashScreen
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
@@ -162,29 +160,26 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
                 // For some reason the SplashScreen applies (incorrect) Y translation to the iconView
                 splashProvider.iconView.translationY = 0F
 
-                val activityAnim = ValueAnimator.ofFloat(1F, 0F).apply {
-                    interpolator = LinearOutSlowInInterpolator()
-                    duration = SPLASH_EXIT_ANIM_DURATION
-                    addUpdateListener { va ->
-                        val value = va.animatedValue as Float
-                        root.translationY = value * 16.dpToPx
-                    }
-                }
+                if (ReducedMotion.isEnabled()) {
+                    root.translationY = 0f
+                    splashProvider.remove()
+                } else {
+                    root.translationY = 16f.dpToPx
+                    root.animate()
+                        .translationY(0f)
+                        .setInterpolator(LinearOutSlowInInterpolator())
+                        .setDuration(SPLASH_EXIT_ANIM_DURATION)
+                        .withLayer()
+                        .start()
 
-                val splashAnim = ValueAnimator.ofFloat(1F, 0F).apply {
-                    interpolator = FastOutSlowInInterpolator()
-                    duration = SPLASH_EXIT_ANIM_DURATION
-                    addUpdateListener { va ->
-                        val value = va.animatedValue as Float
-                        splashProvider.view.alpha = value
-                    }
-                    doOnEnd {
-                        splashProvider.remove()
-                    }
+                    splashProvider.view.animate()
+                        .alpha(0f)
+                        .setInterpolator(FastOutSlowInInterpolator())
+                        .setDuration(SPLASH_EXIT_ANIM_DURATION)
+                        .withLayer()
+                        .withEndAction(splashProvider::remove)
+                        .start()
                 }
-
-                activityAnim.start()
-                splashAnim.start()
             }
         }
     }

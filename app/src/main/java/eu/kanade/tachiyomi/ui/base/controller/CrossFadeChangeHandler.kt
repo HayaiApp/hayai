@@ -13,6 +13,7 @@ import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
 import com.bluelinelabs.conductor.ControllerChangeHandler
 import com.bluelinelabs.conductor.changehandler.AnimatorChangeHandler
 import eu.kanade.tachiyomi.ui.main.MainActivity
+import kotlin.math.abs
 import kotlin.math.roundToLong
 
 class CrossFadeChangeHandler : AnimatorChangeHandler {
@@ -40,12 +41,13 @@ class CrossFadeChangeHandler : AnimatorChangeHandler {
             animatorSet.play(ObjectAnimator.ofFloat(from, View.ALPHA, 0f))
         }
         if (isPush) {
+            val direction = if ((to ?: from)?.layoutDirection == View.LAYOUT_DIRECTION_RTL) -1f else 1f
             if (from != null) {
                 animatorSet.play(
                     ObjectAnimator.ofFloat(
                         from,
                         View.TRANSLATION_X,
-                        -from.width.toFloat() * 0.2f,
+                        -direction * from.width.toFloat() * 0.2f,
                     ),
                 )
             }
@@ -54,30 +56,34 @@ class CrossFadeChangeHandler : AnimatorChangeHandler {
                     ObjectAnimator.ofFloat(
                         to,
                         View.TRANSLATION_X,
-                        to.width.toFloat() * 0.2f,
+                        direction * to.width.toFloat() * 0.2f,
                         0f,
                     ),
                 )
             }
         } else {
+            // Continue in the direction of the predictive-back edge. A right-edge gesture
+            // leaves a negative translation; default to the conventional rightward pop when
+            // the transition was triggered by a button/system callback without progress.
+            val direction = if ((from?.translationX ?: 0f) < 0f) -1f else 1f
             if (from != null) {
                 animatorSet.play(
                     ObjectAnimator.ofFloat(
                         from,
                         View.TRANSLATION_X,
-                        from.width.toFloat() * 0.2f,
+                        direction * from.width.toFloat() * 0.2f,
                     ),
                 )
             }
             if (to != null) {
                 // Allow this to have a nice transition when coming off an aborted push animation or
                 // from back gesture
-                val fromLeft = from?.translationX ?: 0f
+                val fromTranslation = from?.translationX ?: 0f
                 animatorSet.play(
                     ObjectAnimator.ofFloat(
                         to,
                         View.TRANSLATION_X,
-                        fromLeft - to.width * 0.2f,
+                        fromTranslation - direction * to.width * 0.2f,
                         0f,
                     ),
                 )
@@ -88,16 +94,21 @@ class CrossFadeChangeHandler : AnimatorChangeHandler {
         } else {
             try {
                 from?.let {
-                    val startX = from.width.toFloat() * 0.2f
-                    ((startX - it.x) / startX) * 150f
+                    val target = (if (it.translationX < 0f) -1f else 1f) * from.width.toFloat() * 0.2f
+                    if (target == 0f) {
+                        150f
+                    } else {
+                        (abs(target - it.translationX) / abs(target) * 150f)
+                            .coerceIn(1f, 150f)
+                    }
                 }?.roundToLong()
             } catch (e: IllegalArgumentException) {
                 null
             } ?: 150
         }
-        animatorSet.doOnCancel { to?.x = 0f }
-        animatorSet.doOnEnd { to?.x = 0f }
-        if (!isPush && from?.x != null && from.x != 0f &&
+        animatorSet.doOnCancel { to?.translationX = 0f }
+        animatorSet.doOnEnd { to?.translationX = 0f }
+        if (!isPush && from != null && from.translationX != 0f &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
         ) {
             animatorSet.interpolator = if (MainActivity.backVelocity != 0f) {

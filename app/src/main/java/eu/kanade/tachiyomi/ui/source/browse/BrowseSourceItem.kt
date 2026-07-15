@@ -56,6 +56,15 @@ class BrowseSourceItem(
         holder.onSetValues(manga)
     }
 
+    override fun unbindViewHolder(
+        adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>?,
+        holder: BrowseSourceHolder?,
+        position: Int,
+    ) {
+        holder?.recycle()
+        super.unbindViewHolder(adapter, holder, position)
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other is BrowseSourceItem) {

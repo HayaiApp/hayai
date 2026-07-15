@@ -2,17 +2,16 @@ package eu.kanade.tachiyomi.ui.manga.track
 
 import android.annotation.SuppressLint
 import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
 import android.view.View
-import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
 import androidx.core.widget.TextViewCompat
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.TrackItemBinding
 import eu.kanade.tachiyomi.ui.base.holder.BaseViewHolder
+import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.getResourceColor
 import eu.kanade.tachiyomi.util.view.setText
 import java.text.DateFormat
@@ -50,13 +49,14 @@ class TrackHolder(view: View, adapter: TrackAdapter) : BaseViewHolder(view) {
     fun bind(item: TrackItem) {
         val track = item.track
         binding.trackLogo.setImageResource(item.service.getLogo())
-        val bgColor = ColorUtils.setAlphaComponent(item.service.getLogoColor(), 255)
-        binding.logoContainer.setBackgroundColor(bgColor)
-        binding.logoContainer.updateLayoutParams<ConstraintLayout.LayoutParams> {
-            bottomToBottom = if (track != null) binding.divider.id else binding.trackDetails.id
+        binding.logoContainer.background = GradientDrawable().apply {
+            cornerRadius = 12.dpToPx.toFloat()
+            setColor(item.service.getLogoColor())
         }
         val serviceName = binding.trackLogo.context.getString(item.service.nameRes())
         binding.trackLogo.contentDescription = serviceName
+        binding.trackServiceName.text = serviceName
+        binding.addTracking.text = binding.root.context.getString(MR.strings.find_tracker_entry_on, serviceName)
         binding.trackGroup.isVisible = track != null
         binding.addTracking.isVisible = track == null
         if (track != null) {

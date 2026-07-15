@@ -49,6 +49,7 @@ import eu.kanade.tachiyomi.data.coil.MangaKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.library.LibraryPresenter
@@ -80,7 +81,6 @@ import org.koin.core.component.get
 import org.koin.core.logger.Level
 import yokai.core.CrashlyticsLogWriter
 import yokai.core.RollingUniFileLogWriter
-import yokai.presentation.theme.ReducedMotion
 // EXH -->
 import exh.di.exhModule
 // EXH <--
@@ -155,6 +155,13 @@ open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.F
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
         val scope = ProcessLifecycleOwner.get().lifecycleScope
 
+        // Source icons otherwise perform PackageManager.loadIcon() Binder calls from the first
+        // visible Library/Recents/Browse bind. Resolve the shared extension cache from IO once
+        // per process; screen-level calls remain harmless idempotent fallbacks.
+        scope.launchIO {
+            GlobalContext.get().get<ExtensionManager>().preloadInstalledIcons()
+        }
+
         // ── 4. One-shot side effects ──────────────────────────────────────────────────────
         // WebView init transiently rewrites the application context's package identity to
         // the WebView provider (com.android.chrome). Any system-service call from another
@@ -224,12 +231,6 @@ open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.F
 
         preferences.nightMode().changes()
             .onEach { AppCompatDelegate.setDefaultNightMode(it) }
-            .launchIn(scope)
-
-        // Apply the global animator duration scale immediately, then keep it in sync.
-        ReducedMotion.applyGlobalAnimatorScale(ReducedMotion.isEnabled())
-        ReducedMotion.changes()
-            .onEach { ReducedMotion.applyGlobalAnimatorScale(it) }
             .launchIn(scope)
 
         basePreferences.hardwareBitmapThreshold().changes()

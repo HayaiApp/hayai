@@ -24,6 +24,15 @@ class LibraryBadge @JvmOverloads constructor(context: Context, attrs: AttributeS
     MaterialCardView(context, attrs) {
 
     private lateinit var binding: UnreadDownloadBadgeBinding
+    private var unreadDownloadContent: UnreadDownloadContent? = null
+
+    private data class UnreadDownloadContent(
+        val unread: Int,
+        val downloads: Int,
+        val showTotalChapters: Boolean,
+        val lang: String?,
+        val changeShape: Boolean,
+    )
 
     override fun onFinishInflate() {
         super.onFinishInflate()
@@ -39,6 +48,10 @@ class LibraryBadge @JvmOverloads constructor(context: Context, attrs: AttributeS
         lang: String?,
         changeShape: Boolean,
     ) {
+        val content = UnreadDownloadContent(unread, downloads, showTotalChapters, lang, changeShape)
+        if (content == unreadDownloadContent) return
+        unreadDownloadContent = content
+
         // Update the unread count and its visibility.
 
         val unreadBadgeBackground = if (showTotalChapters) {
@@ -171,6 +184,7 @@ class LibraryBadge @JvmOverloads constructor(context: Context, attrs: AttributeS
     }
 
     fun setInLibrary(inLibrary: Boolean) {
+        unreadDownloadContent = null
         this.isVisible = inLibrary
         binding.unreadAngle.isVisible = false
         binding.unreadText.updatePaddingRelative(start = 5.dpToPx)

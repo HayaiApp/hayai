@@ -152,6 +152,9 @@ class BrowseController :
      * Adapter containing sources.
      */
     private var adapter: SourceAdapter? = null
+    private var sourceRecyclerPool: RecyclerView.RecycledViewPool? = null
+    private var submittedLastUsedSignature: Int? = null
+    private var hasSubmittedLastUsed = false
 
     var extQuery = ""
         private set
@@ -183,18 +186,22 @@ class BrowseController :
         super.onViewCreated(view)
         val isReturning = adapter != null
         adapter = SourceAdapter(this)
+        submittedLastUsedSignature = null
+        hasSubmittedLastUsed = false
         // Create binding.sourceRecycler and set adapter.
         binding.sourceRecycler.layoutManager = LinearLayoutManagerAccurateOffset(view.context)
         binding.sourceRecycler.setHasFixedSize(true)
         binding.sourceRecycler.setItemViewCacheSize(8)
         binding.sourceRecycler.itemAnimator = null
-        // Use a process-static pool so holders survive Browse controller destruction;
-        // without it, every root-nav re-entry re-inflates the visible deficit (~12
-        // source_item rows × ~10ms = 120ms/frame). Default per-type cap of 5 was also
-        // too low for the typical visible row count.
-        binding.sourceRecycler.setRecycledViewPool(persistentSourcePool)
-        persistentSourcePool.setMaxRecycledViews(R.layout.source_item, 30)
-        persistentSourcePool.setMaxRecycledViews(R.layout.source_header_item, 8)
+        // The persistent Browse root keeps this pool across tab swaps. Scope it to the
+        // current view/adapter: SourceHolder captures SourceAdapter and its controller, so
+        // process-static reuse after recreation retained stale click targets and contexts.
+        val recyclerPool = RecyclerView.RecycledViewPool().also {
+            it.setMaxRecycledViews(R.layout.source_item, 30)
+            it.setMaxRecycledViews(R.layout.source_header_item, 8)
+        }
+        sourceRecyclerPool = recyclerPool
+        binding.sourceRecycler.setRecycledViewPool(recyclerPool)
 
         binding.sourceRecycler.adapter = adapter
         binding.sourceRecycler.onAnimationsFinished {
@@ -324,6 +331,12 @@ class BrowseController :
                         } else if (state == BottomSheetBehavior.STATE_EXPANDED && binding.bottomSheet.root.isExpanding) {
                             binding.bottomSheet.root.updatedNestedRecyclers()
                             binding.bottomSheet.root.isExpanding = false
+                        }
+                        if (state == BottomSheetBehavior.STATE_EXPANDED) {
+                            // The migration page is adjacent but invisible during first entry.
+                            // Build it after expansion settles so its rows never compete with
+                            // root navigation or the bottom-sheet transform.
+                            binding.bottomSheet.root.prepareMigrationPage()
                         }
 
                         binding.bottomSheet.root.apply {
@@ -656,6 +669,9 @@ class BrowseController :
     }
 
     override fun onDestroyView(view: View) {
+        binding.sourceRecycler.adapter = null
+        sourceRecyclerPool?.clear()
+        sourceRecyclerPool = null
         adapter = null
         // onDestroy is a no-op on the bottom sheet if onCreate never ran (presenter
         // wasn't attached), but we still call it for the normal post-init path.
@@ -767,7 +783,10 @@ class BrowseController :
             // already-initialised sheet we still need to reset it here.
             if (bottomSheetReady) binding.bottomSheet.root.canExpand = true
             setBottomPadding()
-            // Defer the migration refresh + menu update past the cross-fade settle
+            // Defer the menu update past the cross-fade settle. The sheet presenter's
+            // onCreate already performs firstTimeMigration(), so refreshing migrations on
+            // PUSH_ENTER duplicated the database query and full adapter submission. Returns
+            // still refresh inside the delayed !type.isPush branch below.
             // (TAB_SWAP_DURATION_MS in RootTabsController = 250ms). The postDelayed
             // is FIFO with [initBottomSheet]'s — both run on the view's main-looper
             // handler — and initBottomSheet was enqueued first from onViewCreated, so
@@ -775,9 +794,11 @@ class BrowseController :
             view?.postDelayed(POST_ENTRY_DEFER_MS) {
                 if (!isBindingInitialized) return@postDelayed
                 if (!bottomSheetReady) return@postDelayed
-                android.os.Trace.beginSection("Hayai/Browse.refreshMigrations")
-                binding.bottomSheet.root.presenter.refreshMigrations()
-                android.os.Trace.endSection()
+                if (!type.isPush) {
+                    android.os.Trace.beginSection("Hayai/Browse.refreshMigrations")
+                    binding.bottomSheet.root.presenter.refreshMigrations()
+                    android.os.Trace.endSection()
+                }
                 android.os.Trace.beginSection("Hayai/Browse.updateTitleAndMenu")
                 updateTitleAndMenu()
                 android.os.Trace.endSection()
@@ -921,7 +942,7 @@ class BrowseController :
      * Called to update adapter containing sources.
      */
     fun setSources(sources: List<IFlexible<*>>, lastUsed: SourceItem?) {
-        adapter?.updateDataSet(sources, false)
+        adapter?.updateDataSetIfChanged(sources, false)
         setLastUsedSource(lastUsed)
         if (isControllerVisible) {
             appBar()?.lockYPos = false
@@ -932,6 +953,10 @@ class BrowseController :
      * Called to set the last used catalogue at the top of the view.
      */
     fun setLastUsedSource(item: SourceItem?) {
+        val nextSignature = item?.bindingContentSignature()
+        if (hasSubmittedLastUsed && nextSignature == submittedLastUsedSignature) return
+        submittedLastUsedSignature = nextSignature
+        hasSubmittedLastUsed = true
         adapter?.removeAllScrollableHeaders()
         if (item != null) {
             adapter?.addScrollableHeader(item)
@@ -944,10 +969,6 @@ class BrowseController :
 
     companion object {
         const val HELP_URL = "https://mihon.app/docs/guides/source-migration"
-
-        // Shared across BrowseController lifetimes so source_item / header holders
-        // recycled on one entry are reused on the next; survives controller destruction.
-        private val persistentSourcePool = RecyclerView.RecycledViewPool()
 
         /**
          * Delay used to push non-essential first-entry work past the cross-fade settle

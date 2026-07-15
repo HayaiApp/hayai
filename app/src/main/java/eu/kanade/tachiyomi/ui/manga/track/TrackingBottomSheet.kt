@@ -26,6 +26,7 @@ import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
+import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.transition.TransitionManager
@@ -40,8 +41,10 @@ import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.databinding.TrackChaptersDialogBinding
 import eu.kanade.tachiyomi.databinding.TrackScoreDialogBinding
 import eu.kanade.tachiyomi.databinding.TrackingBottomSheetBinding
+import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsDivider
+import eu.kanade.tachiyomi.ui.setting.controllers.SettingsTrackingController
 import eu.kanade.tachiyomi.util.lang.indexesOf
 import eu.kanade.tachiyomi.util.system.addCheckBoxPrompt
 import eu.kanade.tachiyomi.util.system.dpToPx
@@ -62,7 +65,9 @@ import eu.kanade.tachiyomi.util.view.expand
 import eu.kanade.tachiyomi.util.view.setPositiveButton
 import eu.kanade.tachiyomi.util.view.setTitle
 import eu.kanade.tachiyomi.util.view.setTitleText
+import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import eu.kanade.tachiyomi.widget.E2EBottomSheetDialog
+import eu.kanade.tachiyomi.widget.EmptyView
 import java.text.DateFormat
 import java.util.Calendar
 import yokai.i18n.MR
@@ -83,6 +88,7 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
     private val searchAdapter = FastAdapter.with(searchItemAdapter)
     private var suggestedStartDate: Long? = null
     private var suggestedFinishDate: Long? = null
+    private var currentSearchQuery = ""
     private val dateFormat: DateFormat by lazy {
         presenter.preferences.dateFormat()
     }
@@ -114,8 +120,6 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
             onBackPressedDispatcher.onBackPressed()
         }
 
-        binding.trackSearchRecycler.adapter = adapter
-
         searchAdapter.onClickListener = { _, _, _, position ->
             trackItem(position)
             true
@@ -128,6 +132,10 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
 
         binding.textInputLayout.setEndIconOnClickListener {
             submitSearch()
+        }
+
+        binding.trackSearch.doAfterTextChanged {
+            binding.textInputLayout.error = null
         }
 
         binding.trackSearch.setOnEditorActionListener { _, actionId, keyEvent ->
@@ -271,26 +279,34 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
         val title = presenter.manga.title
         sheetBehavior.expand()
         sheetBehavior.isDraggable = false
-        search(title)
-        binding.trackSearch.setText(title, TextView.BufferType.EDITABLE)
+        binding.trackingHeader.isVisible = false
         binding.trackRecycler.isVisible = false
         binding.trackSearchConstraintLayout.isVisible = true
+        binding.trackSearch.setText(title, TextView.BufferType.EDITABLE)
+        search(title)
     }
 
     private fun hideSearchView() {
         startTransition()
+        presenter.cancelTrackSearch()
         searchItemAdapter.clear()
         searchAdapter.notifyAdapterDataSetChanged()
         sheetBehavior.isDraggable = true
+        binding.trackingHeader.isVisible = true
         binding.trackRecycler.isVisible = true
         binding.trackSearchConstraintLayout.isVisible = false
         searchingItem = null
+        currentSearchQuery = ""
         backCallback.isEnabled = false
     }
 
     private fun submitSearch() {
         val text = binding.trackSearch.text?.toString()?.trim().orEmpty()
-        if (text.isBlank()) return
+        if (text.isBlank()) {
+            binding.textInputLayout.error = activity.getString(MR.strings.tracker_search_enter_title)
+            binding.trackSearch.requestFocus()
+            return
+        }
         startTransition()
         val imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.hideSoftInputFromWindow(binding.trackSearch.windowToken, 0)
@@ -299,18 +315,35 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
     }
 
     private fun search(query: String) {
+        val item = searchingItem ?: return
+        currentSearchQuery = query
         startTransition()
-        binding.searchProgress.visibility = View.VISIBLE
-        binding.trackSearchRecycler.visibility = View.GONE
+        binding.textInputLayout.error = null
+        binding.textInputLayout.setEndIconVisible(false)
+        binding.searchProgress.isVisible = true
+        binding.searchStateMessage.text = activity.getString(
+            MR.strings.tracker_searching_service,
+            activity.getString(item.service.nameRes()),
+        )
+        binding.searchStateMessage.isVisible = true
+        binding.trackSearchRecycler.isVisible = false
         binding.searchEmptyView.hide()
-        val searchingItem = searchingItem ?: return
-        presenter.trackSearch(query, searchingItem.service)
+        searchItemAdapter.clear()
+        if (!presenter.trackSearch(query, item.service)) {
+            showSearchError(
+                message = activity.getString(MR.strings.no_network_connection),
+                showLogin = false,
+            )
+        }
     }
 
     fun onSearchResults(results: List<TrackSearch>) {
+        val item = searchingItem ?: return
         startTransition()
-        binding.searchProgress.visibility = View.GONE
-        binding.trackSearchRecycler.visibility = View.VISIBLE
+        binding.textInputLayout.setEndIconVisible(true)
+        binding.searchProgress.isVisible = false
+        binding.searchStateMessage.isVisible = false
+        binding.trackSearchRecycler.isVisible = true
         searchItemAdapter.set(
             results.map {
                 TrackSearchItem(it).apply {
@@ -321,27 +354,64 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
         if (results.isEmpty()) {
             binding.searchEmptyView.show(
                 Icons.Filled.SearchOff,
-                MR.strings.no_results_found,
+                activity.getString(
+                    MR.strings.tracker_search_empty,
+                    activity.getString(item.service.nameRes()),
+                    currentSearchQuery,
+                ),
+                listOf(EmptyView.Action(MR.strings.retry) { search(currentSearchQuery) }),
             )
         } else {
             binding.searchEmptyView.hide()
-            if (results.size == 1 && searchingItem?.track == null) {
-                trackItem(0)
-            }
         }
         binding.trackSearchRecycler.isVisible = !binding.searchEmptyView.isVisible
     }
 
     fun onSearchResultsError(error: Throwable) {
         Logger.e(error)
+        val service = searchingItem?.service ?: return
+        val showLogin = error.isAuthenticationError()
+        val message = if (showLogin) {
+            activity.getString(MR.strings.tracker_session_expired, activity.getString(service.nameRes()))
+        } else {
+            activity.getString(MR.strings.tracker_search_failed, activity.getString(service.nameRes()))
+        }
+        showSearchError(message, showLogin)
+    }
+
+    private fun showSearchError(message: String, showLogin: Boolean) {
         startTransition()
+        binding.textInputLayout.setEndIconVisible(true)
         binding.searchProgress.isVisible = false
+        binding.searchStateMessage.isVisible = false
         binding.trackSearchRecycler.isVisible = false
         searchItemAdapter.clear()
+        val actions = buildList {
+            if (showLogin) {
+                add(
+                    EmptyView.Action(MR.strings.log_in) {
+                        dismiss()
+                        controller.router.pushController(SettingsTrackingController().withFadeTransaction())
+                    },
+                )
+            }
+            add(EmptyView.Action(MR.strings.retry) { search(currentSearchQuery) })
+        }
         binding.searchEmptyView.show(
             Icons.Filled.SearchOff,
-            error.message ?: "",
+            message,
+            actions,
         )
+    }
+
+    private fun Throwable.isAuthenticationError(): Boolean {
+        if (this is HttpException && code in setOf(401, 403)) return true
+        val details = generateSequence(this) { it.cause }
+            .mapNotNull { it.message }
+            .joinToString(" ")
+            .lowercase()
+        return listOf("unauthorized", "authentication", "session expired", "not logged", "log in")
+            .any(details::contains)
     }
 
     private fun trackItem(position: Int) {

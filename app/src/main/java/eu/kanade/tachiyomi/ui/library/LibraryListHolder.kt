@@ -29,6 +29,18 @@ class LibraryListHolder(
 ) : LibraryHolder(view, adapter) {
 
     private val binding = MangaListItemBinding.bind(view)
+    private var titleLayoutTask: Runnable? = null
+    private var boundSignature: Int? = null
+    private var boundCover: CoverContent? = null
+    private var appliedOutline = adapter.showOutline
+
+    private data class CoverContent(
+        val mangaId: Long?,
+        val sourceId: Long,
+        val url: String?,
+        val lastModified: Long,
+        val inLibrary: Boolean,
+    )
 
     /**
      * Method called from [LibraryCategoryAdapter.onBindViewHolder]. It updates the data for this
@@ -37,7 +49,13 @@ class LibraryListHolder(
      * @param item the manga item to bind.
      */
     override fun onSetValues(item: LibraryItem) {
-        setCards(adapter.showOutline, binding.card, binding.unreadDownloadBadge.root)
+        val signature = item.bindingContentSignature()
+        if (signature == boundSignature && appliedOutline == adapter.showOutline) return
+        boundSignature = signature
+        if (appliedOutline != adapter.showOutline) {
+            appliedOutline = adapter.showOutline
+            setCards(appliedOutline, binding.card, binding.unreadDownloadBadge.root)
+        }
         binding.title.isVisible = true
         binding.constraintLayout.minHeight = 56.dpToPx
         if (item is LibraryPlaceholderItem) {
@@ -65,6 +83,8 @@ class LibraryListHolder(
             binding.unreadDownloadBadge.badgeView.isVisible = false
             binding.padding.isVisible = false
             binding.subtitle.isVisible = false
+            binding.coverThumbnail.dispose()
+            boundCover = null
             return
         }
 
@@ -102,16 +122,38 @@ class LibraryListHolder(
         }
         binding.subtitle.text = subtitle.highlightText(item.filter, color)
         binding.title.maxLines = 2
-        binding.title.post {
+        titleLayoutTask?.let(binding.title::removeCallbacks)
+        val layoutTask = Runnable {
             val hasAuthorInFilter =
                 item.filter.isNotBlank() && authorArtist.contains(item.filter, true)
             binding.subtitle.isVisible = subtitle.isNotBlank() && (binding.title.lineCount <= 1 || hasAuthorInFilter || item.manga.manga.isNovel())
             binding.title.maxLines = if (hasAuthorInFilter) 1 else 2
         }
+        titleLayoutTask = layoutTask
+        binding.title.post(layoutTask)
 
         // Update the cover.
+        val manga = item.manga.manga
+        val cover = CoverContent(
+            mangaId = manga.id,
+            sourceId = manga.source,
+            url = manga.thumbnail_url,
+            lastModified = manga.cover_last_modified,
+            inLibrary = manga.favorite,
+        )
+        if (cover != boundCover) {
+            boundCover = cover
+            binding.coverThumbnail.dispose()
+            binding.coverThumbnail.loadManga(manga)
+        }
+    }
+
+    override fun recycle() {
+        titleLayoutTask?.let(binding.title::removeCallbacks)
+        titleLayoutTask = null
         binding.coverThumbnail.dispose()
-        binding.coverThumbnail.loadManga(item.manga.manga)
+        boundSignature = null
+        boundCover = null
     }
 
     override fun onActionStateChanged(position: Int, actionState: Int) {

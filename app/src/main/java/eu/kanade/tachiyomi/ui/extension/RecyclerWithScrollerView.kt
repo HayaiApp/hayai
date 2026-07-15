@@ -60,8 +60,13 @@ class RecyclerWithScrollerView @JvmOverloads constructor(context: Context, attrs
     }
 
     fun onBind(adapter: FlexibleAdapter<IFlexible<*>>) {
-        binding?.recycler?.adapter = adapter
-        adapter.fastScroller = binding?.fastScroller
+        val binding = binding ?: return
+        if (binding.recycler.adapter !== adapter) {
+            binding.recycler.adapter = adapter
+        }
+        if (adapter.fastScroller !== binding.fastScroller) {
+            adapter.fastScroller = binding.fastScroller
+        }
     }
 
     fun showEmptyState(image: ImageVector, message: String, actions: List<EmptyView.Action> = emptyList()) {

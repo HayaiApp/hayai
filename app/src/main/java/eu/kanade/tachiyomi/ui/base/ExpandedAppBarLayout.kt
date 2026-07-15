@@ -81,6 +81,12 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
     private var tabSelectedListener: TabLayout.OnTabSelectedListener? = null
     private var boundPager: ViewPager? = null
     private var pagerListener: ViewPager.OnPageChangeListener? = null
+    private var appliedTabItems: List<TabItem> = emptyList()
+    private var appliedTabMode: TabMode? = null
+    private var onTabSelected: ((Int) -> Unit)? = null
+    private var onTabReselected: ((Int) -> Unit)? = null
+    private var onPagerPageSelected: ((Int) -> Unit)? = null
+    private var suppressTabCallbacks = false
 
     /**
      * Which of [mainToolbar] / [searchToolbar] is the active "menu host" for this
@@ -89,6 +95,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
      * [useSearchToolbarForMenu] as the user scrolls / opens the search pill.
      */
     private var currentActiveToolbar: BaseToolbar? = null
+    private var lastToolbarTitleAlpha = INVALID_TITLE_ALPHA
     private var isExtraSmall = false
     val useLargeToolbar: Boolean
         get() = preferences.useLargeToolbar().get() && !isExtraSmall
@@ -151,6 +158,19 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         val height = array.getDimensionPixelSize(0, 0)
         array.recycle()
         height
+    }
+
+    // Scroll background updates used to resolve the same theme attributes through a
+    // TypedArray on every frame. An app bar is recreated when its themed Context changes,
+    // so these values are safe to resolve once per instance.
+    internal val surfaceColor: Int by lazy(LazyThreadSafetyMode.NONE) {
+        context.getResourceColor(materialR.attr.colorSurface)
+    }
+    internal val elevatedSurfaceColor: Int by lazy(LazyThreadSafetyMode.NONE) {
+        context.getResourceColor(materialR.attr.colorPrimaryVariant)
+    }
+    internal val themedStatusBarColor: Int by lazy(LazyThreadSafetyMode.NONE) {
+        context.getResourceColor(AR.attr.statusBarColor)
     }
 
     val preLayoutHeight: Int
@@ -227,7 +247,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         if (useSmallAnyway) {
             mainToolbar?.backgroundColor = null
             if (!setTitleAlpha) return
-            mainToolbar?.toolbarTitle?.setTextColorAlpha(255)
+            setToolbarTitleAlpha(255)
         }
     }
 
@@ -263,45 +283,76 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         onReselected: ((Int) -> Unit)? = null,
         pagerSync: TabsPagerSync? = null,
     ) {
-        clearTabs()
-        if (items.isEmpty()) return
         val tabLayout = mainTabs ?: return
         val tabsFrame = tabsFrameLayout ?: return
-        tabLayout.tabMode = mode.tabLayoutMode
-        tabLayout.tabGravity = TabLayout.GRAVITY_FILL
+        if (items.isEmpty()) {
+            clearTabs()
+            return
+        }
+
         val safeIndex = selectedIndex.coerceIn(0, items.lastIndex)
-        val inflater = LayoutInflater.from(tabLayout.context)
-        items.forEachIndexed { index, item ->
-            val tab = tabLayout.newTab()
-            when (item) {
-                is TabItem.Label -> tab.setText(item.text)
-                is TabItem.Badged -> {
-                    val view = inflater.inflate(R.layout.chrome_tab_with_count, tabLayout, false)
-                    view.findViewById<TextView>(R.id.tab_label).text = item.text
-                    val countView = view.findViewById<TextView>(R.id.tab_count)
-                    // Null count = "show number of items" pref off; drop the badge entirely.
-                    countView.isGone = item.count == null
-                    item.count?.let { countView.text = it.toString() }
-                    tab.customView = view
+        this.onTabSelected = onSelected
+        this.onTabReselected = onReselected
+        onPagerPageSelected = pagerSync?.onPageSelected
+
+        // Root tab controllers keep their local app bars alive. Re-entering one therefore
+        // must not remove/reinflate every tab and badge: that forces TabLayout to remeasure
+        // the entire strip during the navigation frame. Reuse the existing views whenever
+        // the item structure is compatible and only update changed text/count values.
+        val canReuseTabs = appliedTabItems.size == items.size &&
+            appliedTabItems.zip(items).all { (old, new) ->
+                (old is TabItem.Label && new is TabItem.Label) ||
+                    (old is TabItem.Badged && new is TabItem.Badged)
+            }
+
+        if (!canReuseTabs) {
+            clearTabs()
+            this.onTabSelected = onSelected
+            this.onTabReselected = onReselected
+            onPagerPageSelected = pagerSync?.onPageSelected
+
+            tabLayout.tabMode = mode.tabLayoutMode
+            tabLayout.tabGravity = TabLayout.GRAVITY_FILL
+            val inflater = LayoutInflater.from(tabLayout.context)
+            items.forEachIndexed { index, item ->
+                val tab = tabLayout.newTab()
+                bindTab(tab, item, inflater)
+                tabLayout.addTab(tab, index == safeIndex)
+            }
+
+            val tabListener = object : TabLayout.OnTabSelectedListener {
+                override fun onTabSelected(tab: TabLayout.Tab?) {
+                    tab ?: return
+                    if (!suppressTabCallbacks) onTabSelected?.invoke(tab.position)
+                }
+                override fun onTabUnselected(tab: TabLayout.Tab?) {}
+                override fun onTabReselected(tab: TabLayout.Tab?) {
+                    tab ?: return
+                    if (!suppressTabCallbacks) onTabReselected?.invoke(tab.position)
                 }
             }
-            tabLayout.addTab(tab, index == safeIndex)
-        }
-        val tabListener = object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                tab ?: return
-                onSelected(tab.position)
+            tabLayout.addOnTabSelectedListener(tabListener)
+            tabSelectedListener = tabListener
+        } else {
+            if (appliedTabMode != mode) tabLayout.tabMode = mode.tabLayoutMode
+            val inflater = LayoutInflater.from(tabLayout.context)
+            items.forEachIndexed { index, item ->
+                tabLayout.getTabAt(index)?.let { bindTab(it, item, inflater) }
             }
-            override fun onTabUnselected(tab: TabLayout.Tab?) {}
-            override fun onTabReselected(tab: TabLayout.Tab?) {
-                tab ?: return
-                onReselected?.invoke(tab.position)
+            if (tabLayout.selectedTabPosition != safeIndex) {
+                suppressTabCallbacks = true
+                tabLayout.getTabAt(safeIndex)?.select()
+                suppressTabCallbacks = false
             }
         }
-        tabLayout.addOnTabSelectedListener(tabListener)
-        tabSelectedListener = tabListener
-        pagerSync?.let { sync ->
-            val pager = sync.pager
+
+        val nextPager = pagerSync?.pager
+        if (boundPager !== nextPager) {
+            boundPager?.let { pager -> pagerListener?.let(pager::removeOnPageChangeListener) }
+            boundPager = null
+            pagerListener = null
+        }
+        if (nextPager != null && boundPager == null) {
             val listener = object : ViewPager.SimpleOnPageChangeListener() {
                 override fun onPageScrolled(
                     position: Int,
@@ -314,16 +365,45 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
                     if (tabLayout.selectedTabPosition != position) {
                         tabLayout.getTabAt(position)?.select()
                     }
-                    sync.onPageSelected(position)
+                    onPagerPageSelected?.invoke(position)
                 }
             }
-            pager.addOnPageChangeListener(listener)
-            boundPager = pager
+            nextPager.addOnPageChangeListener(listener)
+            boundPager = nextPager
             pagerListener = listener
         }
+
+        appliedTabItems = items.toList()
+        appliedTabMode = mode
         useTabsInPreLayout = true
         tabsFrame.alpha = 1f
         tabsFrame.isVisible = true
+    }
+
+    private fun bindTab(tab: TabLayout.Tab, item: TabItem, inflater: LayoutInflater) {
+        when (item) {
+            is TabItem.Label -> {
+                if (tab.customView != null) tab.customView = null
+                if (tab.text != item.text) tab.setText(item.text)
+            }
+            is TabItem.Badged -> {
+                val customView = tab.customView
+                    ?: inflater.inflate(R.layout.chrome_tab_with_count, mainTabs, false).also {
+                        tab.customView = it
+                    }
+                customView.findViewById<TextView>(R.id.tab_label).apply {
+                    if (text != item.text) text = item.text
+                }
+                customView.findViewById<TextView>(R.id.tab_count).apply {
+                    val shouldHide = item.count == null
+                    if (isGone != shouldHide) isGone = shouldHide
+                    item.count?.let { count ->
+                        val countText = count.toString()
+                        if (text != countText) text = countText
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -334,6 +414,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         boundPager?.let { pager -> pagerListener?.let(pager::removeOnPageChangeListener) }
         boundPager = null
         pagerListener = null
+        onPagerPageSelected = null
         val tabLayout = mainTabs
         val tabsFrame = tabsFrameLayout
         if (tabLayout != null) {
@@ -345,6 +426,11 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
             tabsFrame.isVisible = false
             tabsFrame.alpha = 0f
         }
+        appliedTabItems = emptyList()
+        appliedTabMode = null
+        onTabSelected = null
+        onTabReselected = null
+        suppressTabCallbacks = false
         useTabsInPreLayout = false
     }
 
@@ -360,6 +446,8 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         cardFrame?.isVisible = false
         cardFrame?.alpha = 0f
         dropLiftedPillMenu()
+        currentActiveToolbar = null
+        lastToolbarTitleAlpha = INVALID_TITLE_ALPHA
         searchToolbar?.searchItem?.collapseActionView()
         // mainToolbar may have been made invisible / gone by a SEARCH_ONLY or scroll-
         // collapsed previous controller — restore to fully-visible so the next
@@ -555,8 +643,8 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         val alpha =
             (bigHeight + newY * 2) / (bigHeight) + 0.45f // (realHeight.toFloat() + newY * 5) / realHeight.toFloat() + .33f
         bigView?.alpha = MathUtils.clamp(if (alpha.isNaN()) 1f else alpha, 0f, 1f)
-        val toolbarTextView = mainToolbar?.toolbarTitle ?: return
-        toolbarTextView.setTextColorAlpha(
+        if (mainToolbar?.toolbarTitle == null) return
+        setToolbarTitleAlpha(
             (
                 MathUtils.clamp(
                     (1 - ((if (alpha.isNaN()) 1f else alpha) + 0.95f)) * 2,
@@ -681,6 +769,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         val card = cardFrame
         val wantSearchTB = (showCardTB || toolbarMode == ToolbarState.SEARCH_ONLY) && card?.isVisible == true
         if (wantSearchTB && search != null) {
+            if (currentActiveToolbar === search) return
             currentActiveToolbar = search
             if (toolbarMode == ToolbarState.EXPANDED) {
                 main?.isInvisible = true
@@ -689,6 +778,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
             card.backgroundColor = null
             liftMenuToPill()
         } else {
+            if (currentActiveToolbar === main) return
             currentActiveToolbar = main
             if (toolbarMode == ToolbarState.EXPANDED) {
                 main?.isInvisible = false
@@ -730,6 +820,11 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         }
     }
 
+    /** Re-copy newly inflated main-toolbar actions when the pill is already active. */
+    internal fun refreshLiftedPillMenu() {
+        if (currentActiveToolbar === searchToolbar) liftMenuToPill()
+    }
+
     /**
      * Inverse of [liftMenuToPill] — removes the lifted action items from the pill so
      * they don't double-up with the now-visible [mainToolbar] in expanded mode.
@@ -737,19 +832,25 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
      */
     internal fun dropLiftedPillMenu() {
         val menu = searchToolbar?.menu ?: return
-        val toRemove = mutableListOf<Int>()
-        var i = 0
-        val count = menu.size()
-        while (i < count) {
+        // Remove backwards so the menu can be mutated in place without allocating a
+        // temporary list. This method is part of scroll/chrome transitions.
+        var i = menu.size() - 1
+        while (i >= 0) {
             val id = menu.getItem(i).itemId
-            if (id != R.id.action_search) toRemove.add(id)
-            i++
+            if (id != R.id.action_search) menu.removeItem(id)
+            i--
         }
-        toRemove.forEach { menu.removeItem(it) }
+    }
+
+    private fun setToolbarTitleAlpha(alpha: Int) {
+        if (lastToolbarTitleAlpha == alpha) return
+        lastToolbarTitleAlpha = alpha
+        mainToolbar?.toolbarTitle?.setTextColorAlpha(alpha)
     }
 
     companion object {
         private const val INVALID_TITLE_HEIGHT = -1
+        private const val INVALID_TITLE_ALPHA = -1
     }
 }
 

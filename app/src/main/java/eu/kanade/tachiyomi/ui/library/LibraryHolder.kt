@@ -39,6 +39,9 @@ abstract class LibraryHolder(
      */
     abstract fun onSetValues(item: LibraryItem)
 
+    /** Releases holder-local work when FlexibleAdapter recycles the row. */
+    open fun recycle() = Unit
+
     fun setUnreadBadge(badge: LibraryBadge, item: LibraryMangaItem) {
         val showTotal = item.sectionHeader.category.sortingMode() == LibrarySort.TotalChapters
         badge.setUnreadDownload(

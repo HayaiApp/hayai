@@ -73,4 +73,51 @@ data class ExtensionItem(
     override fun hashCode(): Int {
         return extension.pkgName.hashCode()
     }
+
+    /**
+     * Snapshot of everything consumed by [ExtensionHolder]. [equals] deliberately only
+     * identifies a package, which is correct for FlexibleAdapter identity but is not enough
+     * to decide whether a repeated presenter emission needs to rebind the row.
+     */
+    internal fun bindingContentSignature(): Int {
+        var result = getLayoutRes()
+        fun include(value: Any?) {
+            result = 31 * result + (value?.hashCode() ?: 0)
+        }
+
+        header?.let {
+            include(it.name)
+            include(it.size)
+            include(it.canUpdate)
+            include(it.installedSorting)
+        }
+
+        include(extension::class)
+        include(extension.name)
+        include(extension.pkgName)
+        include(extension.versionName)
+        include(extension.versionCode)
+        include(extension.libVersion)
+        include(extension.lang)
+        include(extension.isNsfw)
+        include(extension.isNovel)
+        when (val extension = extension) {
+            is Extension.Installed -> {
+                include(extension.hasUpdate)
+                include(extension.isObsolete)
+                include(extension.isShared)
+                include(extension.repoUrl)
+                include(extension.icon?.constantState)
+            }
+            is Extension.Available -> {
+                include(extension.apkName)
+                include(extension.iconUrl)
+                include(extension.repoUrl)
+            }
+            is Extension.Untrusted -> include(extension.signatureHash)
+        }
+        include(installStep)
+        include(sessionProgress)
+        return result
+    }
 }

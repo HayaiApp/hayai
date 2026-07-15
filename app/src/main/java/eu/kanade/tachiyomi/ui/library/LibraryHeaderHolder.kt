@@ -50,6 +50,28 @@ class LibraryHeaderHolder(val view: View, val adapter: LibraryCategoryAdapter) :
     private val refreshDrawable = itemView.context.contextCompatDrawable(R.drawable.ic_refresh_24dp)
     var locked = false
     private val headerGestureDetector = LibraryHeaderGestureDetector(this, binding)
+    private val flagIcons = mutableMapOf<String, Int?>()
+    private var boundContent: HeaderContent? = null
+
+    private data class HeaderContent(
+        val catId: Int,
+        val categoryName: String,
+        val categoryOrder: Int,
+        val categoryFlags: Int,
+        val mangaSort: Char?,
+        val isAlone: Boolean,
+        val isHidden: Boolean,
+        val isDynamic: Boolean,
+        val sourceId: Long?,
+        val langId: String?,
+        val previousIsCollapsed: Boolean,
+        val shorterMargin: Boolean,
+        val isFilteredList: Boolean,
+        val showNumber: Boolean,
+        val filteredCount: Int,
+        val totalCount: Int,
+        val searchText: String?,
+    )
     val category: Category?
         get() = (adapter.getItem(flexibleAdapterPosition) as? LibraryHeaderItem)?.category
 
@@ -154,6 +176,7 @@ class LibraryHeaderHolder(val view: View, val adapter: LibraryCategoryAdapter) :
 
     @SuppressLint("SetTextI18n")
     fun bind(item: LibraryHeaderItem) {
+        val category = item.category
         val index = adapter.headerItems.indexOf(item)
         val previousIsCollapsed =
             if (index > 0) {
@@ -163,6 +186,38 @@ class LibraryHeaderHolder(val view: View, val adapter: LibraryCategoryAdapter) :
                 false
             }
         val shorterMargin = adapter.headerItems.firstOrNull() == item
+        val isFilteredList = (adapter.libraryListener as? FilteredLibraryController)?.let {
+            it.filterCategories.size == 1 && it.getTitle() == category.name
+        } ?: false
+        val filteredCount = adapter.visibleItemsPerCategory[item.catId] ?: 0
+        val totalCount = adapter.itemsPerCategory[item.catId] ?: 0
+        val searchText = adapter.getFilter(String::class.java)
+        val content = HeaderContent(
+            catId = item.catId,
+            categoryName = category.name,
+            categoryOrder = category.order,
+            categoryFlags = category.flags,
+            mangaSort = category.mangaSort,
+            isAlone = category.isAlone,
+            isHidden = category.isHidden,
+            isDynamic = category.isDynamic,
+            sourceId = category.sourceId,
+            langId = category.langId,
+            previousIsCollapsed = previousIsCollapsed,
+            shorterMargin = shorterMargin,
+            isFilteredList = isFilteredList,
+            showNumber = adapter.showNumber,
+            filteredCount = filteredCount,
+            totalCount = totalCount,
+            searchText = searchText,
+        )
+        if (content == boundContent) {
+            // Queue/selection mode changes independently from category structure and counts.
+            notifyStatus(LibraryUpdateJob.categoryInQueue(category.id), category)
+            return
+        }
+        boundContent = content
+
         binding.categoryTitle.updateLayoutParams<ConstraintLayout.LayoutParams> {
             topMargin = (
                 when {
@@ -173,11 +228,6 @@ class LibraryHeaderHolder(val view: View, val adapter: LibraryCategoryAdapter) :
                 ).dpToPx
         }
         binding.rearView.updatePadding(top = binding.categoryTitle.marginTop - 6)
-        val category = item.category
-
-        val isFilteredList = (adapter.libraryListener as? FilteredLibraryController)?.let {
-            it.filterCategories.size == 1 && it.getTitle() == category.name
-        } ?: false
         val categoryName = if ((category.isAlone || isFilteredList) && !category.isDynamic) {
             ""
         } else {
@@ -186,11 +236,6 @@ class LibraryHeaderHolder(val view: View, val adapter: LibraryCategoryAdapter) :
 
         binding.categoryTitle.text = categoryName +
             if (adapter.showNumber) {
-                val filteredCount = adapter.currentItems.count {
-                    it is LibraryMangaItem && it.header?.catId == item.catId
-                }
-                val totalCount = adapter.itemsPerCategory[item.catId] ?: 0
-                val searchText = adapter.getFilter(String::class.java)
                 var countText = if (searchText.isNullOrBlank()) {
                     " ($totalCount)"
                 } else {
@@ -227,6 +272,7 @@ class LibraryHeaderHolder(val view: View, val adapter: LibraryCategoryAdapter) :
 
     @SuppressLint("DiscouragedApi")
     fun getFlagIcon(lang: String): Int? {
+        if (flagIcons.containsKey(lang)) return flagIcons[lang]
         val flagId = itemView.resources.getIdentifier(
             "ic_flag_${lang.replace("-", "_")}",
             "drawable",
@@ -242,6 +288,7 @@ class LibraryHeaderHolder(val view: View, val adapter: LibraryCategoryAdapter) :
                 null
             }
             )
+        flagIcons[lang] = flagId
         return flagId
     }
 

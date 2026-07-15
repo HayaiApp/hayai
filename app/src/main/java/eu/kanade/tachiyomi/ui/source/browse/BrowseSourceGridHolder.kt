@@ -36,6 +36,29 @@ class BrowseSourceGridHolder(
 ) : BrowseSourceHolder(view, adapter) {
 
     private val binding = BrowseSourceGridItemBinding.bind(view)
+    private val novelLabel = view.context.getString(MR.strings.novel)
+    private val inLibraryLabel = view.context.getString(MR.strings.in_library)
+    private val tertiaryColor = view.context.getResourceColor(materialR.attr.colorTertiary)
+    private val onTertiaryColor = view.context.getResourceColor(materialR.attr.colorOnTertiary)
+    private val secondaryColor = view.context.getResourceColor(materialR.attr.colorSecondary)
+    private val onSecondaryColor = view.context.getResourceColor(materialR.attr.colorOnSecondary)
+    private var boundContent: BindingContent? = null
+    private var boundCover: CoverContent? = null
+
+    private data class BindingContent(
+        val title: String,
+        val favorite: Boolean,
+        val isNovel: Boolean,
+        val ehCategoryToken: String?,
+    )
+
+    private data class CoverContent(
+        val mangaId: Long?,
+        val sourceId: Long,
+        val url: String?,
+        val lastModified: Long,
+        val inLibrary: Boolean,
+    )
 
     init {
         binding.card.strokeWidth = if (showOutline) 1.dpToPx else 0
@@ -48,7 +71,22 @@ class BrowseSourceGridHolder(
     }
 
     override fun onSetValues(manga: Manga) {
-        val title = manga.title
+        val content = BindingContent(
+            title = manga.title,
+            favorite = manga.favorite,
+            isNovel = manga.isNovel(),
+            ehCategoryToken = manga.genre?.substringBefore(',')?.trim()?.lowercase()
+                .takeIf { manga.isEhBasedManga() },
+        )
+        if (content != boundContent) {
+            boundContent = content
+            bindContent(content)
+        }
+        setImage(manga)
+    }
+
+    private fun bindContent(content: BindingContent) {
+        val title = content.title
         if (compact) {
             binding.compactTitle.text = title
         } else {
@@ -56,21 +94,20 @@ class BrowseSourceGridHolder(
         }
 
         // Favourite/in-library state dims the cover (mirrors Compose isSelected alpha).
-        binding.coverThumbnail.alpha = if (manga.favorite) 0.34f else 1.0f
+        binding.coverThumbnail.alpha = if (content.favorite) 0.34f else 1.0f
 
         // Badge order matches the Compose cell: Novel, then EH category, then In Library.
         val segments = buildList {
-            if (manga.isNovel()) {
+            if (content.isNovel) {
                 add(
                     BrowseBadgeStrip.Segment(
-                        text = view.context.getString(MR.strings.novel),
-                        backgroundColor = view.context.getResourceColor(materialR.attr.colorTertiary),
-                        textColor = view.context.getResourceColor(materialR.attr.colorOnTertiary),
+                        text = novelLabel,
+                        backgroundColor = tertiaryColor,
+                        textColor = onTertiaryColor,
                     ),
                 )
             }
-            if (manga.isEhBasedManga()) {
-                val token = manga.genre?.substringBefore(',')?.trim()?.lowercase()
+            content.ehCategoryToken?.let { token ->
                 SourceTagsUtil.getEhCategoryDisplay(token)?.let { (genreColor, label) ->
                     add(
                         BrowseBadgeStrip.Segment(
@@ -81,22 +118,29 @@ class BrowseSourceGridHolder(
                     )
                 }
             }
-            if (manga.favorite) {
+            if (content.favorite) {
                 add(
                     BrowseBadgeStrip.Segment(
-                        text = view.context.getString(MR.strings.in_library),
-                        backgroundColor = view.context.getResourceColor(materialR.attr.colorSecondary),
-                        textColor = view.context.getResourceColor(materialR.attr.colorOnSecondary),
+                        text = inLibraryLabel,
+                        backgroundColor = secondaryColor,
+                        textColor = onSecondaryColor,
                     ),
                 )
             }
         }
         binding.badgeStrip.setSegments(segments)
-
-        setImage(manga)
     }
 
     override fun setImage(manga: Manga) {
+        val cover = CoverContent(
+            mangaId = manga.id,
+            sourceId = manga.source,
+            url = manga.thumbnail_url,
+            lastModified = manga.cover_last_modified,
+            inLibrary = manga.favorite,
+        )
+        if (cover == boundCover) return
+        boundCover = cover
         if ((view.context as? Activity)?.isDestroyed == true) return
         binding.coverThumbnail.dispose()
         // dispose() leaves the prior drawable in place; CoverViewTarget.onError swaps in a
@@ -108,5 +152,11 @@ class BrowseSourceGridHolder(
         // covers decode at view bounds instead of over-decoding. Coil shows the XML placeholder
         // background until the cover (or error) lands; matches the Compose cell behaviour.
         binding.coverThumbnail.loadManga(manga.cover())
+    }
+
+    override fun recycle() {
+        binding.coverThumbnail.dispose()
+        boundContent = null
+        boundCover = null
     }
 }

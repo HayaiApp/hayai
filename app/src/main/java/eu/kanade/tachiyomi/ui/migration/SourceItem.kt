@@ -51,4 +51,20 @@ data class SourceItem(
     ) {
         holder.bind(this)
     }
+
+    /** State consumed by [SourceHolder], separate from data-class/source object identity. */
+    internal fun bindingContentSignature(): Int {
+        var result = getLayoutRes()
+        fun include(value: Any?) {
+            result = 31 * result + (value?.hashCode() ?: 0)
+        }
+        include(source::class)
+        include(source.id)
+        include(source.name)
+        include(source.lang)
+        include(numberOfItems)
+        include(isUninstalled)
+        include(isObsolete)
+        return result
+    }
 }

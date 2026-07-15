@@ -58,6 +58,10 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
      */
     var itemsPerCategory: Map<Int, Int> = emptyMap()
 
+    /** Filtered/visible counts, computed once per submission instead of once per header bind. */
+    var visibleItemsPerCategory: Map<Int, Int> = emptyMap()
+        private set
+
     /**
      * The list of manga in this category.
      */
@@ -66,6 +70,7 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
     // Single in-flight filter job. setItems and external requestFilter() both go through
     // launchFilter() so updateDataSet / notifyDataSetChanged calls can't interleave.
     private var filterJob: Job? = null
+    private var submittedSnapshot: SubmittedSnapshot? = null
 
     val libraryListener: LibraryListener? = controller
 
@@ -198,7 +203,7 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
             if (mangas.firstOrNull()?.filter?.isNotBlank() == true) {
                 mangas.forEach { it.filter = "" }
             }
-            updateDataSet(mangas)
+            updateDataSetIfChanged(mangas)
         } else {
             val filteredManga = withDefContext {
                 mangas.filter {
@@ -209,15 +214,46 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
             if (filteredManga.isEmpty() && controller?.presenter?.showAllCategories == false) {
                 val catId = (mangas.firstOrNull() as? LibraryMangaItem)?.let { it.header?.catId ?: it.manga.category }
                 val blankItem = catId?.let { controller.presenter.blankItem(it) }
-                updateDataSet(blankItem ?: emptyList())
+                updateDataSetIfChanged(blankItem ?: emptyList())
             } else {
-                updateDataSet(filteredManga)
+                updateDataSetIfChanged(filteredManga)
             }
         }
         isLongPressDragEnabled = libraryListener?.canDrag() == true && s.isNullOrBlank()
         setItemsPerCategoryMap()
-        notifyDataSetChanged()
     }
+
+    private fun updateDataSetIfChanged(items: List<LibraryItem>): Boolean {
+        visibleItemsPerCategory = items.asSequence()
+            .filterIsInstance<LibraryMangaItem>()
+            .groupingBy { it.sectionHeader.catId }
+            .eachCount()
+        val snapshot = SubmittedSnapshot(
+            itemSignatures = items.map(LibraryItem::bindingContentSignature),
+            libraryLayout = preferences.libraryLayout().get(),
+            uniformGrid = uiPreferences.uniformGrid().get(),
+            hideReadingButton = preferences.hideStartReadingButton().get(),
+            showNumber = showNumber,
+            showOutline = showOutline,
+            pagedMode = isPagedMode,
+            activeFilters = hasActiveFilters,
+        )
+        if (snapshot == submittedSnapshot) return false
+        submittedSnapshot = snapshot
+        updateDataSet(items)
+        return true
+    }
+
+    private data class SubmittedSnapshot(
+        val itemSignatures: List<Int>,
+        val libraryLayout: Int,
+        val uniformGrid: Boolean,
+        val hideReadingButton: Boolean,
+        val showNumber: Boolean,
+        val showOutline: Boolean,
+        val pagedMode: Boolean,
+        val activeFilters: Boolean,
+    )
 
     private fun getFirstLetter(name: String): String {
         val letter = name.firstOrNull() ?: '#'

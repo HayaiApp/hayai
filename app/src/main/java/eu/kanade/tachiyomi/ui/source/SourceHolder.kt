@@ -5,6 +5,7 @@ import android.view.View
 import androidx.core.view.isVisible
 import androidx.core.content.ContextCompat
 import coil3.asImage
+import coil3.dispose
 import coil3.load
 import com.google.android.material.R as materialR
 import eu.kanade.tachiyomi.R
@@ -27,6 +28,7 @@ class SourceHolder(view: View, val adapter: SourceAdapter) :
     BaseFlexibleViewHolder(view, adapter) {
 
     val binding = SourceItemBinding.bind(view)
+    private var iconRunnable: Runnable? = null
 
     init {
         binding.sourcePin.setOnClickListener {
@@ -68,12 +70,20 @@ class SourceHolder(view: View, val adapter: SourceAdapter) :
             )
         }
 
-        // Set circle letter image.
-        itemView.post {
+        // Cancel a deferred icon lookup from the row's previous item. Besides preventing a
+        // stale icon from winning after recycling, this avoids doing PackageManager work for
+        // a source that scrolled away before the next main-loop turn.
+        iconRunnable?.let(itemView::removeCallbacks)
+        binding.sourceImage.dispose()
+        when {
+            source.id == LocalSource.ID -> binding.sourceImage.setImageResource(R.mipmap.ic_local_source)
+            source is NovelSource -> binding.sourceImage.setImageResource(R.drawable.ic_book_24dp)
+            else -> binding.sourceImage.setImageDrawable(null)
+        }
+        val iconTask = Runnable {
             val icon = source.icon()
             when {
                 icon != null -> binding.sourceImage.setImageDrawable(icon)
-                item.source.id == LocalSource.ID -> binding.sourceImage.setImageResource(R.mipmap.ic_local_source)
                 // NOVEL -->
                 // Prefer the on-disk icon over the remote URL: Coil supports File directly,
                 // so cold starts paint the source row without going through the network.
@@ -102,6 +112,8 @@ class SourceHolder(view: View, val adapter: SourceAdapter) :
                 // NOVEL <--
             }
         }
+        iconRunnable = iconTask
+        itemView.post(iconTask)
 
         binding.sourceLatest.isVisible = source.supportsLatest
     }

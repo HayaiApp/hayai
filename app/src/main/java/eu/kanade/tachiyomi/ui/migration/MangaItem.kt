@@ -37,4 +37,18 @@ class MangaItem(val manga: Manga) : AbstractFlexibleItem<MangaHolder>() {
     override fun hashCode(): Int {
         return manga.id!!.hashCode()
     }
+
+    /** State consumed by [MangaHolder], including Coil's cover cache invalidation inputs. */
+    internal fun bindingContentSignature(): Int {
+        var result = getLayoutRes()
+        fun include(value: Any?) {
+            result = 31 * result + (value?.hashCode() ?: 0)
+        }
+        include(manga.id)
+        include(manga.source)
+        include(manga.title)
+        include(manga.thumbnail_url)
+        include(manga.cover_last_modified)
+        return result
+    }
 }

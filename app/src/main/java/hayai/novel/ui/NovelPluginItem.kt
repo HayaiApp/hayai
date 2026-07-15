@@ -57,4 +57,31 @@ data class NovelPluginItem(
     }
 
     override fun hashCode(): Int = plugin.id.hashCode()
+
+    /** Complete row/header state used to gate logically identical full submissions. */
+    internal fun bindingContentSignature(): Int {
+        var result = getLayoutRes()
+        fun include(value: Any?) {
+            result = 31 * result + (value?.hashCode() ?: 0)
+        }
+
+        header?.let {
+            include(it.name)
+            include(it.size)
+            include(it.canUpdate)
+            include(it.installedSorting)
+        }
+        include(plugin.id)
+        include(plugin.name)
+        include(plugin.site)
+        include(plugin.lang)
+        include(plugin.version)
+        include(plugin.url)
+        include(plugin.iconUrl)
+        include(isInstalled)
+        include(installedVersion)
+        include(isObsolete)
+        include(isInstalling)
+        return result
+    }
 }

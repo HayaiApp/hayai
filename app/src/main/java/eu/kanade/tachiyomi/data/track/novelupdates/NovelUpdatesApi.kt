@@ -181,7 +181,7 @@ class NovelUpdatesApi(
             }
         } catch (e: Exception) {
             Logger.e(e) { "NovelUpdates: search failed" }
-            emptyList()
+            throw e
         }
     }
 }

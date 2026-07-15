@@ -48,6 +48,11 @@ class DateItem(val date: Date, val addedString: Boolean = false) : AbstractHeade
         return date.hashCode()
     }
 
+    override fun shouldNotifyChange(newItem: IFlexible<*>): Boolean {
+        val other = newItem as? DateItem ?: return true
+        return date != other.date || addedString != other.addedString
+    }
+
     class Holder(view: View, val adapter: RecentMangaAdapter) : FlexibleViewHolder(view, adapter, true) {
 
         private val now = Date().time

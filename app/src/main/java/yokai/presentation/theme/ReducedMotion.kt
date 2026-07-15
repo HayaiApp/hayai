@@ -2,6 +2,7 @@ package yokai.presentation.theme
 
 import yokai.util.koin.get
 import android.animation.ValueAnimator
+import android.os.Build
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -30,31 +31,17 @@ object ReducedMotion {
     private val preferences: PreferencesHelper by lazy { get() }
     private val pref get() = preferences.reducedMotion()
 
-    /** Synchronous read suitable for any thread. */
-    fun isEnabled(): Boolean = pref.get()
+    /**
+     * Synchronous read suitable for any thread. Android's system-wide "Remove animations"
+     * setting is part of the contract too; app motion must never override that accessibility
+     * choice just because Hayai's own preference is off.
+     */
+    fun isEnabled(): Boolean = pref.get() ||
+        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ValueAnimator.areAnimatorsEnabled())
 
     /** Cold flow that emits whenever the preference changes. */
     fun changes(): Flow<Boolean> = pref.changes()
 
-    /**
-     * Sets the process-wide [ValueAnimator] duration scale to 0 when reduced motion is enabled,
-     * or restores it to 1 when disabled. This covers every [ValueAnimator] / [ObjectAnimator] /
-     * [ViewPropertyAnimator] in the app without requiring per-site checks.
-     *
-     * [ValueAnimator.setDurationScale] is a hidden API; reflection is required. On the rare
-     * device where it is inaccessible the per-animator checks in change-handlers and activities
-     * remain as fallback.
-     */
-    fun applyGlobalAnimatorScale(enabled: Boolean) {
-        val scale = if (enabled) 0f else 1f
-        try {
-            ValueAnimator::class.java
-                .getMethod("setDurationScale", Float::class.javaPrimitiveType)
-                .invoke(null, scale)
-        } catch (_: Exception) {
-            // Hidden API not accessible on this device; per-site checks are the fallback.
-        }
-    }
 }
 
 /**

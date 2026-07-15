@@ -9,6 +9,7 @@ import eu.davidea.flexibleadapter.items.AbstractSectionableItem
 import eu.davidea.flexibleadapter.items.IFilterable
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.data.database.models.dominantCoverColors
 import eu.kanade.tachiyomi.source.SourceManager
 import yokai.util.koin.injectLazy
 import yokai.domain.ui.UiPreferences
@@ -58,6 +59,76 @@ abstract class LibraryItem(
     val hideReadingButton: Boolean
         get() = preferences.hideStartReadingButton().get()
 
+    /**
+     * Snapshot of model state consumed by Library holders and headers. Item equality is
+     * intentionally identity-oriented (manga/category), so it cannot safely gate a full
+     * adapter submission when unread counts, cover metadata, titles or category controls move.
+     */
+    internal fun bindingContentSignature(): Int {
+        var result = javaClass.hashCode()
+        fun include(value: Any?) {
+            result = 31 * result + (value?.hashCode() ?: 0)
+        }
+
+        fun includeHeader(header: LibraryHeaderItem) {
+            val category = header.category
+            include(header.catId)
+            include(category.id)
+            include(category.name)
+            include(category.order)
+            include(category.flags)
+            include(category.mangaOrder)
+            include(category.mangaSort)
+            include(category.isAlone)
+            include(category.isHidden)
+            include(category.isDynamic)
+            include(category.sourceId)
+            include(category.langId)
+            include(category.isSystem)
+        }
+
+        includeHeader(sectionHeader)
+        include(filter)
+        when (this) {
+            is LibraryMangaItem -> {
+                val libraryManga = manga
+                val manga = libraryManga.manga
+                include(manga.id)
+                include(manga.source)
+                include(manga.title)
+                include(manga.author)
+                include(manga.artist)
+                include(manga.genre)
+                include(manga.status)
+                include(manga.thumbnail_url)
+                include(manga.cover_last_modified)
+                include(manga.dominantCoverColors)
+                include(libraryManga.unread)
+                include(libraryManga.read)
+                include(libraryManga.category)
+                include(libraryManga.bookmarkCount)
+                include(libraryManga.totalChapters)
+                include(libraryManga.latestUpdate)
+                include(libraryManga.lastRead)
+                include(libraryManga.lastFetch)
+                include(downloadCount)
+                include(unreadType)
+                include(sourceLanguage)
+            }
+            is LibraryPlaceholderItem -> {
+                include(category)
+                when (val type = type) {
+                    is LibraryPlaceholderItem.Type.Blank -> include(type.mangaCount)
+                    is LibraryPlaceholderItem.Type.Hidden -> {
+                        include(type.title)
+                        include(type.hiddenItems.map { it.manga.manga.id })
+                    }
+                }
+            }
+        }
+        return result
+    }
+
     @CallSuper
     override fun bindViewHolder(
         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
@@ -68,6 +139,15 @@ abstract class LibraryItem(
         holder.onSetValues(this)
         (holder as? LibraryGridHolder)?.setSelected(adapter.isSelected(position))
         (holder.itemView.layoutParams as? StaggeredGridLayoutManager.LayoutParams)?.isFullSpan = this is LibraryPlaceholderItem
+    }
+
+    override fun unbindViewHolder(
+        adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>?,
+        holder: LibraryHolder?,
+        position: Int,
+    ) {
+        holder?.recycle()
+        super.unbindViewHolder(adapter, holder, position)
     }
 
     companion object {

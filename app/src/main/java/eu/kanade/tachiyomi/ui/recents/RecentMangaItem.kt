@@ -80,6 +80,75 @@ class RecentMangaItem(
         }
     }
 
+    /**
+     * Stable snapshot of every model field consumed by [RecentMangaHolder]. The adapter
+     * stores these values after a full submission so repeated presenter emissions with
+     * identical content don't trigger another notifyDataSetChanged + visible-row rebind.
+     */
+    internal fun bindingContentSignature(): Int {
+        var result = getLayoutRes()
+        fun include(value: Any?) {
+            result = 31 * result + (value?.hashCode() ?: 0)
+        }
+
+        val header = header
+        when (header) {
+            is DateItem -> {
+                include(header.date.time)
+                include(header.addedString)
+            }
+            is RecentMangaHeaderItem -> {
+                include(header.recentsType)
+                include(header.sourceId)
+                include(header.sourceName)
+            }
+            else -> include(header)
+        }
+
+        if (mch.manga.id == null) return result
+
+        include(mch.manga.id)
+        include(mch.manga.source)
+        include(mch.manga.title)
+        include(mch.manga.thumbnail_url)
+        include(mch.manga.date_added)
+        include(mch.manga.cover_last_modified)
+
+        includeChapter(chapter, ::include)
+        include(mch.history.id)
+        include(mch.history.last_read)
+        include(mch.history.time_read)
+
+        mch.extraChapters.forEach { extra ->
+            includeChapter(extra.chapter, ::include)
+            include(extra.history?.id)
+            include(extra.history?.last_read)
+            include(extra.history?.time_read)
+        }
+
+        include(status)
+        include(progress)
+        downloadInfo.forEach { info ->
+            include(info.chapterId)
+            include(info.status)
+            include(info.progress)
+        }
+        return result
+    }
+
+    private fun includeChapter(chapter: Chapter, include: (Any?) -> Unit) {
+        include(chapter.id)
+        include(chapter.name)
+        include(chapter.scanlator)
+        include(chapter.read)
+        include(chapter.bookmark)
+        include(chapter.last_page_read)
+        include(chapter.pages_left)
+        include(chapter.date_fetch)
+        include(chapter.date_upload)
+        include(chapter.chapter_number)
+    }
+
     override fun bindViewHolder(
         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
         holder: BaseChapterHolder,

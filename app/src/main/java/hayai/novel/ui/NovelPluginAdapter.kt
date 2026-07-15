@@ -13,6 +13,8 @@ import android.widget.TextView
 class NovelPluginAdapter(val listener: OnButtonClickListener) :
     FlexibleAdapter<IFlexible<*>>(null, listener, true) {
 
+    private var submittedSnapshot: SubmittedSnapshot? = null
+
     private val preferences: PreferencesHelper by injectLazy()
 
     var installedSortOrder = preferences.installedExtensionsOrder().get()
@@ -20,6 +22,22 @@ class NovelPluginAdapter(val listener: OnButtonClickListener) :
     init {
         setDisplayHeadersAtStartUp(true)
     }
+
+    fun updateDataSetIfChanged(items: List<NovelPluginItem>): Boolean {
+        val nextSnapshot = SubmittedSnapshot(
+            items.map(NovelPluginItem::bindingContentSignature),
+            installedSortOrder,
+        )
+        if (nextSnapshot == submittedSnapshot) return false
+        submittedSnapshot = nextSnapshot
+        updateDataSet(items)
+        return true
+    }
+
+    private data class SubmittedSnapshot(
+        val itemSignatures: List<Int>,
+        val installedSortOrder: Int,
+    )
 
     interface OnButtonClickListener {
         fun onNovelPluginButtonClick(position: Int)

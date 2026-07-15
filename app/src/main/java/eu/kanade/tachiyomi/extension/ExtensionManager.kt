@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.util.system.withIOContext
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -114,10 +115,9 @@ class ExtensionManager(
     // History-by-Source view binds N source headers in one frame; the first time per
     // package per process, each blocks the UI thread. Warm the iconMap from IO on first
     // call so the bind path is a getOrPut hit. Waits for installed extensions to load.
-    private var iconsPreloaded = false
+    private val iconsPreloaded = AtomicBoolean(false)
     fun preloadInstalledIcons() {
-        if (iconsPreloaded) return
-        iconsPreloaded = true
+        if (!iconsPreloaded.compareAndSet(false, true)) return
         initScope.launch {
             _installedExtensionsFlow.first { it.isNotEmpty() }
                 .flatMap { it.sources }

@@ -143,7 +143,7 @@ class MigrationController :
             adapter = MangaAdapter(this, presenter.uiPreferences.outlineOnCovers().get())
             binding.migrationRecycler.adapter = adapter
         }
-        adapter?.updateDataSet(manga, true)
+        (adapter as MangaAdapter).updateDataSetIfChanged(manga, true)
         appBar()?.doOnNextLayout {
             binding.migrationRecycler.requestApplyInsets()
         }
@@ -155,7 +155,7 @@ class MigrationController :
             adapter = SourceAdapter(this)
             binding.migrationRecycler.adapter = adapter
         }
-        adapter?.updateDataSet(sources)
+        (adapter as SourceAdapter).updateDataSetIfChanged(sources)
     }
 
 

@@ -8,13 +8,54 @@
     android:background="@drawable/bottom_sheet_rounded_background"
     android:layout_height="match_parent">
 
+    <LinearLayout
+        android:id="@+id/tracking_header"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="14dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <View
+            android:layout_width="32dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="14dp"
+            android:background="?attr/colorOutlineVariant" />
+
+        <com.google.android.material.textview.MaterialTextView
+            style="?textAppearanceTitleLarge"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/tracking"
+            android:textColor="?android:attr/textColorPrimary" />
+
+        <com.google.android.material.textview.MaterialTextView
+            style="?textAppearanceBodyMedium"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="@string/tracking_sheet_summary"
+            android:textColor="?android:attr/textColorSecondary" />
+
+    </LinearLayout>
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/track_recycler"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:paddingTop="5dp"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:paddingTop="2dp"
         android:paddingBottom="24dp"
         android:clipToPadding="false"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tracking_header"
         tools:visibility="visible"
         tools:itemCount="3"
         tools:listitem="@layout/track_item" />
@@ -102,8 +143,6 @@
             app:endIconTint="?actionBarTintColor"
             app:hintEnabled="true"
             app:hintTextColor="?colorPrimary"
-            app:startIconDrawable="@drawable/ic_search_24dp"
-            app:startIconTint="?actionBarTintColor"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/title_layout">
@@ -149,9 +188,28 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintBottom_toTopOf="@id/search_state_message"
+                app:layout_constraintVertical_chainStyle="packed"
                 android:visibility="invisible"
                 tools:visibility="invisible" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/search_state_message"
+                style="?textAppearanceBodyMedium"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginEnd="24dp"
+                android:gravity="center"
+                android:textColor="?android:attr/textColorSecondary"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/search_progress"
+                tools:text="Searching AniList…"
+                tools:visibility="visible" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/track_search_recycler"

@@ -106,6 +106,7 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
     lateinit var controller: BrowseController
     var boundViews = arrayListOf<RecyclerWithScrollerView>()
     private var selectedExtensionTypeTab = EXTENSION_TYPE_MANGA
+    private var tabbedSheetAdapter: TabbedSheetAdapter? = null
 
     val extensionFrameLayout: RecyclerWithScrollerView?
         get() = findViewWithTag(EXTENSION_RECYCLER_TAG) as? RecyclerWithScrollerView
@@ -118,11 +119,11 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
 
     var isExpanding = false
 
-    // Shared across the sheet recyclers (manga extensions, novel plugins, migration) AND across
-    // BrowseController lifetimes so holders survive every nav swap. Without this, returning
-    // to Browse re-inflates ~12 extension cards (~150ms/frame) on each entry.
-    val sharedExtensionPool: RecyclerView.RecycledViewPool
-        get() = persistentExtensionPool
+    // Share holders only between recyclers owned by this sheet. A process-static pool retained
+    // holders with the old Activity context and, more subtly, ExtensionHolder's old adapter /
+    // click listener after controller recreation. Persistent root tabs already keep this sheet
+    // alive during ordinary tab swaps, so instance scope preserves reuse without stale owners.
+    val sharedExtensionPool = RecyclerView.RecycledViewPool()
 
     override fun onFinishInflate() {
         super.onFinishInflate()
@@ -143,9 +144,6 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
         private const val EXTENSION_PAGE_TAG = "TabbedSheetPageExtensions"
         private const val MIGRATION_PAGE_TAG = "TabbedSheetPageMigration"
 
-        // Process-static so holders are reused on every Browse re-entry; Views inside survive
-        // BrowseController + ExtensionBottomSheet destruction.
-        private val persistentExtensionPool = RecyclerView.RecycledViewPool()
     }
 
     fun onCreate(controller: BrowseController) {
@@ -170,7 +168,7 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
         // UninitializedPropertyAccessException.
         this.controller = controller
 
-        binding.pager.adapter = TabbedSheetAdapter()
+        tabbedSheetAdapter = TabbedSheetAdapter().also { binding.pager.adapter = it }
         binding.tabs.setupWithViewPager(binding.pager)
         binding.pager.doOnApplyWindowInsetsCompat { _, insets, _ ->
             val bottomBar = controller.activityBinding?.bottomNav
@@ -184,6 +182,11 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
         binding.tabs.addOnTabSelectedListener(
             object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab?) {
+                    if (tab?.position == OUTER_TAB_MIGRATION) {
+                        // Normally prepared just after the first sheet expansion. Keep this
+                        // fallback for users who tap Migration while the sheet is collapsed.
+                        tabbedSheetAdapter?.ensureMigrationPage()
+                    }
                     isExpanding = !sheetBehavior.isExpanded()
                     if (canExpand) {
                         this@ExtensionBottomSheet.sheetBehavior?.expand()
@@ -256,6 +259,18 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
         listOf(extensionFrameLayout, novelPluginFrameLayout, migrationFrameLayout).forEach { recyclerWithScrollerBinding ->
             recyclerWithScrollerBinding?.binding?.recycler?.isNestedScrollingEnabled =
                 recyclerWithScrollerBinding == activeFrameLayout
+        }
+    }
+
+    /**
+     * Materialize the off-screen migration recycler after expansion instead of during Browse
+     * entry. Its adapter can receive data while detached, avoiding hidden ViewHolder inflation
+     * on the root-navigation frame; once created, the page remains ready for smooth swipes.
+     */
+    fun prepareMigrationPage() {
+        if (!::binding.isInitialized) return
+        binding.pager.postOnAnimation {
+            tabbedSheetAdapter?.ensureMigrationPage()
         }
     }
 
@@ -438,8 +453,8 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
             migrationFrameLayout?.onBind(migAdapter!!)
             migAdapter?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
         }
-        migAdapter?.updateDataSet(sources, changingAdapters)
-        controller.updateTitleAndMenu()
+        val changed = (migAdapter as SourceAdapter).updateDataSetIfChanged(sources, changingAdapters)
+        if (changed) controller.updateTitleAndMenu()
     }
 
     override fun setMigrationManga(title: String, manga: List<MangaItem>?) {
@@ -450,20 +465,19 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
             migrationFrameLayout?.onBind(migAdapter!!)
             migAdapter?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
         }
-        migAdapter?.updateDataSet(manga, changingAdapters)
-        controller.updateTitleAndMenu()
+        val changed = (migAdapter as MangaAdapter).updateDataSetIfChanged(manga, changingAdapters)
+        if (changed) controller.updateTitleAndMenu()
     }
 
     fun drawExtensions() {
-        if (controller.extQuery.isNotBlank()) {
-            extAdapter?.updateDataSet(
-                extensions.filter {
-                    it.extension.name.contains(controller.extQuery, ignoreCase = true)
-                },
-            )
+        val displayedExtensions = if (controller.extQuery.isNotBlank()) {
+            extensions.filter {
+                it.extension.name.contains(controller.extQuery, ignoreCase = true)
+            }
         } else {
-            extAdapter?.updateDataSet(extensions)
+            extensions
         }
+        extAdapter?.updateDataSetIfChanged(displayedExtensions)
         updateExtTitle()
         updateExtUpdateAllButton()
         // NOVEL -->
@@ -498,10 +512,12 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
             extAdapter?.headerItems?.find { it is ExtensionGroupItem && it.canUpdate != null } as? ExtensionGroupItem
                 ?: return
         val items = extAdapter?.getSectionItemPositions(updateHeader) ?: return
-        updateHeader.canUpdate = items.any {
+        val canUpdate = items.any {
             val extItem = (extAdapter?.getItem(it) as? ExtensionItem) ?: return
             extItem.installStep == null || extItem.installStep == InstallStep.Error
         }
+        if (updateHeader.canUpdate == canUpdate) return
+        updateHeader.canUpdate = canUpdate
         extAdapter?.updateItem(updateHeader)
     }
 
@@ -538,10 +554,23 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
     }
 
     fun setCanInstallPrivately(installPrivately: Boolean) {
-        extAdapter?.installPrivately = installPrivately
+        val adapter = extAdapter ?: return
+        if (adapter.installPrivately == installPrivately) return
+        adapter.installPrivately = installPrivately
+        drawExtensions()
     }
 
     fun onDestroy() {
+        boundViews.toList().forEach { view ->
+            view.binding?.recycler?.adapter = null
+        }
+        boundViews.clear()
+        binding.pager.adapter = null
+        tabbedSheetAdapter = null
+        sharedExtensionPool.clear()
+        extAdapter = null
+        migAdapter = null
+        novelPluginAdapter = null
         presenter.onDestroy()
     }
 
@@ -596,7 +625,7 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
         } else {
             novelPlugins
         }
-        novelPluginAdapter?.updateDataSet(displayedPlugins)
+        novelPluginAdapter?.updateDataSetIfChanged(displayedPlugins)
         updateNovelPluginsEmptyState(displayedPlugins.isEmpty())
     }
 
@@ -696,8 +725,8 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
                 }
                 else -> {
                     host.tag = MIGRATION_PAGE_TAG
-                    host.addView(createRecyclerPage(host, MIGRATION_RECYCLER_TAG, migAdapter!!))
-                    migrationFrameLayout?.hideEmptyState()
+                    // The legacy ViewPager eagerly binds its adjacent page. Leave Migration as
+                    // a cheap host until the sheet expansion animation has completed.
                 }
             }
         }
@@ -712,6 +741,15 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
                 MIGRATION_PAGE_TAG -> OUTER_TAB_MIGRATION
                 else -> POSITION_NONE
             }
+        }
+
+        fun ensureMigrationPage() {
+            val host = binding.pager.findViewWithTag<FrameLayout>(MIGRATION_PAGE_TAG) ?: return
+            if (host.childCount != 0) return
+            val adapter = migAdapter ?: return
+            host.addView(createRecyclerPage(host, MIGRATION_RECYCLER_TAG, adapter))
+            migrationFrameLayout?.hideEmptyState()
+            updatedNestedRecyclers()
         }
 
         private fun createExtensionsPage(container: ViewGroup): View {
