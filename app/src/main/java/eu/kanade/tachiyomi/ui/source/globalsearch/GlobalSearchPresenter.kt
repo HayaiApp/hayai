@@ -9,7 +9,6 @@ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.CatalogueSource
-import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SManga
@@ -17,12 +16,12 @@ import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.withUIContext
-import java.util.Date
-import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -57,13 +56,10 @@ open class GlobalSearchPresenter(
 
     private var fetchSourcesJob: Job? = null
 
-    private var loadTime = hashMapOf<Long, Long>()
-
     var query = ""
 
-    private val fetchImageFlow = MutableSharedFlow<Pair<List<Manga>, Source>>()
-
-    private var fetchImageJob: Job? = null
+    @Volatile
+    private var searchSession: SearchSession? = null
 
     private val extensionManager: ExtensionManager by injectLazy()
 
@@ -71,7 +67,8 @@ open class GlobalSearchPresenter(
 
     var items: List<GlobalSearchItem> = emptyList()
 
-    private val semaphore = Semaphore(5)
+    private val sourceSearchSemaphore = Semaphore(5)
+    private val mangaInitializationSemaphore = Semaphore(3)
 
     override fun onCreate() {
         super.onCreate()
@@ -79,11 +76,11 @@ open class GlobalSearchPresenter(
         extensionFilter = initialExtensionFilter
 
         if (items.isEmpty()) {
-            // Perform a search with previous or initial state
             search(initialQuery.orEmpty())
-        }
-        presenterScope.launchUI {
-            view?.setItems(items)
+        } else {
+            presenterScope.launchUI {
+                view?.setItems(items)
+            }
         }
     }
 
@@ -156,40 +153,33 @@ open class GlobalSearchPresenter(
      * @param query query on which to search.
      */
     fun search(query: String) {
-        // Return if there's nothing to do
         if (this.query == query) return
 
-        // Update query
         this.query = query
-
-        // Create image fetch subscription
-        initializeFetchImageSubscription()
-
-        // Create items with the initial state
+        fetchSourcesJob?.cancel()
+        val session = beginSearch()
         val initialItems = sources.map { createCatalogueSearchItem(it, null) }
         items = initialItems
-        presenterScope.launchUI { view?.setItems(items) }
-        val pinnedSourceIds = preferences.pinnedCatalogues().get()
-
-        fetchSourcesJob?.cancel()
+        presenterScope.launchUI {
+            if (searchSession === session) {
+                view?.setItems(initialItems)
+            }
+        }
         fetchSourcesJob = presenterScope.launch {
-            sources.map { source ->
-                launch mainLaunch@{
-                    semaphore.withPermit {
-                        if (this@GlobalSearchPresenter.items.find { it.source == source }?.results != null) {
-                            return@mainLaunch
-                        }
+            sources.forEach { source ->
+                launch {
+                    sourceSearchSemaphore.withPermit {
                         val mangas = try {
                             source.getSearchManga(1, query, source.getFilterList())
+                        } catch (error: CancellationException) {
+                            throw error
                         } catch (error: Exception) {
                             MangasPage(emptyList(), false)
                         }
                             .mangas.take(10)
                             .mapNotNull { networkToLocalManga(it, source.id) }
-                        fetchImage(mangas, source)
-                        if (mangas.isNotEmpty() && !loadTime.containsKey(source.id)) {
-                            loadTime[source.id] = Date().time
-                        }
+                        if (searchSession !== session) return@withPermit
+                        initializeMangas(mangas, source, session)
                         val result = createCatalogueSearchItem(
                             source,
                             mangas.map {
@@ -199,60 +189,63 @@ open class GlobalSearchPresenter(
                                 )
                             },
                         )
-                        items = items
-                            .map { item -> if (item.source == result.source) result else item }
-                            .sortedWith(
-                                compareBy(
-                                    // Bubble up sources that actually have results
-                                    { it.results.isNullOrEmpty() },
-                                    // Same as initial sort, i.e. pinned first then alphabetically
-                                    { it.source.id.toString() !in pinnedSourceIds },
-                                    { loadTime[it.source.id] ?: 0L },
-                                    { "${it.source.name.lowercase(Locale.getDefault())} (${it.source.lang})" },
-                                ),
-                            )
-                        withUIContext { view?.setItems(items) }
+                        withUIContext {
+                            if (searchSession !== session) return@withUIContext
+                            val item = items.firstOrNull { it.source.id == source.id } ?: return@withUIContext
+                            item.results = result.results
+                            view?.updateItem(item)
+                        }
                     }
                 }
             }
         }
     }
 
-    /**
-     * Initialize a list of manga.
-     *
-     * @param manga the list of manga to initialize.
-     */
-    private fun fetchImage(manga: List<Manga>, source: Source) {
-        presenterScope.launch {
-            fetchImageFlow.emit(Pair(manga, source))
-        }
-    }
-
-    /**
-     * Subscribes to the initializer of manga details and updates the view if needed.
-     */
-    private fun initializeFetchImageSubscription() {
-        fetchImageJob?.cancel()
-        fetchImageJob = fetchImageFlow.onEach { (mangaList, source) ->
-            mangaList
-                .filter { it.thumbnail_url == null && !it.initialized }
-                .forEach {
-                    presenterScope.launchIO {
-                        try {
-                            val manga = getMangaDetails(it, source)
-                            withUIContext {
-                                view?.onMangaInitialized(source as CatalogueSource, manga)
-                            }
-                        } catch (_: Exception) {
-                            withUIContext {
-                                view?.onMangaInitialized(source as CatalogueSource, it)
-                            }
+    private fun initializeMangas(mangas: List<Manga>, source: CatalogueSource, session: SearchSession) {
+        mangas.asSequence()
+            .filter { it.thumbnail_url == null && !it.initialized }
+            .filter { manga -> manga.id?.let(session.initializingMangaIds::add) == true }
+            .forEach { manga ->
+                session.scope.launchIO {
+                    val initializedManga = try {
+                        mangaInitializationSemaphore.withPermit {
+                            getMangaDetails(manga, source)
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        manga
+                    } finally {
+                        manga.id?.let(session.initializingMangaIds::remove)
+                    }
+                    withUIContext {
+                        if (searchSession === session) {
+                            view?.onMangaInitialized(source, initializedManga)
                         }
                     }
                 }
-        }.launchIn(presenterScope)
+            }
     }
+
+    private fun beginSearch(): SearchSession {
+        searchSession?.scope?.cancel()
+        return SearchSession(
+            CoroutineScope(
+                presenterScope.coroutineContext + SupervisorJob(presenterScope.coroutineContext[Job]),
+            ),
+        ).also { searchSession = it }
+    }
+
+    override fun onDestroy() {
+        fetchSourcesJob?.cancel()
+        searchSession?.scope?.cancel()
+        super.onDestroy()
+    }
+
+    private class SearchSession(
+        val scope: CoroutineScope,
+        val initializingMangaIds: MutableSet<Long> = ConcurrentHashMap.newKeySet(),
+    )
 
     /**
      * Initializes the given manga.
@@ -260,7 +253,7 @@ open class GlobalSearchPresenter(
      * @param manga the manga to initialize.
      * @return The initialized manga.
      */
-    private suspend fun getMangaDetails(manga: Manga, source: Source): Manga {
+    private suspend fun getMangaDetails(manga: Manga, source: CatalogueSource): Manga {
         val networkManga = source.getMangaDetails(manga.copy())
         manga.copyFrom(networkManga)
         manga.initialized = true

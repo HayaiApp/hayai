@@ -56,7 +56,8 @@ class TrackHolder(view: View, adapter: TrackAdapter) : BaseViewHolder(view) {
         val serviceName = binding.trackLogo.context.getString(item.service.nameRes())
         binding.trackLogo.contentDescription = serviceName
         binding.trackServiceName.text = serviceName
-        binding.addTracking.text = binding.root.context.getString(MR.strings.find_tracker_entry_on, serviceName)
+        binding.addTrackingService.text = serviceName
+        binding.addTracking.contentDescription = binding.root.context.getString(MR.strings.find_tracker_entry_on, serviceName)
         binding.trackGroup.isVisible = track != null
         binding.addTracking.isVisible = track == null
         if (track != null) {

@@ -59,6 +59,7 @@ import eu.kanade.tachiyomi.util.system.withUIContext
 import java.util.Date
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -71,6 +72,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import yokai.util.koin.injectLazy
 import yokai.domain.category.interactor.GetCategories
@@ -163,6 +166,8 @@ class ReaderViewModel(
      * a chapter the user never scrolled to completion this session.
      */
     private val sessionReachedThreshold: MutableMap<Long, Boolean> = mutableMapOf()
+    private var novelProgressSaveJob: Job? = null
+    private val novelProgressSaveMutex = Mutex()
 
     /**
      * The chapter loader for the loaded manga. It'll be null until [manga] is set.
@@ -694,20 +699,22 @@ class ReaderViewModel(
 
     fun onNovelScrollProgress(page: ReaderPage) {
         if (source?.isNovelSource() != true) return
-        viewModelScope.launchNonCancellableIO {
-            saveChapterProgress(page.chapter, page, hasExtraPage = false, sessionScrollAdvance = true)
+        novelProgressSaveJob?.cancel()
+        novelProgressSaveJob = viewModelScope.launchIO {
+            novelProgressSaveMutex.withLock {
+                saveChapterProgress(page.chapter, page, hasExtraPage = false, sessionScrollAdvance = true)
+            }
         }
     }
 
-    /**
-     * Called from teardown paths (pause/stop/destroy) to flush the last known scroll
-     * percent without ever flipping `chapter.read = true`. The `sessionScrollAdvance=false`
-     * flag short-circuits the mark-read gate inside `saveChapterProgress`.
-     */
     fun onNovelTeardownProgress(page: ReaderPage) {
         if (source?.isNovelSource() != true) return
+        novelProgressSaveJob?.cancel()
+        novelProgressSaveJob = null
         viewModelScope.launchNonCancellableIO {
-            saveChapterProgress(page.chapter, page, hasExtraPage = false, sessionScrollAdvance = false)
+            novelProgressSaveMutex.withLock {
+                saveChapterProgress(page.chapter, page, hasExtraPage = false, sessionScrollAdvance = false)
+            }
         }
     }
 
@@ -970,8 +977,10 @@ class ReaderViewModel(
         // moveToPage reads it back on the UI thread, the second navigation snaps back
         // to that stale page (typically 0), undoing a page-preview launch.
         readerChapter.requestedPage = if (isTextSource) 0 else page.index
-        getChapter.awaitById(readerChapter.chapter.id!!)?.let { dbChapter ->
-            readerChapter.chapter.bookmark = dbChapter.bookmark
+        if (!isTextSource) {
+            getChapter.awaitById(readerChapter.chapter.id!!)?.let { dbChapter ->
+                readerChapter.chapter.bookmark = dbChapter.bookmark
+            }
         }
 
         if (shouldTrack && page.status !is Page.State.Error) {
@@ -1021,7 +1030,7 @@ class ReaderViewModel(
                 ChapterUpdate(
                     id = readerChapter.chapter.id!!,
                     read = readerChapter.chapter.read,
-                    bookmark = readerChapter.chapter.bookmark,
+                    bookmark = if (isTextSource) null else readerChapter.chapter.bookmark,
                     lastPageRead = readerChapter.chapter.last_page_read.toLong(),
                     pagesLeft = readerChapter.chapter.pages_left.toLong(),
                 )

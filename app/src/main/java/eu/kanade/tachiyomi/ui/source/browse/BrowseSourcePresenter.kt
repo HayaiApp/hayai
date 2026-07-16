@@ -17,15 +17,19 @@ import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchNonCancellableIO
 import eu.kanade.tachiyomi.util.system.withUIContext
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import yokai.util.koin.injectLazy
@@ -102,6 +106,8 @@ open class BrowseSourcePresenter(
      */
     private lateinit var pager: Pager
     private var pagerJob: Job? = null
+    private var mangaInitializationContext: MangaInitializationContext? = null
+    private val mangaInitializationSemaphore = Semaphore(3)
 
     /**
      * Subscription for one request from the pager.
@@ -204,6 +210,7 @@ open class BrowseSourcePresenter(
         view?.unsubscribe()
 
         // Prepare the pager.
+        val mangaInitializationContext = resetMangaInitializationContext()
         pagerJob?.cancel()
         pagerJob = presenterScope.launchIO {
             pager.asFlow()
@@ -212,7 +219,7 @@ open class BrowseSourcePresenter(
                         .map { networkToLocalManga(it, sourceId) }
                         .filter { !preferences.hideInLibraryItems().get() || !it.favorite }
                 }
-                .onEach { initializeMangas(it.second) }
+                .onEach { initializeMangas(it.second, mangaInitializationContext) }
                 .map { (first, second) ->
                     first to second.map {
                         BrowseSourceItem(
@@ -292,23 +299,47 @@ open class BrowseSourcePresenter(
         return localManga
     }
 
-    /**
-     * Initialize a list of manga.
-     *
-     * @param mangas the list of manga to initialize.
-     */
     fun initializeMangas(mangas: List<Manga>) {
-        presenterScope.launchIO {
-            mangas.asFlow()
-                .filter { it.thumbnail_url == null && !it.initialized }
-                .map { getMangaDetails(it) }
-                .onEach {
-                    withUIContext { view?.onMangaInitialized(it) }
-                }
-                .catch { e -> Logger.e(e) { "Unable to initialize manga" } }
-                .collect()
-        }
+        val context = mangaInitializationContext ?: return
+        initializeMangas(mangas, context)
     }
+
+    private fun initializeMangas(mangas: List<Manga>, context: MangaInitializationContext) {
+        mangas.asSequence()
+            .filter { it.thumbnail_url == null && !it.initialized }
+            .filter { manga -> manga.id?.let(context.initializingMangaIds::add) == true }
+            .forEach { manga ->
+                context.scope.launchIO {
+                    try {
+                        mangaInitializationSemaphore.withPermit {
+                            val initializedManga = getMangaDetails(manga)
+                            withUIContext { view?.onMangaInitialized(initializedManga) }
+                        }
+                    } finally {
+                        manga.id?.let(context.initializingMangaIds::remove)
+                    }
+                }
+            }
+        }
+
+    private fun resetMangaInitializationContext(): MangaInitializationContext {
+        mangaInitializationContext?.scope?.cancel()
+        return MangaInitializationContext(
+            CoroutineScope(
+                presenterScope.coroutineContext + SupervisorJob(presenterScope.coroutineContext[Job]),
+            ),
+        ).also { mangaInitializationContext = it }
+    }
+
+    override fun onDestroy() {
+        mangaInitializationContext?.scope?.cancel()
+        super.onDestroy()
+    }
+
+    private class MangaInitializationContext(
+        val scope: CoroutineScope,
+        val initializingMangaIds: MutableSet<Long> = ConcurrentHashMap.newKeySet(),
+    )
 
     /**
      * Returns the initialized manga.

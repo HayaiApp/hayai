@@ -486,6 +486,12 @@ WHERE manga_id = :manga_id
     AND chapter_id = :chapter_id
     AND target_language = :target_language;
 
+cachedTranslationChapterIds:
+SELECT chapter_id
+FROM chapter_translation_cache
+WHERE manga_id = :manga_id
+    AND target_language = :target_language;
+
 upsertCachedTranslation:
 INSERT INTO chapter_translation_cache(
     manga_id, chapter_id, source_language, target_language, original_hash,

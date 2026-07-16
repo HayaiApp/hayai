@@ -16,11 +16,8 @@ import com.bluelinelabs.conductor.RouterTransaction
 import com.bluelinelabs.conductor.changehandler.SimpleSwapChangeHandler
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.library.LibraryController
-import eu.kanade.tachiyomi.ui.library.compose.LibraryComposeController
 import eu.kanade.tachiyomi.ui.recents.RecentsController
 import eu.kanade.tachiyomi.ui.source.BrowseController
-import yokai.util.koin.injectLazy
-import yokai.domain.base.BasePreferences
 import yokai.presentation.theme.ReducedMotion
 
 /**
@@ -57,9 +54,6 @@ interface RootTabContent {
  * synthetic Conductor events are dispatched.
  */
 class RootTabsController : Controller() {
-
-    private val basePreferences: BasePreferences by injectLazy()
-
     private val containers = mutableMapOf<Int, FrameLayout>()
 
     // -1 sentinel until selectTab() is first called. Prevents premature visibility
@@ -316,8 +310,7 @@ class RootTabsController : Controller() {
     fun allChildRouters(): List<Router> = TAB_IDS.mapNotNull { childRouterFor(it) }
 
     private fun controllerForTab(id: Int): Controller = when (id) {
-        R.id.nav_library ->
-            if (basePreferences.composeLibrary().get()) LibraryComposeController() else LibraryController()
+        R.id.nav_library -> LibraryController()
         R.id.nav_recents -> RecentsController()
         else -> BrowseController()
     }

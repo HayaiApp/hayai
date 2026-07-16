@@ -83,6 +83,7 @@ import kotlin.math.absoluteValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.catch
@@ -92,6 +93,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import yokai.util.koin.injectLazy
 import yokai.domain.category.interactor.GetCategories
 import yokai.domain.chapter.interactor.GetAvailableScanlators
@@ -343,9 +345,12 @@ class MangaDetailsPresenter(
 
         // Find downloaded chapters
         setDownloadedChapters(chapters, downloadsByChapterId)
-        annotateChapterTranslations(chapters)
-        if (allChapters !== chapters) {
-            annotateChapterTranslations(allChapters)
+        if (isChapterTranslationAvailable()) {
+            val cachedTranslationChapterIds = getCachedTranslationChapterIds()
+            annotateChapterTranslations(chapters, cachedTranslationChapterIds)
+            if (allChapters !== chapters) {
+                annotateChapterTranslations(allChapters, cachedTranslationChapterIds)
+            }
         }
         allChapterScanlators = allChapters.mapNotNull { it.chapter.scanlator }.toSet()
 
@@ -394,13 +399,17 @@ class MangaDetailsPresenter(
         return !isLockedFromSearch && translationService.isGloballyEnabled() && source is NovelSource
     }
 
-    private suspend fun annotateChapterTranslations(chapters: List<ChapterItem>) {
-        if (!isChapterTranslationAvailable()) return
-        val mangaId = manga.id ?: return
-        withContext(Dispatchers.IO) {
-            chapters.forEach { chapter ->
-                chapter.hasCachedTranslation = translationService.hasTranslation(chapter.id, mangaId)
-            }
+    private suspend fun getCachedTranslationChapterIds(): Set<Long> {
+        val mangaId = manga.id ?: return emptySet()
+        val targetLanguage = translationService.getLastTargetLanguage()
+        return withContext(Dispatchers.IO) {
+            translationService.getCachedTranslationChapterIds(mangaId, targetLanguage)
+        }
+    }
+
+    private fun annotateChapterTranslations(chapters: List<ChapterItem>, cachedTranslationChapterIds: Set<Long>) {
+        chapters.forEach { chapter ->
+            chapter.hasCachedTranslation = chapter.id?.let(cachedTranslationChapterIds::contains) == true
         }
     }
 
@@ -1215,7 +1224,12 @@ class MangaDetailsPresenter(
         trackSearchJob?.cancel()
         trackSearchJob = presenterScope.launch(Dispatchers.IO) {
             val results = try {
-                service.search(query)
+                withTimeout(TRACK_SEARCH_TIMEOUT_MS) {
+                    service.search(query)
+                }
+            } catch (e: TimeoutCancellationException) {
+                withContext(Dispatchers.Main) { view?.trackSearchError(e) }
+                return@launch
             } catch (_: CancellationException) {
                 return@launch
             } catch (e: Exception) {
@@ -1232,28 +1246,57 @@ class MangaDetailsPresenter(
         trackSearchJob = null
     }
 
-    fun registerTracking(item: Track?, service: TrackService) {
+    fun registerTracking(
+        item: Track?,
+        service: TrackService,
+        onComplete: ((Result<Track>) -> Unit)? = null,
+    ) {
         if (item != null) {
             item.manga_id = manga.id!!
 
             presenterScope.launch {
                 val binding = try {
-                    service.bind(item)
+                    withTimeout(TRACK_BIND_TIMEOUT_MS) {
+                        service.bind(item)
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    if (onComplete == null) {
+                        trackError(e)
+                    } else {
+                        onComplete(Result.failure(e))
+                    }
+                    return@launch
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    trackError(e)
-                    null
+                    if (onComplete == null) {
+                        trackError(e)
+                    } else {
+                        onComplete(Result.failure(e))
+                    }
+                    return@launch
                 }
-                withContext(Dispatchers.IO) {
-                    if (binding != null) {
+                try {
+                    withContext(Dispatchers.IO) {
                         insertTrack.await(binding)
                         syncChaptersWithTrackServiceTwoWay(chapters, binding, service)
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (onComplete == null) {
+                        trackError(e)
+                    } else {
+                        onComplete(Result.failure(e))
+                    }
+                    return@launch
                 }
                 val metadataSearch = (binding as? TrackSearch) ?: (item as? TrackSearch)
-                if (binding != null && metadataSearch != null) {
+                if (metadataSearch != null) {
                     persistTrackerMetadata(metadataSearch, service)
                 }
                 fetchTracks()
+                onComplete?.invoke(Result.success(binding))
             }
         }
     }
@@ -1405,6 +1448,8 @@ class MangaDetailsPresenter(
     }
 
     companion object {
+        private const val TRACK_SEARCH_TIMEOUT_MS = 25_000L
+        private const val TRACK_BIND_TIMEOUT_MS = 30_000L
         const val MULTIPLE_VOLUMES = 1
         const val TENS_OF_CHAPTERS = 2
         const val MULTIPLE_SEASONS = 3

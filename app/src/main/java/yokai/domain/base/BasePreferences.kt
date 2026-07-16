@@ -64,8 +64,6 @@ class BasePreferences(private val preferenceStore: PreferenceStore) {
 
     fun hardwareBitmapThreshold() = preferenceStore.getInt("pref_hardware_bitmap_threshold", GLUtil.SAFE_TEXTURE_LIMIT)
 
-    fun composeLibrary() = preferenceStore.getBoolean("pref_use_compose_library", false)
-
     fun appIcon() = preferenceStore.getEnum("pref_app_icon", AppIcons.DEFAULT)
 
     enum class AppIcons(val displayName: String, val id: String, val icon: Int) {

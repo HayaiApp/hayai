@@ -98,7 +98,7 @@ object SettingsAdvancedScreen : ComposableSettings() {
             add(getDataManagementGroup())
             add(getNetworkGroup(networkPreferences))
             add(getExtensionGroup(basePreferences))
-            add(getLibraryGroup(basePreferences))
+            add(getLibraryGroup())
             add(getDeveloperGroup())
         }.toPersistentList()
     }
@@ -380,7 +380,7 @@ object SettingsAdvancedScreen : ComposableSettings() {
     }
 
     @Composable
-    private fun getLibraryGroup(basePreferences: BasePreferences): Preference.PreferenceGroup {
+    private fun getLibraryGroup(): Preference.PreferenceGroup {
         val context = LocalContext.current
 
         val children = buildList {
@@ -394,13 +394,6 @@ object SettingsAdvancedScreen : ComposableSettings() {
                 subtitle = stringResource(MR.strings.updates_tracking_details),
                 onClick = { LibraryUpdateJob.startNow(context, target = LibraryUpdateJob.Target.TRACKING) },
             ))
-            if (BuildConfig.FLAVOR == "dev" || BuildConfig.DEBUG) {
-                add(Preference.PreferenceItem.SwitchPreference(
-                    pref = basePreferences.composeLibrary(),
-                    title = stringResource(MR.strings.pref_use_compose_library),
-                    // FIXME: Add beta tag support to preference item
-                ))
-            }
         }.toPersistentList()
 
         return Preference.PreferenceGroup(

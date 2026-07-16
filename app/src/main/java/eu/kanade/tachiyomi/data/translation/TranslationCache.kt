@@ -22,6 +22,14 @@ class TranslationCache(
             .executeAsOneOrNull() != null
     }
 
+    fun getCachedTranslationChapterIds(mangaId: Long, targetLanguage: String): Set<Long> {
+        migrateLegacyIfNeeded()
+        return database.series_knowledgeQueries
+            .cachedTranslationChapterIds(mangaId, targetLanguage)
+            .executeAsList()
+            .toSet()
+    }
+
     fun getTranslation(mangaId: Long, chapterId: Long, targetLanguage: String): CachedTranslation? {
         migrateLegacyIfNeeded()
         return database.series_knowledgeQueries.findCachedTranslation(

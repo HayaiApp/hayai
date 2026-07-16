@@ -208,10 +208,12 @@ open class GlobalSearchController(
                         val index = this@GlobalSearchController.adapter
                             ?.currentItems?.indexOfFirst { it.source.id == source } ?: return@let
                         val item = this@GlobalSearchController.adapter?.getItem(index) ?: return@let
-                        val oldMangaIndex = item.results?.indexOfFirst {
+                        val results = item.results ?: return@let
+                        val oldMangaIndex = results.indexOfFirst {
                             it.manga.title.lowercase() == manga.title.lowercase()
-                        } ?: return@let
-                        val oldMangaItem = item.results.getOrNull(oldMangaIndex)
+                        }
+                        if (oldMangaIndex < 0) return@let
+                        val oldMangaItem = results.getOrNull(oldMangaIndex)
                         oldMangaItem?.manga?.favorite = stillFaved
                         val holder = binding.recycler.findViewHolderForAdapterPosition(index) as? GlobalSearchHolder
                         holder?.updateManga(oldMangaIndex)
@@ -340,6 +342,16 @@ open class GlobalSearchController(
      * @param searchResult result of search.
      */
     fun setItems(searchResult: List<GlobalSearchItem>) {
+        if (applyExtensionFilterResult(searchResult)) return
+        adapter?.updateDataSet(searchResult)
+    }
+
+    fun updateItem(item: GlobalSearchItem) {
+        if (applyExtensionFilterResult(presenter.items)) return
+        adapter?.updateItem(item)
+    }
+
+    private fun applyExtensionFilterResult(searchResult: List<GlobalSearchItem>): Boolean {
         if (extensionFilter != null) {
             val results = searchResult.firstOrNull()?.results
             if (results != null && searchResult.size == 1 && results.size == 1) {
@@ -348,7 +360,7 @@ open class GlobalSearchController(
                     MangaDetailsController(manga, true, shouldLockIfNeeded = true)
                         .withFadeTransaction(),
                 )
-                return
+                return true
             } else if (results != null) {
                 (activity as? SearchActivity)?.setFloatingToolbar(true)
                 customTitle = null
@@ -357,7 +369,7 @@ open class GlobalSearchController(
                 appBar()?.updateAppBarAfterY(binding.recycler)
             }
         }
-        adapter?.updateDataSet(searchResult)
+        return false
     }
 
     /**

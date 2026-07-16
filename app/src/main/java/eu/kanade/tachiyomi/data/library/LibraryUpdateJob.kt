@@ -72,7 +72,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -124,8 +123,6 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     private var extraDeferredJobs = mutableListOf<Deferred<Any>>()
 
     private val extraScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val emitScope = MainScope()
-
     private val mangaToUpdate = mutableListOf<LibraryManga>()
 
     private val mangaToUpdateMap = mutableMapOf<Long, List<LibraryManga>>()
@@ -240,12 +237,8 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         }
     }
 
-    private suspend fun sendUpdate(mangaId: Long?) {
-        if (isStopped) {
-            updateMutableFlow.tryEmit(mangaId)
-        } else {
-            emitScope.launch { updateMutableFlow.emit(mangaId) }
-        }
+    private fun sendUpdate(mangaId: Long?) {
+        updateMutableFlow.tryEmit(mangaId)
     }
 
     private suspend fun updateChaptersJob(mangaToAdd: List<LibraryManga>) {

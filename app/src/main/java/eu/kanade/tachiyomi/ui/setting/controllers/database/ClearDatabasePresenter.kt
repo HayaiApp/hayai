@@ -5,7 +5,6 @@ import eu.kanade.tachiyomi.data.database.models.SourceIdMangaCount
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
 import eu.kanade.tachiyomi.util.system.launchIO
-import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.withUIContext
 import yokai.data.DatabaseHandler
 
@@ -27,7 +26,7 @@ class ClearDatabasePresenter : BaseCoroutinePresenter<ClearDatabaseController>()
 
     override fun onCreate() {
         super.onCreate()
-        presenterScope.launchUI {
+        presenterScope.launchIO {
             getDatabaseSources()
         }
     }
@@ -48,19 +47,19 @@ class ClearDatabasePresenter : BaseCoroutinePresenter<ClearDatabaseController>()
 
     fun reorder(sortBy: SortSources) {
         this.sortBy = sortBy
-        presenterScope.launchUI {
+        presenterScope.launchIO {
             getDatabaseSources()
         }
     }
 
-    private suspend fun getDatabaseSources() = withUIContext {
-        hasStubSources = false
+    private suspend fun getDatabaseSources() {
+        var containsStubSources = false
         val sources = handler.awaitList {
             mangasQueries.getSourceIdsOfNotInLibrary { source, count -> SourceIdMangaCount(source, count) }
         }
             .map {
                 val sourceObj = sourceManager.getOrStub(it.source)
-                hasStubSources = sourceObj is SourceManager.StubSource || hasStubSources
+                containsStubSources = sourceObj is SourceManager.StubSource || containsStubSources
                 ClearDatabaseSourceItem(sourceObj, it.count)
             }
             .sortedWith(
@@ -74,6 +73,9 @@ class ClearDatabasePresenter : BaseCoroutinePresenter<ClearDatabaseController>()
                     { it.source.name },
                 ),
             )
-        view?.setItems(sources)
+        withUIContext {
+            this@ClearDatabasePresenter.hasStubSources = containsStubSources
+            view?.setItems(sources)
+        }
     }
 }

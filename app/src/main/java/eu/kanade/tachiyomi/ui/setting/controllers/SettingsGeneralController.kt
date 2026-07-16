@@ -12,6 +12,7 @@ import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import yokai.i18n.MR
+import yokai.i18n.R as I18nR
 import yokai.util.lang.getString
 import eu.kanade.tachiyomi.data.updater.AppDownloadInstallJob
 import eu.kanade.tachiyomi.ui.setting.SettingsLegacyController
@@ -171,7 +172,7 @@ class SettingsGeneralController : SettingsLegacyController() {
                     dialogTitleRes = MR.strings.language
 
                     val langs = mutableListOf<Language>()
-                    val parser = context.resources.getXml(R.xml.locales_config)
+                    val parser = context.resources.getXml(I18nR.xml.locales_config)
                     var eventType = parser.eventType
                     while (eventType != XmlResourceParser.END_DOCUMENT) {
                         if (eventType == XmlResourceParser.START_TAG && parser.name == "locale") {

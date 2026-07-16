@@ -286,10 +286,12 @@ class Downloader(
                 .sortedByDescending { it.source_order }
         }
 
-        // Runs in main thread (synchronization needed).
+        val queuedChapterIds = queueState.value.asSequence()
+            .mapNotNull { it.chapter.id }
+            .toHashSet()
         val chaptersToQueue = chaptersWithoutDir.await()
             // Filter out those already enqueued.
-            .filter { chapter -> queueState.value.none { it.chapter.id == chapter.id } }
+            .filter { chapter -> chapter.id !in queuedChapterIds }
             // Create a download for each one.
             .map { Download(source, manga, it) }
 
@@ -737,7 +739,9 @@ class Downloader(
     }
 
     fun removeFromQueue(chapters: List<Chapter>) {
-        removeFromQueueIf { it.chapter.id in chapters.map { it.id } }
+        val chapterIds = chapters.asSequence().mapNotNull { it.id }.toHashSet()
+        if (chapterIds.isEmpty()) return
+        removeFromQueueIf { it.chapter.id in chapterIds }
     }
 
     fun removeFromQueue(manga: Manga) {

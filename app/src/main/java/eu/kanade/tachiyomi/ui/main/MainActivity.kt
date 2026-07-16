@@ -90,7 +90,6 @@ import eu.kanade.tachiyomi.ui.base.controller.BaseController
 import eu.kanade.tachiyomi.ui.base.controller.BaseLegacyController
 import eu.kanade.tachiyomi.ui.base.controller.DialogController
 import eu.kanade.tachiyomi.ui.library.LibraryController
-import eu.kanade.tachiyomi.ui.library.compose.LibraryComposeController
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
 import eu.kanade.tachiyomi.ui.more.AboutController
 import eu.kanade.tachiyomi.ui.more.OverflowDialog
@@ -605,7 +604,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                 if (currentRoot?.tag()?.toIntOrNull() != id) {
                     setRoot(
                         when (id) {
-                            R.id.nav_library -> if (basePreferences.composeLibrary().get()) LibraryComposeController() else LibraryController()
+                            R.id.nav_library -> LibraryController()
                             R.id.nav_recents -> RecentsController()
                             else -> BrowseController()
                         },
@@ -1145,21 +1144,11 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             rootTabsController?.view?.alpha = 1f
             rootTabsController?.resetActiveTabAlpha()
             restoreRootTabsAlphas()
-            // Re-sync chrome visibility in case the activity-global appBar got into a
-            // stale state across the activity transition.
-            syncActivityAppBarVisibility(active)
-            // Also defensively snap the local appBar of any LocalAppBarOwner back to a
-            // visible baseline — the same defensive reset wireDefaultLocalChrome does on
-            // every controller enter. Activity resume doesn't fire a Conductor change,
-            // so without this nudge the local appBar can stay at translationY = -height
-            // (off-screen) from before the pause.
-            val localAppBar = (active as? eu.kanade.tachiyomi.ui.base.LocalAppBarOwner)?.localAppBar()
-            localAppBar?.let { bar ->
-                bar.alpha = 1f
-                bar.isInvisible = false
-                bar.lockYPos = false
-                bar.translationY = 0f
-                bar.y = 0f
+            val activeBaseController = active as? BaseController
+            if (activeBaseController?.hostsOwnAppBar == true) {
+                activeBaseController.activateLocalChrome()
+            } else {
+                syncActivityAppBarVisibility(active)
             }
         }
     }

@@ -56,6 +56,10 @@ class TranslationService(
         return cache.hasTranslation(mangaId, chapterId, preferences.targetLanguage().get())
     }
 
+    fun getCachedTranslationChapterIds(mangaId: Long, targetLanguage: String): Set<Long> {
+        return cache.getCachedTranslationChapterIds(mangaId, targetLanguage)
+    }
+
     fun deleteTranslation(chapterId: Long?, mangaId: Long?) {
         if (chapterId == null || mangaId == null) return
         cache.deleteTranslation(mangaId, chapterId, preferences.targetLanguage().get())

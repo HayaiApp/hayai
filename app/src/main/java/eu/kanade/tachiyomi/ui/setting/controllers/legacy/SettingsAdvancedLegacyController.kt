@@ -389,12 +389,6 @@ class SettingsAdvancedLegacyController : SettingsLegacyController() {
 
                 onClick { LibraryUpdateJob.Companion.startNow(context, target = LibraryUpdateJob.Target.TRACKING) }
             }
-            if (BuildConfig.FLAVOR == "dev" || BuildConfig.DEBUG) {
-                switchPreference {
-                    bindTo(basePreferences.composeLibrary())
-                    title = context.getString(MR.strings.pref_use_compose_library).addBetaTag(context)
-                }
-            }
         }
 
         preferenceCategory {

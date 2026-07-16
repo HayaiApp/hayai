@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import eu.kanade.tachiyomi.util.system.extension
 import eu.kanade.tachiyomi.util.system.launchIO
-import eu.kanade.tachiyomi.util.system.launchNonCancellableIO
 import eu.kanade.tachiyomi.util.system.nameWithoutExtension
 import java.io.File
 import java.util.concurrent.*
@@ -75,7 +74,7 @@ class DownloadCache(
 
     val scope = CoroutineScope(Dispatchers.IO)
 
-    private val _changes: Channel<Unit> = Channel(Channel.UNLIMITED)
+    private val _changes: Channel<Unit> = Channel(Channel.CONFLATED)
     val changes = _changes.receiveAsFlow()
         .onStart { emit(Unit) }
         .shareIn(scope, SharingStarted.Lazily, 1)
@@ -277,9 +276,7 @@ class DownloadCache(
     }
 
     private fun notifyChanges() {
-        scope.launchNonCancellableIO {
-            _changes.send(Unit)
-        }
+        _changes.trySend(Unit)
         updateDiskCache()
     }
 

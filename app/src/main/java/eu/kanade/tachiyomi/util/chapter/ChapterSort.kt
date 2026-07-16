@@ -34,7 +34,7 @@ class ChapterSort(val manga: Manga, val chapterFilter: ChapterFilter = get(), va
             andFiltered -> chapterFilter.filterChapters(rawChapters, manga)
             else -> rawChapters
         }
-        return chapters.sortedWith(sortComparator(true)).firstOrNull()
+        return chapters.minWithOrNull(sortComparator(true))
     }
 
     fun <T : Chapter> getNextUnreadChapter(rawChapters: List<T>, andFiltered: Boolean = true): T? {
@@ -43,7 +43,9 @@ class ChapterSort(val manga: Manga, val chapterFilter: ChapterFilter = get(), va
             else -> rawChapters
         }
 
-        return chapters.sortedWith(sortComparator(true)).find { !it.read }
+        return chapters.asSequence()
+            .filterNot { it.read }
+            .minWithOrNull(sortComparator(true))
     }
 
     fun <T : Chapter> sortComparator(ignoreAsc: Boolean = false): Comparator<T> {

@@ -18,7 +18,7 @@ import eu.kanade.tachiyomi.source.CatalogueSource
  * @param results the search results.
  * @param highlighted whether this search item should be highlighted/marked in the catalogue search view.
  */
-class GlobalSearchItem(val source: CatalogueSource, val results: List<GlobalSearchMangaItem>?, val highlighted: Boolean = false) :
+class GlobalSearchItem(val source: CatalogueSource, var results: List<GlobalSearchMangaItem>?, val highlighted: Boolean = false) :
     AbstractFlexibleItem<GlobalSearchHolder>() {
 
     /**

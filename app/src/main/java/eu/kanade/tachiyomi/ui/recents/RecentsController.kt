@@ -1092,9 +1092,7 @@ class RecentsController(bundle: Bundle? = null) :
         presenter.setUiActive(true)
         if (!isBindingInitialized) return
         binding.downloadBottomSheet.dlBottomSheet.dismiss()
-        // Tab swap is not a Conductor event, so the base-controller hoist of
-        // onSetupLocalChrome doesn't fire here — wire chrome explicitly.
-        onSetupLocalChrome()
+        activateLocalChrome()
         setBottomPadding()
         updateTitleAndMenu()
         pendingInactiveList?.let { pending ->

@@ -625,7 +625,7 @@ class NovelWebViewViewer(val activity: ReaderActivity) :
                         val imagePath = android.net.Uri.decode(url.removePrefix("hayai-novel-image://"))
                         val loader = activity.viewModel.state.value.viewerChapters?.currChapter?.pageLoader
                         if (loader != null) {
-                            val stream = kotlinx.coroutines.runBlocking { loader.getPageDataStream(imagePath) }
+                            val stream = loader.getPageDataStream(imagePath)
                             if (stream != null) {
                                 val mimeType = when (imagePath.substringAfterLast('.', "").lowercase()) {
                                     "png" -> "image/png"

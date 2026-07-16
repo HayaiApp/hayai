@@ -289,23 +289,62 @@
                 app:constraint_referenced_ids="vert_divider_3,bottom_divider,track_start_date,track_finish_date" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <com.google.android.material.button.MaterialButton
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/add_tracking"
-            style="@style/Theme.Widget.Button.TextButton"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:letterSpacing="0.0"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:text="@string/find_tracker_entry"
-            android:textAlignment="textStart"
+            android:layout_height="0dp"
+            android:background="@drawable/card_item_selector"
+            android:clickable="true"
+            android:focusable="true"
+            android:minHeight="72dp"
             android:visibility="gone"
-            app:icon="@drawable/ic_search_24dp"
-            app:iconGravity="textStart"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/logo_container"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/add_tracking_service"
+                style="?textAppearanceTitleMedium"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_marginEnd="48dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                app:layout_constraintBottom_toTopOf="@id/add_tracking_hint"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintVertical_chainStyle="packed"
+                tools:text="NovelList" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/add_tracking_hint"
+                style="?textAppearanceBodySmall"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_marginTop="2dp"
+                android:layout_marginEnd="48dp"
+                android:text="@string/tracker_connect_service_hint"
+                android:textColor="?android:attr/textColorSecondary"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/add_tracking_service" />
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="16dp"
+                android:contentDescription="@null"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_arrow_forward_24dp"
+                app:tint="?colorPrimary" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <androidx.constraintlayout.widget.Group
             android:id="@+id/track_group"

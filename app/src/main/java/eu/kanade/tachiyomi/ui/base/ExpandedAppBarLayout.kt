@@ -434,15 +434,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         useTabsInPreLayout = false
     }
 
-    /**
-     * Defensive reset to a known-clean baseline. Idempotent. Called by the activity on
-     * every controller-change before the incoming controller's chrome wiring runs, so
-     * any slots the previous controller left populated (tabs row, search pill, lifted
-     * menu, scroll-offset state) are vacated. This is the single invariant enforcement
-     * point — controllers no longer have to clean up after themselves.
-     */
-    fun resetToBaseline() {
-        clearTabs()
+    fun resetForActivation() {
         cardFrame?.isVisible = false
         cardFrame?.alpha = 0f
         dropLiftedPillMenu()
@@ -463,6 +455,11 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         isInvisible = false
         useTabsInPreLayout = false
         compactSearchMode = false
+    }
+
+    fun resetToBaseline() {
+        clearTabs()
+        resetForActivation()
     }
 
     fun setTitle(title: CharSequence?, setBigTitle: Boolean) {

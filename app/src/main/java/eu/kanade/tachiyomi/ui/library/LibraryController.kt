@@ -281,13 +281,14 @@ open class LibraryController(
     private fun seedSearchFromState() {
         val pill = searchToolbar() ?: return
         val searchView = pill.searchView ?: return
-        if (searchView.query?.toString().orEmpty() == query) return
-        if (query.isNotEmpty()) {
-            if (pill.isSearchExpanded != true) pill.searchItem?.expandActionView()
+        if (query.isEmpty()) {
+            if (pill.isSearchExpanded == true) pill.searchItem?.collapseActionView()
+            return
+        }
+        if (pill.isSearchExpanded != true) pill.searchItem?.expandActionView()
+        if (searchView.query?.toString().orEmpty() != query) {
             searchView.setQuery(query, false)
             searchView.clearFocus()
-        } else if (pill.isSearchExpanded == true) {
-            pill.searchItem?.collapseActionView()
         }
     }
 
@@ -1697,10 +1698,7 @@ open class LibraryController(
         // onSetupLocalChrome below owns the one tab-strip/mini-bar refresh for activation.
         // Avoid doing it here and then immediately repeating the same TabLayout work.
         reconcileDisplaySurface(refreshChrome = false)
-        // BaseController.onChangeStarted fires onSetupLocalChrome on push/pop, but tab
-        // swaps go through RootTabsController.selectTab → onTabActivated and bypass
-        // Conductor's lifecycle. Wire chrome explicitly here.
-        onSetupLocalChrome()
+        activateLocalChrome()
         pendingInactiveLibraryUpdate?.let { pending ->
             pendingInactiveLibraryUpdate = null
             onNextLibraryUpdate(pending.items, pending.freshStart)

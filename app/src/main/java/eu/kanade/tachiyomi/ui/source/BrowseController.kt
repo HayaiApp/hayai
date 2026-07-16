@@ -725,8 +725,7 @@ class BrowseController :
      */
     override fun onTabActivated() {
         if (!isBindingInitialized) return
-        // Tab swap is not a Conductor event; rewire the local chrome explicitly.
-        onSetupLocalChrome()
+        activateLocalChrome()
         binding.bottomSheet.root.canExpand = true
         setBottomPadding()
         // The lastUsed flow collector started in SourcePresenter.loadLastUsedSource can miss
