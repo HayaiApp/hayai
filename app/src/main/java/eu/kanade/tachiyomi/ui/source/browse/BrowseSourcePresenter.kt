@@ -271,6 +271,7 @@ open class BrowseSourcePresenter(
                 }
                 .catch { error ->
                     Logger.e(error) { "Unable to prepare a page" }
+                    withUIContext { view?.onAddPageError(error) }
                 }
                 .collectLatest { (page, mangas) ->
                     if (mangas.isEmpty() && page == 1) {

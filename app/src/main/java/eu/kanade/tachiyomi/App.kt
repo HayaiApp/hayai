@@ -49,7 +49,6 @@ import eu.kanade.tachiyomi.data.coil.MangaKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
-import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.library.LibraryPresenter
@@ -67,7 +66,6 @@ import eu.kanade.tachiyomi.util.system.setToDefault
 import eu.kanade.tachiyomi.util.system.WebViewUtil
 import java.security.Security
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.conscrypt.Conscrypt
@@ -89,7 +87,6 @@ import hayai.novel.di.novelModule
 // NOVEL <--
 import yokai.core.di.appModule
 import yokai.core.di.domainModule
-import yokai.core.di.initExpensiveComponents
 import yokai.core.di.preferenceModule
 import yokai.core.migration.Migrator
 import yokai.core.migration.migrations.migrations
@@ -139,10 +136,6 @@ open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.F
                 // NOVEL <--
             )
         }
-        // Eagerly warm up heavy singletons on IO so the main thread isn't blocked when
-        // MainActivity later calls into them. See AppModule.initExpensiveComponents.
-        initExpensiveComponents(this)
-
         // EXH -->
         // Schedule EHentai gallery update worker if enabled
         // This will be wired when EHentaiUpdateWorkerConstants is available:
@@ -155,40 +148,8 @@ open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.F
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
         val scope = ProcessLifecycleOwner.get().lifecycleScope
 
-        // Source icons otherwise perform PackageManager.loadIcon() Binder calls from the first
-        // visible Library/Recents/Browse bind. Resolve the shared extension cache from IO once
-        // per process; screen-level calls remain harmless idempotent fallbacks.
-        scope.launchIO {
-            GlobalContext.get().get<ExtensionManager>().preloadInstalledIcons()
-        }
-
         // ── 4. One-shot side effects ──────────────────────────────────────────────────────
-        // WebView init transiently rewrites the application context's package identity to
-        // the WebView provider (com.android.chrome). Any system-service call from another
-        // thread during that window hits checkCallerIsSameApp with a mismatched package
-        // and throws SecurityException. Channels are created before WebView is touched.
-        val channelsJob = scope.launchIO { setupNotificationChannels() }
-
-        // Trigger NovelPluginManager init now so QuickJS metadata extraction happens at
-        // app launch, not at first reader-open (where init awaits the source up to 5s).
-        scope.launchIO {
-            try {
-                GlobalContext.get().get<hayai.novel.plugin.NovelPluginManager>()
-            } catch (e: Throwable) {
-                Logger.w(e) { "App: pre-warming NovelPluginManager failed" }
-            }
-        }
-
-        // Pre-load WebView native libs so the first novel chapter doesn't pay the
-        // WebView class-init cost (200–500 ms cold) on the UI thread.
-        scope.launch {
-            channelsJob.join()
-            try {
-                WebView(this@App).destroy()
-            } catch (e: Throwable) {
-                Logger.w(e) { "App: pre-warming WebView failed" }
-            }
-        }
+        setupNotificationChannels()
 
         // Cover ratio/colour cache: heavy SharedPreferences read on first access; on IO so it
         // can't block the main thread. MangaCoverMetadata.load() merges into the existing

@@ -12,6 +12,11 @@ The format is simplified version of [Keep a Changelog](https://keepachangelog.co
 
 ## [Unreleased]
 
+### Emergency fixes
+- Restore reliable manga/novel browse delivery when cached or fast source responses complete before the UI collector is attached
+- Surface browse preparation failures instead of leaving the screen on an endless loading indicator
+- Remove eager network/source/database, WebView, novel-plugin, and extension-icon startup pre-warms that could race source and image initialization
+
 > **Rokku maintenance sync:** Extension-ecosystem compatibility and the maintenance fixes below
 > were ported from [Rokku](https://github.com/rokku-app/rokku) through v1.2.5. Many thanks to
 > Thiago Rocha, Hiirbaf, Sacha1016, and the Rokku contributors for keeping the Yokai lineage current.

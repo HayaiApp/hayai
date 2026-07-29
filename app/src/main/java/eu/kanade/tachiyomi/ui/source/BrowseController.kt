@@ -153,8 +153,6 @@ class BrowseController :
      */
     private var adapter: SourceAdapter? = null
     private var sourceRecyclerPool: RecyclerView.RecycledViewPool? = null
-    private var submittedLastUsedSignature: Int? = null
-    private var hasSubmittedLastUsed = false
 
     var extQuery = ""
         private set
@@ -186,8 +184,6 @@ class BrowseController :
         super.onViewCreated(view)
         val isReturning = adapter != null
         adapter = SourceAdapter(this)
-        submittedLastUsedSignature = null
-        hasSubmittedLastUsed = false
         // Create binding.sourceRecycler and set adapter.
         binding.sourceRecycler.layoutManager = LinearLayoutManagerAccurateOffset(view.context)
         binding.sourceRecycler.setHasFixedSize(true)
@@ -941,7 +937,7 @@ class BrowseController :
      * Called to update adapter containing sources.
      */
     fun setSources(sources: List<IFlexible<*>>, lastUsed: SourceItem?) {
-        adapter?.updateDataSetIfChanged(sources, false)
+        adapter?.updateDataSet(sources, false)
         setLastUsedSource(lastUsed)
         if (isControllerVisible) {
             appBar()?.lockYPos = false
@@ -952,10 +948,6 @@ class BrowseController :
      * Called to set the last used catalogue at the top of the view.
      */
     fun setLastUsedSource(item: SourceItem?) {
-        val nextSignature = item?.bindingContentSignature()
-        if (hasSubmittedLastUsed && nextSignature == submittedLastUsedSignature) return
-        submittedLastUsedSignature = nextSignature
-        hasSubmittedLastUsed = true
         adapter?.removeAllScrollableHeaders()
         if (item != null) {
             adapter?.addScrollableHeader(item)
