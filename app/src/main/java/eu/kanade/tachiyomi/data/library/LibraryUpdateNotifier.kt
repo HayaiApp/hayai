@@ -148,6 +148,7 @@ class LibraryUpdateNotifier(private val context: Context) {
         // .txt file, and the "Learn why" link is unchanged.
         val reportIntent =
             NotificationReceiver.openLibraryUpdateReportPendingActivity(context, "SKIPPED")
+        val pendingIntent = NotificationReceiver.openErrorOrSkippedLogPendingActivity(context, uri)
         context.notificationManager.notify(
             Notifications.ID_LIBRARY_SKIPPED,
             context.notificationBuilder(Notifications.CHANNEL_LIBRARY_SKIPPED) {
@@ -166,7 +167,7 @@ class LibraryUpdateNotifier(private val context: Context) {
                 addAction(
                     R.drawable.ic_file_open_24dp,
                     context.getString(MR.strings.open_log),
-                    NotificationReceiver.openErrorOrSkippedLogPendingActivity(context, uri),
+                    pendingIntent,
                 )
                 addAction(
                     R.drawable.ic_help_outline_24dp,
@@ -276,15 +277,22 @@ class LibraryUpdateNotifier(private val context: Context) {
                         setLargeIcon(notificationBitmap)
                         setContentTitle(context.getString(MR.strings.new_chapters_found))
                         color = ContextCompat.getColor(context, R.color.secondaryTachiyomi)
-                        if (updates.size > 1) {
+                        // Content text must always be set, even when "hide notification content"
+                        // is on and there's a single update: falling through with no content text
+                        // at all left the summary notification visibly empty in that case.
+                        if (!preferences.hideNotificationContent().get()) {
                             setContentText(
-                                context.getString(
-                                    MR.plurals.for_n_titles,
-                                    updates.size,
-                                    updates.size,
-                                ),
+                                if (updates.size > 1) {
+                                    context.getString(
+                                        MR.plurals.for_n_titles,
+                                        updates.size,
+                                        updates.size,
+                                    )
+                                } else {
+                                    updates.keys.first().manga.title.chop(45)
+                                },
                             )
-                            if (!preferences.hideNotificationContent().get()) {
+                            if (updates.size > 1) {
                                 setStyle(
                                     NotificationCompat.BigTextStyle()
                                         .bigText(
@@ -294,8 +302,14 @@ class LibraryUpdateNotifier(private val context: Context) {
                                         ),
                                 )
                             }
-                        } else if (!preferences.hideNotificationContent().get()) {
-                            setContentText(updates.keys.first().manga.title.chop(45))
+                        } else {
+                            setContentText(
+                                context.getString(
+                                    MR.plurals.for_n_titles,
+                                    updates.size,
+                                    updates.size,
+                                ),
+                            )
                         }
                         priority = NotificationCompat.PRIORITY_HIGH
                         setGroup(Notifications.GROUP_NEW_CHAPTERS)

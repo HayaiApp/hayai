@@ -118,7 +118,6 @@ class LibraryGridHolder(
         setUnreadBadge(binding.unreadDownloadBadge.badgeView, item)
         setReadingButton(item)
         setSelected(adapter.isSelected(flexibleAdapterPosition))
-
         // Update the cover.
         binding.coverThumbnail.dispose()
         setCover(item.manga.manga)

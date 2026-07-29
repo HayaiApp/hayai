@@ -54,7 +54,6 @@ class DownloadButton @JvmOverloads constructor(context: Context, attrs: Attribut
     private val checkAnim by lazy {
         AnimatedVectorDrawableCompat.create(context, R.drawable.anim_dl_to_check_to_dl)
     }
-    private var isAnimating = false
     private var iconAnimation: ObjectAnimator? = null
 
     private lateinit var binding: DownloadButtonBinding
@@ -68,7 +67,6 @@ class DownloadButton @JvmOverloads constructor(context: Context, attrs: Attribut
         if (state != Download.State.DOWNLOADING) {
             iconAnimation?.cancel()
             binding.downloadIcon.alpha = 1f
-            isAnimating = false
         }
         binding.downloadIcon.setImageDrawable(
             if (state == Download.State.CHECKED) {
@@ -111,14 +109,20 @@ class DownloadButton @JvmOverloads constructor(context: Context, attrs: Attribut
                 binding.downloadBorder.drawable.setTint(progressBGColor)
                 binding.downloadProgress.progressDrawable?.setTint(downloadedColor)
                 binding.downloadIcon.drawable.setTint(disabledColor)
-                if (!isAnimating) {
+                // Checking the animator's actual isRunning state (rather than a separately
+                // tracked flag) matters here: this view is recycled by the chapter list's
+                // RecyclerView, and an ObjectAnimator can stop ticking (e.g. when its target
+                // view gets detached from the window while off-screen) without ever notifying
+                // us, which would otherwise leave a stale "already animating" flag and the
+                // icon frozen once the row is recycled back into view.
+                if (iconAnimation?.isRunning != true) {
+                    iconAnimation?.cancel()
                     iconAnimation = ObjectAnimator.ofFloat(binding.downloadIcon, "alpha", 1f, 0f).apply {
                         duration = 1000
                         repeatCount = ObjectAnimator.INFINITE
                         repeatMode = ObjectAnimator.REVERSE
                     }
                     iconAnimation?.start()
-                    isAnimating = true
                 }
             }
             Download.State.DOWNLOADED -> {

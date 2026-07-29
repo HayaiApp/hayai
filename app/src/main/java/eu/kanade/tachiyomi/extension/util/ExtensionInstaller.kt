@@ -97,14 +97,22 @@ internal class ExtensionInstaller(private val context: Context) {
 
     /**
      * StateFlow used to notify the installation step of every download.
+     *
+     * Buffered so [emitToFlow] can emit synchronously (see below) instead of spawning a new
+     * coroutine per call, which on the multi-threaded [ioScope] dispatcher could let a package's
+     * own state transitions (e.g. Installing -> Installed) race and be delivered out of order,
+     * especially when several extensions are being installed/updated at once.
      */
-    private val _downloadsSharedFlow = MutableSharedFlow<Pair<String, ExtensionIntallInfo>>()
+    private val _downloadsSharedFlow = MutableSharedFlow<Pair<String, ExtensionIntallInfo>>(
+        extraBufferCapacity = 64,
+    )
     val downloadSharedFlow = _downloadsSharedFlow.asSharedFlow()
 
     /** Map of download id to installer session id */
     val downloadInstallerMap = hashMapOf<String, Int>()
-    fun emitToFlow(name: String, extensionInfo: ExtensionIntallInfo) =
-        ioScope.launch { _downloadsSharedFlow.emit(name to extensionInfo) }
+    fun emitToFlow(name: String, extensionInfo: ExtensionIntallInfo) {
+        _downloadsSharedFlow.tryEmit(name to extensionInfo)
+    }
 
     /**
      * Adds the given extension to the downloads queue and returns a flow containing its

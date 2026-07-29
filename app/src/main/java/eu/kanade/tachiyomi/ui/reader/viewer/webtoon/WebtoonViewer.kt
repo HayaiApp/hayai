@@ -50,9 +50,16 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
     private var scrollDistance = activity.resources.displayMetrics.heightPixels * 3 / 4
 
     /**
+     * Distance (each side) beyond the visible viewport that the layout manager keeps laid out
+     * and decoding. Larger than [scrollDistance] on purpose: pages that finish decoding while
+     * still off-screen don't cause a visible reflow/jump once they scroll into view.
+     */
+    private val extraLayoutSpace = activity.resources.displayMetrics.heightPixels * 5 / 4
+
+    /**
      * Layout manager of the recycler view.
      */
-    private val layoutManager = WebtoonLayoutManager(activity, scrollDistance)
+    private val layoutManager = WebtoonLayoutManager(activity, extraLayoutSpace)
 
     /**
      * Adapter of the recycler view.

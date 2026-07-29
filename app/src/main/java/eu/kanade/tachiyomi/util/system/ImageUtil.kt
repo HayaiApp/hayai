@@ -780,6 +780,14 @@ object ImageUtil {
         isHardwareThresholdExceeded(opts.outWidth, opts.outHeight)
     }
 
+    /**
+     * Returns the (width, height) of the image without loading it fully into memory.
+     * Either value may be -1 if it couldn't be determined.
+     */
+    fun getImageDimensions(imageSource: BufferedSource): Pair<Int, Int> = extractImageOptions(imageSource).let { opts ->
+        Pair(opts.outWidth, opts.outHeight)
+    }
+
     fun isHardwareThresholdExceeded(drawable: BitmapDrawable): Boolean =
         isHardwareThresholdExceeded(drawable.bitmap)
 

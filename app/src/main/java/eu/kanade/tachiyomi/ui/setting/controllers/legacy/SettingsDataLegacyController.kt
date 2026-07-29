@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.data.backup.create.BackupCreatorJob
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
+import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.extension.ExtensionManager
@@ -364,11 +365,7 @@ class SettingsDataLegacyController : SettingsLegacyController() {
                 .setTitle(MR.strings.restore_backup)
                 .setMessage(message)
                 .setPositiveButton(MR.strings.restore) { _, _ ->
-                    val context = applicationContext
-                    if (context != null) {
-                        activity.toast(MR.strings.restoring_backup)
-                        BackupRestoreJob.start(context, uri)
-                    }
+                    showRestoreOptionsDialog(uri)
                 }.show()
         } catch (e: Exception) {
             activity.materialAlertDialog()
@@ -377,6 +374,33 @@ class SettingsDataLegacyController : SettingsLegacyController() {
                 .setPositiveButton(AR.string.cancel, null)
                 .show()
         }
+    }
+
+    private fun showRestoreOptionsDialog(uri: Uri) {
+        val activity = activity ?: return
+        val defaultOptions = RestoreOptions()
+        val entries = RestoreOptions.getEntries()
+        val options = entries.map { activity.getString(it.label) }
+
+        activity.materialAlertDialog()
+            .setTitle(MR.strings.what_should_backup)
+            .setMultiChoiceItems(
+                options.toTypedArray(),
+                defaultOptions.asBooleanArray(),
+                null,
+            )
+            .setPositiveButton(MR.strings.restore) { dialog, _ ->
+                val listView = (dialog as AlertDialog).listView
+                val booleanArray = BooleanArray(listView.count) { listView.isItemChecked(it) }
+
+                val context = applicationContext
+                if (context != null) {
+                    activity.toast(MR.strings.restoring_backup)
+                    BackupRestoreJob.start(context, uri, RestoreOptions.fromBooleanArray(booleanArray))
+                }
+            }
+            .setNegativeButton(AR.string.cancel, null)
+            .show()
     }
 
     private fun clearChapterCache() {

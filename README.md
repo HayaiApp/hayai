@@ -21,11 +21,13 @@ A free and open source manga & novel reader
 [![Hayai Beta](https://img.shields.io/github/v/release/HayaiApp/hayai?maxAge=3600&label=Beta&labelColor=2c2c47&color=1c1c39&filter=v*-b*)](https://github.com/HayaiApp/hayai/releases)
 [![Hayai Nightly](https://img.shields.io/github/v/release/HayaiApp/hayai-nightly?maxAge=3600&label=Nightly&labelColor=B11A3B&color=1c1c39)](https://github.com/HayaiApp/hayai-nightly/releases)
 
-*Requires Android 6.0 or higher.*
+*Requires Android 8.0 or higher.*
 
 ## About Fork
 
 Hayai is a fork of [Yōkai](https://github.com/null2264/yokai), which itself is a fork of [TachiyomiJ2K](https://github.com/Jays2Kings/tachiyomiJ2K) and [Mihon](https://github.com/mihonapp/mihon) (formerly Tachiyomi). It cherry-picks pieces from across the Tachiyomi ecosystem and adds first-class novel support.
+
+Hayai also incorporates extension-ecosystem maintenance and stability fixes from [Rokku](https://github.com/rokku-app/rokku). Thanks to Thiago Rocha and the Rokku contributors for keeping the shared Yokai codebase compatible with current Keiyoushi extensions.
 
 ## Features
 

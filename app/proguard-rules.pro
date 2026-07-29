@@ -81,6 +81,13 @@
 
 ##---------------Begin: proguard configuration for okhttp  ----------
 -keepclasseswithmembers class okhttp3.MultipartBody$Builder { *; }
+
+# okhttp-brotli/okhttp-zstd reach their native decoder classes via JNI, which R8
+# can't trace, so they get stripped unless kept explicitly.
+-keep class okhttp3.brotli.** { *; }
+-keep class org.brotli.dec.** { *; }
+-keep class okhttp3.zstd.** { *; }
+-keep class com.squareup.zstd.** { *; }
 ##---------------End: proguard configuration for okhttp  ----------
 
 ##---------------Begin: proguard configuration for kotlinx.serialization  ----------

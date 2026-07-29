@@ -193,6 +193,9 @@ class WebtoonPageHolder(
                 Pair(source, isAnimated)
             }
             withUIContext {
+                // Resize the placeholder to the image's real aspect ratio before it's shown,
+                // so the holder doesn't visibly collapse/jump once the placeholder is hidden.
+                resizePlaceholderToMatch(source)
                 frame.setImage(
                     source,
                     isAnimated,
@@ -254,6 +257,23 @@ class WebtoonPageHolder(
     private fun onImageDecodeError() {
         progressContainer.isVisible = false
         showErrorLayout(true)
+    }
+
+    /**
+     * Shrinks the placeholder container to the image's expected on-screen height ahead of time,
+     * so hiding it once the image is decoded doesn't cause a visible resize of the holder.
+     */
+    private fun resizePlaceholderToMatch(source: BufferedSource) {
+        val (imageWidth, imageHeight) = ImageUtil.getImageDimensions(source)
+        if (imageWidth <= 0 || imageHeight <= 0) return
+
+        val frameWidth = frame.width.takeIf { it > 0 } ?: viewer.recycler.width
+        if (frameWidth <= 0) return
+
+        val estimatedHeight = (frameWidth.toFloat() * imageHeight / imageWidth).toInt()
+        progressContainer.updateLayoutParams<FrameLayout.LayoutParams> {
+            height = estimatedHeight.coerceAtMost(parentHeight)
+        }
     }
 
     /**

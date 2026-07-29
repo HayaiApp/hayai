@@ -1,9 +1,12 @@
 package eu.kanade.tachiyomi.data.download
 
+import android.Manifest
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import eu.kanade.tachiyomi.R
@@ -56,8 +59,35 @@ internal class DownloadNotifier(private val context: Context) {
      *
      * @param id the id of the notification.
      */
-    private fun NotificationCompat.Builder.show(id: Int = Notifications.ID_DOWNLOAD_CHAPTER) {
+    private fun NotificationCompat.Builder.show(id: Int = Notifications.ID_DOWNLOAD_CHAPTER, refreshGroupSummary: Boolean = true) {
+        if (!context.hasNotificationPermission()) return
+        setGroup(GROUP_KEY_DOWNLOADS)
         context.notificationManager.notify(id, build())
+        // Re-posting the group summary is only needed when a notification in the group actually
+        // starts/stops existing, not on every progress tick: onProgressChange() calls show() once
+        // per downloaded page, and re-notifying the summary that often causes the OS's silent
+        // notification bucket to visibly reshuffle/flicker on every page.
+        if (refreshGroupSummary) {
+            showGroupSummary()
+        }
+    }
+
+    /**
+     * Explicitly declares a group summary for the downloader channel's notifications, with the
+     * app's own icon. Without this, letting the OS auto-bundle 2+ notifications from this channel
+     * (e.g. a download in progress alongside a connection warning) can end up showing a generic
+     * fallback icon on the collapsed summary card instead of ours.
+     */
+    private fun showGroupSummary() {
+        if (!context.hasNotificationPermission()) return
+        val summary = NotificationCompat.Builder(context, Notifications.CHANNEL_DOWNLOADER)
+            .setSmallIcon(R.drawable.ic_file_download_24dp)
+            .setColor(ContextCompat.getColor(context, R.color.secondaryTachiyomi))
+            .setGroup(GROUP_KEY_DOWNLOADS)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .build()
+        context.notificationManager.notify(Notifications.ID_DOWNLOAD_GROUP_SUMMARY, summary)
     }
 
     /**
@@ -67,6 +97,10 @@ internal class DownloadNotifier(private val context: Context) {
     fun dismiss() {
         context.notificationManager.cancel(Notifications.ID_DOWNLOAD_CHAPTER)
         context.notificationManager.cancel(Notifications.ID_DOWNLOAD_PAUSED)
+        // The group summary posted by showGroupSummary() is never dismissed on its own - without
+        // this it's left behind as a "ghost" notification with no children once the last
+        // downloader notification is cancelled.
+        context.notificationManager.cancel(Notifications.ID_DOWNLOAD_GROUP_SUMMARY)
     }
 
     /**
@@ -81,6 +115,9 @@ internal class DownloadNotifier(private val context: Context) {
         with(notification) {
             // Check if first call.
             if (!isDownloading) {
+                // Android's own animated download icon (a bouncing arrow), same as Mihon/Yokai
+                // use here specifically - unlike the branded icon used everywhere else, this one
+                // only exists as the system drawable; a custom vector can't reproduce it.
                 setSmallIcon(AR.drawable.stat_sys_download)
                 setAutoCancel(false)
                 clearActions()
@@ -127,7 +164,8 @@ internal class DownloadNotifier(private val context: Context) {
         // Create notification
         with(notification) {
             // Check if first call.
-            if (!isDownloading) {
+            val isFirstCall = !isDownloading
+            if (isFirstCall) {
                 setSmallIcon(AR.drawable.stat_sys_download)
                 setAutoCancel(false)
                 clearActions()
@@ -165,7 +203,7 @@ internal class DownloadNotifier(private val context: Context) {
             setProgress(download.pages!!.size, download.downloadedImages, false)
 
             // Displays the progress bar on notification
-            show()
+            show(refreshGroupSummary = isFirstCall)
         }
     }
 
@@ -248,13 +286,21 @@ internal class DownloadNotifier(private val context: Context) {
                 ),
             )
             setTimeoutAfter(30000)
+            setGroup(GROUP_KEY_DOWNLOADS)
         }
             .build()
 
+        if (!context.hasNotificationPermission()) return
         context.notificationManager.notify(
             Notifications.ID_DOWNLOAD_SIZE_WARNING,
             notification,
         )
+        showGroupSummary()
+    }
+
+    private fun Context.hasNotificationPermission(): Boolean {
+        return ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     /**
@@ -282,7 +328,7 @@ internal class DownloadNotifier(private val context: Context) {
                     error ?: context.getString(MR.strings.could_not_download_unexpected_error),
                 ),
             )
-            setSmallIcon(AR.drawable.stat_sys_warning)
+            setSmallIcon(R.drawable.ic_warning_white_24dp)
             setCategory(NotificationCompat.CATEGORY_ERROR)
             setOngoing(false)
             clearActions()
@@ -308,5 +354,9 @@ internal class DownloadNotifier(private val context: Context) {
         // Reset download information
         errorThrown = true
         isDownloading = false
+    }
+
+    companion object {
+        private const val GROUP_KEY_DOWNLOADS = "app.rokku.download"
     }
 }

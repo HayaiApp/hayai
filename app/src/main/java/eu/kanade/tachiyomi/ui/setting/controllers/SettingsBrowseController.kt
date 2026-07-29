@@ -39,6 +39,7 @@ import eu.kanade.tachiyomi.util.view.snack
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import yokai.util.koin.injectLazy
 import yokai.domain.base.BasePreferences.ExtensionInstaller
+import yokai.domain.source.SourcePreferences
 import yokai.presentation.extension.repo.ExtensionRepoController
 
 class SettingsBrowseController : SettingsLegacyController() {
@@ -47,6 +48,7 @@ class SettingsBrowseController : SettingsLegacyController() {
     var updatedExtNotifPref: SwitchPreferenceCompat? = null
 
     private val uiPreferences: UiPreferences by injectLazy()
+    private val sourcePreferences: SourcePreferences by injectLazy()
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
         titleRes = MR.strings.browse
@@ -208,6 +210,11 @@ class SettingsBrowseController : SettingsLegacyController() {
             switchPreference {
                 bindTo(uiPreferences.enableSourceSwipeAction())
                 titleRes = MR.strings.enable_source_swipe_action
+            }
+            switchPreference {
+                bindTo(sourcePreferences.relatedMangas())
+                titleRes = MR.strings.pref_related_mangas
+                summaryRes = MR.strings.pref_related_mangas_summary
             }
         }
 

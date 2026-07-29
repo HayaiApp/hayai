@@ -1,11 +1,13 @@
 package yokai.domain.extension.repo.service
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import yokai.domain.extension.repo.model.ExtensionRepo
 
 @Serializable
 data class ExtensionRepoMetaDto(
     val meta: ExtensionRepoDto,
+    @SerialName("index_v2") val indexV2: String? = null,
 )
 
 @Serializable

@@ -16,6 +16,19 @@ class ExtensionRepoService(
     suspend fun fetchRepoDetails(
         repo: String,
     ): ExtensionRepo? {
+        return fetchRepoMeta(repo)?.toExtensionRepo(baseUrl = repo)
+    }
+
+    /**
+     * Returns the `index_v2` URL advertised by the repo's `repo.json`, if any. Repos that have
+     * migrated to the newer ExtensionStore index (protobuf or JSON object) point to it from here;
+     * repos that haven't return null, in which case the legacy `index.min.json` should be used.
+     */
+    suspend fun fetchIndexV2Url(repo: String): String? {
+        return fetchRepoMeta(repo)?.indexV2
+    }
+
+    private suspend fun fetchRepoMeta(repo: String): ExtensionRepoMetaDto? {
         return withIOContext {
             val url = "$repo/repo.json".toUri()
 
@@ -23,7 +36,6 @@ class ExtensionRepoService(
                 client.newCall(GET(url.toString()))
                     .awaitSuccess()
                     .parseAs<ExtensionRepoMetaDto>()
-                    .toExtensionRepo(baseUrl = repo)
             } catch (e: Exception) {
                 Logger.e(e) { "Failed to fetch repo details" }
                 null

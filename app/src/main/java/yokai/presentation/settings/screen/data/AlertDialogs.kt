@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.data.backup.create.BackupCreatorJob
 import eu.kanade.tachiyomi.data.backup.create.BackupOptions
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
+import eu.kanade.tachiyomi.data.backup.restore.RestoreOptions
 import eu.kanade.tachiyomi.util.system.toast
 import yokai.domain.DialogHostState
 import yokai.i18n.MR
@@ -49,13 +50,16 @@ suspend fun DialogHostState.awaitRestoreBackup(
             }"
         }
 
+        var options by mutableStateOf(RestoreOptions())
+
         AlertDialog(
             onDismissRequest = { cont.cancel() },
             confirmButton = {
                 TextButton(
+                    enabled = options.canRestore(),
                     onClick = {
                         context.toast(MR.strings.restoring_backup)
-                        BackupRestoreJob.start(context, uri)
+                        BackupRestoreJob.start(context, uri, options)
                         cont.cancel()
                     },
                 ) {
@@ -68,7 +72,26 @@ suspend fun DialogHostState.awaitRestoreBackup(
                 }
             },
             title = { Text(text = stringResource(MR.strings.restore_backup)) },
-            text = { Text(text = message) },
+            text = {
+                Box {
+                    val state = rememberLazyListState()
+                    LazyColumn(state = state) {
+                        item {
+                            Text(text = message)
+                        }
+                        RestoreOptions.getEntries().forEach { option ->
+                            item {
+                                LabeledCheckbox(
+                                    label = stringResource(option.label),
+                                    checked = option.getter(options),
+                                    onCheckedChange = { options = option.setter(options, it) },
+                                    enabled = option.enabled(options),
+                                )
+                            }
+                        }
+                    }
+                }
+            },
         )
     } else {
         AlertDialog(

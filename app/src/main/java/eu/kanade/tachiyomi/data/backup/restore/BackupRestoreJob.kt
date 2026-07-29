@@ -45,11 +45,15 @@ class BackupRestoreJob(val context: Context, workerParams: WorkerParameters) : C
         val uriPath = inputData.getString(BackupConst.EXTRA_URI) ?: return Result.failure()
         val uri = Uri.parse(uriPath) ?: return Result.failure()
 
+        val options = inputData.getBooleanArray(RESTORE_FLAGS_KEY)
+            ?.let(RestoreOptions::fromBooleanArray)
+            ?: RestoreOptions()
+
         tryToSetForeground()
 
         return withIOContext {
             try {
-                restorer.restore(uri)
+                restorer.restore(uri, options)
                 Result.success()
             } catch (e: Exception) {
                 if (e is CancellationException) {
@@ -67,11 +71,16 @@ class BackupRestoreJob(val context: Context, workerParams: WorkerParameters) : C
 
     companion object {
         private const val TAG = "BackupRestorer"
+        private const val RESTORE_FLAGS_KEY = "restore_flags" // BooleanArray
 
-        fun start(context: Context, uri: Uri) {
+        fun start(context: Context, uri: Uri, options: RestoreOptions = RestoreOptions()) {
+            val inputData = workDataOf(
+                BackupConst.EXTRA_URI to uri.toString(),
+                RESTORE_FLAGS_KEY to options.asBooleanArray(),
+            )
             val request = OneTimeWorkRequestBuilder<BackupRestoreJob>()
                 .addTag(TAG)
-                .setInputData(workDataOf(BackupConst.EXTRA_URI to uri.toString()))
+                .setInputData(inputData)
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             context.workManager.enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, request)

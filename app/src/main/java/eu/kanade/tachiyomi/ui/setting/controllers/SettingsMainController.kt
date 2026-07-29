@@ -14,7 +14,6 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
 import eu.kanade.tachiyomi.ui.more.AboutController
 import eu.kanade.tachiyomi.ui.setting.SettingsLegacyController
-import eu.kanade.tachiyomi.ui.setting.controllers.legacy.SettingsDataLegacyController
 import eu.kanade.tachiyomi.ui.setting.controllers.search.SettingsSearchController
 import exh.source.ExhPreferences
 import yokai.util.koin.injectLazy
@@ -123,15 +122,11 @@ class SettingsMainController : SettingsLegacyController(), FloatingSearchInterfa
         }
         // Data & Storage (backup/restore/cache) — kept as its own top-level
         // entry because it covers app-data ops, not download-cache cleanup.
-        preferenceLongClickable {
+        preference {
             iconRes = R.drawable.ic_storage_24dp
             iconTint = tintColor
             titleRes = MR.strings.data_and_storage
             onClick { navigateTo(SettingsDataController()) }
-            onLongClick {
-                navigateTo(SettingsDataLegacyController())
-                context.toast("You're entering legacy version of 'Data and storage'")
-            }
         }
         preference {
             iconRes = R.drawable.ic_security_24dp

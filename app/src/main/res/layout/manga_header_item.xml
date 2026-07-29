@@ -415,6 +415,117 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/button_group_compose" />
 
+    <View
+        android:id="@+id/related_divider_top"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="12dp"
+        android:background="@color/strong_divider"
+        app:layout_constraintTop_toBottomOf="@id/page_preview_compose" />
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/related_title_wrapper"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/related_divider_top">
+
+        <TextView
+            android:id="@+id/related_title"
+            style="?textAppearanceTitleSmall"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="@string/related_mangas"
+            android:textSize="17sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/related_title_more_icon" />
+
+        <ImageView
+            android:id="@+id/related_title_more_icon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:contentDescription="@string/more"
+            android:padding="@dimen/material_component_text_fields_padding_above_and_below_label"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/ic_arrow_forward_24dp"
+            app:tint="?attr/colorOnBackground" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <TextView
+        android:id="@+id/related_no_results"
+        style="?textAppearanceBodyMedium"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:paddingBottom="8dp"
+        android:textColor="?attr/colorOnSurface"
+        android:visibility="gone"
+        android:text="@string/no_related_mangas_found"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/related_title_wrapper"
+        tools:visibility="visible" />
+
+    <FrameLayout
+        android:id="@+id/related_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:minHeight="208dp"
+        android:paddingBottom="8dp"
+        app:layout_constrainedHeight="true"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/related_title_wrapper">
+
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/related_progress"
+            android:indeterminate="true"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            app:indicatorSize="16dp"
+            app:trackThickness="3dp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/related_recycler"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            android:paddingStart="7dp"
+            android:paddingEnd="7dp"
+            tools:listitem="@layout/source_global_search_controller_card_item" />
+    </FrameLayout>
+
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/related_manga_bottom"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="bottom"
+        app:constraint_referenced_ids="related_title_wrapper,related_no_results,related_card" />
+
+    <View
+        android:id="@+id/related_divider_bottom"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/strong_divider"
+        app:layout_constraintTop_toBottomOf="@id/related_manga_bottom" />
+
+    <androidx.constraintlayout.widget.Group
+        android:id="@+id/related_manga_group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:constraint_referenced_ids="related_divider_top,related_title_wrapper,related_no_results,related_card,related_divider_bottom" />
+
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/chapter_layout"
         android:layout_width="match_parent"
@@ -425,7 +536,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/page_preview_compose">
+        app:layout_constraintTop_toBottomOf="@id/related_divider_bottom">
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/chapters_title"

@@ -55,6 +55,7 @@ data class BackupChapter(
             sourceOrder: Long,
             dateFetch: Long,
             dateUpload: Long,
+            @Suppress("UNUSED_PARAMETER") memo: String,
         ) = BackupChapter(
             url = url,
             name = name,

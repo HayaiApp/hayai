@@ -212,6 +212,7 @@
     <string name="reduces_banding_impacts_performance">Reduz o efeito de anéis nos degradês, mas pode afetar o desempenho</string>
     <string name="crop_borders">Aparar bordas</string>
     <string name="use_custom_brightness">Usar brilho personalizado</string>
+    <string name="custom_filter">Filtros</string>
     <string name="use_custom_color_filter">Usar filtro de cores personalizado</string>
     <string name="color_filter_blend_mode">Modo de mistura do filtro de cores</string>
     <string name="overlay">Sobreposição</string>

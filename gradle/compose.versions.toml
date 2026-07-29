@@ -1,5 +1,5 @@
 [versions]
-compose = "2026.05.01"
+compose = "2026.06.01"
 
 [libraries]
 bom = { module = "androidx.compose:compose-bom", version.ref = "compose" }
