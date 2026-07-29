@@ -1144,11 +1144,14 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             rootTabsController?.view?.alpha = 1f
             rootTabsController?.resetActiveTabAlpha()
             restoreRootTabsAlphas()
-            val activeBaseController = active as? BaseController
-            if (activeBaseController?.hostsOwnAppBar == true) {
-                activeBaseController.activateLocalChrome()
-            } else {
-                syncActivityAppBarVisibility(active)
+            syncActivityAppBarVisibility(active)
+            val localAppBar = (active as? eu.kanade.tachiyomi.ui.base.LocalAppBarOwner)?.localAppBar()
+            localAppBar?.let { bar ->
+                bar.alpha = 1f
+                bar.isInvisible = false
+                bar.lockYPos = false
+                bar.translationY = 0f
+                bar.y = 0f
             }
         }
     }

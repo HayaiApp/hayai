@@ -434,7 +434,8 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         useTabsInPreLayout = false
     }
 
-    fun resetForActivation() {
+    fun resetToBaseline() {
+        clearTabs()
         cardFrame?.isVisible = false
         cardFrame?.alpha = 0f
         dropLiftedPillMenu()
@@ -455,11 +456,6 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         isInvisible = false
         useTabsInPreLayout = false
         compactSearchMode = false
-    }
-
-    fun resetToBaseline() {
-        clearTabs()
-        resetForActivation()
     }
 
     fun setTitle(title: CharSequence?, setBigTitle: Boolean) {

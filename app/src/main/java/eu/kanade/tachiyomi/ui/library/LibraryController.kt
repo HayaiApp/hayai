@@ -281,14 +281,13 @@ open class LibraryController(
     private fun seedSearchFromState() {
         val pill = searchToolbar() ?: return
         val searchView = pill.searchView ?: return
-        if (query.isEmpty()) {
-            if (pill.isSearchExpanded == true) pill.searchItem?.collapseActionView()
-            return
-        }
-        if (pill.isSearchExpanded != true) pill.searchItem?.expandActionView()
-        if (searchView.query?.toString().orEmpty() != query) {
+        if (searchView.query?.toString().orEmpty() == query) return
+        if (query.isNotEmpty()) {
+            if (pill.isSearchExpanded != true) pill.searchItem?.expandActionView()
             searchView.setQuery(query, false)
             searchView.clearFocus()
+        } else if (pill.isSearchExpanded == true) {
+            pill.searchItem?.collapseActionView()
         }
     }
 
@@ -452,7 +451,6 @@ open class LibraryController(
 
     private var scrollDistance = 0f
     private val scrollDistanceTilHidden = 1000.dpToPx
-    private var filterSheetBaseBottomInset: Int? = null
     private var textAnim: ViewPropertyAnimator? = null
     private var hasExpanded = false
 
@@ -656,40 +654,27 @@ open class LibraryController(
 
     fun updateFilterSheetY() {
         val bottomBar = if (!isSubClass) activityBinding?.bottomNav else null
-        val systemInsetBottom = view?.rootWindowInsetsCompat?.getInsets(systemBars())?.bottom ?: 0
+        val systemInsets = view?.rootWindowInsetsCompat?.getInsets(systemBars())
         val bottomSheet = binding.filterBottomSheet.filterBottomSheet
         if (bottomBar != null) {
-            val baseInset = max(bottomBar.height, systemInsetBottom)
-            updateFilterSheetLayout(baseInset)
-            val visibleInset = max(
-                bottomBar.height - bottomBar.translationY,
-                systemInsetBottom.toFloat(),
-            )
-            val motionOffset = baseInset - visibleInset
             bottomSheet.translationY = if (bottomSheet.sheetBehavior.isHidden()) {
                 bottomBar.translationY - bottomBar.height
-            } else if (bottomSheet.sheetBehavior.isExpanded()) {
-                0f
             } else {
-                motionOffset
+                0f
             }
-            binding.fastScroller.translationY = motionOffset
-        } else {
-            updateFilterSheetLayout(systemInsetBottom)
-            bottomSheet.translationY = 0f
-            binding.fastScroller.translationY = 0f
-        }
-        updateHopperY()
-    }
+            val pad = bottomBar.translationY - bottomBar.height
+            val padding = max((-pad).toInt(), systemInsets?.bottom ?: 0)
+            bottomSheet.updatePaddingRelative(bottom = padding)
 
-    private fun updateFilterSheetLayout(bottomInset: Int) {
-        if (filterSheetBaseBottomInset == bottomInset) return
-        filterSheetBaseBottomInset = bottomInset
-        val bottomSheet = binding.filterBottomSheet.filterBottomSheet
-        bottomSheet.updatePaddingRelative(bottom = bottomInset)
-        bottomSheet.sheetBehavior?.peekHeight = 60.dpToPx + bottomInset
-        binding.fastScroller.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-            bottomMargin = bottomInset
+            bottomSheet.sheetBehavior?.peekHeight = 60.dpToPx + padding
+            updateHopperY()
+            binding.fastScroller.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                bottomMargin = -pad.toInt()
+            }
+        } else {
+            bottomSheet.updatePaddingRelative(bottom = systemInsets?.bottom ?: 0)
+            updateHopperY()
+            bottomSheet.sheetBehavior?.peekHeight = 60.dpToPx + (systemInsets?.bottom ?: 0)
         }
     }
 
@@ -1118,7 +1103,6 @@ open class LibraryController(
     @SuppressLint("ClickableViewAccessibility")
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
-        filterSheetBaseBottomInset = null
         mAdapter = LibraryCategoryAdapter(this)
         adapter.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
         setRecyclerLayout()
@@ -1738,7 +1722,7 @@ open class LibraryController(
         // onSetupLocalChrome below owns the one tab-strip/mini-bar refresh for activation.
         // Avoid doing it here and then immediately repeating the same TabLayout work.
         reconcileDisplaySurface(refreshChrome = false)
-        activateLocalChrome()
+        onSetupLocalChrome()
         pendingInactiveLibraryUpdate?.let { pending ->
             pendingInactiveLibraryUpdate = null
             onNextLibraryUpdate(pending.items, pending.freshStart)

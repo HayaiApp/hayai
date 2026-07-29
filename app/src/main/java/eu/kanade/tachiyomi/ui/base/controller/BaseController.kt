@@ -7,6 +7,7 @@ import android.view.MenuItem
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.forEach
+import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import co.touchlab.kermit.Logger
@@ -33,7 +34,7 @@ abstract class BaseController(bundle: Bundle? = null) :
      * Controllers that host their own [eu.kanade.tachiyomi.ui.base.ExpandedAppBarLayout]
      * inside their layout (implementing [eu.kanade.tachiyomi.ui.base.LocalAppBarOwner]
      * so `appBar()` routes to that local instance) override this to `true`. When true:
-     *   - [activateLocalChrome] configures the local chrome on every enter.
+     *   - [onChangeStarted] calls [onSetupLocalChrome] for chrome configuration.
      *   - The activity hides its (legacy / detail-screen) appBar while this controller
      *     is visible, see [eu.kanade.tachiyomi.ui.main.MainActivity.syncActivityAppBarVisibility].
      *   - [setHasOptionsMenu] is forced to false — menu inflation lives on the local
@@ -48,21 +49,6 @@ abstract class BaseController(bundle: Bundle? = null) :
      * be gated on `toolbar.menu.size() == 0`.
      */
     open fun onSetupLocalChrome() { }
-
-    internal fun activateLocalChrome() {
-        if (!hostsOwnAppBar) return
-
-        removeQueryListener()
-        (this as? eu.kanade.tachiyomi.ui.base.LocalAppBarOwner)
-            ?.localAppBar()
-            ?.let { appBar ->
-                appBar.resetForActivation()
-                wireDefaultLocalChrome(appBar)
-            }
-        setOptionsMenuHidden(false)
-        onSetupLocalChrome()
-        (activity as? MainActivity)?.syncActivityAppBarVisibility(this)
-    }
 
     lateinit var viewScope: CoroutineScope
     var isDragging = false
@@ -104,7 +90,7 @@ abstract class BaseController(bundle: Bundle? = null) :
     override fun onChangeStarted(handler: ControllerChangeHandler, type: ControllerChangeType) {
         if (type.isEnter && !isControllerVisible) {
             view?.alpha = 0f
-        } else if (!type.isEnter || !hostsOwnAppBar) {
+        } else {
             removeQueryListener()
         }
         // When re-entering, snap the view to fully-opaque immediately. The change handler
@@ -125,10 +111,10 @@ abstract class BaseController(bundle: Bundle? = null) :
         // their own appBar.
         if (type.isEnter && isControllerVisible) {
             if (hostsOwnAppBar) {
-                activateLocalChrome()
-            } else {
-                (activity as? MainActivity)?.syncActivityAppBarVisibility(this)
+                wireDefaultLocalChrome()
+                onSetupLocalChrome()
             }
+            (activity as? MainActivity)?.syncActivityAppBarVisibility(this)
         }
         super.onChangeStarted(handler, type)
     }
@@ -154,9 +140,17 @@ abstract class BaseController(bundle: Bundle? = null) :
      * Controllers that need custom behavior can override any of these in their own
      * [onSetupLocalChrome] — it runs after this method.
      */
-    private fun wireDefaultLocalChrome(appBar: eu.kanade.tachiyomi.ui.base.ExpandedAppBarLayout) {
+    private fun wireDefaultLocalChrome() {
         val act = activity as? MainActivity ?: return
+        val appBar = (this as? eu.kanade.tachiyomi.ui.base.LocalAppBarOwner)
+            ?.localAppBar() ?: return
         val toolbar = appBar.mainToolbar ?: return
+
+        appBar.alpha = 1f
+        appBar.isInvisible = false
+        appBar.lockYPos = false
+        appBar.translationY = 0f
+        appBar.y = 0f
 
         val onRoot = router.backstackSize == 1 && act !is eu.kanade.tachiyomi.ui.main.SearchActivity
         if (onRoot) {

@@ -1119,7 +1119,7 @@ class RecentsController(bundle: Bundle? = null) :
         setRootUiActive(true)
         if (!isBindingInitialized) return
         binding.downloadBottomSheet.dlBottomSheet.dismiss()
-        activateLocalChrome()
+        onSetupLocalChrome()
         setBottomPadding()
         updateTitleAndMenu()
         pendingInactiveList?.let { pending ->
