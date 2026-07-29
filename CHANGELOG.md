@@ -104,6 +104,7 @@ The format is simplified version of [Keep a Changelog](https://keepachangelog.co
 - EHentai gallery parsing: ignore optional favorite-color border div, prefer class-based category selection
 
 ### Fixes
+- **Fix navigation transitions leaving chrome in a stale state.** Restore immediate toolbar/menu reconciliation, unconditional app-bar synchronization, deterministic tab reconstruction, and cancellation-safe search/bottom-navigation animations
 - **Fix chrome disappearing or becoming unresponsive after tab changes and activity resume.** Roll back the centralized chrome reset and cached layout geometry so top bars, search controls, tabs, and bottom-sheet navigation are restored and measured by their owning screen
 - **Fix library update report page always showing empty.** `createFileInCacheDir` writes to `externalCacheDir` but `read()` was reading from `cacheDir` — the JSON was saved but never found. `save()` now writes directly to `cacheDir` (matching `read()`), and `errorLogFile()`/`skippedLogFile()` now read from `externalCacheDir` to match where `writeErrorFile()` puts the `.txt` logs
 - **Fix duplicate three-dot overflow menus in Recents.** `action_update_report` (overflow item) and `action_more` (custom three-dot toolbar button) were creating two separate overflow menus simultaneously. Both removed; the update report is now accessible from the display options sheet

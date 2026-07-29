@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.main
 
+import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.app.assist.AssistContent
@@ -152,7 +154,6 @@ import yokai.domain.base.BasePreferences
 import yokai.domain.manga.interactor.GetLibraryManga
 import yokai.domain.recents.interactor.GetRecents
 import yokai.i18n.MR
-import yokai.presentation.theme.ReducedMotion
 import yokai.presentation.core.Constants
 import yokai.presentation.extension.repo.ExtensionRepoController
 import yokai.presentation.onboarding.OnboardingController
@@ -222,7 +223,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     // exactly once by LibraryController.consumePendingLibrarySearch(), which clears it.
     var pendingLibrarySearch: String? = null
 
-    private var navAnimationGeneration = 0
+    private var animationSet: AnimatorSet? = null
     private val downloadManager: DownloadManager by injectLazy()
     private val mangaShortcutManager: MangaShortcutManager by injectLazy()
     private val extensionManager: ExtensionManager by injectLazy()
@@ -234,7 +235,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
     private val updateChecker by lazy { AppUpdateChecker() }
     private val isUpdaterEnabled = BuildConfig.INCLUDE_UPDATER
-    private var searchBarAnimationGeneration = 0
+    private var searchBarAnimation: ValueAnimator? = null
     private var searchTBLongClickSet = false
     private var overflowDialog: Dialog? = null
 
@@ -896,34 +897,21 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             (showSearchAnyway || isAppBarVisible)
         ) {
             binding.appBar.background = null
-            binding.cardFrame.animate().cancel()
+            searchBarAnimation?.cancel()
             if (showSearchBar && !binding.cardFrame.isVisible) {
                 binding.cardFrame.alpha = 0f
                 binding.cardFrame.isVisible = true
             }
             val endValue = if (showSearchBar) 1f else 0f
-            if (ReducedMotion.isEnabled()) {
-                ++searchBarAnimationGeneration
-                binding.cardFrame.alpha = endValue
-                binding.cardFrame.isVisible = showSearchBar
-            } else {
-                val generation = ++searchBarAnimationGeneration
-                binding.cardFrame.animate()
-                    .alpha(endValue)
-                    .setDuration((abs(binding.cardFrame.alpha - endValue) * 150).roundToLong())
-                    .withLayer()
-                    .withEndAction {
-                        if (generation == searchBarAnimationGeneration) {
-                            binding.cardFrame.isVisible = showSearchBar
-                        }
-                    }
-                    .start()
-            }
+            val animation = ValueAnimator.ofFloat(binding.cardFrame.alpha, endValue)
+            animation.addUpdateListener { binding.cardFrame.alpha = it.animatedValue as Float }
+            animation.doOnEnd { binding.cardFrame.isVisible = showSearchBar }
+            animation.duration = (abs(binding.cardFrame.alpha - endValue) * 150).roundToLong()
+            searchBarAnimation = animation
+            animation.start()
         } else if (this::topRouter.isInitialized &&
             (!binding.appBar.useLargeToolbar || onSmallerController || !isAppBarVisible)
         ) {
-            ++searchBarAnimationGeneration
-            binding.cardFrame.animate().cancel()
             binding.cardFrame.alpha = 1f
             binding.cardFrame.isVisible = showSearchBar
         }
@@ -933,19 +921,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                 if (show && !solidBG) Color.TRANSPARENT else getResourceColor(materialR.attr.colorSurface),
             )
         }
-        // Defer the menu rebuild past the current frame so it doesn't run mid-fade.
-        // setupSearchTBMenu diffs the current toolbar menu against the new controller's
-        // menu, addOrUpdates/removes items, and may trigger requestLayout on actionMenuView.
-        // Doing this synchronously during onChangeStarted blocks the Conductor crossfade
-        // (200ms) and was a major source of the 250–700ms frames during root nav swaps.
-        binding.toolbar.post {
-            Trace.beginSection("Hayai/setupSearchTBMenu")
-            try {
-                setupSearchTBMenu(binding.toolbar.menu)
-            } finally {
-                Trace.endSection()
-            }
-        }
+        setupSearchTBMenu(binding.toolbar.menu)
         if (currentToolbar != binding.searchToolbar) {
             binding.searchToolbar.menu?.children?.toList()?.forEach {
                 it.isVisible = false
@@ -1688,29 +1664,9 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     fun onActiveTabChanged(@Suppress("UNUSED_PARAMETER") fromTabId: Int, @Suppress("UNUSED_PARAMETER") toTabId: Int) {
         val active = activeRootController
         active?.view?.alpha = 1f
-        if (active is RootTabContent && active.router.backstackSize == 1) {
-            // Root tabs own their app bar and keep the bottom navigation visible. Avoid the
-            // full activity-global chrome/menu walk in the transition's first frame; it only
-            // mutates hidden views and previously delayed the first rendered animation frame.
-            reEnableBackPressedCallBack()
-            syncActivityAppBarVisibility(active)
-            ++navAnimationGeneration
-            nav.animate().cancel()
-            nav.alpha = 1f
-            nav.translationY = 0f
-            nav.isVisible = true
-        } else {
-            // A tab can preserve a pushed detail screen. Those still use the global app bar
-            // and may hide bottom navigation, so retain the complete synchronization path.
-            syncActivityViewWithController(active)
-            syncActivityAppBarVisibility(active)
-            setFloatingToolbar(canShowFloatingToolbar(active), changeBG = false)
-        }
-    }
-
-    /** Complete non-visual menu/title work after the root-tab motion has settled. */
-    fun onRootTabTransitionSettled() {
-        val active = activeRootController
+        syncActivityViewWithController(active)
+        syncActivityAppBarVisibility(active)
+        setFloatingToolbar(canShowFloatingToolbar(active), changeBG = false)
         invalidateOptionsMenu()
         binding.searchToolbar.title = searchTitle
         (active as? BaseLegacyController<*>)?.setTitle()
@@ -1724,31 +1680,10 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
      * [BaseController.onChangeStarted] on every push/pop enter, by [onActiveTabChanged]
      * on every tab swap, and by the activity-level Conductor change listener.
      */
-    private var lastGlobalAppBarController: Controller? = null
-    private var lastGlobalAppBarVisibility: Boolean? = null
-
     fun syncActivityAppBarVisibility(active: Controller?) {
         val hostsOwn = (active as? BaseController)?.hostsOwnAppBar == true
         val composeRoute = active is eu.kanade.tachiyomi.ui.base.controller.BaseComposeController
         val shouldShowGlobalAppBar = !(hostsOwn || composeRoute)
-        if (
-            active === lastGlobalAppBarController &&
-            lastGlobalAppBarVisibility == shouldShowGlobalAppBar &&
-            binding.appBar.isVisible == shouldShowGlobalAppBar
-        ) {
-            // BaseController and the activity's Conductor listener both observe the same
-            // enter event. Treat the second call as a no-op instead of clearing/rebuilding
-            // the global tabs/search/menu tree twice in one frame.
-            return
-        }
-        if (!shouldShowGlobalAppBar && !binding.appBar.isVisible) {
-            // Local-app-bar root tabs are persistent siblings. Once the global app bar is
-            // hidden, resetting all of its tabs/search/menu state on every root swap is pure
-            // measure/layout churn; it will be reset when a global-app-bar screen enters.
-            lastGlobalAppBarController = active
-            lastGlobalAppBarVisibility = false
-            return
-        }
         // Defensive reset of the shared activity-global appBar before the incoming
         // controller configures it. Without this, slots the outgoing controller left
         // populated (search pill, secondary tabs row, lifted menu, scroll offset) bleed
@@ -1756,8 +1691,6 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
         // tab-strip padding on manga details / settings / any deep-nested screen.
         binding.appBar.resetToBaseline()
         binding.appBar.isVisible = shouldShowGlobalAppBar
-        lastGlobalAppBarController = active
-        lastGlobalAppBarVisibility = shouldShowGlobalAppBar
     }
 
     override fun onPreparePanel(featureId: Int, view: View?, menu: Menu): Boolean {
@@ -2003,11 +1936,13 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                     binding.bottomView?.visibility ?: View.GONE
                 }
             } else {
-                ++navAnimationGeneration
-                nav.animate().cancel()
-                nav.isVisible = true
-                if (ReducedMotion.isEnabled()) {
-                    nav.alpha = targetAlpha
+                animationSet?.cancel()
+                animationSet = AnimatorSet()
+                val alphaAnimation = ValueAnimator.ofFloat(nav.alpha, targetAlpha)
+                alphaAnimation.addUpdateListener { valueAnimator ->
+                    nav.alpha = valueAnimator.animatedValue as Float
+                }
+                alphaAnimation.doOnEnd {
                     nav.isVisible = !hideBottomNav
                     binding.bottomView?.visibility =
                         if (hideBottomNav) {
@@ -2016,25 +1951,10 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                             binding.bottomView?.visibility
                                 ?: View.GONE
                         }
-                } else {
-                    val generation = navAnimationGeneration
-                    nav.animate()
-                        .alpha(targetAlpha)
-                        .setDuration(150L)
-                        .withLayer()
-                        .withEndAction {
-                            if (generation != navAnimationGeneration) return@withEndAction
-                            nav.isVisible = !hideBottomNav
-                            binding.bottomView?.visibility =
-                                if (hideBottomNav) {
-                                    View.GONE
-                                } else {
-                                    binding.bottomView?.visibility
-                                        ?: View.GONE
-                                }
-                        }
-                        .start()
                 }
+                alphaAnimation.duration = 150
+                animationSet?.playTogether(alphaAnimation)
+                animationSet?.start()
             }
         }
     }
