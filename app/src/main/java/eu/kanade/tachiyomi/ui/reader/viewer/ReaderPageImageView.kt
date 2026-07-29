@@ -39,6 +39,9 @@ import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.ImageUtil
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import okio.BufferedSource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+import yokai.domain.base.BasePreferences
 import yokai.domain.ui.settings.ReaderPreferences.CutoutBehaviour
 
 /**
@@ -56,6 +59,10 @@ open class ReaderPageImageView @JvmOverloads constructor(
     @StyleRes defStyleRes: Int = 0,
     private val isWebtoon: Boolean = false,
 ) : FrameLayout(context, attrs, defStyleAttrs, defStyleRes) {
+
+    private val alwaysDecodeLongStripWithSSIV by lazy {
+        Injekt.get<BasePreferences>().alwaysDecodeLongStripWithSSIV().get()
+    }
 
     protected var pageView: View? = null
 
@@ -233,7 +240,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
             }
             is BufferedSource -> {
                 // SSIV doesn't tile bitmaps, so if the image exceeded max texture size it won't load regardless.
-                if (!isWebtoon || ImageUtil.isMaxTextureSizeExceeded(data)) {
+                if (!isWebtoon || alwaysDecodeLongStripWithSSIV || ImageUtil.isMaxTextureSizeExceeded(data)) {
                     setHardwareConfig(!ImageUtil.isHardwareThresholdExceeded(data))
                     setImage(ImageSource.inputStream(data.inputStream()))
                     isVisible = true

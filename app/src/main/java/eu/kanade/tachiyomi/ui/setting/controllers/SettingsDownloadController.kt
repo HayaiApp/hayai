@@ -21,7 +21,6 @@ import eu.kanade.tachiyomi.ui.setting.summaryMRes as summaryRes
 import eu.kanade.tachiyomi.ui.setting.switchPreference
 import eu.kanade.tachiyomi.ui.setting.titleMRes as titleRes
 import eu.kanade.tachiyomi.ui.setting.triStateListPreference
-import eu.kanade.tachiyomi.util.lang.addBetaTag
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,7 +58,7 @@ class SettingsDownloadController : SettingsLegacyController() {
         }
         switchPreference {
             bindTo(downloadPreferences.downloadWithId())
-            title = context.getString(MR.strings.download_with_id).addBetaTag(context)
+            title = context.getString(MR.strings.download_with_id)
             summaryRes = MR.strings.download_with_id_details
         }
         seekBarPreference {

@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.system.ImageUtil
@@ -229,7 +230,18 @@ class LocalSource(private val context: Context) : CatalogueSource, UnmeteredSour
 
     override suspend fun getLatestUpdates(page: Int) = getSearchManga(page, "", latestFilters)
 
-    override suspend fun getMangaDetails(manga: SManga): SManga = withIOContext {
+    override suspend fun getMangaUpdate(
+        manga: SManga,
+        chapters: List<SChapter>,
+        fetchDetails: Boolean,
+        fetchChapters: Boolean,
+    ): SMangaUpdate {
+        val updatedManga = if (fetchDetails) loadMangaDetails(manga) else manga
+        val updatedChapters = if (fetchChapters) loadChapterList(manga) else chapters
+        return SMangaUpdate(updatedManga, updatedChapters)
+    }
+
+    private suspend fun loadMangaDetails(manga: SManga): SManga = withIOContext {
         // Making sure that we have the latest cover file path, in case user use different file format
         invalidateCover(manga, context)
 
@@ -333,7 +345,7 @@ class LocalSource(private val context: Context) : CatalogueSource, UnmeteredSour
         }
     }
 
-    override suspend fun getChapterList(manga: SManga): List<SChapter> = withIOContext {
+    private suspend fun loadChapterList(manga: SManga): List<SChapter> = withIOContext {
         val dirs = getMangaDirs(context, manga.url).toList()
 
         // 1. Gather files from ALL directories

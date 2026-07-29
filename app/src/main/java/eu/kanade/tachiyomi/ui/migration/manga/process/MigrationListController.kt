@@ -198,7 +198,12 @@ class MigrationListController(bundle: Bundle? = null) :
                                                                     searchResult,
                                                                     source.id,
                                                                 )
-                                                            val chapters = source.getChapterList(localManga)
+                                                            val chapters = source.getMangaUpdate(
+                                                                localManga,
+                                                                chapters = emptyList(),
+                                                                fetchDetails = false,
+                                                                fetchChapters = true,
+                                                            ).chapters
                                                             try {
                                                                 syncChaptersWithSource(
                                                                     chapters,
@@ -236,7 +241,12 @@ class MigrationListController(bundle: Bundle? = null) :
                                                         source.id,
                                                     )
                                                     val chapters: List<SChapter> = try {
-                                                        source.getChapterList(localManga)
+                                                        source.getMangaUpdate(
+                                                            localManga,
+                                                            chapters = emptyList(),
+                                                            fetchDetails = false,
+                                                            fetchChapters = true,
+                                                        ).chapters
                                                     } catch (e: java.lang.Exception) {
                                                         Logger.e(e) { "Something went wrong while trying to retrieve chapter list" }
                                                         emptyList()
@@ -270,8 +280,12 @@ class MigrationListController(bundle: Bundle? = null) :
 
                             if (result != null && result.thumbnail_url == null) {
                                 try {
-                                    val newManga =
-                                        sourceManager.getOrStub(result.source).getMangaDetails(result)
+                                    val newManga = sourceManager.getOrStub(result.source).getMangaUpdate(
+                                        result,
+                                        chapters = emptyList(),
+                                        fetchDetails = true,
+                                        fetchChapters = false,
+                                    ).manga
                                     result.copyFrom(newManga)
 
                                     updateManga.await(result.toMangaUpdate())
@@ -347,13 +361,12 @@ class MigrationListController(bundle: Bundle? = null) :
                         val value = it.toLongOrNull() ?: return@mapNotNull null
                         sourceManager.get(value) as? CatalogueSource
                     }
-                    val validSources = if (sources.size == 1) {
-                        sources
-                    } else {
-                        sources.filter { it.id != manga.source }
-                    }
+                    // Keep the manga's own source in the list: if the migration match is broken
+                    // (e.g. wrong entry, dead link), the user can search it again against the
+                    // original source to refresh it in place, instead of having to migrate away
+                    // to another source and back.
                     manga.title = manga.title.toNormalized()
-                    val searchController = SearchController(manga, validSources)
+                    val searchController = SearchController(manga, sources)
                     searchController.targetController = this@MigrationListController
                     router.pushController(searchController.withFadeTransaction())
                 }
@@ -379,7 +392,12 @@ class MigrationListController(bundle: Bundle? = null) :
             val result = CoroutineScope(migratingManga.manga.migrationJob).async {
                 val localManga = smartSearchEngine.networkToLocalManga(manga, source.id)
                 try {
-                    val chapters = source.getChapterList(localManga)
+                    val chapters = source.getMangaUpdate(
+                        localManga,
+                        chapters = emptyList(),
+                        fetchDetails = false,
+                        fetchChapters = true,
+                    ).chapters
                     withIOContext { syncChaptersWithSource(chapters, localManga, source) }
                 } catch (e: Exception) {
                     return@async null
@@ -389,8 +407,12 @@ class MigrationListController(bundle: Bundle? = null) :
 
             if (result != null) {
                 try {
-                    val newManga =
-                        sourceManager.getOrStub(result.source).getMangaDetails(result)
+                    val newManga = sourceManager.getOrStub(result.source).getMangaUpdate(
+                        result,
+                        chapters = emptyList(),
+                        fetchDetails = true,
+                        fetchChapters = false,
+                    ).manga
                     result.copyFrom(newManga)
 
                     updateManga.await(result.toMangaUpdate())
@@ -413,16 +435,32 @@ class MigrationListController(bundle: Bundle? = null) :
 
     fun migrateMangas() {
         launchUI {
-            adapter?.performMigrations(false)
+            val dialog = showMigrationProgressDialog()
+            adapter?.performMigrations(false) { current, total ->
+                dialog.setMessage("$current / $total")
+            }
+            dialog.dismiss()
             navigateOut()
         }
     }
 
     fun copyMangas() {
         launchUI {
-            adapter?.performMigrations(true)
+            val dialog = showMigrationProgressDialog()
+            adapter?.performMigrations(true) { current, total ->
+                dialog.setMessage("$current / $total")
+            }
+            dialog.dismiss()
             navigateOut()
         }
+    }
+
+    private fun showMigrationProgressDialog(): androidx.appcompat.app.AlertDialog {
+        return activity!!.materialAlertDialog()
+            .setTitle(MR.strings.migrating_progress)
+            .setMessage("0 / 0")
+            .setCancelable(false)
+            .show()
     }
 
     private fun navigateOut() {

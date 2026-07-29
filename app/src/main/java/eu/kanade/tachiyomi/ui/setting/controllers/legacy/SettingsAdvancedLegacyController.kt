@@ -420,6 +420,12 @@ class SettingsAdvancedLegacyController : SettingsLegacyController() {
                 }
             }
 
+            switchPreference {
+              bindTo(basePreferences.alwaysDecodeLongStripWithSSIV())
+              titleMRes = MR.strings.pref_always_decode_long_strip_with_ssiv
+              summaryMRes = MR.strings.pref_always_decode_long_strip_with_ssiv_summary
+            }
+
             preference {
                 bindTo(basePreferences.displayProfile())
                 titleMRes = MR.strings.pref_display_profile

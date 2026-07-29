@@ -11,7 +11,9 @@ import eu.kanade.tachiyomi.data.backup.models.BackupManga
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
+import eu.kanade.tachiyomi.data.backup.models.BackupExtensionRepo
 import eu.kanade.tachiyomi.data.backup.create.creators.CategoriesBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.ExtensionReposBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.PreferenceBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.SourcesBackupCreator
@@ -34,6 +36,7 @@ class BackupCreator(
     private val mangaBackupCreator: MangaBackupCreator = MangaBackupCreator(),
     private val preferenceBackupCreator: PreferenceBackupCreator = PreferenceBackupCreator(),
     private val sourcesBackupCreator: SourcesBackupCreator = SourcesBackupCreator(),
+    private val extensionReposBackupCreator: ExtensionReposBackupCreator = ExtensionReposBackupCreator(),
     private val getManga: GetManga = get(),
 ) {
 
@@ -79,6 +82,7 @@ class BackupCreator(
                 backupSources = backupSources(backupManga),
                 backupPreferences = backupAppPreferences(options),
                 backupSourcePreferences = backupSourcePreferences(options),
+                backupExtensionRepo = backupExtensionRepos(options),
             )
 
             val byteArray = parser.encodeToByteArray(Backup.serializer(), backup)
@@ -133,5 +137,11 @@ class BackupCreator(
         if (!options.sourcePrefs) return emptyList()
 
         return preferenceBackupCreator.createSource(includePrivatePreferences = options.includePrivate)
+    }
+
+    private suspend fun backupExtensionRepos(options: BackupOptions): List<BackupExtensionRepo> {
+        if (!options.extensionRepos) return emptyList()
+
+        return extensionReposBackupCreator()
     }
 }

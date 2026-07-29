@@ -1,5 +1,7 @@
 package yokai.domain.chapter.models
 
+import kotlinx.serialization.json.JsonObject
+
 data class ChapterUpdate(
     val id: Long,
     val mangaId: Long? = null,
@@ -14,4 +16,5 @@ data class ChapterUpdate(
     val sourceOrder: Long? = null,
     val dateFetch: Long? = null,
     val dateUpload: Long? = null,
+    val memo: JsonObject? = null,
 )

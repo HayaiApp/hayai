@@ -18,6 +18,7 @@ data class LibraryManga(
         get() = read > 0
 
     companion object {
+        // Used by findAll (one-shot fetch) — includes description
         fun mapper(
             // manga
             id: Long,
@@ -42,6 +43,7 @@ data class LibraryManga(
             coverLastModified: Long,
             nextUpdate: Long,
             fetchInterval: Long,
+            memo: String,
             // libraryManga
             total: Long,
             readCount: Double,
@@ -74,6 +76,74 @@ data class LibraryManga(
                 coverLastModified = coverLastModified,
                 nextUpdate = nextUpdate,
                 fetchInterval = fetchInterval,
+                memo = memo,
+            ),
+            read = readCount.roundToInt(),
+            unread = maxOf((total - readCount).roundToInt(), 0),
+            totalChapters = total.toInt(),
+            bookmarkCount = bookmarkCount.roundToInt(),
+            category = categoryId.toInt(),
+            latestUpdate = latestUpdate,
+            lastRead = lastRead,
+            lastFetch = lastFetch,
+        )
+
+        // Used by findAllAsFlow (reactive subscription) — excludes description to
+        // avoid CursorWindow overflow on large libraries with frequent re-emissions.
+        fun flowMapper(
+            // manga
+            id: Long,
+            source: Long,
+            url: String,
+            artist: String?,
+            author: String?,
+            genre: String?,
+            title: String,
+            status: Long,
+            thumbnailUrl: String?,
+            favorite: Boolean,
+            lastUpdate: Long?,
+            initialized: Boolean,
+            viewerFlags: Long,
+            hideTitle: Boolean,
+            chapterFlags: Long,
+            dateAdded: Long?,
+            filteredScanlators: String?,
+            updateStrategy: Long,
+            coverLastModified: Long,
+            // libraryManga
+            total: Long,
+            readCount: Double,
+            bookmarkCount: Double,
+            categoryId: Long,
+            latestUpdate: Long,
+            lastRead: Long,
+            lastFetch: Long,
+        ): LibraryManga = LibraryManga(
+            manga = Manga.mapper(
+                id = id,
+                source = source,
+                url = url,
+                artist = artist,
+                author = author,
+                description = null,
+                genre = genre,
+                title = title,
+                status = status,
+                thumbnailUrl = thumbnailUrl,
+                favorite = favorite,
+                lastUpdate = lastUpdate,
+                initialized = initialized,
+                viewerFlags = viewerFlags,
+                hideTitle = hideTitle,
+                chapterFlags = chapterFlags,
+                dateAdded = dateAdded,
+                filteredScanlators = filteredScanlators,
+                updateStrategy = updateStrategy,
+                coverLastModified = coverLastModified,
+                // Excluded from this lightweight query (see comment above); not needed for
+                // library display, only for the reader's source URL-matching checks.
+                memo = "{}",
             ),
             read = readCount.roundToInt(),
             unread = maxOf((total - readCount).roundToInt(), 0),

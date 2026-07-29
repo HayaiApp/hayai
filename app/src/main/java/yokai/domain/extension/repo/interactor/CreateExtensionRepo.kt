@@ -12,7 +12,7 @@ import yokai.domain.extension.repo.service.ExtensionRepoService
 class CreateExtensionRepo(
     private val extensionRepoRepository: ExtensionRepoRepository
 ) {
-    private val repoRegex = """^https://.*/index\.min\.json$""".toRegex()
+    private val repoRegex = """^https://\S+$""".toRegex()
 
     private val networkService: NetworkHelper by injectLazy()
 
@@ -22,11 +22,20 @@ class CreateExtensionRepo(
     private val extensionRepoService = ExtensionRepoService(client)
 
     suspend fun await(repoUrl: String): Result {
-        if (!repoUrl.matches(repoRegex)) {
+        val trimmedUrl = repoUrl.trim().removeSuffix("/")
+        if (!trimmedUrl.matches(repoRegex)) {
             return Result.InvalidUrl
         }
 
-        val baseUrl = repoUrl.removeSuffix("/index.min.json")
+        // Accept either the repo's base URL, or a direct link to one of the files it serves
+        // (index.min.json, repo.json, index.pb, ...).
+        val lastSegment = trimmedUrl.substringAfterLast('/')
+        val baseUrl = if ('.' in lastSegment) {
+            trimmedUrl.substringBeforeLast('/')
+        } else {
+            trimmedUrl
+        }
+
         return extensionRepoService.fetchRepoDetails(baseUrl)?.let { insert(it) } ?: Result.InvalidUrl
     }
 

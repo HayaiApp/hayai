@@ -12,6 +12,22 @@ The format is simplified version of [Keep a Changelog](https://keepachangelog.co
 
 ## [Unreleased]
 
+> **Rokku maintenance sync:** Extension-ecosystem compatibility and the maintenance fixes below
+> were ported from [Rokku](https://github.com/rokku-app/rokku) through v1.2.5. Many thanks to
+> Thiago Rocha, Hiirbaf, Sacha1016, and the Rokku contributors for keeping the Yokai lineage current.
+
+### Rokku maintenance
+- Support current Keiyoushi/TachiyomiX extension metadata, extension-lib 1.6, `repo.json`/`index.pb` repository URLs, and protobuf `index_v2` extension indexes
+- Adopt the combined source update API while retaining Hayai's built-in and novel-source compatibility
+- Update Kotlin to 2.4.10, Compose BOM to 2026.06.01, Okio to 3.18.0, and keep OkHttp Brotli/Zstd extension compatibility
+- Raise the minimum Android version to 8.0 (API 26) to match current extension bytecode requirements
+- Add selectable backup restore content, extension-repository backup/restore, source suggestions, and an optional SSIV long-strip decoder override
+- Rewrite the Shizuku installer around real `PackageInstaller` sessions and harden install/update confirmation fallbacks
+- Resume interrupted page downloads, preserve downloads across the “Download with ID” toggle, and reduce grouped-notification churn
+- Persist extension chapter/manga memo metadata and propagate combined manga details during library updates
+- Port library, manga-details, and migration performance fixes, plus webtoon split/decode stability fixes
+- Update Shikimori to its current domain and complete the remaining pt-BR filter translation
+
 ### Additions
 - Add **Library display onboarding step** during setup that lets users choose between continuous or tabbed library view modes with visual preview cards
 - Add **Library update report screen** that displays structured results from library updates, including per-title errors, skipped entries, and reasons, accessible from Library settings and Recents. Report can be accessed via notification or viewed in-app with option to open full log file

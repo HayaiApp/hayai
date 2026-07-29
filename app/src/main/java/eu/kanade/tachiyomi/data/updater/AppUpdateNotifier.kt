@@ -159,6 +159,32 @@ internal class AppUpdateNotifier(private val context: Context) {
     }
 
     /**
+     * Starting an activity from a background broadcast receiver can be silently blocked by the
+     * OS (Background Activity Launch restrictions), leaving the update stuck "Installing"
+     * forever with the confirm dialog never shown. Show a notification the user can tap
+     * instead, which always runs in a foreground/user-initiated context.
+     */
+    fun onInstallConfirmationRequired(confirmIntent: Intent?) {
+        confirmIntent ?: return
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            Notifications.ID_INSTALL,
+            confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        with(NotificationCompat.Builder(context, Notifications.CHANNEL_INSTALLING)) {
+            setContentTitle(context.getString(MR.strings.install))
+            setSmallIcon(AR.drawable.stat_sys_download_done)
+            setAutoCancel(true)
+            setOngoing(false)
+            setContentIntent(pendingIntent)
+            clearActions()
+            addAction(R.drawable.ic_system_update_24dp, context.getString(MR.strings.install), pendingIntent)
+            show(Notifications.ID_INSTALL)
+        }
+    }
+
+    /**
      * Call when apk download is finished.
      *
      * @param uri path location of apk.

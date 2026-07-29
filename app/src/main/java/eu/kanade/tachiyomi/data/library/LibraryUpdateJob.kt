@@ -287,29 +287,18 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                         )
                         ensureActive()
                         val networkManga = try {
-                            source.getMangaDetails(manga.manga.copy())
+                            source.getMangaUpdate(
+                                manga.manga.copy(),
+                                chapters = emptyList(),
+                                fetchDetails = true,
+                                fetchChapters = false,
+                            ).manga
                         } catch (e: java.lang.Exception) {
                             Logger.e(e)
                             null
                         }
                         if (networkManga != null) {
-                            manga.manga.prepareCoverUpdate(coverCache, networkManga, false)
-                            val thumbnailUrl = manga.manga.thumbnail_url
-                            manga.manga.copyFrom(networkManga)
-                            manga.manga.initialized = true
-                            val request: ImageRequest =
-                                if (thumbnailUrl != manga.manga.thumbnail_url) {
-                                    // load new covers in background
-                                    ImageRequest.Builder(context).data(manga.manga.cover())
-                                        .memoryCachePolicy(CachePolicy.DISABLED).build()
-                                } else {
-                                    ImageRequest.Builder(context).data(manga.manga.cover())
-                                        .memoryCachePolicy(CachePolicy.DISABLED)
-                                        .diskCachePolicy(CachePolicy.WRITE_ONLY)
-                                        .build()
-                                }
-                            context.imageLoader.execute(request)
-                            updateManga.await(manga.manga.toMangaUpdate())
+                            applyMangaDetailsUpdate(manga, networkManga)
                         }
                     }
                 }
@@ -317,6 +306,31 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         }
         asyncList.awaitAll()
         notifier.cancelProgressNotification()
+    }
+
+    /**
+     * Applies manga details returned by a source (cover, metadata, etc.) to the local copy and
+     * persists it. Shared between the standalone details refresh and the chapter update flow,
+     * since a source can return updated manga details alongside chapters in the same response.
+     */
+    private suspend fun applyMangaDetailsUpdate(manga: LibraryManga, networkManga: SManga) {
+        manga.manga.prepareCoverUpdate(coverCache, networkManga, false)
+        val thumbnailUrl = manga.manga.thumbnail_url
+        manga.manga.copyFrom(networkManga)
+        manga.manga.initialized = true
+        val request: ImageRequest =
+            if (thumbnailUrl != manga.manga.thumbnail_url) {
+                // load new covers in background
+                ImageRequest.Builder(context).data(manga.manga.cover())
+                    .memoryCachePolicy(CachePolicy.DISABLED).build()
+            } else {
+                ImageRequest.Builder(context).data(manga.manga.cover())
+                    .memoryCachePolicy(CachePolicy.DISABLED)
+                    .diskCachePolicy(CachePolicy.WRITE_ONLY)
+                    .build()
+            }
+        context.imageLoader.execute(request)
+        updateManga.await(manga.manga.toMangaUpdate())
     }
 
     /**
@@ -365,15 +379,11 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         }
         if (newUpdates.isNotEmpty()) {
             notifier.showResultNotification(newUpdates)
-            if (!wasStopped && preferences.refreshCoversToo().get() && !isStopped) {
-                updateDetails(newUpdates.keys.toList())
-                notifier.cancelProgressNotification()
-                if (downloadNew && hasDownloads) {
-                    DownloadJob.start(context, runExtensionUpdatesAfter)
-                    runExtensionUpdatesAfter = false
-                }
-            } else if (downloadNew && hasDownloads) {
-                DownloadJob.start(applicationContext, runExtensionUpdatesAfter)
+            // Manga details (when refreshCoversToo is on) are now fetched inline in
+            // updateMangaChapters(), in the same request as the chapter list, so no separate
+            // details pass is needed here anymore.
+            if (downloadNew && hasDownloads) {
+                DownloadJob.start(context, runExtensionUpdatesAfter)
                 runExtensionUpdatesAfter = false
             }
         }
@@ -462,7 +472,21 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
             var hasDownloads = false
             ensureActive()
             notifier.showProgressNotification(manga.manga, progress, mangaToUpdate.size)
-            val fetchedChapters = source.getChapterList(manga.manga.copy())
+            val fetchDetailsToo = preferences.refreshCoversToo().get()
+            val mangaUpdate = source.getMangaUpdate(
+                manga.manga.copy(),
+                chapters = emptyList(),
+                fetchDetails = fetchDetailsToo,
+                fetchChapters = true,
+            )
+            // Applied before chapters are synced, matching Mihon's UpdateMangaFromRemote
+            // (awaitUpdateFromSource runs before syncChaptersWithSource). Some sources return
+            // updated manga details in the same response as chapters (e.g. when both are
+            // scraped from the same page), regardless of whether details were explicitly
+            // requested - persist them instead of dropping them on the floor.
+            mangaUpdate.manga?.let { applyMangaDetailsUpdate(manga, it) }
+
+            val fetchedChapters = mangaUpdate.chapters
 
             if (fetchedChapters.isNotEmpty()) {
                 val newChapters = syncChaptersWithSource(fetchedChapters, manga.manga, source, fetchWindow = fetchWindow)
@@ -492,6 +516,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                     sendUpdate(manga.manga.id)
                 }
             }
+
             return@coroutineScope hasDownloads
         } catch (e: Exception) {
             if (e !is CancellationException) {

@@ -18,10 +18,16 @@ class AppUpdateBroadcast : BroadcastReceiver() {
             val extras = intent.extras ?: return
             when (val status = extras.getInt(PackageInstaller.EXTRA_STATUS)) {
                 PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                    // The confirm notification below is itself the recovery path for a blocked
+                    // confirm dialog, so mark this resolved to stop AppDownloadInstallJob's
+                    // timeout fallback from also firing and replacing it with a redundant
+                    // "tap to install manually" notification a few seconds later.
+                    AppDownloadInstallJob.installResolved = true
                     val confirmIntent = extras.getParcelableCompat(Intent.EXTRA_INTENT, Intent::class.java)
-                    context.startActivity(confirmIntent?.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    AppUpdateNotifier(context.localeContext).onInstallConfirmationRequired(confirmIntent)
                 }
                 PackageInstaller.STATUS_SUCCESS -> {
+                    AppDownloadInstallJob.installResolved = true
                     val prefs = PreferenceManager.getDefaultSharedPreferences(context)
                     prefs.edit {
                         remove(AppDownloadInstallJob.NOTIFY_ON_INSTALL_KEY)
@@ -36,6 +42,7 @@ class AppUpdateBroadcast : BroadcastReceiver() {
                     }
                 }
                 PackageInstaller.STATUS_FAILURE, PackageInstaller.STATUS_FAILURE_ABORTED, PackageInstaller.STATUS_FAILURE_BLOCKED, PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE, PackageInstaller.STATUS_FAILURE_INVALID, PackageInstaller.STATUS_FAILURE_STORAGE -> {
+                    AppDownloadInstallJob.installResolved = true
                     if (status != PackageInstaller.STATUS_FAILURE_ABORTED) {
                         context.toast(MR.strings.could_not_install_update)
                         val uri = intent.getStringExtra(AppDownloadInstallJob.EXTRA_FILE_URI) ?: return

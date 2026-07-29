@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.domain.manga.models.Manga
+import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
@@ -509,13 +510,9 @@ class Downloader(
 
         val digitCount = (download.pages?.size ?: 0).toString().length.coerceAtLeast(3)
         val filename = String.format("%0${digitCount}d", page.number)
-        val tmpFile = tmpDir.findFile("$filename.tmp")
 
-        // Delete temp file if it exists
-        tmpFile?.delete()
-
-        // Try to find the image file
-        val imageFile = tmpDir.listFiles().orEmpty().find { it.name.orEmpty().startsWith("$filename.") || it.name.orEmpty().startsWith("${filename}__001") }
+        // Try to find the image file (a leftover .tmp from an interrupted download doesn't count)
+        val imageFile = tmpDir.listFiles().orEmpty().find { isDownloadedPageImage(it.name.orEmpty(), filename) }
 
         val chapName = download.chapter.preferredChapterName(context, download.manga, preferences)
         try {
@@ -565,15 +562,21 @@ class Downloader(
         page.progress = 0
         return flow {
             val dataSaver = exh.util.DataSaver.fromPreferences(exhPreferences)
-            val response = with(exh.util.DataSaver) { source.getImage(page, dataSaver) }
-            val file = tmpDir.createFile("$filename.tmp")
+            val file = tmpDir.findFile("$filename.tmp") ?: tmpDir.createFile("$filename.tmp")!!
             try {
-                response.body.source().saveTo(file!!.openOutputStream())
-                val extension = getImageExtension(response, file)
-                file.renameTo("$filename.$extension")
-            } catch (e: Exception) {
-                response.close()
-                file?.delete()
+                with(exh.util.DataSaver) { source.getImage(page, dataSaver, file.length()) }.use { response ->
+                    response.body.source().saveTo(
+                        // If the server supports partial downloads (HTTP 206), append to the
+                        // existing file. Otherwise, start from scratch and overwrite the file.
+                        stream = file.openOutputStream(response.code == 206),
+                    )
+                    val extension = getImageExtension(response, file)
+                    file.renameTo("$filename.$extension")
+                }
+            } catch (e: HttpException) {
+                if (e.code == 416) {
+                    file.delete()
+                }
                 throw e
             }
             emit(file)
@@ -622,6 +625,12 @@ class Downloader(
 
         return ImageUtil.getExtensionFromMimeType(mime) { file.openInputStream() }
     }
+
+    private fun isDownloadedPageImage(fileName: String, pagePrefix: String): Boolean =
+        !fileName.endsWith(".tmp") && (
+            fileName.startsWith("$pagePrefix.") ||
+                fileName.startsWith("${pagePrefix}__001.")
+            )
 
     private fun splitTallImageIfNeeded(page: Page, tmpDir: UniFile) {
         if (!preferences.splitTallImages().get()) return

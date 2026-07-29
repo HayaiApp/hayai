@@ -625,9 +625,32 @@ open class BrowseSourceController(bundle: Bundle) :
 
     override fun onChangeStarted(handler: ControllerChangeHandler, type: ControllerChangeType) {
         super.onChangeStarted(handler, type)
-        if (type == ControllerChangeType.POP_ENTER && lastPosition > -1) {
-            adapter?.notifyItemChanged(lastPosition, false)
-            lastPosition = -1
+        if (type == ControllerChangeType.POP_ENTER) {
+            // The reactive per-item favorite subscription (see BrowseSourceItem.subscribe())
+            // only watches whichever manga was directly tapped - it misses favorites toggled a
+            // few screens deeper (e.g. from a suggested manga's own details screen), so refresh
+            // every currently bound item's favorite status here as well.
+            refreshFavoriteStatuses()
+            if (lastPosition > -1) {
+                adapter?.notifyItemChanged(lastPosition, false)
+                lastPosition = -1
+            }
+        }
+    }
+
+    private fun refreshFavoriteStatuses() {
+        val items = adapter?.currentItems?.filterIsInstance<BrowseSourceItem>() ?: return
+        viewScope.launchIO {
+            items.forEach { item ->
+                val id = item.manga.id ?: return@forEach
+                val fresh = getManga.awaitById(id) ?: return@forEach
+                if (fresh.favorite != item.manga.favorite) {
+                    withUIContext {
+                        val holder = getHolder(item.mangaId)
+                        if (holder != null) item.updateManga(holder, fresh)
+                    }
+                }
+            }
         }
     }
 

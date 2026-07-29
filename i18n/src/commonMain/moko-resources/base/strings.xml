@@ -225,7 +225,7 @@
     <string name="shift_double_pages">Shift double pages</string>
 
     <!-- Library update service notifications -->
-    <string name="allow_notifications_recommended">Allowing notifications is recommended to keep your library and app up to date.</string>
+    <string name="allow_notifications_recommended">Allowing notifications is recommended to keep your library and app up to date</string>
     <string name="new_chapters_found">New chapters found</string>
     <string name="notification_size_warning">Large updates may lead to increased battery usage and sources becoming slower. Tap to learn more.</string>
     <string name="download_queue_size_warning">Warning: large bulk downloads may lead to sources becoming slower and/or blocking Tachiyomi. Tap to learn more.</string>
@@ -274,7 +274,7 @@
     <string name="display_buttons_bottom_reader">Buttons at bottom of reader</string>
     <string name="certain_buttons_can_be_found">Certain buttons can be found in other places if disabled here</string>
     <string name="search_suggestions">Search suggestions</string>
-    <string name="search_tips_show_periodically">Search tips will show up periodically. Long press the suggestion to search it.</string>
+    <string name="search_tips_show_periodically">Search tips will show up periodically. Long press the suggestion to search it</string>
     <string name="enable_chapter_swipe_action">Enable chapter swipe action</string>
 
     <!-- Recents -->
@@ -385,7 +385,7 @@
     <string name="untrusted">Untrusted</string>
     <string name="uninstall">Uninstall</string>
     <string name="ext_installer_shizuku_stopped">Shizuku is not running</string>
-    <string name="ext_installer_shizuku_unavailable_dialog">Install and start Shizuku to use Shizuku as extension installer.</string>
+    <string name="ext_installer_shizuku_unavailable_dialog">Install and start Shizuku to use Shizuku as extension installer</string>
     <string name="ext_installer_pref">Installer</string>
     <string name="ext_installer_shizuku" translatable="false">Shizuku</string>
     <string name="ext_installer_private" translatable="false">Private</string>
@@ -460,7 +460,7 @@
     <string name="show_page_number">Show page number</string>
     <string name="true_32bit_color">32-bit color</string>
     <string name="page_preload_amount">Page preload amount</string>
-    <string name="amount_of_pages_to_preload">The amount of pages to preload when reading. Higher values will result in a smoother reading experience, at the cost of higher cache and network usage.</string>
+    <string name="amount_of_pages_to_preload">The amount of pages to preload when reading. Higher values will result in a smoother reading experience, at the cost of higher cache and network usage</string>
     <string name="reduces_banding_impacts_performance">Reduces banding, but may impact
         performance</string>
     <string name="invert_double_pages">Invert double pages</string>
@@ -570,6 +570,8 @@
     <string name="pref_hardware_bitmap_threshold">Custom hardware bitmap threshold</string>
     <string name="pref_hardware_bitmap_threshold_default">Default (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">If reader loads a blank image incrementally reduce the threshold.\nSelected: %s</string>
+    <string name="pref_always_decode_long_strip_with_ssiv">Use legacy decoder for long strip reader</string>
+    <string name="pref_always_decode_long_strip_with_ssiv_summary">Affects performance. Only enable if reducing bitmap threshold doesn\'t fix blank image issues</string>
     <string name="pref_double_tap_zoom">Double tap to zoom</string>
 
     <!-- Manga details -->
@@ -671,9 +673,9 @@
     <string name="tracked">Tracked</string>
     <string name="not_tracked">Not tracked</string>
     <string name="services">Services</string>
-    <string name="tracking_info">One-way sync to update the chapter progress in tracking services. Set up tracking for individual entries from their tracking button.</string>
+    <string name="tracking_info">One-way sync to update the chapter progress in tracking services. Set up tracking for individual entries from their tracking button</string>
     <string name="enhanced_services">Enhanced services</string>
-    <string name="enhanced_tracking_info">Services that provide enhanced features for specific sources. Entries are automatically tracked when added to your library.</string>
+    <string name="enhanced_tracking_info">Services that provide enhanced features for specific sources. Entries are automatically tracked when added to your library</string>
     <string name="update_tracking_after_reading">Update tracking after reading</string>
     <string name="update_tracking_marked_read">Update tracking when marked as read</string>
     <string name="reading">Reading</string>
@@ -726,6 +728,7 @@
     <string name="select_sources">Select sources</string>
     <string name="source_migration">Source migration</string>
     <string name="migration">Migration</string>
+    <string name="migrating_progress">Migrating…</string>
     <string name="skip_pre_migration">Skip pre-migration</string>
     <string name="select_a_source_then_item_to_migrate">Select a source, then select an item to
         migrate</string>
@@ -885,11 +888,11 @@
     <string name="restore_error">Failed to restore backup</string>
     <string name="restore_missing_sources">Missing sources:</string>
     <string name="restore_missing_trackers">Trackers not logged into:</string>
-    <string name="restore_content_full">Data from the backup file will be restored.\n\nYou will need to install any missing extensions and log in to tracking services afterwards to use them.</string>
+    <string name="restore_content_full">Data from the backup file will be restored.\n\nYou will need to install any missing extensions and log in to tracking services afterwards to use them</string>
     <string name="restoring_backup_canceled">Canceled restore</string>
     <string name="backup_restore_invalid_uri">Error: empty URI</string>
     <string name="creating_backup">Creating backup</string>
-    <string name="backup_info">Automatic backups are highly recommended. You should keep copies in other places as well.</string>
+    <string name="backup_info">Automatic backups are highly recommended. You should keep copies in other places as well</string>
     <string name="what_should_backup">What do you want to backup?</string>
     <string name="restoring_backup">Restoring backup</string>
     <string name="restore_duration">%1$02d min, %2$02d sec</string>
@@ -907,13 +910,13 @@
 
     <string name="data_management">Data Management</string>
     <string name="check_for_beta_releases">Check for beta releases</string>
-    <string name="try_new_features">Try new features before they\'re officially released. Beta releases may be unstable and are provided to give feedback to the developer.</string>
-    <string name="warning_unenroll_from_beta">Rolling back to the previous production version may cause issues and could require clearing app data.</string>
-    <string name="warning_enroll_into_beta">Beta releases may be unstable and could require clearing app data.</string>
+    <string name="try_new_features">Try new features before they\'re officially released. Beta releases may be unstable and are provided to give feedback to the developer</string>
+    <string name="warning_unenroll_from_beta">Rolling back to the previous production version may cause issues and could require clearing app data</string>
+    <string name="warning_enroll_into_beta">Beta releases may be unstable and could require clearing app data</string>
     <string name="crash_logs">Crash logs</string>
     <string name="dump_crash_logs">Dump crash logs</string>
     <string name="saves_error_logs">Saves error logs to a file for sharing with the developers</string>
-    <string name="about_dont_kill_my_app">Some manufacturers have additional app restrictions that kill background services. This website has more info on how to fix it.</string>
+    <string name="about_dont_kill_my_app">Some manufacturers have additional app restrictions that kill background services. This website has more info on how to fix it</string>
     <string name="crash_log_saved">Crash logs saved</string>
     <string name="pref_verbose_logging">Verbose logging</string>
     <string name="pref_verbose_logging_summary">Print verbose logs to system log (may reduces app performance)</string>
@@ -996,9 +999,14 @@
     <string name="pref_migration_parallel">Parallel migration</string>
     <string name="pref_migration_parallel_summary">Titles resolved simultaneously: %1$d</string>
     <string name="enable_source_swipe_action">Enable source swipe action</string>
+    <string name="pref_related_mangas">Show Suggestions</string>
+    <string name="pref_related_mangas_summary">Show suggested titles on details page</string>
+    <string name="related_mangas">Suggestions</string>
+    <string name="related_mangas_site_suggestions">Site suggestions</string>
+    <string name="no_related_mangas_found">No suggestions found</string>
     <string name="nsfw_sources">NSFW (18+) sources</string>
     <string name="show_in_sources_and_extensions">Show in sources and extensions lists</string>
-    <string name="does_not_prevent_unofficial_nsfw">This does not prevent unofficial or potentially incorrectly flagged extensions from surfacing NSFW (18+) content within the app.</string>
+    <string name="does_not_prevent_unofficial_nsfw">This does not prevent unofficial or potentially incorrectly flagged extensions from surfacing NSFW (18+) content within the app</string>
 
     <!-- Extension repos -->
     <string name="repos">Repos</string>

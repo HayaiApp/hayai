@@ -13,7 +13,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import yokai.util.koin.injectLazy
-import yokai.domain.download.DownloadPreferences
 import yokai.domain.storage.StorageManager
 import yokai.i18n.MR
 import yokai.util.lang.getString
@@ -26,10 +25,6 @@ import yokai.util.lang.getString
  */
 class DownloadProvider(private val context: Context) {
 
-    /**
-     * Preferences helper.
-     */
-    private val downloadPreferences: DownloadPreferences by injectLazy()
     private val storageManager: StorageManager by injectLazy()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -159,13 +154,14 @@ class DownloadProvider(private val context: Context) {
     ): List<UniFile> {
         val mangaDir = findMangaDir(manga, source) ?: return emptyList()
         val chapterNameHashSet = chapters.map { it.name }.toHashSet()
-        val scanlatorNameHashSet = chapters.map {
-            getChapterDirName(it)
-            getChapterDirName(it, includeId = downloadPreferences.downloadWithId().get())
+        // Match both the ID-suffixed and plain names, regardless of the current
+        // "Download with ID" setting - otherwise toggling it would make existing
+        // downloads look unmatched and get deleted by the cleanup this backs.
+        val scanlatorNameHashSet = chapters.flatMap {
+            listOf(getChapterDirName(it), getChapterDirName(it, includeId = true))
         }.toHashSet()
-        val scanlatorCbzNameHashSet = chapters.map {
-            "${getChapterDirName(it)}.cbz"
-            "${getChapterDirName(it, includeId = downloadPreferences.downloadWithId().get())}.cbz"
+        val scanlatorCbzNameHashSet = chapters.flatMap {
+            listOf("${getChapterDirName(it)}.cbz", "${getChapterDirName(it, includeId = true)}.cbz")
         }.toHashSet()
 
         return mangaDir.listFiles().orEmpty().asList().filter { file ->
@@ -199,8 +195,11 @@ class DownloadProvider(private val context: Context) {
      */
     fun findTempChapterDirs(chapters: List<Chapter>, manga: Manga, source: Source): List<UniFile> {
         val mangaDir = findMangaDir(manga, source) ?: return emptyList()
-        return chapters.mapNotNull {
-            mangaDir.findFile("${getChapterDirName(it, includeId = downloadPreferences.downloadWithId().get())}_tmp")
+        return chapters.flatMap {
+            listOfNotNull(
+                mangaDir.findFile("${getChapterDirName(it)}_tmp"),
+                mangaDir.findFile("${getChapterDirName(it, includeId = true)}_tmp"),
+            )
         }
     }
 

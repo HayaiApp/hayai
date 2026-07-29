@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.util.system.withIOContext
 import hayai.novel.source.TextSource
 import java.util.Locale
 import yokai.util.koin.injectLazy
+import yokai.data.memoAdapter
 import yokai.data.updateStrategyAdapter
 import yokai.domain.chapter.interactor.GetChapter
 import yokai.domain.manga.interactor.UpdateManga
@@ -198,6 +199,7 @@ fun Manga.Companion.mapper(
     coverLastModified: Long,
     nextUpdate: Long,
     fetchInterval: Long,
+    memo: String,
 ) = create(url, title, source).apply {
     this.id = id
     this.artist = artist
@@ -218,6 +220,7 @@ fun Manga.Companion.mapper(
     this.cover_last_modified = coverLastModified
     this.next_update = nextUpdate
     this.fetch_interval = fetchInterval.toInt()
+    this.memo = memoAdapter.decode(memo)
 }
 
 fun Manga.hasCustomCover(coverCache: CoverCache = get()): Boolean {

@@ -39,6 +39,7 @@ object Notifications {
     const val ID_DOWNLOAD_CHAPTER_ERROR = -202
     const val ID_DOWNLOAD_SIZE_WARNING = -203
     const val ID_DOWNLOAD_PAUSED = -204
+    const val ID_DOWNLOAD_GROUP_SUMMARY = -205
 
     /**
      * Notification channel and ids used by the library updater.
@@ -76,6 +77,7 @@ object Notifications {
     const val ID_EXTENSION_PROGRESS = -402
     const val CHANNEL_EXT_UPDATED = "ext_updated_channel"
     const val ID_UPDATED_EXTS = -403
+    const val ID_EXTENSION_INSTALL_CONFIRM = -404
 
     private const val GROUP_BACKUP_RESTORE = "group_backup_restore"
     const val CHANNEL_BACKUP_RESTORE_PROGRESS = "backup_restore_progress_channel"

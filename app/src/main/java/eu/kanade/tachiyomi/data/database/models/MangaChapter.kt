@@ -28,6 +28,7 @@ class MangaChapter(val manga: Manga, val chapter: Chapter) {
             coverLastModified: Long,
             nextUpdate: Long,
             fetchInterval: Long,
+            mangaMemo: String,
             // chapter
             chapterId: Long,
             _mangaId: Long,
@@ -42,6 +43,7 @@ class MangaChapter(val manga: Manga, val chapter: Chapter) {
             sourceOrder: Long,
             dateFetch: Long,
             dateUpload: Long,
+            chapterMemo: String,
         ) = MangaChapter(
             Manga.mapper(
                 id = mangaId,
@@ -66,6 +68,7 @@ class MangaChapter(val manga: Manga, val chapter: Chapter) {
                 coverLastModified = coverLastModified,
                 nextUpdate = nextUpdate,
                 fetchInterval = fetchInterval,
+                memo = mangaMemo,
             ),
             Chapter.mapper(
                 id = chapterId,
@@ -81,6 +84,7 @@ class MangaChapter(val manga: Manga, val chapter: Chapter) {
                 sourceOrder = sourceOrder,
                 dateFetch = dateFetch,
                 dateUpload = dateUpload,
+                memo = chapterMemo,
             ),
         )
     }

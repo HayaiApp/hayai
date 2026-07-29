@@ -83,6 +83,8 @@ interface Manga : SManga {
 
         update_strategy = other.update_strategy
 
+        memo = other.memo
+
         if (!initialized) {
             initialized = other.initialized
         }
@@ -228,6 +230,7 @@ interface Manga : SManga {
             coverLastModified = cover_last_modified,
             nextUpdate = next_update,
             fetchInterval = fetch_interval,
+            memo = memo,
         )
     }
 

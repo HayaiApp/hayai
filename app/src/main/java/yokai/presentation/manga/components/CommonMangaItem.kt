@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -35,6 +37,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -127,10 +130,76 @@ fun MangaComfortableGridItem(
     badgeSegments: List<BadgeSegment> = listOf(),
     isSelected: Boolean = false,
     showOutline: Boolean = false,
+    inLibrary: Boolean = false,
     onClickContinueReading: (() -> Unit)? = null,
 ) {
-    Column {
+    Box {
+        Column(modifier = Modifier.padding(top = InLibraryBadgeOverhang, start = InLibraryBadgeOverhang)) {
+            MangaGridCover(
+                border = if (showOutline) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+                cover = {
+                    Box {
+                        var isLoading by remember { mutableStateOf(false) }
+                        MangaCover(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .alpha(if (isSelected) 0.34f else 1.0f),
+                            data = coverData,
+                            onState = { state ->
+                                isLoading = state is AsyncImagePainter.State.Loading
+                            }
+                        )
+                        if (isLoading) {
+                            LoadingIndicator(modifier = Modifier.align(Alignment.Center))
+                        }
+                    }
+                },
+                badgeSegments = BadgeSegments(
+                    lang = lang,
+                    unreadCount = unreadCount,
+                    downloadCount = downloadCount,
+                    extraBadgeSegments = badgeSegments,
+                ),
+                content = {
+                    if (onClickContinueReading != null) {
+                        ContinueReadingButton(
+                            modifier = Modifier.align(Alignment.BottomEnd),
+                            onClick = onClickContinueReading,
+                        )
+                    }
+                },
+            )
+            GridItemTitle(
+                modifier = Modifier.padding(4.dp),
+                title = title,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    color = MaterialTheme.colorScheme.onBackground,
+                ),
+                minLines = 2,
+            )
+        }
+        if (inLibrary) {
+            InLibraryBadge()
+        }
+    }
+}
+
+@Composable
+fun MangaCompactGridItem(
+    coverData: MangaCoverModel,
+    title: String,
+    lang: String? = null,
+    unreadCount: Int = 0,
+    downloadCount: Int = 0,
+    badgeSegments: List<BadgeSegment> = listOf(),
+    isSelected: Boolean = false,
+    showOutline: Boolean = false,
+    inLibrary: Boolean = false,
+    onClickContinueReading: (() -> Unit)? = null,
+) {
+    Box {
         MangaGridCover(
+            modifier = Modifier.padding(top = InLibraryBadgeOverhang, start = InLibraryBadgeOverhang),
             border = if (showOutline) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
             cover = {
                 MangaCover(
@@ -149,63 +218,69 @@ fun MangaComfortableGridItem(
             content = {
                 if (onClickContinueReading != null) {
                     ContinueReadingButton(
-                        modifier = Modifier.align(Alignment.BottomEnd),
+                        modifier = Modifier.align(Alignment.TopEnd),
                         onClick = onClickContinueReading,
                     )
                 }
+                CoverTextOverlay(
+                    title = title,
+                )
             },
         )
-        GridItemTitle(
-            modifier = Modifier.padding(4.dp),
-            title = title,
-            style = MaterialTheme.typography.titleSmall.copy(
-                color = MaterialTheme.colorScheme.onBackground,
-            ),
-            minLines = 2,
-        )
+        if (inLibrary) {
+            InLibraryBadge()
+        }
     }
 }
 
+/**
+ * How much [MangaGridCover] is inset from the top-start corner of its enclosing [Box] in
+ * [MangaComfortableGridItem]/[MangaCompactGridItem], reserving room for [InLibraryBadge] to
+ * overhang the cover without being clipped. Grid items here are hosted in a `ComposeView` inside
+ * a legacy RecyclerView grid cell (see BrowseSourceGridHolder/RelatedMangaCardHolder), so content
+ * can't simply be drawn past this composable's own bounds via a negative offset — it would be
+ * clipped by the ComposeView/cell. Reserving the space inside the layout instead guarantees it's
+ * never clipped, regardless of how the parent grid hosts this composable.
+ *
+ * Matches the legacy grid item's positioning (res/layout/manga_grid_item.xml): the cover card
+ * has a 6dp top/start margin from the grid cell, while the badge only has 3dp — 3dp less than
+ * the card — so it overhangs the cover's top-start corner instead of being clipped inside it
+ * like the language flag and unread/download counters (which stay inside [MangaGridCover]'s own
+ * rounded clip).
+ */
+private val InLibraryBadgeOverhang = 3.dp
+
 @Composable
-fun MangaCompactGridItem(
-    coverData: MangaCoverModel,
-    title: String,
-    lang: String? = null,
-    unreadCount: Int = 0,
-    downloadCount: Int = 0,
-    badgeSegments: List<BadgeSegment> = listOf(),
-    isSelected: Boolean = false,
-    showOutline: Boolean = false,
-    onClickContinueReading: (() -> Unit)? = null,
-) {
-    MangaGridCover(
-        border = if (showOutline) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
-        cover = {
-            MangaCover(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(if (isSelected) 0.34f else 1.0f),
-                data = coverData,
-            )
-        },
-        badgeSegments = BadgeSegments(
-            lang = lang,
-            unreadCount = unreadCount,
-            downloadCount = downloadCount,
-            extraBadgeSegments = badgeSegments,
-        ),
-        content = {
-            if (onClickContinueReading != null) {
-                ContinueReadingButton(
-                    modifier = Modifier.align(Alignment.TopEnd),
-                    onClick = onClickContinueReading,
-                )
-            }
-            CoverTextOverlay(
-                title = title,
-            )
-        },
-    )
+private fun BoxScope.InLibraryBadge() {
+    // Matches eu.kanade.tachiyomi.ui.library.LibraryBadge.setInLibrary's shape: a MaterialCardView
+    // with makeShapeCorners(radius, radius), where `radius` is the card's default 12dp corner
+    // radius (res/values/dimens.xml's rounded_radius, the app's standard MaterialCardView corner
+    // size). That helper rounds the top-start/bottom-end corners to the full radius and the other
+    // two corners to a fixed 4dp, plus a subtle 0.75dp colorOutline stroke
+    // (res/layout/unread_download_badge.xml's app:strokeColor/app:strokeWidth) — not a diagonal
+    // cut and not a single rounded corner.
+    val shape = RoundedCornerShape(topStart = 12.dp, topEnd = 4.dp, bottomStart = 4.dp, bottomEnd = 12.dp)
+    Box(
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .height(18.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.secondary)
+            .border(0.75.dp, MaterialTheme.colorScheme.outline, shape)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(MR.strings.in_library),
+            color = MaterialTheme.colorScheme.onSecondary,
+            fontSize = 13.sp,
+            style = TextStyle(
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Composable

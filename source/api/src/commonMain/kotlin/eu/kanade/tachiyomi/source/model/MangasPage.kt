@@ -4,6 +4,12 @@ import exh.metadata.metadata.RaisedSearchMetadata
 
 // EXH -->
 open class MangasPage(open val mangas: List<SManga>, open val hasNextPage: Boolean) {
+    @Deprecated("MangasPage is now a regular class")
+    operator fun component1(): List<SManga> = mangas
+
+    @Deprecated("MangasPage is now a regular class")
+    operator fun component2(): Boolean = hasNextPage
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is MangasPage) return false

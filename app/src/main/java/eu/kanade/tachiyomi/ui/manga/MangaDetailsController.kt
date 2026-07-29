@@ -316,6 +316,10 @@ class MangaDetailsController :
 
                 if (isTablet) return
 
+                when {
+                    dy > 0 && binding.fab.isExtended -> binding.fab.shrink()
+                    dy < 0 && !binding.fab.isExtended -> binding.fab.extend()
+                }
                 syncReadingFabVisibility()
             }
         })
@@ -884,6 +888,10 @@ class MangaDetailsController :
         super.onChangeStarted(handler, type)
         isPushing = true
         if (type.isEnter) {
+            // The fade transition doesn't detach this controller's view on push (kept alive
+            // underneath for cheap back navigation), so onAttach() won't fire again when
+            // returning here - this is the hook that does, e.g. after favoriting a related manga.
+            presenter.refreshRelatedMangaFavorites()
             if (isControllerVisible) {
                 // Apply MangaDetails-specific window/toolbar tint state on top of the
                 // activity's chrome.
@@ -1096,7 +1104,18 @@ class MangaDetailsController :
         colorToolbar(binding.recycler.canScrollVertically(-1))
         updateMenuVisibility(activityBinding?.toolbar?.menu)
     }
-
+    // Lightweight update for single chapter read/bookmark toggles.
+    // Skips full adapter dataset replacement which caused ~1s freeze when at top of chapter selection screen.
+    // Also part of a fix for manual chapter marking read/unread/bookmarks skipping entries usuallyy 6/20 times.
+    // Now can manually mark any amount of chapters 1 by 1 without ANY misses or latency issues.
+    fun updateChaptersQuick(chapterId: Long) {
+        view ?: return
+        val position = adapter?.indexOf(chapterId) ?: return
+        if (position >= 0) adapter?.notifyItemChanged(position)
+        getHeader()?.updateReadingButton()
+        updateFab()
+        updateMenuVisibility(activityBinding?.toolbar?.menu)
+    }
     private fun addMangaHeader() {
         val tabletHeader = presenter.tabletChapterHeaderItem
         if (tabletHeader != null && tabletAdapter?.scrollableHeaders?.isEmpty() == true) {
@@ -1108,6 +1127,27 @@ class MangaDetailsController :
             adapter?.removeAllScrollableHeaders()
             adapter?.addScrollableHeader(presenter.headerItem)
         }
+    }
+
+    fun updateRelatedManga() {
+        view ?: return
+        getHeader()?.bindRelatedManga(presenter)
+    }
+
+    override fun openRelatedManga(manga: Manga) {
+        router.pushController(MangaDetailsController(manga, true).withFadeTransaction())
+    }
+
+    override fun openRelatedMangaScreen() {
+        val mangaIds = presenter.relatedMangaItem.mangas.mapNotNull { it.id }
+        if (mangaIds.isEmpty()) return
+        router.pushController(
+            yokai.presentation.manga.related.RelatedMangaController(
+                presenter.mangaId,
+                presenter.manga.title,
+                mangaIds,
+            ).withFadeTransaction(),
+        )
     }
 
     fun refreshAdapter() {

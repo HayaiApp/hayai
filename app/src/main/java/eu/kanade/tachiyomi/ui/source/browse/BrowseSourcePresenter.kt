@@ -349,7 +349,12 @@ open class BrowseSourcePresenter(
      */
     private suspend fun getMangaDetails(manga: Manga): Manga {
         try {
-            val networkManga = source.getMangaDetails(manga.copy())
+            val networkManga = source.getMangaUpdate(
+                manga.copy(),
+                chapters = emptyList(),
+                fetchDetails = true,
+                fetchChapters = false,
+            ).manga
             manga.copyFrom(networkManga)
             manga.initialized = true
             updateManga.await(manga.toMangaUpdate())

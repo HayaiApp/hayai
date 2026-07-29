@@ -9,7 +9,11 @@ import okio.ForwardingSource
 import okio.Source
 import okio.buffer
 
-class ProgressResponseBody(private val responseBody: ResponseBody, private val progressListener: ProgressListener) : ResponseBody() {
+class ProgressResponseBody(
+    private val responseBody: ResponseBody,
+    private val progressListener: ProgressListener,
+    private val existingSize: Long = 0L, // bytes already downloaded
+) : ResponseBody() {
 
     private val bufferedSource: BufferedSource by lazy {
         source(responseBody.source()).buffer()
@@ -29,14 +33,20 @@ class ProgressResponseBody(private val responseBody: ResponseBody, private val p
 
     private fun source(source: Source): Source {
         return object : ForwardingSource(source) {
-            var totalBytesRead = 0L
+            var totalBytesRead = existingSize
 
             @Throws(IOException::class)
             override fun read(sink: Buffer, byteCount: Long): Long {
                 val bytesRead = super.read(sink, byteCount)
                 // read() returns the number of bytes read, or -1 if this source is exhausted.
                 totalBytesRead += if (bytesRead != -1L) bytesRead else 0
-                progressListener.update(totalBytesRead, responseBody.contentLength(), bytesRead == -1L)
+
+                // contentLength() returns -1L if Content-Length is missing
+                val totalLength = responseBody.contentLength().let {
+                    if (it != -1L) it + existingSize else -1L
+                }
+
+                progressListener.update(totalBytesRead, totalLength, bytesRead == -1L)
                 return bytesRead
             }
         }

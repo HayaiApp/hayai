@@ -73,26 +73,32 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
                             firstLoad = true
                             currentDownloads.clear()
                         }
-                        extensions = toItems(
-                            Triple(
-                                extensionManager.installedExtensionsFlow.value,
-                                extensionManager.untrustedExtensionsFlow.value,
-                                extensionManager.availableExtensionsFlow.value,
-                            ),
-                        )
-                        withUIContext { view?.setExtensions(extensions) }
+                        rebuildExtensions()
                         return@collect
                     }
                     val extension = extensions.find { item ->
                         it.first == item.extension.pkgName
                     } ?: return@collect
                     when (it.second.first) {
-                        InstallStep.Installed, InstallStep.Error -> {
+                        InstallStep.Installed, InstallStep.Error, InstallStep.Done -> {
                             currentDownloads.remove(extension.extension.pkgName)
                         }
                         else -> {
                             currentDownloads[extension.extension.pkgName] = it.second
                         }
+                    }
+                    if (it.second.first.isCompleted()) {
+                        // The extension just finished installing (or failed/was cancelled) and
+                        // may have moved from the Available/Updates group into the Installed
+                        // group. A single updateItem() call only patches the row in place and
+                        // can't relocate it between groups, so it'd keep showing under its old
+                        // group with a stale status until the sheet was reopened. Rebuild the
+                        // whole list instead so it lands in the right place. Note: some installs
+                        // only ever emit a generic "Done" (from the install-status poll loop's
+                        // onCompletion) rather than an explicit "Installed", so Done must be
+                        // treated as terminal here too or those items never get unstuck.
+                        rebuildExtensions()
+                        return@collect
                     }
                     val item = updateInstallStep(extension.extension, it.second.first, it.second.second)
                     if (item != null) {
@@ -100,6 +106,17 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
                     }
                 }
         }
+    }
+
+    private suspend fun rebuildExtensions() {
+        extensions = toItems(
+            Triple(
+                extensionManager.installedExtensionsFlow.value,
+                extensionManager.untrustedExtensionsFlow.value,
+                extensionManager.availableExtensionsFlow.value,
+            ),
+        )
+        withUIContext { view?.setExtensions(extensions) }
     }
 
     fun refreshExtensions() {
@@ -242,12 +259,19 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
             )
                 .collect {
                     when (it.first) {
-                        InstallStep.Installed, InstallStep.Error -> {
+                        InstallStep.Installed, InstallStep.Error, InstallStep.Done -> {
                             currentDownloads.remove(extension.pkgName)
                         }
                         else -> {
                             currentDownloads[extension.pkgName] = it
                         }
+                    }
+                    if (it.first.isCompleted()) {
+                        // See the comment in the downloadSharedFlow collector above: this needs
+                        // a full rebuild so the extension relocates into the Installed group,
+                        // and Done must be treated as terminal too, not just Installed/Error.
+                        rebuildExtensions()
+                        return@collect
                     }
                     val item = updateInstallStep(extension, it.first, it.second)
                     if (item != null) {

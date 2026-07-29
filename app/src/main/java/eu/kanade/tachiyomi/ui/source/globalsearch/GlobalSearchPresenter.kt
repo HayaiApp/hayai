@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.CatalogueSource
+import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SManga
@@ -253,8 +254,13 @@ open class GlobalSearchPresenter(
      * @param manga the manga to initialize.
      * @return The initialized manga.
      */
-    private suspend fun getMangaDetails(manga: Manga, source: CatalogueSource): Manga {
-        val networkManga = source.getMangaDetails(manga.copy())
+    private suspend fun getMangaDetails(manga: Manga, source: Source): Manga {
+        val networkManga = source.getMangaUpdate(
+            manga.copy(),
+            chapters = emptyList(),
+            fetchDetails = true,
+            fetchChapters = false,
+        ).manga
         manga.copyFrom(networkManga)
         manga.initialized = true
         updateManga.await(manga.toMangaUpdate())

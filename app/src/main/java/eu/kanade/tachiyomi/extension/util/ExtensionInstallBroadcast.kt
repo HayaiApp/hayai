@@ -13,15 +13,21 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import com.hippo.unifile.UniFile
+import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.util.ExtensionInstallBroadcast.Companion.EXTRA_SESSION_ID
 import eu.kanade.tachiyomi.extension.util.ExtensionInstallBroadcast.Companion.PACKAGE_INSTALLED_ACTION
 import eu.kanade.tachiyomi.extension.util.ExtensionInstallBroadcast.Companion.packageInstallStep
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.getParcelableCompat
+import eu.kanade.tachiyomi.util.system.notificationBuilder
+import eu.kanade.tachiyomi.util.system.notificationManager
 import eu.kanade.tachiyomi.util.system.toast
 import yokai.util.koin.injectLazy
 import yokai.i18n.MR
+import yokai.util.lang.getString
+import android.R as AR
 
 /**
  * Broadcast used to install extensions, that receives callbacks from package installer.
@@ -93,7 +99,13 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
                         if (context is Activity) {
                             context.startActivity(confirmIntent)
                         } else {
-                            context.startActivity(confirmIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            // Starting an activity from a background broadcast receiver can be
+                            // silently blocked by the OS (Background Activity Launch
+                            // restrictions), leaving the extension stuck "Installing" forever
+                            // with the confirm dialog never shown. Show a notification the user
+                            // can tap instead, which always runs in a foreground/user-initiated
+                            // context.
+                            showInstallConfirmNotification(context, confirmIntent, downloadId)
                         }
                     }
                     PackageInstaller.STATUS_SUCCESS -> {
@@ -113,6 +125,28 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
                         extensionManager.setInstallationResult(downloadId, false)
                     }
                 }
+            }
+        }
+
+        private fun showInstallConfirmNotification(context: Context, confirmIntent: Intent?, downloadId: Long) {
+            confirmIntent ?: return
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                downloadId.hashCode(),
+                confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            with(
+                context.notificationBuilder(Notifications.CHANNEL_EXT_PROGRESS) {
+                    setContentTitle(context.getString(MR.strings.install))
+                    setSmallIcon(AR.drawable.stat_sys_download_done)
+                    setAutoCancel(true)
+                    setOngoing(false)
+                    setContentIntent(pendingIntent)
+                    addAction(R.drawable.ic_system_update_24dp, context.getString(MR.strings.install), pendingIntent)
+                },
+            ) {
+                context.notificationManager.notify(Notifications.ID_EXTENSION_INSTALL_CONFIRM, build())
             }
         }
     }

@@ -2,6 +2,8 @@ package yokai.data
 
 import app.cash.sqldelight.ColumnAdapter
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import java.util.*
 
 // TODO: Move to yokai.data.DatabaseAdapter
@@ -29,4 +31,10 @@ val listOfStringsAdapter = object : ColumnAdapter<List<String>, String> {
             databaseValue.split(listOfStringsSeparator)
         }
     override fun encode(value: List<String>) = value.joinToString(separator = listOfStringsSeparator)
+}
+
+val memoAdapter = object : ColumnAdapter<JsonObject, String> {
+    override fun decode(databaseValue: String): JsonObject =
+        if (databaseValue.isEmpty()) JsonObject(emptyMap()) else Json.decodeFromString(databaseValue)
+    override fun encode(value: JsonObject): String = value.toString()
 }

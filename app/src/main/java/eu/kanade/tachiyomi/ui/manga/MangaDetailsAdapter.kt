@@ -177,5 +177,7 @@ class MangaDetailsAdapter(
         fun openPagePreview()
         fun openReaderAtPage(page: Int)
         fun searchFromMetadata(query: String)
+        fun openRelatedManga(manga: eu.kanade.tachiyomi.domain.manga.models.Manga)
+        fun openRelatedMangaScreen()
     }
 }

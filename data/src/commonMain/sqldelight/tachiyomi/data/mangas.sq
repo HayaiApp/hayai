@@ -22,7 +22,8 @@ CREATE TABLE mangas(
     update_strategy INTEGER NOT NULL DEFAULT 0,
     cover_last_modified INTEGER NOT NULL DEFAULT 0,
     next_update INTEGER NOT NULL DEFAULT 0,
-    fetch_interval INTEGER NOT NULL DEFAULT 0
+    fetch_interval INTEGER NOT NULL DEFAULT 0,
+    memo TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX mangas_url_index ON mangas(url);
@@ -69,8 +70,8 @@ WHERE favorite = 0 AND _id IN (
 );
 
 insert:
-INSERT INTO mangas (source, url, artist, author, description, genre, title, status, thumbnail_url, favorite, last_update, initialized, viewer, hide_title, chapter_flags, date_added, filtered_scanlators, update_strategy, cover_last_modified, next_update, fetch_interval)
-VALUES (:source, :url, :artist, :author, :description, :genre, :title, :status, :thumbnailUrl, :favorite, :lastUpdate, :initialized, :viewer, :hideTitle, :chapterFlags, :dateAdded, :filteredScanlators, :updateStrategy, :coverLastModified, :nextUpdate, :fetchInterval);
+INSERT INTO mangas (source, url, artist, author, description, genre, title, status, thumbnail_url, favorite, last_update, initialized, viewer, hide_title, chapter_flags, date_added, filtered_scanlators, update_strategy, cover_last_modified, next_update, fetch_interval, memo)
+VALUES (:source, :url, :artist, :author, :description, :genre, :title, :status, :thumbnailUrl, :favorite, :lastUpdate, :initialized, :viewer, :hideTitle, :chapterFlags, :dateAdded, :filteredScanlators, :updateStrategy, :coverLastModified, :nextUpdate, :fetchInterval, :memo);
 
 update:
 UPDATE mangas SET
@@ -94,7 +95,8 @@ UPDATE mangas SET
     update_strategy = coalesce(:updateStrategy, update_strategy),
     cover_last_modified = coalesce(:coverLastModified, cover_last_modified),
     next_update = coalesce(:nextUpdate, next_update),
-    fetch_interval = coalesce(:fetchInterval, fetch_interval)
+    fetch_interval = coalesce(:fetchInterval, fetch_interval),
+    memo = coalesce(:memo, memo)
 WHERE _id = :mangaId;
 
 selectLastInsertedRowId:

@@ -421,7 +421,7 @@
     <string name="use_custom_brightness">Usar brilho personalizado</string>
     <string name="grayscale">Nível de cinza</string>
     <string name="pref_inverted_colors">Invertido</string>
-    <string name="custom_filter">Filters</string>
+    <string name="custom_filter">Filtros</string>
     <string name="use_custom_color_filter">Usar filtro de cores personalizado</string>
     <string name="color_filter_blend_mode">Modo de mistura do filtro de cores</string>
     <string name="overlay">Sobreposição</string>
