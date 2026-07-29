@@ -71,6 +71,7 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
     // launchFilter() so updateDataSet / notifyDataSetChanged calls can't interleave.
     private var filterJob: Job? = null
     private var submittedSnapshot: SubmittedSnapshot? = null
+    private var mangaPositionsById: Map<Long, IntArray>? = null
 
     val libraryListener: LibraryListener? = controller
 
@@ -87,11 +88,15 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
     fun setItems(list: List<LibraryItem>) {
         // A copy of manga always unfiltered.
         mangas = list.toList()
+        invalidateMangaPositionIndex()
         launchFilter()
     }
 
     /** Public entry for callers that mutate filter state (setFilter) and need to re-apply. */
-    fun requestFilter() = launchFilter()
+    fun requestFilter() {
+        invalidateMangaPositionIndex()
+        launchFilter()
+    }
 
     private fun setItemsPerCategoryMap() {
         val controller = controller ?: return
@@ -127,21 +132,6 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
         } as? LibraryHeaderItem
     }
 
-    /**
-     * Returns the position in the adapter for the given manga.
-     *
-     * @param manga the manga to find.
-     */
-    fun indexOf(manga: Manga): Int {
-        return currentItems.indexOfFirst {
-            if (it is LibraryMangaItem) {
-                it.manga.manga.id == manga.id
-            } else {
-                false
-            }
-        }
-    }
-
     fun getHeaderPositions(): List<Int> {
         return currentItems.mapIndexedNotNull { index, it ->
             if (it is LibraryHeaderItem) {
@@ -152,19 +142,68 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
         }
     }
 
-    /**
-     * Returns the position in the adapter for the given manga.
-     *
-     * @param manga the manga to find.
-     */
-    fun allIndexOf(manga: Manga): List<Int> {
-        return currentItems.mapIndexedNotNull { index, it ->
-            if (it is LibraryMangaItem && it.manga.manga.id == manga.id) {
-                index
-            } else {
-                null
+    fun visibleMangas(): List<Manga> = currentItems.mapNotNull {
+        (it as? LibraryMangaItem)?.manga?.manga
+    }
+
+    fun updateMangaSelections(changes: Map<Long, Boolean>): List<Int> {
+        val changedPositions = ArrayList<Int>()
+        changes.forEach { (mangaId, selected) ->
+            positionsForManga(mangaId).forEach { position ->
+                if (selected && !isSelected(position)) {
+                    addSelection(position)
+                    changedPositions += position
+                } else if (!selected && isSelected(position)) {
+                    removeSelection(position)
+                    changedPositions += position
+                }
             }
         }
+        return changedPositions
+    }
+
+    fun synchronizeSelection(selectedMangaIds: Set<Long>): List<Int> {
+        val selectedPositions = selectedPositions.toSet()
+        val targetPositions = LinkedHashSet<Int>()
+        selectedMangaIds.forEach { mangaId ->
+            positionsForManga(mangaId).forEach(targetPositions::add)
+        }
+        if (selectedPositions == targetPositions) return emptyList()
+
+        val changedPositions = ArrayList<Int>(selectedPositions.size + targetPositions.size)
+        selectedPositions.forEach { position ->
+            if (position !in targetPositions) {
+                removeSelection(position)
+                changedPositions += position
+            }
+        }
+        targetPositions.forEach { position ->
+            if (position !in selectedPositions) {
+                addSelection(position)
+                changedPositions += position
+            }
+        }
+        return changedPositions
+    }
+
+    fun invalidateMangaPositionIndex() {
+        mangaPositionsById = null
+    }
+
+    private fun positionsForManga(mangaId: Long): IntArray {
+        val positions = mangaPositionsById ?: buildMangaPositionIndex().also {
+            mangaPositionsById = it
+        }
+        return positions[mangaId] ?: IntArray(0)
+    }
+
+    private fun buildMangaPositionIndex(): Map<Long, IntArray> {
+        val positions = HashMap<Long, MutableList<Int>>()
+        currentItems.forEachIndexed { position, item ->
+            val mangaId = (item as? LibraryMangaItem)?.manga?.manga?.id ?: return@forEachIndexed
+            positions.getOrPut(mangaId) { ArrayList(1) }.add(position)
+        }
+        return positions.mapValues { (_, values) -> values.toIntArray() }
     }
 
     private fun launchFilter() {
@@ -224,12 +263,17 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
     }
 
     private fun updateDataSetIfChanged(items: List<LibraryItem>): Boolean {
-        visibleItemsPerCategory = items.asSequence()
-            .filterIsInstance<LibraryMangaItem>()
-            .groupingBy { it.sectionHeader.catId }
-            .eachCount()
+        val itemSignatures = ArrayList<Int>(items.size)
+        val visibleItemCounts = HashMap<Int, Int>()
+        items.forEach { item ->
+            itemSignatures += item.bindingContentSignature()
+            val manga = item as? LibraryMangaItem ?: return@forEach
+            val categoryId = manga.sectionHeader.catId
+            visibleItemCounts[categoryId] = (visibleItemCounts[categoryId] ?: 0) + 1
+        }
+        visibleItemsPerCategory = visibleItemCounts
         val snapshot = SubmittedSnapshot(
-            itemSignatures = items.map(LibraryItem::bindingContentSignature),
+            itemSignatures = itemSignatures,
             libraryLayout = preferences.libraryLayout().get(),
             uniformGrid = uiPreferences.uniformGrid().get(),
             hideReadingButton = preferences.hideStartReadingButton().get(),
@@ -238,9 +282,14 @@ class LibraryCategoryAdapter(val controller: LibraryController?) :
             pagedMode = isPagedMode,
             activeFilters = hasActiveFilters,
         )
-        if (snapshot == submittedSnapshot) return false
+        if (snapshot == submittedSnapshot) {
+            synchronizeSelection(controller?.selectedMangaIds.orEmpty())
+            return false
+        }
         submittedSnapshot = snapshot
+        invalidateMangaPositionIndex()
         updateDataSet(items)
+        synchronizeSelection(controller?.selectedMangaIds.orEmpty())
         return true
     }
 

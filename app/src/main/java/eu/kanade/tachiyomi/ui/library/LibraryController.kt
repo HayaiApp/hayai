@@ -379,7 +379,11 @@ open class LibraryController(
     /**
      * Currently selected mangas.
      */
-    private val selectedMangas = mutableSetOf<Manga>()
+    private val selection = LibrarySelection()
+    private val selectedMangas: Collection<Manga>
+        get() = selection.mangas
+    internal val selectedMangaIds: Set<Long>
+        get() = selection.ids
 
     // Categories the user has explicitly triggered an update for, that we're still waiting on
     // isRunningFlow to confirm as finished. LibraryUpdateJob.categoryInQueue() can't be trusted
@@ -423,16 +427,14 @@ open class LibraryController(
 
     /** Apply the controller-wide selection set/mode onto a freshly bound page adapter. Called from LibraryPagerAdapter.bindCategoryItems. */
     fun applySelectionStateTo(adapter: LibraryCategoryAdapter) {
-        val targetMode = if (selectedMangas.isNotEmpty()) {
+        val targetMode = if (selection.isNotEmpty) {
             SelectableAdapter.Mode.MULTI
         } else {
             SelectableAdapter.Mode.SINGLE
         }
         if (adapter.mode != targetMode) adapter.mode = targetMode
-        if (selectedMangas.isEmpty()) return
-        selectedMangas.forEach { manga ->
-            adapter.allIndexOf(manga).forEach { adapter.addSelection(it) }
-        }
+        adapter.synchronizeSelection(selectedMangaIds)
+        adapter.isLongPressDragEnabled = targetMode == SelectableAdapter.Mode.SINGLE && canDrag()
     }
 
     private var lastClickPosition = -1
@@ -450,6 +452,7 @@ open class LibraryController(
 
     private var scrollDistance = 0f
     private val scrollDistanceTilHidden = 1000.dpToPx
+    private var filterSheetBaseBottomInset: Int? = null
     private var textAnim: ViewPropertyAnimator? = null
     private var hasExpanded = false
 
@@ -653,27 +656,40 @@ open class LibraryController(
 
     fun updateFilterSheetY() {
         val bottomBar = if (!isSubClass) activityBinding?.bottomNav else null
-        val systemInsets = view?.rootWindowInsetsCompat?.getInsets(systemBars())
+        val systemInsetBottom = view?.rootWindowInsetsCompat?.getInsets(systemBars())?.bottom ?: 0
         val bottomSheet = binding.filterBottomSheet.filterBottomSheet
         if (bottomBar != null) {
+            val baseInset = max(bottomBar.height, systemInsetBottom)
+            updateFilterSheetLayout(baseInset)
+            val visibleInset = max(
+                bottomBar.height - bottomBar.translationY,
+                systemInsetBottom.toFloat(),
+            )
+            val motionOffset = baseInset - visibleInset
             bottomSheet.translationY = if (bottomSheet.sheetBehavior.isHidden()) {
                 bottomBar.translationY - bottomBar.height
-            } else {
+            } else if (bottomSheet.sheetBehavior.isExpanded()) {
                 0f
+            } else {
+                motionOffset
             }
-            val pad = bottomBar.translationY - bottomBar.height
-            val padding = max((-pad).toInt(), systemInsets?.bottom ?: 0)
-            bottomSheet.updatePaddingRelative(bottom = padding)
-
-            bottomSheet.sheetBehavior?.peekHeight = 60.dpToPx + padding
-            updateHopperY()
-            binding.fastScroller.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-                bottomMargin = -pad.toInt()
-            }
+            binding.fastScroller.translationY = motionOffset
         } else {
-            bottomSheet.updatePaddingRelative(bottom = systemInsets?.bottom ?: 0)
-            updateHopperY()
-            bottomSheet.sheetBehavior?.peekHeight = 60.dpToPx + (systemInsets?.bottom ?: 0)
+            updateFilterSheetLayout(systemInsetBottom)
+            bottomSheet.translationY = 0f
+            binding.fastScroller.translationY = 0f
+        }
+        updateHopperY()
+    }
+
+    private fun updateFilterSheetLayout(bottomInset: Int) {
+        if (filterSheetBaseBottomInset == bottomInset) return
+        filterSheetBaseBottomInset = bottomInset
+        val bottomSheet = binding.filterBottomSheet.filterBottomSheet
+        bottomSheet.updatePaddingRelative(bottom = bottomInset)
+        bottomSheet.sheetBehavior?.peekHeight = 60.dpToPx + bottomInset
+        binding.fastScroller.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            bottomMargin = bottomInset
         }
     }
 
@@ -1102,6 +1118,7 @@ open class LibraryController(
     @SuppressLint("ClickableViewAccessibility")
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
+        filterSheetBaseBottomInset = null
         mAdapter = LibraryCategoryAdapter(this)
         adapter.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
         setRecyclerLayout()
@@ -2267,7 +2284,7 @@ open class LibraryController(
     }
 
     override fun onDestroyActionMode(mode: ActionMode?) {
-        selectedMangas.clear()
+        selection.clear()
         actionMode = null
         lastClickPosition = -1
         forEachLibraryAdapter { ad, _ ->
@@ -2280,33 +2297,30 @@ open class LibraryController(
     }
 
     private fun setSelection(manga: Manga, selected: Boolean) {
-        val activeAdapter = currentLibraryAdapter ?: return
-        val previousMode = activeAdapter.mode
-        val changed = if (selected) selectedMangas.add(manga) else selectedMangas.remove(manga)
-        if (!changed) return
+        updateSelection(listOf(manga), selected)
+    }
+
+    private fun updateSelection(mangas: Iterable<Manga>, selected: Boolean): Boolean {
+        if (currentLibraryAdapter == null) return false
+        val wasEmpty = selection.isEmpty
+        val changes = selection.update(mangas, selected)
+        if (changes.isEmpty()) return false
 
         if (!selected) lastClickPosition = -1
-        val targetMode = if (selectedMangas.isEmpty()) {
+        val targetMode = if (selection.isEmpty) {
             SelectableAdapter.Mode.SINGLE
         } else {
             SelectableAdapter.Mode.MULTI
         }
         forEachLibraryAdapter { ad, recycler ->
             if (ad.mode != targetMode) ad.mode = targetMode
-            ad.allIndexOf(manga).forEach { position ->
-                if (selected) ad.addSelection(position) else ad.removeSelection(position)
+            ad.updateMangaSelections(changes).forEach { position ->
                 (recycler.findViewHolderForAdapterPosition(position) as? LibraryHolder)?.toggleActivation()
             }
+            ad.isLongPressDragEnabled = targetMode == SelectableAdapter.Mode.SINGLE && canDrag()
         }
-        if (selected) {
-            launchUI {
-                delay(100)
-                forEachLibraryAdapter { ad, _ -> ad.isLongPressDragEnabled = false }
-            }
-        } else if (selectedMangas.isEmpty()) {
-            forEachLibraryAdapter { ad, _ -> ad.isLongPressDragEnabled = canDrag() }
-        }
-        updateHeaders(previousMode != activeAdapter.mode)
+        updateHeaders(wasEmpty != selection.isEmpty)
+        return true
     }
 
     private fun updateHeaders(changedMode: Boolean = false) {
@@ -2403,16 +2417,18 @@ open class LibraryController(
             }
         }
         createActionModeIfNeeded()
-        when {
-            lastClickPosition == -1 -> setSelection(position)
-            lastClickPosition > position -> for (i in position until lastClickPosition) setSelection(
-                i,
-            )
-            lastClickPosition < position -> for (i in lastClickPosition + 1..position) setSelection(
-                i,
-            )
-            else -> setSelection(position)
+        val positions = when {
+            lastClickPosition == -1 || lastClickPosition == position -> position..position
+            lastClickPosition > position -> position until lastClickPosition
+            else -> lastClickPosition + 1..position
         }
+        updateSelection(
+            positions.mapNotNull { index ->
+                (activeAdapter.getItem(index) as? LibraryMangaItem)?.manga?.manga
+            },
+            selected = true,
+        )
+        invalidateActionMode()
         lastClickPosition = position
     }
 
@@ -2432,6 +2448,7 @@ open class LibraryController(
                 adapter.removeSelection(position)
                 (binding.libraryGridRecycler.recycler.findViewHolderForAdapterPosition(position) as? LibraryHolder)?.toggleActivation()
                 adapter.moveItem(position, lastItemPosition!!)
+                adapter.invalidateMangaPositionIndex()
             } else {
                 isDragging = true
                 lastItem = adapter.getItem(position)
@@ -2459,6 +2476,7 @@ open class LibraryController(
     }
 
     override fun onItemMove(fromPosition: Int, toPosition: Int) {
+        adapter.invalidateMangaPositionIndex()
         // Because padding a recycler causes it to scroll up we have to scroll it back down... wild
         val fromItem = adapter.getItem(fromPosition)
         val toItem = adapter.getItem(toPosition)
@@ -2510,6 +2528,7 @@ open class LibraryController(
         } else {
             if (presenter.mangaIsInCategory(item.manga, newHeader?.category?.id)) {
                 adapter.moveItem(position, lastItemPosition!!)
+                adapter.invalidateMangaPositionIndex()
                 snack = view?.snack(MR.strings.already_in_category) {
                     anchorView = anchorView()
                     view.elevation = 15f.dpToPx
@@ -2647,15 +2666,22 @@ open class LibraryController(
 
     override fun selectAll(position: Int) {
         val header = adapter.getSectionHeader(position) ?: return
-        val items = adapter.getSectionItemPositions(header)
-        val allSelected = allSelected(position)
-        for (i in items) setSelection(i, !allSelected)
+        val mangas = adapter.getSectionItemPositions(header).mapNotNull { itemPosition ->
+            (adapter.getItem(itemPosition) as? LibraryMangaItem)?.manga?.manga
+        }
+        if (mangas.isEmpty()) return
+        if (updateSelection(mangas, selected = !mangas.all(selection::contains))) {
+            invalidateActionMode()
+        }
     }
 
     override fun allSelected(position: Int): Boolean {
         val header = adapter.getSectionHeader(position) ?: return false
         val items = adapter.getSectionItemPositions(header)
-        return items.all { adapter.isSelected(it) }
+        val mangas = items.mapNotNull { itemPosition ->
+            (adapter.getItem(itemPosition) as? LibraryMangaItem)?.manga?.manga
+        }
+        return mangas.size == items.size && mangas.all(selection::contains)
     }
 
     //region sheet methods
@@ -2891,12 +2917,10 @@ open class LibraryController(
     private fun selectAllInActiveCategory() {
         if (isTabbedMode) {
             val pageAdapter = currentLibraryAdapter ?: return
-            val mangas = (0 until pageAdapter.itemCount).mapNotNull {
-                (pageAdapter.getItem(it) as? LibraryMangaItem)?.manga?.manga
-            }
+            val mangas = pageAdapter.visibleMangas()
             if (mangas.isEmpty()) return
-            val allAlready = mangas.all { it in selectedMangas }
-            mangas.forEach { setSelection(it, !allAlready) }
+            val allAlready = mangas.all(selection::contains)
+            updateSelection(mangas, !allAlready)
             invalidateActionMode()
         } else {
             val headerPos = mAdapter?.indexOf(activeCategory) ?: -1

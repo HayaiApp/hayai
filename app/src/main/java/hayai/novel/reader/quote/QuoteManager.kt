@@ -5,6 +5,8 @@ import android.content.Context
 import co.touchlab.kermit.Logger
 import com.hippo.unifile.UniFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -144,6 +146,10 @@ class QuoteManager(@Suppress("unused") private val context: Context) {
             handler.awaitOne { series_knowledgeQueries.countQuotes(novelId) }.toInt()
         }
     }
+
+    fun subscribeQuoteCount(novelId: Long): Flow<Int> =
+        handler.subscribeToOne { series_knowledgeQueries.countQuotes(novelId) }
+            .map(Long::toInt)
 
     private suspend fun importLegacyQuotes(novelId: Long): List<Quote> {
         val file = getQuotesFile(novelId)

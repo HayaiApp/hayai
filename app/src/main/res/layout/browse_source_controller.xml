@@ -25,6 +25,14 @@
             tools:visibility="visible"
             app:indicatorSize="100dp"/>
 
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/refinement_ribbon"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
     </FrameLayout>
 
     <eu.kanade.tachiyomi.widget.EmptyView

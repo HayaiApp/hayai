@@ -1,7 +1,6 @@
 package yokai.presentation.extension.repo.component
 
 import android.content.res.Configuration
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,12 +23,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -50,15 +51,13 @@ fun ExtensionRepoItem(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        color = Color.Transparent,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 14.dp, top = 12.dp, end = 6.dp, bottom = 12.dp),
+                .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -134,120 +133,102 @@ fun ExtensionRepoInput(
     val trimmedInput = inputText.trim()
     val canSubmit = trimmedInput.isNotEmpty() && !isLoading
 
-    Surface(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            .padding(horizontal = 20.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Surface(
-                    modifier = Modifier.size(44.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = inputText,
-                onValueChange = onInputChange,
-                enabled = !isLoading,
-                singleLine = true,
-                isError = errorMessage != null,
-                label = { Text(inputLabel) },
-                placeholder = {
-                    Text(
-                        text = placeholder,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                leadingIcon = {
-                    Icon(imageVector = Icons.Filled.Link, contentDescription = null)
-                },
-                trailingIcon = {
-                    if (inputText.isBlank()) {
-                        IconButton(
-                            onClick = {
-                                clipboard.getText()?.text?.trim()?.takeIf(String::isNotEmpty)?.let(onInputChange)
-                            },
-                        ) {
-                            Icon(imageVector = Icons.Filled.ContentPaste, contentDescription = pasteLabel)
-                        }
-                    } else {
-                        IconButton(onClick = { onInputChange("") }) {
-                            Icon(imageVector = Icons.Filled.Clear, contentDescription = clearLabel)
-                        }
-                    }
-                },
-                supportingText = errorMessage?.let { message ->
-                    { Text(text = message) }
-                },
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = { if (canSubmit) onAddClick(trimmedInput) },
-                ),
-            )
-
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                enabled = canSubmit,
-                onClick = { onAddClick(trimmedInput) },
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+        TextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = inputText,
+            onValueChange = onInputChange,
+            enabled = !isLoading,
+            singleLine = true,
+            isError = errorMessage != null,
+            placeholder = {
                 Text(
-                    modifier = Modifier.padding(start = 8.dp),
-                    text = actionLabel,
+                    text = inputLabel,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            leadingIcon = {
+                Icon(imageVector = Icons.Filled.Link, contentDescription = null)
+            },
+            trailingIcon = {
+                if (inputText.isBlank()) {
+                    IconButton(
+                        onClick = {
+                            clipboard.getText()?.text?.trim()?.takeIf(String::isNotEmpty)?.let(onInputChange)
+                        },
+                    ) {
+                        Icon(imageVector = Icons.Filled.ContentPaste, contentDescription = pasteLabel)
+                    }
+                } else {
+                    IconButton(onClick = { onInputChange("") }) {
+                        Icon(imageVector = Icons.Filled.Clear, contentDescription = clearLabel)
+                    }
+                }
+            },
+            supportingText = {
+                Text(text = errorMessage ?: placeholder)
+            },
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { if (canSubmit) onAddClick(trimmedInput) },
+            ),
+            shape = RoundedCornerShape(24.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                errorContainerColor = MaterialTheme.colorScheme.errorContainer,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                errorIndicatorColor = Color.Transparent,
+            ),
+        )
+
+        Button(
+            modifier = Modifier.align(Alignment.End),
+            enabled = canSubmit,
+            onClick = { onAddClick(trimmedInput) },
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
                 )
             }
+            Text(
+                modifier = Modifier.padding(start = 8.dp),
+                text = actionLabel,
+            )
         }
     }
 }

@@ -77,7 +77,9 @@ The format is simplified version of [Keep a Changelog](https://keepachangelog.co
 - Improve page previews: bigger thumbnails, skeleton loading, and infinite scroll
 - Reduce top spacing for app bar title
 - Recommendation cards now use a transparent container color to better blend with the surface
-- Revert filter sheet to the stable View-based implementation while the Compose version is hardened (replaces the temporary 1.15.0 Compose filter sheet)
+- Replace the source filter sheet with a hardened, full-height Compose refinement flow: isolated filter drafts, recursive search, removable active constraints, undo, and extension-reorder-safe saved presets
+- Keep library multi-selection stable across filtering, category pages, row refreshes, and mutable manga metadata by tracking selected database IDs
+- Consolidate Recents and download-sheet queue observation under one lifecycle-aware presenter, eliminating the duplicate download presenter and its competing listeners
 - Fall back to the system installer on MIUI devices when in-app install is unreliable
 - Per-language source toggle in the browse-page filter renamed to **Select all** (was "All sources") so it reads as a UI control rather than a phantom iconless source.
 - App icons & branding assets refreshed for all density buckets and flavors (main, debug, nightly).

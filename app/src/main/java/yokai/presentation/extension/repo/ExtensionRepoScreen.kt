@@ -1,6 +1,5 @@
 package yokai.presentation.extension.repo
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +20,7 @@ import androidx.compose.material.icons.filled.ExtensionOff
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -82,7 +82,8 @@ class ExtensionRepoScreen(
         val novelState by novelScreenModel.state.collectAsState()
         val extensionIsAdding by extensionScreenModel.isAdding.collectAsState()
         val novelIsAdding by novelScreenModel.isAdding.collectAsState()
-        val isRefreshing by extensionScreenModel.isRefreshing.collectAsState()
+        val extensionIsRefreshing by extensionScreenModel.isRefreshing.collectAsState()
+        val novelIsRefreshing by novelScreenModel.isRefreshing.collectAsState()
 
         var extensionInput by rememberSaveable { mutableStateOf("") }
         var novelInput by rememberSaveable { mutableStateOf("") }
@@ -98,24 +99,31 @@ class ExtensionRepoScreen(
             title = title,
             appBarType = AppBarType.SMALL,
             actions = {
-                if (pagerState.currentPage == 0) {
-                    if (isRefreshing) {
-                        Box(
-                            modifier = Modifier.size(48.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        }
-                    } else {
-                        ToolTipButton(
-                            toolTipLabel = stringResource(MR.strings.refresh),
-                            icon = Icons.Outlined.Refresh,
-                            buttonClicked = extensionScreenModel::refreshRepos,
+                val isRefreshing = if (pagerState.currentPage == 0) {
+                    extensionIsRefreshing
+                } else {
+                    novelIsRefreshing
+                }
+                if (isRefreshing) {
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
                         )
                     }
+                } else {
+                    ToolTipButton(
+                        toolTipLabel = stringResource(MR.strings.refresh),
+                        icon = Icons.Outlined.Refresh,
+                        buttonClicked = if (pagerState.currentPage == 0) {
+                            extensionScreenModel::refreshRepos
+                        } else {
+                            novelScreenModel::refreshRepos
+                        },
+                    )
                 }
             },
             appBarBottomContent = {
@@ -348,6 +356,10 @@ class ExtensionRepoScreen(
                         removeLabel = stringResource(MR.strings.remove_repository),
                         onDeleteClick = onDeleteClick,
                     )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 78.dp, end = 20.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    )
                 }
             }
         }
@@ -384,38 +396,31 @@ class ExtensionRepoScreen(
 
     @Composable
     private fun EmptyRepositoryState(message: String) {
-        Surface(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                .padding(horizontal = 32.dp, vertical = 56.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             ) {
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        androidx.compose.material3.Icon(
-                            imageVector = Icons.Filled.ExtensionOff,
-                            contentDescription = null,
-                        )
-                    }
+                Box(contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Filled.ExtensionOff,
+                        contentDescription = null,
+                    )
                 }
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 

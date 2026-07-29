@@ -29,8 +29,11 @@ import java.util.TreeMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
@@ -69,6 +72,10 @@ class RecentsPresenter(
     private val upsertHistory: UpsertHistory by injectLazy()
 
     private var recentsJob: Job? = null
+    private var downloadUpdatesJob: Job? = null
+    @Volatile private var downloadUpdatesScope: CoroutineScope? = null
+    private var queueSnapshot = emptyMap<Long, Download>()
+    private var reconcileQueueOnStart = true
     private var initialized = false
     @Volatile private var uiActive = false
     @Volatile private var refreshWhenActive = true
@@ -123,7 +130,8 @@ class RecentsPresenter(
         get() = pageOffset == 0
 
     override val progressJobs = mutableMapOf<Download, Job>()
-    override val queueListenerScope get() = presenterScope
+    override val queueListenerScope
+        get() = requireNotNull(downloadUpdatesScope)
 
     override fun onCreate() {
         super.onCreate()
@@ -137,26 +145,6 @@ class RecentsPresenter(
         // (Binder, main-thread). Warm the icon cache from IO before the user can navigate
         // into the source-grouped view.
         get<eu.kanade.tachiyomi.extension.ExtensionManager>().preloadInstalledIcons()
-        presenterScope.launchUI {
-            downloadManager.statusFlow().collect(::onStatusChange)
-        }
-        presenterScope.launchUI {
-            downloadManager.progressFlow().collect(::onProgressUpdate)
-        }
-        presenterScope.launchIO {
-            downloadManager.queueState.collectLatest {
-                if (!uiActive) {
-                    refreshWhenActive = true
-                    return@collectLatest
-                }
-                if (recentItems.isNotEmpty()) setDownloadedChapters(recentItems, it)
-                withUIContext {
-                    if (recentItems.isNotEmpty()) view?.showLists(recentItems, true)
-                    view?.updateDownloadStatus(!downloadManager.isPaused())
-                }
-            }
-        }
-        downloadManager.isDownloaderRunning.onEach(::downloadStatusChanged).launchIn(presenterScope)
         LibraryUpdateJob.updateFlow.onEach(::onUpdateManga).launchIn(presenterScope)
         if (lastRecents != null) {
             if (recentItems.isEmpty()) {
@@ -204,10 +192,149 @@ class RecentsPresenter(
         if (!active) {
             refreshWhenActive = true
             recentsJob?.cancel()
-        } else if (refreshWhenActive) {
-            getRecents()
+            stopDownloadUpdates()
+        } else {
+            startDownloadUpdates()
+            if (refreshWhenActive) {
+                getRecents()
+            }
         }
     }
+
+    private fun startDownloadUpdates() {
+        if (downloadUpdatesJob != null) return
+
+        val job = SupervisorJob(presenterScope.coroutineContext[Job])
+        val scope = CoroutineScope(presenterScope.coroutineContext + job)
+        downloadUpdatesJob = job
+        downloadUpdatesScope = scope
+        queueSnapshot = emptyMap()
+        reconcileQueueOnStart = true
+
+        scope.launchUI {
+            downloadManager.statusFlow().collect { download ->
+                if (downloadUpdatesScope === scope) {
+                    onStatusChange(download)
+                }
+            }
+        }
+        scope.launchIO {
+            downloadManager.queueState.collectLatest { queue ->
+                onQueueChanged(scope, queue)
+            }
+        }
+        scope.launchUI {
+            downloadManager.isDownloaderRunning.collect { isRunning ->
+                if (uiActive && downloadUpdatesScope === scope) {
+                    view?.updateDownloadStatus(isRunning)
+                }
+            }
+        }
+    }
+
+    private fun stopDownloadUpdates() {
+        val job = downloadUpdatesJob ?: return
+        downloadUpdatesJob = null
+        downloadUpdatesScope = null
+        queueSnapshot = emptyMap()
+        reconcileQueueOnStart = true
+        progressJobs.values.forEach { it.cancel() }
+        progressJobs.clear()
+        job.cancel()
+    }
+
+    private suspend fun onQueueChanged(scope: CoroutineScope, queue: List<Download>) {
+        if (!uiActive || downloadUpdatesScope !== scope) return
+
+        val currentQueue = HashMap<Long, Download>(queue.size)
+        queue.forEach { download ->
+            download.chapter.id?.let { currentQueue[it] = download }
+        }
+
+        val affectedChapterIds = HashSet<Long>()
+        if (reconcileQueueOnStart) {
+            reconcileQueueOnStart = false
+            recentItems.forEach { item ->
+                item.chapter.id?.let(affectedChapterIds::add)
+                item.mch.extraChapters.forEach { chapter ->
+                    chapter.id?.let(affectedChapterIds::add)
+                }
+            }
+        } else {
+            queueSnapshot.forEach { (chapterId, download) ->
+                if (currentQueue[chapterId] !== download) {
+                    affectedChapterIds += chapterId
+                }
+            }
+            currentQueue.forEach { (chapterId, download) ->
+                if (queueSnapshot[chapterId] !== download) {
+                    affectedChapterIds += chapterId
+                }
+            }
+        }
+        if (!uiActive || downloadUpdatesScope !== scope) return
+        queueSnapshot = currentQueue
+
+        val updatedChapterIds = affectedChapterIds.filterTo(mutableListOf<Long>()) { chapterId ->
+            updateQueuedChapterState(chapterId, currentQueue)
+        }
+
+        withUIContext {
+            if (!uiActive || downloadUpdatesScope !== scope) return@withUIContext
+            val controller = view ?: return@withUIContext
+            updatedChapterIds.forEach(controller::updateChapterDownload)
+            controller.updateDownloadStatus(!downloadManager.isPaused())
+        }
+    }
+
+    private fun updateQueuedChapterState(
+        chapterId: Long,
+        queue: Map<Long, Download>,
+    ): Boolean {
+        var changed = false
+        recentItems.forEach { item ->
+            if (item.chapter.id == chapterId) {
+                changed = updateMainDownloadState(item, queue) || changed
+            }
+
+            val chapter = item.mch.extraChapters.firstOrNull { it.id == chapterId } ?: return@forEach
+            val info = item.downloadInfo.firstOrNull { it.chapterId == chapterId } ?: return@forEach
+            val state = resolveDownloadState(chapter, item.mch.manga, queue)
+            if (info.download !== state.download || info.status != state.status) {
+                info.download = state.download
+                info.status = state.status
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    private fun updateMainDownloadState(
+        item: RecentMangaItem,
+        queue: Map<Long, Download>,
+    ): Boolean {
+        val state = resolveDownloadState(item.chapter, item.mch.manga, queue)
+        if (item.download === state.download && item.status == state.status) return false
+        item.download = state.download
+        item.status = state.status
+        return true
+    }
+
+    private fun resolveDownloadState(
+        chapter: Chapter,
+        manga: Manga,
+        queue: Map<Long, Download>,
+    ): ChapterDownloadState {
+        val isDownloaded = downloadManager.isChapterDownloaded(chapter, manga)
+        val download = if (isDownloaded) null else queue[chapter.id]
+        val status = if (isDownloaded) Download.State.DOWNLOADED else download?.status ?: Download.State.default
+        return ChapterDownloadState(download, status)
+    }
+
+    private data class ChapterDownloadState(
+        val download: Download?,
+        val status: Download.State,
+    )
 
     /**
      * Gets a set of recent entries based on preferred view type, unless changed by [customViewType]
@@ -625,6 +752,8 @@ class RecentsPresenter(
     }
 
     override fun onDestroy() {
+        uiActive = false
+        stopDownloadUpdates()
         super.onDestroy()
         lastRecents = recentItems
     }
@@ -669,13 +798,11 @@ class RecentsPresenter(
         }
     }
 
-    private fun downloadStatusChanged(downloading: Boolean) {
-        presenterScope.launchUI {
-            view?.updateDownloadStatus(downloading)
-        }
-    }
-
     private fun onUpdateManga(mangaId: Long?) {
+        if (!uiActive) {
+            refreshWhenActive = true
+            return
+        }
         when (mangaId) {
             null -> {
                 presenterScope.launchUI { view?.setRefreshing(false) }
@@ -824,18 +951,28 @@ class RecentsPresenter(
         }
     }
 
-    override fun onProgressUpdate(download: Download) {
-        // don't do anything
+    override fun onStatusChange(download: Download) {
+        if (uiActive) {
+            super.onStatusChange(download)
+        }
     }
+
+    override fun onProgressUpdate(download: Download) = Unit
 
     override fun onQueueUpdate(download: Download) {
         if (!uiActive) return
-        view?.updateChapterDownload(download)
+        view?.let { controller ->
+            controller.updateChapterDownload(download)
+            controller.updateDownloadSheetStatus(download)
+        }
     }
 
     override fun onPageProgressUpdate(download: Download) {
         if (!uiActive) return
-        view?.updateChapterDownload(download)
+        view?.let { controller ->
+            controller.updateChapterDownload(download)
+            controller.updateDownloadSheetProgress(download)
+        }
     }
 
     // region Bulk selection actions (Wave 2A)

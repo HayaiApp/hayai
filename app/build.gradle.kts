@@ -286,6 +286,9 @@ dependencies {
     testImplementation(libs.bundles.test)
     testRuntimeOnly(libs.bundles.test.runtime)
     androidTestImplementation(libs.bundles.test.android)
+    androidTestImplementation(platform(compose.bom))
+    androidTestImplementation(compose.ui.test.junit4)
+    debugImplementation(compose.ui.test.manifest)
     testImplementation(kotlinx.coroutines.test)
 
     // For detecting memory leaks

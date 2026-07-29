@@ -742,7 +742,7 @@ class MangaDetailsPresenter(
                         if (manga.shouldDownloadNewChapters(preferences) && manualFetch) {
                             downloadChapters(
                                 added.sortedBy { it.chapter_number }
-                                    .map { it.toModel() },
+                                    .map { it.toModel(emptyMap()) },
                             )
                         }
                         view?.view?.context?.let { mangaShortcutManager.updateShortcuts(it) }

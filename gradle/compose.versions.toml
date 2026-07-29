@@ -9,6 +9,8 @@ material3 = { module = "androidx.compose.material3:material3", version = "1.5.0-
 material-motion = { module = "io.github.fornewid:material-motion-compose-core", version = "2.0.1" }
 ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 icons = { module = "androidx.compose.material:material-icons-extended" }
 webview = { module = "io.github.kevinnzou:compose-webview", version = "0.33.6" }
 

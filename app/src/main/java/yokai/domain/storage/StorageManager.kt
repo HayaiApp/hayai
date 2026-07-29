@@ -26,7 +26,7 @@ class StorageManager(
 
     private var baseDir: UniFile? = getBaseDir(storagePreferences.baseStorageDirectory().get())
 
-    private val _changes: Channel<Unit> = Channel(Channel.UNLIMITED)
+    private val _changes: Channel<Unit> = Channel(Channel.CONFLATED)
     val changes = _changes.receiveAsFlow()
         .shareIn(scope, SharingStarted.Lazily, 1)
 
@@ -57,7 +57,7 @@ class StorageManager(
                     }
                 }
 
-                _changes.send(Unit)
+                _changes.trySend(Unit)
             }
             .launchIn(scope)
     }

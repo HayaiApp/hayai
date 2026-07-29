@@ -10,7 +10,6 @@ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.SourceManager
-import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
@@ -38,6 +37,11 @@ import yokai.domain.manga.interactor.InsertManga
 import yokai.domain.manga.interactor.UpdateManga
 import yokai.domain.manga.models.MangaUpdate
 import yokai.domain.source.browse.filter.FilterSerializer
+import yokai.domain.source.browse.filter.ActiveConstraint
+import yokai.domain.source.browse.filter.ConstraintRemoval
+import yokai.domain.source.browse.filter.FilterTree
+import yokai.domain.source.browse.filter.FilterTreeSnapshot
+import yokai.domain.source.browse.filter.RefinementSnapshot
 import yokai.domain.source.browse.filter.interactor.DeleteSavedSearch
 import yokai.domain.source.browse.filter.interactor.GetSavedSearch
 import yokai.domain.source.browse.filter.interactor.InsertSavedSearch
@@ -85,16 +89,11 @@ open class BrowseSourcePresenter(
     val page: Int
         get() = pager.currentPage
 
-    /**
-     * Modifiable list of filters. Mutated in place by the new
-     * [eu.kanade.tachiyomi.ui.source.browse.compose.ComposeSourceFilterSheet] composables —
-     * setting this field is reserved for wholesale swaps (reset, saved-search apply).
-     */
+    /** Full, isolated materialization of the currently applied source filter tree. */
     var sourceFilters = FilterList()
-        set(value) {
-            field = value
-            filtersChanged = true
-        }
+
+    private var baselineFilters = FilterTreeSnapshot(emptyList())
+    private var appliedRefinement = RefinementSnapshot(searchQuery.orEmpty(), baselineFilters)
 
     /**
      * List of filters used by the [Pager]. If empty alongside [query], the popular query is used.
@@ -116,8 +115,6 @@ open class BrowseSourcePresenter(
 
     var query = searchQuery ?: ""
 
-    private val oldFilters = mutableListOf<Any?>()
-
     override fun onCreate() {
         super.onCreate()
         if (sourceInitializationStarted) return
@@ -137,7 +134,8 @@ open class BrowseSourcePresenter(
 
             source = resolvedSource
             sourceFilters = resolvedSource.getFilterList()
-            snapshotDefaultFilters()
+            baselineFilters = FilterTree.capture(sourceFilters)
+            appliedRefinement = RefinementSnapshot(query, baselineFilters)
             filtersChanged = false
             sourceInitializationState = SourceInitializationState.READY
 
@@ -149,7 +147,7 @@ open class BrowseSourcePresenter(
             withUIContext { view?.savedSearches = savedSearches }
 
             getSavedSearch.subscribeAllBySourceId(sourceId)
-                .map { it.applyAllSave(source.getFilterList()) }
+                .map { it.applyAllSave(source::getFilterList) }
                 .onEach {
                     withUIContext { view?.savedSearches = it }
                 }
@@ -157,32 +155,60 @@ open class BrowseSourcePresenter(
         }
     }
 
-    private fun snapshotDefaultFilters() {
-        if (oldFilters.isNotEmpty()) return
-        for (filter in sourceFilters) {
-            if (filter is Filter.Group<*>) {
-                oldFilters.add(filter.state.map { (it as Filter<*>).state })
-            } else {
-                oldFilters.add(filter.state)
-            }
-        }
+    fun filtersMatchDefault(filters: FilterList = sourceFilters): Boolean =
+        FilterTree.capture(filters) == baselineFilters
+
+    fun createFilterDraft(): FilterList =
+        FilterTree.materialize(appliedRefinement.filters, source::getFilterList)
+
+    fun copyFilters(filters: FilterList): FilterList =
+        FilterTree.materialize(FilterTree.capture(filters), source::getFilterList)
+
+    fun activeConstraints(): List<ActiveConstraint> = FilterTree.activeConstraints(
+        baseline = baselineFilters,
+        current = appliedRefinement.filters,
+        query = appliedRefinement.query,
+    )
+
+    fun currentRefinement(): RefinementSnapshot = appliedRefinement
+
+    fun baselineFilterSnapshot(): FilterTreeSnapshot = baselineFilters
+
+    fun applyRefinement(refinement: RefinementSnapshot): Boolean {
+        if (refinement == appliedRefinement) return false
+        val filters = FilterTree.materialize(refinement.filters, source::getFilterList)
+        sourceFilters = FilterTree.materialize(refinement.filters, source::getFilterList)
+        val isDefault = refinement.filters == baselineFilters
+        filtersChanged = !isDefault
+        restartPager(refinement.query, if (isDefault) FilterList() else filters)
+        return true
     }
 
-    fun filtersMatchDefault(): Boolean {
-        for (i in sourceFilters.indices) {
-            val filter = oldFilters.getOrNull(i)
-            if (sourceFilters[i] is Filter.Group<*> && filter is List<*>) {
-                for (j in filter.indices) {
-                    val state = ((sourceFilters[i] as Filter.Group<*>).state[j] as Filter<*>).state
-                    if (filter[j] != state) {
-                        return false
-                    }
-                }
-            } else if (filter != sourceFilters[i].state) {
-                return false
+    fun commitFilterDraft(filters: FilterList, query: String = this.query): Boolean =
+        applyRefinement(RefinementSnapshot(query, FilterTree.capture(filters)))
+
+    fun resetDraft(filters: FilterList) {
+        FilterTree.apply(baselineFilters, filters)
+    }
+
+    fun clearRefinement(): Boolean = applyRefinement(RefinementSnapshot("", baselineFilters))
+
+    fun removeConstraint(removal: ConstraintRemoval): RefinementSnapshot? {
+        val previous = appliedRefinement
+        val draft = createFilterDraft()
+        val nextQuery = when (removal) {
+            ConstraintRemoval.ClearQuery -> ""
+            is ConstraintRemoval.ResetPath -> {
+                if (!FilterTree.resetPath(draft, baselineFilters, removal.path)) return null
+                previous.query
+            }
+            is ConstraintRemoval.RemoveAutoCompleteValue -> {
+                if (!FilterTree.removeAutoCompleteValue(draft, removal.path, removal.value)) return null
+                previous.query
             }
         }
-        return true
+        val next = RefinementSnapshot(nextQuery, FilterTree.capture(draft))
+        return previous.takeIf { applyRefinement(next) }
     }
 
     /**
@@ -193,12 +219,25 @@ open class BrowseSourcePresenter(
      */
     fun restartPager(query: String = this.query, filters: FilterList = this.appliedFilters) {
         this.query = query
-        this.appliedFilters = filters
+        val filterSnapshot = if (filters.isEmpty()) baselineFilters else FilterTree.capture(filters)
+        appliedRefinement = RefinementSnapshot(query, filterSnapshot)
+        sourceFilters = FilterTree.materialize(filterSnapshot, source::getFilterList)
+        val isDefault = filterSnapshot == baselineFilters
+        this.appliedFilters = if (isDefault) {
+            FilterList()
+        } else {
+            FilterTree.materialize(filterSnapshot, source::getFilterList)
+        }
+        val pagerFilters = if (isDefault) {
+            FilterList()
+        } else {
+            FilterTree.materialize(filterSnapshot, source::getFilterList)
+        }
 
         // Create a new pager.
         pager = createPager(
             query,
-            filters.takeIf { it.isNotEmpty() || query.isBlank() } ?: source.getFilterList(),
+            pagerFilters.takeIf { it.isNotEmpty() || query.isBlank() } ?: source.getFilterList(),
         )
 
         val sourceId = source.id
@@ -397,11 +436,7 @@ open class BrowseSourcePresenter(
                 sourceId,
                 name,
                 query,
-                try {
-                    Json.encodeToString(filterSerializer.serialize(filters))
-                } catch (e: Exception) {
-                    "[]"
-                },
+                Json.encodeToString(filterSerializer.serializeV2(filters)),
             )
         }
     }
@@ -413,11 +448,11 @@ open class BrowseSourcePresenter(
     }
 
     suspend fun loadSearch(id: Long): SavedSearch? {
-        return getSavedSearch.awaitById(id)?.applySave(source.getFilterList())
+        return getSavedSearch.awaitById(id)?.applySave(source::getFilterList)
     }
 
     suspend fun loadSearches(): List<SavedSearch> {
-       return getSavedSearch.awaitAllBySourceId(sourceId).applyAllSave(source.getFilterList())
+       return getSavedSearch.awaitAllBySourceId(sourceId).applyAllSave(source::getFilterList)
     }
 }
 

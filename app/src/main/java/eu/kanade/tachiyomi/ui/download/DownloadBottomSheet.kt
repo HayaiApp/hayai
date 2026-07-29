@@ -50,8 +50,6 @@ class DownloadBottomSheet @JvmOverloads constructor(
      */
     private var adapter: DownloadAdapter? = null
 
-    private val presenter = DownloadBottomPresenter()
-
     val preferences: PreferencesHelper by injectLazy()
 
     /**
@@ -59,6 +57,15 @@ class DownloadBottomSheet @JvmOverloads constructor(
      */
     private var isRunning: Boolean = false
     private var activity: Activity? = null
+    private var initialized = false
+    private var viewConfigured = false
+    private var items = listOf<DownloadHeaderItem>()
+
+    private val downloadManager
+        get() = controller?.presenter?.downloadManager
+
+    private val downloadQueue: List<Download>
+        get() = downloadManager?.queueState?.value.orEmpty()
 
     lateinit var binding: DownloadBottomSheetBinding
     override fun onFinishInflate() {
@@ -67,48 +74,49 @@ class DownloadBottomSheet @JvmOverloads constructor(
     }
 
     fun onCreate(controller: RecentsController) {
-        // Initialize adapter, scroll listener and recycler views
-        presenter.attachView(this)
-        presenter.onCreate()
-        adapter = DownloadAdapter(this)
-        sheetBehavior = BottomSheetBehavior.from(this)
+        if (initialized) return
+        initialized = true
+        this.controller = controller
         activity = controller.activity
-        // Create recycler and set adapter.
-        binding.dlRecycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(context)
+        sheetBehavior = BottomSheetBehavior.from(this)
+        adapter = DownloadAdapter(this)
         binding.dlRecycler.adapter = adapter
         adapter?.isHandleDragEnabled = true
         adapter?.isSwipeEnabled = true
         adapter?.fastScroller = binding.fastScroller
         binding.fastScroller.controller = controller
-        binding.dlRecycler.setHasFixedSize(true)
-        binding.dlRecycler.addItemDecoration(ExtensionDividerItemDecoration(context))
-        this.controller = controller
-        updateDLTitle()
 
-        val headerHeight = (activity as? MainActivity)?.toolbarHeight ?: 0
-        binding.dlRecyclerLayout.doOnApplyWindowInsetsCompat { v, windowInsets, _ ->
-            v.updateLayoutParams<MarginLayoutParams> {
-                topMargin = windowInsets.getInsets(systemBars()).top +
-                    (controller.toolbarHeight ?: headerHeight) -
-                    binding.sheetLayout.height
+        if (!viewConfigured) {
+            viewConfigured = true
+            binding.dlRecycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(context)
+            binding.dlRecycler.setHasFixedSize(true)
+            binding.dlRecycler.addItemDecoration(ExtensionDividerItemDecoration(context))
+
+            val headerHeight = (activity as? MainActivity)?.toolbarHeight ?: 0
+            binding.dlRecyclerLayout.doOnApplyWindowInsetsCompat { v, windowInsets, _ ->
+                v.updateLayoutParams<MarginLayoutParams> {
+                    topMargin = windowInsets.getInsets(systemBars()).top +
+                        (this@DownloadBottomSheet.controller?.toolbarHeight ?: headerHeight) -
+                        binding.sheetLayout.height
+                }
+            }
+            binding.sheetLayout.setOnClickListener {
+                if (!sheetBehavior.isExpanded()) {
+                    sheetBehavior?.expand()
+                } else {
+                    sheetBehavior?.collapse()
+                }
+            }
+            binding.downloadFab.setOnClickListener {
+                if (downloadManager?.isPaused() == true) {
+                    DownloadJob.start(context)
+                } else {
+                    downloadManager?.pauseDownloads()
+                }
+                updateFab()
             }
         }
-        binding.sheetLayout.setOnClickListener {
-            if (!sheetBehavior.isExpanded()) {
-                sheetBehavior?.expand()
-            } else {
-                sheetBehavior?.collapse()
-            }
-        }
-        binding.downloadFab.setOnClickListener {
-            if (controller.presenter.downloadManager.isPaused()) {
-                DownloadJob.start(context)
-            } else {
-                presenter.pauseDownloads()
-            }
-            updateFab()
-        }
-        update(!presenter.downloadManager.isPaused())
+        update(downloadManager?.isPaused() != true)
         setInformationView()
         if (!controller.hasQueue()) {
             sheetBehavior?.isHideable = true
@@ -117,16 +125,43 @@ class DownloadBottomSheet @JvmOverloads constructor(
     }
 
     fun update(isRunning: Boolean) {
-        presenter.getItems()
+        updateItems(downloadQueue)
         onQueueStatusChange(isRunning)
-        if (binding.downloadFab.isInvisible != presenter.downloadQueueState.value.isEmpty()) {
-            binding.downloadFab.isInvisible = presenter.downloadQueueState.value.isEmpty()
+        if (binding.downloadFab.isInvisible != downloadQueue.isEmpty()) {
+            binding.downloadFab.isInvisible = downloadQueue.isEmpty()
         }
         prepareMenu()
     }
 
+    private fun updateItems(downloads: List<Download>) {
+        val nextItems = downloads
+            .groupBy { it.source }
+            .map { entry ->
+                DownloadHeaderItem(entry.key.id, entry.key.name, entry.value.size).apply {
+                    addSubItems(0, entry.value.map { DownloadItem(it, this) })
+                }
+            }
+        val changed = if (items.size != nextItems.size ||
+            items.sumOf { it.subItemsCount } != nextItems.sumOf { it.subItemsCount }
+        ) {
+            true
+        } else {
+            val currentIds = items.flatMap { header ->
+                header.subItems.mapNotNull { it.download.chapter.id }
+            }.toLongArray()
+            val nextIds = nextItems.flatMap { header ->
+                header.subItems.mapNotNull { it.download.chapter.id }
+            }.toLongArray()
+            !currentIds.contentEquals(nextIds)
+        }
+        items = nextItems
+        if (changed) {
+            onNextDownloads(nextItems)
+        }
+    }
+
     private fun updateDLTitle() {
-        val extCount = presenter.downloadQueueState.value.firstOrNull()
+        val extCount = downloadQueue.firstOrNull()
         binding.titleText.text = if (extCount != null) {
             context.getString(
                 MR.strings.downloading_,
@@ -145,8 +180,8 @@ class DownloadBottomSheet @JvmOverloads constructor(
     private fun onQueueStatusChange(running: Boolean) {
         val oldRunning = isRunning
         isRunning = running
-        if (binding.downloadFab.isInvisible != presenter.downloadQueueState.value.isEmpty()) {
-            binding.downloadFab.isInvisible = presenter.downloadQueueState.value.isEmpty()
+        if (binding.downloadFab.isInvisible != downloadQueue.isEmpty()) {
+            binding.downloadFab.isInvisible = downloadQueue.isEmpty()
         }
         updateFab()
         if (oldRunning != running) {
@@ -157,11 +192,6 @@ class DownloadBottomSheet @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Called from the presenter to assign the downloads for the adapter.
-     *
-     * @param downloads the downloads from the queue.
-     */
     fun onNextDownloads(downloads: List<DownloadHeaderItem>) {
         prepareMenu()
         setInformationView()
@@ -212,7 +242,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
     private fun setInformationView() {
         updateDLTitle()
         setBottomSheet()
-        if (presenter.downloadQueueState.value.isEmpty()) {
+        if (downloadQueue.isEmpty()) {
             binding.emptyView.show(
                 Icons.Filled.FileDownloadOff,
                 MR.strings.nothing_is_downloading,
@@ -226,10 +256,10 @@ class DownloadBottomSheet @JvmOverloads constructor(
         val menu = binding.sheetToolbar.menu
         updateFab()
         // Set clear button visibility.
-        menu.findItem(R.id.clear_queue)?.isVisible = presenter.downloadQueueState.value.isNotEmpty()
+        menu.findItem(R.id.clear_queue)?.isVisible = downloadQueue.isNotEmpty()
 
         // Set reorder button visibility.
-        menu.findItem(R.id.reorder)?.isVisible = presenter.downloadQueueState.value.isNotEmpty()
+        menu.findItem(R.id.reorder)?.isVisible = downloadQueue.isNotEmpty()
     }
 
     private fun updateFab() {
@@ -240,7 +270,8 @@ class DownloadBottomSheet @JvmOverloads constructor(
     fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.clear_queue -> {
-                presenter.stopDownloads()
+                downloadManager?.clearQueue()
+                downloadManager?.stopDownloads()
             }
             R.id.newest, R.id.oldest -> {
                 reorderQueue({ it.download.chapter.date_upload }, item.itemId == R.id.newest)
@@ -264,7 +295,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
             }
             newDownloads.addAll(headerItem.subItems.map { it.download })
         }
-        presenter.reorder(newDownloads)
+        downloadManager?.reorderQueue(newDownloads)
     }
 
     fun dismiss() {
@@ -276,7 +307,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
     }
 
     private fun setBottomSheet() {
-        val hasQueue = presenter.downloadQueueState.value.isNotEmpty()
+        val hasQueue = downloadQueue.isNotEmpty()
         if (hasQueue) {
             sheetBehavior?.skipCollapsed = !hasQueue
             if (sheetBehavior.isHidden()) sheetBehavior?.collapse()
@@ -301,7 +332,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
                 (item as DownloadItem).download
             }
         }
-        presenter.reorder(downloads)
+        downloadManager?.reorderQueue(downloads)
     }
 
     override fun onItemRemoved(position: Int) {
@@ -312,7 +343,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
             return
         }
         val download = (item as? DownloadItem)?.download ?: return
-        presenter.cancelDownload(download)
+        downloadManager?.deletePendingDownloads(download)
 
         adapter?.removeItem(position)
         val adapter = adapter ?: return
@@ -321,7 +352,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
                 (item as DownloadItem).download
             }
         }
-        presenter.reorder(downloads)
+        downloadManager?.reorderQueue(downloads)
     }
 
     /**
@@ -349,7 +380,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
                         }
                         newDownloads.addAll(headerItem.subItems.map { it.download })
                     }
-                    presenter.reorder(newDownloads)
+                    downloadManager?.reorderQueue(newDownloads)
                 }
                 R.id.move_to_top_series -> {
                     val (selectedSeries, otherSeries) = adapter?.currentItems
@@ -357,7 +388,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
                         ?.map(DownloadItem::download)
                         ?.partition { item.download.manga.id == it.manga.id }
                         ?: Pair(listOf<Download>(), listOf<Download>())
-                    presenter.reorder(selectedSeries + otherSeries)
+                    downloadManager?.reorderQueue(selectedSeries + otherSeries)
                 }
                 R.id.move_to_bottom_series -> {
                     val (selectedSeries, otherSeries) = adapter?.currentItems
@@ -365,7 +396,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
                         ?.map(DownloadItem::download)
                         ?.partition { item.download.manga.id == it.manga.id }
                         ?: Pair(listOf<Download>(), listOf<Download>())
-                    presenter.reorder(otherSeries + selectedSeries)
+                    downloadManager?.reorderQueue(otherSeries + selectedSeries)
                 }
                 R.id.cancel_series -> {
                     val allDownloadsForSeries = adapter?.currentItems
@@ -373,7 +404,7 @@ class DownloadBottomSheet @JvmOverloads constructor(
                         ?.filter { item.download.manga.id == it.download.manga.id }
                         ?.map(DownloadItem::download)
                     if (!allDownloadsForSeries.isNullOrEmpty()) {
-                        presenter.cancelDownloads(allDownloadsForSeries)
+                        downloadManager?.deletePendingDownloads(*allDownloadsForSeries.toTypedArray())
                     }
                 }
             }
@@ -381,7 +412,14 @@ class DownloadBottomSheet @JvmOverloads constructor(
     }
 
     fun onDestroy() {
-        presenter.onDestroy()
+        if (!initialized) return
+        initialized = false
+        binding.dlRecycler.adapter = null
         binding.fastScroller.controller = null
+        adapter = null
+        items = emptyList()
+        controller = null
+        sheetBehavior = null
+        activity = null
     }
 }

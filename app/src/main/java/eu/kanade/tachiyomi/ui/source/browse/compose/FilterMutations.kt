@@ -9,9 +9,8 @@ import eu.kanade.tachiyomi.source.model.Filter
  * without standing up a Compose harness. The composables in this package wire user gestures to
  * these functions; they MUST NOT mutate `Filter.X.state` directly anywhere else.
  *
- * Every function mutates the supplied filter IN PLACE — this is what
- * `BrowseSourceController.showFilters()` relies on for its `oldFilters` vs `presenter.sourceFilters`
- * snapshot comparison. Never replace the [Filter] instance.
+ * Every function mutates the supplied filter in place. The supplied instance belongs only to the
+ * sheet's isolated draft; [FilterSheetStateHolder] republishes an immutable UI state afterward.
  */
 internal object FilterMutations {
 
@@ -121,6 +120,15 @@ internal object FilterMutations {
         baseTag: String,
         target: AutoCompleteTagState,
     ) {
+        // A caller may hand us an already-prefixed literal selected from the active summary.
+        // Preserve source-defined operators such as `~` verbatim; never manufacture `-~tag`.
+        if (filter.validPrefixes.any(baseTag::startsWith)) {
+            filter.state = when (target) {
+                AutoCompleteTagState.Off -> filter.state - baseTag
+                else -> if (baseTag in filter.state) filter.state else filter.state + baseTag
+            }
+            return
+        }
         val include = baseTag
         val exclude = "-$baseTag"
         val supportsExclude = "-" in filter.validPrefixes

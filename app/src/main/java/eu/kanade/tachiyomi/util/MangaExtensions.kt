@@ -43,8 +43,6 @@ import eu.kanade.tachiyomi.widget.TriStateCheckBox
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 import yokai.domain.category.interactor.GetCategories
 import yokai.domain.category.interactor.SetMangaCategories
 import yokai.domain.chapter.interactor.GetChapter
@@ -84,13 +82,18 @@ suspend fun Manga.shouldDownloadNewChapters(prefs: PreferencesHelper, getCategor
     return categoriesForManga.any { it in includedCategories }
 }
 
-suspend fun Manga.moveCategories(activity: Activity, onMangaMoved: () -> Unit) {
-    moveCategories(activity, false, onMangaMoved)
+suspend fun Manga.moveCategories(
+    activity: Activity,
+    scope: CoroutineScope,
+    onMangaMoved: () -> Unit,
+) {
+    moveCategories(activity, false, scope, onMangaMoved)
 }
 
 suspend fun Manga.moveCategories(
     activity: Activity,
     addingToLibrary: Boolean,
+    scope: CoroutineScope,
     onMangaMoved: () -> Unit,
 ) {
     val getCategories: GetCategories = get()
@@ -107,7 +110,7 @@ suspend fun Manga.moveCategories(
         ) {
             onMangaMoved()
             if (addingToLibrary) {
-                autoAddTrack(onMangaMoved)
+                autoAddTrack(scope, onMangaMoved)
             }
         }.show()
     }
@@ -160,8 +163,7 @@ suspend fun Manga.addOrRemoveToFavorites(
     setMangaCategories: SetMangaCategories = get(),
     getManga: GetManga = get(),
     updateManga: UpdateManga = get(),
-    @OptIn(DelicateCoroutinesApi::class)
-    scope: CoroutineScope = GlobalScope,
+    scope: CoroutineScope,
 ): Snackbar? {
     if (!favorite) {
         if (checkForDupes) {
@@ -206,7 +208,7 @@ suspend fun Manga.addOrRemoveToFavorites(
             defaultCategory != null -> {
                 favorite = true
                 date_added = Date().time
-                autoAddTrack(onMangaMoved)
+                autoAddTrack(scope, onMangaMoved)
                 updateManga.await(
                     MangaUpdate(
                         id = this@addOrRemoveToFavorites.id!!,
@@ -221,7 +223,7 @@ suspend fun Manga.addOrRemoveToFavorites(
                     view.snack(activity.getString(MR.strings.added_to_, defaultCategory.name)) {
                         setAction(MR.strings.change) {
                             scope.launchIO {
-                                moveCategories(activity, onMangaMoved)
+                                moveCategories(activity, scope, onMangaMoved)
                             }
                         }
                     }
@@ -233,7 +235,7 @@ suspend fun Manga.addOrRemoveToFavorites(
                 ) -> { // last used category(s)
                 favorite = true
                 date_added = Date().time
-                autoAddTrack(onMangaMoved)
+                autoAddTrack(scope, onMangaMoved)
                 updateManga.await(
                     MangaUpdate(
                         id = this@addOrRemoveToFavorites.id!!,
@@ -261,7 +263,7 @@ suspend fun Manga.addOrRemoveToFavorites(
                     ) {
                         setAction(MR.strings.change) {
                             scope.launchIO {
-                                moveCategories(activity, onMangaMoved)
+                                moveCategories(activity, scope, onMangaMoved)
                             }
                         }
                     }
@@ -270,7 +272,7 @@ suspend fun Manga.addOrRemoveToFavorites(
             defaultCategoryId == 0 || categories.isEmpty() -> { // 'Default' or no category
                 favorite = true
                 date_added = Date().time
-                autoAddTrack(onMangaMoved)
+                autoAddTrack(scope, onMangaMoved)
                 updateManga.await(
                     MangaUpdate(
                         id = this@addOrRemoveToFavorites.id!!,
@@ -286,7 +288,7 @@ suspend fun Manga.addOrRemoveToFavorites(
                         view.snack(activity.getString(MR.strings.added_to_, activity.getString(MR.strings.default_value))) {
                             setAction(MR.strings.change) {
                                 scope.launchIO {
-                                    moveCategories(activity, onMangaMoved)
+                                    moveCategories(activity, scope, onMangaMoved)
                                 }
                             }
                         }
@@ -296,7 +298,7 @@ suspend fun Manga.addOrRemoveToFavorites(
                 }
             }
             else -> { // Always ask
-                showSetCategoriesSheet(activity, categories, onMangaAdded, onMangaMoved)
+                showSetCategoriesSheet(activity, categories, onMangaAdded, onMangaMoved, scope)
             }
         }
     } else {
@@ -348,6 +350,7 @@ private suspend fun Manga.showSetCategoriesSheet(
     categories: List<Category>,
     onMangaAdded: (Pair<Long, Boolean>?) -> Unit,
     onMangaMoved: () -> Unit,
+    scope: CoroutineScope,
     getCategories: GetCategories = get(),
 ) {
     val categoriesForManga = getCategories.awaitByMangaId(this.id!!)
@@ -363,7 +366,7 @@ private suspend fun Manga.showSetCategoriesSheet(
         ) {
             (activity as? MainActivity)?.showNotificationPermissionPrompt()
             onMangaAdded(null)
-            autoAddTrack(onMangaMoved)
+            autoAddTrack(scope, onMangaMoved)
         }.show()
     }
 }
@@ -376,8 +379,7 @@ private suspend fun showAddDuplicateDialog(
     controller: Controller,
     addManga: suspend () -> Unit,
     migrateManga: (Long, Boolean) -> Unit,
-    @OptIn(DelicateCoroutinesApi::class)
-    scope: CoroutineScope = GlobalScope,
+    scope: CoroutineScope,
 ) {
     val migrationOptions = MigrationFlags.options(libraryManga)
     withUIContext {
@@ -465,7 +467,7 @@ private suspend fun showAddDuplicateDialog(
     }
 }
 
-fun Manga.autoAddTrack(onMangaMoved: () -> Unit) {
+fun Manga.autoAddTrack(scope: CoroutineScope, onMangaMoved: () -> Unit) {
     val loggedServices = get<TrackManager>().services.filter { it.isLogged }
     val source = get<SourceManager>().getOrStub(this.source)
     val getChapter = get<GetChapter>()
@@ -474,7 +476,7 @@ fun Manga.autoAddTrack(onMangaMoved: () -> Unit) {
         .filterIsInstance<EnhancedTrackService>()
         .filter { it.accept(source) }
         .forEach { service ->
-            launchIO {
+            scope.launchIO {
                 try {
                     service.match(this@autoAddTrack)?.let { track ->
                         val mangaId = this@autoAddTrack.id!!

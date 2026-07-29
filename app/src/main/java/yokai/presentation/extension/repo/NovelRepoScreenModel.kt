@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.util.system.launchIO
+import hayai.novel.plugin.NovelPluginManager
 import hayai.novel.repo.interactor.CreateNovelRepo
 import hayai.novel.repo.interactor.DeleteNovelRepo
 import hayai.novel.repo.interactor.GetNovelRepo
@@ -28,11 +29,14 @@ class NovelRepoScreenModel : StateScreenModel<NovelRepoScreenModel.State>(State.
     private val getNovelRepo: GetNovelRepo by inject()
     private val createNovelRepo: CreateNovelRepo by inject()
     private val deleteNovelRepo: DeleteNovelRepo by inject()
+    private val novelPluginManager: NovelPluginManager by inject()
 
     private val internalEvent = MutableSharedFlow<ExtensionRepoEvent>()
     val event: SharedFlow<ExtensionRepoEvent> = internalEvent.asSharedFlow()
     private val mutableIsAdding = MutableStateFlow(false)
     val isAdding: StateFlow<Boolean> = mutableIsAdding.asStateFlow()
+    private val mutableIsRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = mutableIsRefreshing.asStateFlow()
 
     init {
         screenModelScope.launchIO {
@@ -75,6 +79,23 @@ class NovelRepoScreenModel : StateScreenModel<NovelRepoScreenModel.State>(State.
     fun deleteRepo(url: String) {
         screenModelScope.launchIO {
             deleteNovelRepo.await(url)
+        }
+    }
+
+    fun refreshRepos() {
+        if (state.value !is State.Success || !mutableIsRefreshing.compareAndSet(expect = false, update = true)) {
+            return
+        }
+
+        screenModelScope.launchIO {
+            try {
+                novelPluginManager.refreshAvailablePlugins()
+            } catch (error: Exception) {
+                Logger.e(error) { "Failed to refresh novel repositories" }
+                internalEvent.emit(ExtensionRepoEvent.RefreshFailed)
+            } finally {
+                mutableIsRefreshing.value = false
+            }
         }
     }
 

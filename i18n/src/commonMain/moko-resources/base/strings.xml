@@ -1665,6 +1665,21 @@
     <string name="sort_descending">Sort descending</string>
     <string name="include">Include</string>
     <string name="exclude">Exclude</string>
+    <string name="filter_refine">Refine</string>
+    <string name="filter_find">Find a filter or value</string>
+    <string name="filter_neutral">Neutral</string>
+    <string name="filter_done">Done</string>
+    <string name="filter_quick_presets">Quick presets</string>
+    <string name="filter_save_preset">Save preset</string>
+    <string name="filter_manage_presets">Manage presets</string>
+    <string name="filter_active">Active refinements</string>
+    <string name="filter_no_matches">No filters or values match</string>
+    <string name="filter_search_query">Search: %1$s</string>
+    <string name="filter_updating_results">Updating results</string>
+    <string name="filter_edit">Edit filters</string>
+    <string name="filter_remove_last">Remove last refinement</string>
+    <string name="filter_clear_all">Clear all</string>
+    <string name="filter_refinement_removed">Refinement removed</string>
 
     <!-- EH Page Previews -->
     <string name="page_previews">Page previews</string>

@@ -23,10 +23,16 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -45,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.compose.stringResource
 import dev.icerock.moko.resources.desc.Utils
+import coil3.compose.AsyncImagePainter
 import yokai.i18n.MR
 import yokai.presentation.library.components.LazyLibraryStaggeredGrid
 import yokai.domain.manga.models.MangaCover as MangaCoverModel
@@ -120,6 +127,7 @@ fun BadgeSegments(
     }
 } + extraBadgeSegments
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MangaComfortableGridItem(
     coverData: MangaCoverModel,

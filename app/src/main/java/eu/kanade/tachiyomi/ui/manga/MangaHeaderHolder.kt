@@ -3,11 +3,9 @@ package eu.kanade.tachiyomi.ui.manga
 import android.animation.AnimatorInflater
 import android.annotation.SuppressLint
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.RenderEffect
 import android.graphics.Shader
-import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.text.format.DateUtils
 import android.view.MotionEvent
@@ -16,7 +14,6 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
-import androidx.core.graphics.drawable.toDrawable
 import androidx.core.text.buildSpannedString
 import androidx.core.text.scale
 import androidx.core.view.isInvisible
@@ -30,9 +27,12 @@ import coil3.asDrawable
 import coil3.compose.AsyncImage
 import coil3.imageLoader
 import coil3.request.CachePolicy
+import coil3.request.Disposable
 import coil3.request.ImageRequest
 import coil3.request.error
 import coil3.request.placeholder
+import coil3.size.Precision
+import coil3.size.ViewSizeResolver
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.R as materialR
 import dev.icerock.moko.resources.compose.stringResource
@@ -105,23 +105,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import yokai.i18n.MR
 import yokai.presentation.theme.ReducedMotion
-import yokai.util.coil.loadManga
 import yokai.util.lang.getString
 import eu.kanade.tachiyomi.source.PagePreviewSource
 import eu.kanade.tachiyomi.source.online.NamespaceSource
 import exh.source.getMainSource
 import hayai.novel.reader.quote.quoteManager
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import tachiyomi.domain.translation.service.TranslationPreferences
-import yokai.domain.manga.models.cover
 import yokai.domain.series.SeriesKnowledgeRepository
 import yokai.domain.series.SeriesPreferences
 import yokai.domain.series.model.MetadataProviderType
@@ -185,14 +185,23 @@ class MangaHeaderHolder(
     private var metadataContentInstalled = false
     private var boundMangaId: Long? = null
     private var boundMangaIsNovel = false
+    private var hasBoundManga = false
+    private var boundQuoteCount = 0
     private val accentColorState = mutableStateOf<Int?>(null)
     private val descriptionExpandedState = mutableStateOf(false)
     private val metadataRenderState = mutableStateOf<MetadataRenderState?>(null)
-    // Cache the (description, genre) the post-layout lineCount probe last ran against.
-    // bind() is invoked on every notifyDataSetChanged; without a cache the probe re-runs
-    // after layout each time, costing an extra layout pass per bind even when the text
-    // hasn't changed. Same pattern as RecentMangaHolder's holder-level cache.
-    private var lastBoundDescSignature: Int = 0
+    private var descriptionContent: DescriptionContent? = null
+    private var descriptionLayoutKey: DescriptionLayoutKey? = null
+    private var descriptionLayoutProbe: Runnable? = null
+    private val genreRenderState = mutableStateOf<GenreRenderState?>(null)
+    private var genreContentInstalled = false
+    private var genreContentScheduled = false
+    private val pagePreviewRenderState = mutableStateOf<PagePreviewRenderState?>(null)
+    private var pagePreviewContentInstalled = false
+    private var pagePreviewContentScheduled = false
+    private var coverRenderState: HeaderCoverRenderState? = null
+    private var coverRequest: Disposable? = null
+    private var backdropRequest: Disposable? = null
     private val seriesKnowledgeRepository: SeriesKnowledgeRepository by injectLazy()
     private val seriesPreferences: SeriesPreferences by injectLazy()
     private val translationPreferences: TranslationPreferences by injectLazy()
@@ -342,7 +351,6 @@ class MangaHeaderHolder(
             }
             binding.mangaSummary.maxLines = Integer.MAX_VALUE
             binding.mangaSummary.setTextIsSelectable(true)
-            setDescription()
             descriptionExpandedState.value = true
             binding.lessButton.isVisible = !isTablet
             binding.moreButtonGroup.isVisible = false
@@ -388,7 +396,6 @@ class MangaHeaderHolder(
         binding.mangaSummary.setTextIsSelectable(false)
         binding.mangaSummary.isClickable = true
         binding.mangaSummary.maxLines = 3
-        setDescription()
         descriptionExpandedState.value = false
         binding.lessButton.isVisible = false
         binding.title.maxLines = 4
@@ -398,22 +405,23 @@ class MangaHeaderHolder(
         }
     }
 
-    private fun setDescription() {
-        if (binding != null) {
-            // The holder can be created before the presenter's manga is set (a layout pass races the
-            // async load — e.g. the action-bar ComposeView measuring); bind() re-runs this once ready.
-            if (!adapter.controller.mangaPresenter().isMangaLateInitInitialized()) return
-            val desc = (resolvedSeriesMetadata?.description ?: adapter.controller.mangaPresenter().manga.description)
+    private fun bindDescription(description: String?) {
+        val binding = binding ?: return
+        val content = DescriptionContent(
+            description
                 ?.replace("<", "&lt;")
                 ?.replace(">", "&gt;")
-                ?.replace(Regex("""(?m)^\s*-\s*$"""), "\\-")
-                ?.replace(Regex("""(?m)^\s*\*\s*$"""), "\\*")
-            binding.mangaSummary.movementMethod = LinkMovementMethod.getInstance()
-            binding.mangaSummary.text = when {
-                desc.isNullOrBlank() -> itemView.context.getString(MR.strings.no_description)
-                else -> markwon.toMarkdown(desc.trim())
-            }
-        }
+                ?.replace(EMPTY_DASH_LINE, "\\-")
+                ?.replace(EMPTY_ASTERISK_LINE, "\\*")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() },
+        )
+        if (content == descriptionContent) return
+
+        descriptionContent = content
+        binding.mangaSummary.movementMethod = LinkMovementMethod.getInstance()
+        binding.mangaSummary.text = content.markdown?.let(markwon::toMarkdown)
+            ?: itemView.context.getString(MR.strings.no_description)
     }
 
     fun bindChapters() {
@@ -427,39 +435,6 @@ class MangaHeaderHolder(
             chapterBinding.chaptersTitle.text =
                 itemView.context.getString(MR.plurals.chapters_plural, count, count)
             chapterBinding.filtersText.text = presenter.currentFilters()
-        }
-    }
-    // updatereadingbutton fixes issue where fixing skipped chapter marking & latency caused button text to not update until reloaded
-    // though it still functioned properly without correct chapter number text, directing to correct unread chapter number.
-    // Updating this button still introduces slight latency when manuallying marking chapters with header visible but is near nonexistent now.
-    fun updateReadingButton() {
-        val presenter = adapter.delegate.mangaPresenter()
-        val nextChapter = presenter.getNextUnreadChapter()
-        with(binding?.startReadingButton ?: return) {
-            isEnabled = (nextChapter != null)
-            text = if (nextChapter != null) {
-                val number = adapter.decimalFormat.format(nextChapter.chapter_number.toDouble())
-                if (nextChapter.chapter_number > 0) {
-                    context.getString(
-                        if (nextChapter.last_page_read > 0) {
-                            MR.strings.continue_reading_chapter_
-                        } else {
-                            MR.strings.start_reading_chapter_
-                        },
-                        number,
-                    )
-                } else {
-                    context.getString(
-                        if (nextChapter.last_page_read > 0) {
-                            MR.strings.continue_reading
-                        } else {
-                            MR.strings.start_reading
-                        },
-                    )
-                }
-            } else {
-                context.getString(MR.strings.all_chapters_read)
-            }
         }
     }
     @SuppressLint("SetTextI18n", "StringFormatInvalid")
@@ -485,36 +460,31 @@ class MangaHeaderHolder(
             }
             return
         }
-        boundMangaId = manga.id
-        boundMangaIsNovel = manga.isNovel()
-        seriesKnowledgeJob?.cancel()
-        resolveDisplayOptions(null, 0)
-        applyResolvedMetadata(manga, null)
+        val mangaChanged = !hasBoundManga || boundMangaId != manga.id
+        if (mangaChanged) {
+            hasBoundManga = true
+            boundMangaId = manga.id
+            boundMangaIsNovel = manga.isNovel()
+            boundQuoteCount = 0
+            seriesKnowledgeJob?.cancel()
+            seriesKnowledgeBundle = null
+            resolvedSeriesMetadata = null
+            descriptionContent = null
+            descriptionLayoutKey = null
+            descriptionLayoutProbe?.let(binding.mangaSummary::removeCallbacks)
+            descriptionLayoutProbe = null
+            coverRenderState = null
+            coverRequest?.dispose()
+            coverRequest = null
+            backdropRequest?.dispose()
+            backdropRequest = null
+            observeSeriesKnowledge(manga.id)
+        }
+        resolveDisplayOptions(seriesKnowledgeBundle, boundQuoteCount)
+        applyResolvedMetadata(manga, seriesKnowledgeBundle)
         applyDisplayVisibility()
         renderMetadataSection(manga)
-        loadSeriesKnowledge(manga.id)
-
-        // Only re-run the post-layout lineCount probe when the description or genres actually
-        // changed; expand/collapse based on adapter filter state is cheap and must run every
-        // bind, so it stays outside the cache gate.
-        val descSignature = (resolvedSeriesMetadata?.description ?: manga.description ?: "").hashCode() xor
-            resolvedSeriesMetadata?.genres.orEmpty().joinToString("|").hashCode() xor
-            (if (manga.initialized) 1 else 0)
-        if (descSignature != lastBoundDescSignature) {
-            lastBoundDescSignature = descSignature
-            binding.mangaSummary.post {
-                if (binding.subItemGroup.isVisible) {
-                    if (binding.mangaSummary.lineCount < 3 && manga.genre.isNullOrBlank() &&
-                        binding.moreButton.isVisible && manga.initialized
-                    ) {
-                        expandDesc()
-                        binding.lessButton.isVisible = false
-                        showMoreButton = binding.lessButton.isVisible
-                        canCollapse = false
-                    }
-                }
-            }
-        }
+        scheduleDescriptionLayoutProbe(manga)
         if (adapter.hasFilter()) {
             collapse()
         } else {
@@ -548,53 +518,11 @@ class MangaHeaderHolder(
                 ?: itemView.context.getResourceColor(android.R.attr.colorBackground),
         )
 
-        val tracked = presenter.isTracked() && !item.isLocked
-
-        with(binding.trackButton) {
-            isVisible = presenter.hasTrackers() && showTrackersSection
-            text = itemView.context.getString(
-                if (tracked) {
-                    MR.strings.tracked
-                } else {
-                    MR.strings.tracking
-                },
-            )
-
-            icon = ContextCompat.getDrawable(
-                itemView.context,
-                if (tracked) R.drawable.ic_check_24dp else R.drawable.ic_sync_24dp,
-            )
-            checked(tracked)
-        }
+        bindTrackingButton(presenter, item.isLocked)
 
         boundHeaderItem = item
         bindReadingButton(item)
-
-        // Page preview strip — only inflate Compose if the source actually implements
-        // PagePreviewSource. Otherwise PagePreviewInlineSection would render a 150dp
-        // shimmer skeleton for 1-2 frames, then collapse to 0 when its LaunchedEffect
-        // resolves Unavailable — visibly shifting chapter rows down then back up.
-        binding.pagePreviewCompose.apply {
-            val previewSource = presenter.source.getMainSource<PagePreviewSource>()
-            if (previewSource == null) {
-                isVisible = false
-            } else {
-                isVisible = true
-                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-                postOnAnimation {
-                    setContent {
-                        yokai.presentation.theme.YokaiTheme {
-                            exh.ui.pagepreview.components.PagePreviewInlineSection(
-                                mangaId = manga.id ?: -1L,
-                                sourceId = manga.source,
-                                onOpenPagePreview = { adapter.delegate.openPagePreview() },
-                                onOpenReaderAtPage = { page -> adapter.delegate.openReaderAtPage(page) },
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        bindPagePreview(manga, presenter)
 
         val count = presenter.chapters.size
         binding.chaptersTitle.text = itemView.context.getString(MR.plurals.chapters_plural, count, count)
@@ -604,36 +532,7 @@ class MangaHeaderHolder(
         }
 
         bindRelatedManga(presenter)
-
-        val resolvedStatus = resolvedSeriesMetadata?.status?.trim()?.takeIf { it.isNotBlank() }
-        val statusText = resolvedStatus?.toIntOrNull()?.let { status ->
-            itemView.context.getString(status.stringResourceForMangaStatus())
-        } ?: resolvedStatus ?: itemView.context.getString(manga.status.stringResourceForMangaStatus())
-        // Surface the predicted next chapter release only while smart update is enabled.
-        val showNextUpdate = presenter.preferences.smartUpdateEnabled().get() &&
-            manga.favorite && !manga.isLocal() && manga.next_update > 0L &&
-            manga.next_update.isTodayOrFutureDay() &&
-            manga.status in setOf(SManga.ONGOING, SManga.PUBLISHING_FINISHED)
-        binding.mangaStatus.isVisible = statusText.isNotBlank() && (resolvedStatus != null || manga.status != 0)
-        binding.mangaStatus.text = statusText
-        binding.predictedUpdateButton?.apply {
-            isVisible = showNextUpdate
-            text = if (showNextUpdate) {
-                val relativeUpdate = if (DateUtils.isToday(manga.next_update)) {
-                    itemView.context.getString(MR.strings.manga_interval_expected_update_soon)
-                } else {
-                    manga.next_update.timeSpanFromNow(itemView.context)
-                }
-                itemView.context.getString(
-                    MR.strings.manga_next_update_,
-                    relativeUpdate,
-                )
-            } else {
-                itemView.context.getString(MR.strings.manga_interval_custom_amount)
-            }
-            icon = ContextCompat.getDrawable(itemView.context, R.drawable.ic_hourglass_empty_24dp)
-            checked(showNextUpdate)
-        }
+        bindStatus(manga, presenter)
         with(binding.mangaSource) {
             val enabledLanguages = presenter.preferences.enabledLanguages().get()
 
@@ -663,24 +562,141 @@ class MangaHeaderHolder(
         }
     }
 
-    private fun loadSeriesKnowledge(mangaId: Long?) {
-        mangaId ?: return
-        val shouldLoadQuotes = boundMangaIsNovel
-        seriesKnowledgeJob = adapter.controller.viewScope.launch {
-            val (bundle, quoteCount) = withContext(Dispatchers.IO) {
-                val knowledge = seriesKnowledgeRepository.get(mangaId)
-                val quotes = if (shouldLoadQuotes) {
-                    itemView.context.quoteManager.getQuoteCount(mangaId)
-                } else {
-                    0
-                }
-                knowledge to quotes
+    private fun scheduleDescriptionLayoutProbe(manga: Manga) {
+        val binding = binding ?: return
+        val key = DescriptionLayoutKey(
+            mangaId = manga.id,
+            content = descriptionContent,
+            genres = resolvedSeriesMetadata?.genres.orEmpty(),
+            initialized = manga.initialized,
+        )
+        if (key == descriptionLayoutKey) return
+
+        descriptionLayoutKey = key
+        canCollapse = true
+        descriptionLayoutProbe?.let(binding.mangaSummary::removeCallbacks)
+        val probe = Runnable {
+            if (descriptionLayoutKey != key || boundMangaId != manga.id) return@Runnable
+            if (
+                binding.subItemGroup.isVisible &&
+                binding.mangaSummary.lineCount < 3 &&
+                key.genres.isEmpty() &&
+                binding.moreButton.isVisible &&
+                key.initialized
+            ) {
+                expandDesc()
+                binding.lessButton.isVisible = false
+                showMoreButton = false
+                canCollapse = false
             }
-            if (boundMangaId != mangaId || binding == null) return@launch
-            resolveDisplayOptions(bundle, quoteCount)
-            applyResolvedMetadata(adapter.delegate.mangaPresenter().manga, bundle)
-            applyDisplayVisibility()
-            renderMetadataSection(adapter.delegate.mangaPresenter().manga)
+        }
+        descriptionLayoutProbe = probe
+        binding.mangaSummary.post(probe)
+    }
+
+    private fun bindPagePreview(manga: Manga, presenter: MangaDetailsPresenter) {
+        val pagePreviewCompose = binding?.pagePreviewCompose ?: return
+        val state = manga.id?.takeIf {
+            presenter.source.getMainSource<PagePreviewSource>() != null
+        }?.let { mangaId ->
+            PagePreviewRenderState(mangaId, manga.source)
+        }
+        pagePreviewRenderState.value = state
+        pagePreviewCompose.isVisible = state != null
+        if (state == null || pagePreviewContentInstalled || pagePreviewContentScheduled) return
+
+        pagePreviewContentScheduled = true
+        pagePreviewCompose.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        pagePreviewCompose.postOnAnimation {
+            pagePreviewContentScheduled = false
+            if (pagePreviewRenderState.value == null || binding.pagePreviewCompose !== pagePreviewCompose) {
+                return@postOnAnimation
+            }
+            pagePreviewContentInstalled = true
+            pagePreviewCompose.setContent {
+                val renderState = pagePreviewRenderState.value ?: return@setContent
+                yokai.presentation.theme.YokaiTheme {
+                    exh.ui.pagepreview.components.PagePreviewInlineSection(
+                        mangaId = renderState.mangaId,
+                        sourceId = renderState.sourceId,
+                        onOpenPagePreview = adapter.delegate::openPagePreview,
+                        onOpenReaderAtPage = adapter.delegate::openReaderAtPage,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun bindTrackingButton(presenter: MangaDetailsPresenter, isLocked: Boolean) {
+        val binding = binding ?: return
+        val tracked = presenter.isTracked() && !isLocked
+        binding.trackButton.apply {
+            isVisible = presenter.hasTrackers() && showTrackersSection
+            text = itemView.context.getString(
+                if (tracked) MR.strings.tracked else MR.strings.tracking,
+            )
+            icon = ContextCompat.getDrawable(
+                itemView.context,
+                if (tracked) R.drawable.ic_check_24dp else R.drawable.ic_sync_24dp,
+            )
+            checked(tracked)
+        }
+    }
+
+    private fun bindStatus(manga: Manga, presenter: MangaDetailsPresenter) {
+        val binding = binding ?: return
+        val resolvedStatus = resolvedSeriesMetadata?.status?.trim()?.takeIf { it.isNotBlank() }
+        val statusText = resolvedStatus?.toIntOrNull()?.let { status ->
+            itemView.context.getString(status.stringResourceForMangaStatus())
+        } ?: resolvedStatus ?: itemView.context.getString(manga.status.stringResourceForMangaStatus())
+        val showNextUpdate = presenter.preferences.smartUpdateEnabled().get() &&
+            manga.favorite && !manga.isLocal() && manga.next_update > 0L &&
+            manga.next_update.isTodayOrFutureDay() &&
+            manga.status in setOf(SManga.ONGOING, SManga.PUBLISHING_FINISHED)
+        binding.mangaStatus.isVisible = statusText.isNotBlank() && (resolvedStatus != null || manga.status != 0)
+        binding.mangaStatus.text = statusText
+        binding.predictedUpdateButton?.apply {
+            isVisible = showNextUpdate
+            text = if (showNextUpdate) {
+                val relativeUpdate = if (DateUtils.isToday(manga.next_update)) {
+                    itemView.context.getString(MR.strings.manga_interval_expected_update_soon)
+                } else {
+                    manga.next_update.timeSpanFromNow(itemView.context)
+                }
+                itemView.context.getString(MR.strings.manga_next_update_, relativeUpdate)
+            } else {
+                itemView.context.getString(MR.strings.manga_interval_custom_amount)
+            }
+            icon = ContextCompat.getDrawable(itemView.context, R.drawable.ic_hourglass_empty_24dp)
+            checked(showNextUpdate)
+        }
+    }
+
+    private fun observeSeriesKnowledge(mangaId: Long?) {
+        mangaId ?: return
+        val quoteCounts = if (boundMangaIsNovel) {
+            itemView.context.quoteManager.subscribeQuoteCount(mangaId)
+        } else {
+            flowOf(0)
+        }
+        seriesKnowledgeJob = adapter.controller.viewScope.launch {
+            combine(seriesKnowledgeRepository.subscribe(mangaId), quoteCounts) { bundle, quoteCount ->
+                bundle to quoteCount
+            }.conflate().collect { (bundle, quoteCount) ->
+                if (boundMangaId != mangaId || binding == null) return@collect
+                val presenter = adapter.delegate.mangaPresenter()
+                val manga = presenter.mangaOrNull ?: return@collect
+                seriesKnowledgeBundle = bundle
+                boundQuoteCount = quoteCount
+                resolveDisplayOptions(bundle, quoteCount)
+                applyResolvedMetadata(manga, bundle)
+                applyDisplayVisibility()
+                bindTrackingButton(presenter, boundHeaderItem?.isLocked == true)
+                bindStatus(manga, presenter)
+                renderMetadataSection(manga)
+                scheduleDescriptionLayoutProbe(manga)
+                if (manga.initialized) updateCover(manga)
+            }
         }
     }
 
@@ -701,7 +717,6 @@ class MangaHeaderHolder(
     }
 
     private fun resolveDisplayOptions(bundle: SeriesKnowledgeBundle?, quoteCount: Int) {
-        seriesKnowledgeBundle = bundle
         val local = bundle?.displayOptions?.associateBy { it.optionKey }.orEmpty()
 
         fun visible(section: SeriesDisplaySection): Boolean =
@@ -731,18 +746,16 @@ class MangaHeaderHolder(
             knowledge = bundle,
             includeTrackers = showTrackersSection,
         )
+        if (resolved == resolvedSeriesMetadata) return
         resolvedSeriesMetadata = resolved
-        binding ?: return
+        val binding = binding ?: return
         binding.title.text = resolved.title
         binding.mangaAuthor.text = listOfNotNull(
             resolved.author?.trim()?.takeIf { it.isNotBlank() },
             resolved.artist?.trim()?.takeIf { it.isNotBlank() && it != resolved.author },
         ).joinToString(", ")
-        setDescription()
+        bindDescription(resolved.description)
         setGenreTags(binding, manga, resolved.genres)
-        if (manga.initialized) {
-            updateCover(manga)
-        }
     }
 
     private fun renderMetadataSection(manga: Manga) {
@@ -801,7 +814,6 @@ class MangaHeaderHolder(
         resolvedGenres: List<String>? = resolvedSeriesMetadata?.genres,
     ) {
         val genres = resolvedGenres ?: if (manga.genre.isNullOrBlank()) emptyList() else (manga.getGenres() ?: emptyList())
-        val delegate = adapter.delegate
         val context = binding.root.context
         val dark = context.isInNightMode()
         val amoled = adapter.delegate.mangaPresenter().preferences.themeDarkAmoled().get()
@@ -834,30 +846,44 @@ class MangaHeaderHolder(
                 if (dark) 0.945f else 0.175f,
             ),
         )
-        val isNamespaceSource = adapter.delegate.mangaPresenter().source.getMainSource<NamespaceSource>() != null
-        binding.mangaGenresTags.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        // Defer like buttonGroupCompose / metadataCompose so first composition doesn't stall
-        // the push animation frame. minHeight on the ComposeView reserves space.
-        binding.mangaGenresTags.postOnAnimation {
-            binding.mangaGenresTags.setContent {
+        genreRenderState.value = GenreRenderState(
+            genres = genres.toList(),
+            containerColor = containerColorInt,
+            labelColor = labelColorInt,
+            isNamespaceSource = adapter.delegate.mangaPresenter().source.getMainSource<NamespaceSource>() != null,
+        )
+        installGenreTagsContent()
+    }
+
+    private fun installGenreTagsContent() {
+        if (genreContentInstalled || genreContentScheduled) return
+        val genreCompose = binding?.mangaGenresTags ?: return
+        genreContentScheduled = true
+        genreCompose.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        genreCompose.postOnAnimation {
+            genreContentScheduled = false
+            if (binding.mangaGenresTags !== genreCompose) return@postOnAnimation
+            genreContentInstalled = true
+            genreCompose.setContent {
+                val state = genreRenderState.value ?: return@setContent
                 yokai.presentation.theme.YokaiTheme {
-                    if (isNamespaceSource) {
+                    if (state.isNamespaceSource) {
                         NamespaceGenreTagsSection(
-                            genres = genres,
-                            containerColor = ComposeColor(containerColorInt),
-                            labelColor = ComposeColor(labelColorInt),
+                            genres = state.genres,
+                            containerColor = ComposeColor(state.containerColor),
+                            labelColor = ComposeColor(state.labelColor),
                             isExpanded = descriptionExpandedState.value,
-                            onTagClick = { genre -> delegate.searchFromMetadata(genre) },
-                            onTagLongClick = { genre -> delegate.copyContentToClipboard(genre, genre) },
+                            onTagClick = adapter.delegate::searchFromMetadata,
+                            onTagLongClick = { genre -> adapter.delegate.copyContentToClipboard(genre, genre) },
                         )
                     } else {
                         GenreTagsSection(
-                            genres = genres,
-                            containerColor = ComposeColor(containerColorInt),
-                            labelColor = ComposeColor(labelColorInt),
+                            genres = state.genres,
+                            containerColor = ComposeColor(state.containerColor),
+                            labelColor = ComposeColor(state.labelColor),
                             isExpanded = descriptionExpandedState.value,
-                            onTagClick = { genre -> delegate.searchFromMetadata(genre) },
-                            onTagLongClick = { genre -> delegate.copyContentToClipboard(genre, genre) },
+                            onTagClick = adapter.delegate::searchFromMetadata,
+                            onTagLongClick = { genre -> adapter.delegate.copyContentToClipboard(genre, genre) },
                         )
                     }
                 }
@@ -1077,70 +1103,77 @@ class MangaHeaderHolder(
     }
 
     fun updateCover(manga: Manga) {
-        binding ?: return
+        val binding = binding ?: return
         if (!manga.initialized) return
-        val drawable = adapter.controller.binding.mangaCoverFull.drawable
+        val sharedDrawable = adapter.controller.binding.mangaCoverFull.drawable
         val resolved = resolvedSeriesMetadata
-        val coverUrl = resolved?.coverUrl?.takeIf { it.isSupportedImageModel() }
-        if (coverUrl != null && coverUrl != manga.thumbnail_url) {
-            val request = ImageRequest.Builder(itemView.context)
+        val coverUrl = resolved?.coverUrl
+            ?.takeIf { it.isSupportedImageModel() && it != manga.thumbnail_url }
+        val backdropUrl = resolved?.bannerUrl?.takeIf { it.isSupportedImageModel() } ?: coverUrl
+        val renderState = HeaderCoverRenderState(manga.id, coverUrl, backdropUrl)
+        val previousState = coverRenderState
+        coverRenderState = renderState
+
+        if (coverUrl == null) {
+            coverRequest?.dispose()
+            coverRequest = null
+            if (binding.mangaCover.drawable !== sharedDrawable) {
+                binding.mangaCover.setImageDrawable(sharedDrawable)
+            }
+        } else if (previousState?.mangaId != renderState.mangaId || previousState?.coverUrl != coverUrl) {
+            coverRequest?.dispose()
+            coverRequest = ImageRequest.Builder(itemView.context)
                 .data(coverUrl)
-                .placeholder(drawable)
-                .error(drawable)
+                .placeholder(sharedDrawable)
+                .error(sharedDrawable)
                 .diskCachePolicy(CachePolicy.READ_ONLY)
+                .size(ViewSizeResolver(binding.mangaCover))
+                .precision(Precision.INEXACT)
                 .target(
-                    onSuccess = {
-                        binding.mangaCover.setImageDrawable(it.asDrawable(itemView.resources))
+                    onSuccess = { image ->
+                        if (coverRenderState != renderState) return@target
+                        binding.mangaCover.setImageDrawable(image.asDrawable(itemView.resources))
                     },
                 )
                 .build()
-            itemView.context.imageLoader.enqueue(request)
-        } else {
-            binding.mangaCover.loadManga(manga) {
-                placeholder(drawable)
-                error(drawable)
-                if (manga.favorite) networkCachePolicy(CachePolicy.READ_ONLY)
-                diskCachePolicy(CachePolicy.READ_ONLY)
-            }
+                .let(itemView.context.imageLoader::enqueue)
         }
-        loadBackdrop(
-            model = resolved?.bannerUrl?.takeIf { it.isSupportedImageModel() }
-                ?: coverUrl
-                ?: manga,
-            placeholder = drawable,
-            manga = manga,
-        )
+
+        if (backdropUrl == null) {
+            backdropRequest?.dispose()
+            backdropRequest = null
+            if (binding.backdrop.drawable !== sharedDrawable) {
+                binding.backdrop.setImageDrawable(sharedDrawable)
+            }
+            applyBlur()
+        } else if (previousState?.mangaId != renderState.mangaId || previousState?.backdropUrl != backdropUrl) {
+            loadBackdrop(backdropUrl, sharedDrawable, renderState)
+        }
     }
 
-    private fun loadBackdrop(model: Any, placeholder: android.graphics.drawable.Drawable?, manga: Manga) {
-        binding ?: return
-        val requestModel = if (model is Manga) model.cover() else model
-        val requestBuilder = ImageRequest.Builder(itemView.context)
-            .data(requestModel)
+    private fun loadBackdrop(
+        url: String,
+        placeholder: android.graphics.drawable.Drawable?,
+        renderState: HeaderCoverRenderState,
+    ) {
+        val binding = binding ?: return
+        backdropRequest?.dispose()
+        backdropRequest = ImageRequest.Builder(itemView.context)
+            .data(url)
             .placeholder(placeholder)
             .error(placeholder)
             .diskCachePolicy(CachePolicy.READ_ONLY)
+            .size(ViewSizeResolver(binding.backdrop))
+            .precision(Precision.INEXACT)
             .target(
-                onSuccess = {
-                    val result = it.asDrawable(itemView.resources)
-                    val bitmap = (result as? BitmapDrawable)?.bitmap
-                    if (bitmap == null) {
-                        binding.backdrop.setImageDrawable(result)
-                        return@target
-                    }
-                    val yOffset = (bitmap.height / 2 * 0.33).toInt()
-
-                    binding.backdrop.setImageDrawable(
-                        Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height - yOffset)
-                            .toDrawable(itemView.resources),
-                    )
+                onSuccess = { image ->
+                    if (coverRenderState != renderState) return@target
+                    binding.backdrop.setImageDrawable(image.asDrawable(itemView.resources))
                     applyBlur()
                 },
             )
-        if (model is Manga && manga.favorite) {
-            requestBuilder.networkCachePolicy(CachePolicy.READ_ONLY)
-        }
-        itemView.context.imageLoader.enqueue(requestBuilder.build())
+            .build()
+            .let(itemView.context.imageLoader::enqueue)
     }
 
     fun expand() {
@@ -1196,6 +1229,38 @@ private data class MetadataRenderState(
     val translationEnabled: Boolean,
     val translationMode: TranslationMode,
 )
+
+private data class DescriptionContent(
+    val markdown: String?,
+)
+
+private data class DescriptionLayoutKey(
+    val mangaId: Long?,
+    val content: DescriptionContent?,
+    val genres: List<String>,
+    val initialized: Boolean,
+)
+
+private data class GenreRenderState(
+    val genres: List<String>,
+    val containerColor: Int,
+    val labelColor: Int,
+    val isNamespaceSource: Boolean,
+)
+
+private data class PagePreviewRenderState(
+    val mangaId: Long,
+    val sourceId: Long,
+)
+
+private data class HeaderCoverRenderState(
+    val mangaId: Long?,
+    val coverUrl: String?,
+    val backdropUrl: String?,
+)
+
+private val EMPTY_DASH_LINE = Regex("""(?m)^\s*-\s*$""")
+private val EMPTY_ASTERISK_LINE = Regex("""(?m)^\s*\*\s*$""")
 
 internal data class SeriesCharacterCard(
     val name: String,

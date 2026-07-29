@@ -10,6 +10,9 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExploreOff
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.WindowInsetsCompat.Type.ime
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.isVisible
@@ -75,13 +78,18 @@ import eu.kanade.tachiyomi.widget.LinearLayoutManagerAccurateOffset
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import yokai.util.koin.injectLazy
 import yokai.domain.manga.interactor.GetManga
 import yokai.domain.source.browse.filter.models.SavedSearch
+import yokai.domain.source.browse.filter.ActiveConstraint
+import yokai.domain.source.browse.filter.ConstraintSemantic
+import yokai.domain.source.browse.filter.FilterPath
 import yokai.i18n.MR
 import yokai.presentation.core.icons.CustomIcons
 import yokai.presentation.core.icons.LocalSource
+import yokai.presentation.theme.YokaiTheme
 import yokai.util.lang.getString
 
 /**
@@ -151,9 +159,16 @@ open class BrowseSourceController(bundle: Bundle) :
     private var composeFilterSheet: eu.kanade.tachiyomi.ui.source.browse.compose.ComposeSourceFilterSheet? = null
     private var lastPosition: Int = -1
     private var sourceUiInitialized = false
+    private val ribbonConstraints = MutableStateFlow<List<ActiveConstraint>>(emptyList())
+    private val resultsUpdating = MutableStateFlow(false)
+    private var browseHeaderHeight = 0
 
     // Basically a cache just so the filter sheet is shown faster
     var savedSearches = emptyList<SavedSearch>()
+        set(value) {
+            field = value
+            composeFilterSheet?.refreshSavedSearches()
+        }
 
     private val isBehindGlobalSearch: Boolean
         get() = router.backstackSize >= 2 && router.backstack[router.backstackSize - 2].controller is GlobalSearchController
@@ -191,6 +206,22 @@ open class BrowseSourceController(bundle: Bundle) :
 
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
+
+        binding.refinementRibbon.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool,
+        )
+        binding.refinementRibbon.setContent {
+            val constraints by ribbonConstraints.collectAsState()
+            val updating by resultsUpdating.collectAsState()
+            YokaiTheme {
+                eu.kanade.tachiyomi.ui.source.browse.compose.RefinementRibbon(
+                    constraints = constraints,
+                    updating = updating,
+                    onOpen = ::openRefinement,
+                    onRemove = ::removeRefinement,
+                )
+            }
+        }
 
         // Initialize adapter, scroll listener and recycler views
         adapter = FlexibleAdapter(null, this, false)
@@ -262,6 +293,7 @@ open class BrowseSourceController(bundle: Bundle) :
         binding.progress.isVisible = true
 
         presenter.restartPager()
+        updateRefinementRibbon()
 
     }
 
@@ -335,6 +367,11 @@ open class BrowseSourceController(bundle: Bundle) :
                     top = (bigToolbarHeight + insets.getInsets(systemBars()).top),
                     bottom = insets.getInsets(systemBars()).bottom,
                 )
+                browseHeaderHeight = bigToolbarHeight + insets.getInsets(systemBars()).top
+                binding.refinementRibbon.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                    topMargin = browseHeaderHeight
+                }
+                updateRecyclerTopPadding()
             },
         )
         binding.floatingBrowseBar.applyBottomAnimatedInsets(8.dpToPx)
@@ -421,81 +458,39 @@ open class BrowseSourceController(bundle: Bundle) :
         return true
     }
 
-    private fun applyFilters() {
-        val allDefault = presenter.filtersMatchDefault()
-        showProgressBar()
-        adapter?.clear()
-        presenter.setSourceFilter(if (allDefault) FilterList() else presenter.sourceFilters)
-        updatePopLatestIcons()
-    }
-
-    private fun showFilters() {
+    private fun showFilters(initialPath: FilterPath? = null) {
         if (composeFilterSheet != null) return
-        showComposeFilters()
+        showComposeFilters(initialPath)
     }
 
-    /**
-     * Snapshot of every filter's state taken at the moment the sheet is shown. The dismiss
-     * callback compares this against the post-mutation `presenter.sourceFilters` to decide whether
-     * the query needs to be re-run.
-     */
-    private fun snapshotCurrentFilters(): List<Any?> {
-        val out = mutableListOf<Any?>()
-        for (i in presenter.sourceFilters) {
-            if (i is Filter.Group<*>) {
-                val subFilters = mutableListOf<Any?>()
-                for (j in i.state) { subFilters.add((j as Filter<*>).state) }
-                out.add(subFilters)
-            } else {
-                out.add(i.state)
-            }
-        }
-        return out
-    }
-
-    private fun filtersDifferFromSnapshot(oldFilters: List<Any?>): Boolean {
-        var matches = true
-        for (i in presenter.sourceFilters.indices) {
-            val filter = oldFilters.getOrNull(i)
-            val sourceFilter = presenter.sourceFilters[i]
-            if (sourceFilter is Filter.Group<*> && filter is List<*>) {
-                for (j in filter.indices) {
-                    if (filter[j] != (sourceFilter.state[j] as Filter<*>).state) {
-                        matches = false; break
-                    }
-                }
-            } else if (filter != sourceFilter.state) { matches = false; break }
-            if (!matches) break
-        }
-        return !matches
-    }
-
-    private fun showComposeFilters() {
-        val oldFilters = snapshotCurrentFilters()
+    private fun showComposeFilters(initialPath: FilterPath? = null) {
         val sheet = eu.kanade.tachiyomi.ui.source.browse.compose.ComposeSourceFilterSheet(
             activity = activity!!,
+            draftFilters = presenter.createFilterDraft(),
+            baseline = presenter.baselineFilterSnapshot(),
+            sourceQuery = presenter.query,
+            initialPath = initialPath,
             getSavedSearches = { savedSearches },
-            getFilters = { presenter.sourceFilters },
-            onSearchClicked = {
-                if (filtersDifferFromSnapshot(oldFilters)) { applyFilters() }
+            onCommit = { filters, query ->
+                if (presenter.commitFilterDraft(filters, query)) {
+                    showProgressBar()
+                    syncSearchQuery(query)
+                    updatePopLatestIcons()
+                    updateRefinementRibbon()
+                }
             },
-            onResetClicked = {
-                presenter.appliedFilters = FilterList()
-                presenter.sourceFilters = presenter.source.getFilterList()
-                composeFilterSheet?.refreshFilters()
-            },
-            onSaveClicked = {
+            onSaveClicked = { filters, query ->
+                val filtersToSave = presenter.copyFilters(filters)
                 viewScope.launchIO {
                     val names = presenter.loadSearches().map { it.name }
                     var searchName = ""
                     withUIContext {
                         activity!!.materialAlertDialog()
-                            .setTitle(activity!!.getString(MR.strings.save_search))
+                            .setTitle(activity!!.getString(MR.strings.filter_save_preset))
                             .setTextInput(hint = activity!!.getString(MR.strings.save_search_hint)) { input -> searchName = input }
                             .setPositiveButton(MR.strings.save) { _, _ ->
                                 if (searchName.isNotBlank() && searchName !in names) {
-                                    presenter.saveSearch(searchName.trim(), presenter.query, presenter.sourceFilters)
-                                    composeFilterSheet?.refreshSavedSearches()
+                                    presenter.saveSearch(searchName.trim(), query, filtersToSave)
                                 } else { activity!!.toast(MR.strings.save_search_invalid_name) }
                             }
                             .setNegativeButton(MR.strings.cancel, null)
@@ -508,9 +503,7 @@ open class BrowseSourceController(bundle: Bundle) :
                     val search = presenter.loadSearch(searchId)
                     if (search?.filters == null) return@launchIO
                     withUIContext {
-                        presenter.sourceFilters = search.filters
-                        composeFilterSheet?.refreshFilters()
-                        composeFilterSheet?.dismiss()
+                        composeFilterSheet?.loadPreset(search)
                     }
                 }
             },
@@ -521,13 +514,11 @@ open class BrowseSourceController(bundle: Bundle) :
                     .setPositiveButton(MR.strings.cancel, null)
                     .setNegativeButton(android.R.string.ok) { _, _ ->
                         presenter.deleteSearch(searchId)
-                        composeFilterSheet?.refreshSavedSearches()
                     }
                     .show()
             },
         )
         composeFilterSheet = sheet
-        presenter.filtersChanged = false
         sheet.setOnCancelListener { composeFilterSheet = null }
         sheet.setOnDismissListener { composeFilterSheet = null }
         sheet.show()
@@ -595,6 +586,7 @@ open class BrowseSourceController(bundle: Bundle) :
             searchWithQuery(genreName)
         }
         updatePopLatestIcons()
+        updateRefinementRibbon()
     }
 
     private fun openInWebView() {
@@ -667,10 +659,10 @@ open class BrowseSourceController(bundle: Bundle) :
         }
 
         showProgressBar()
-        adapter?.clear()
 
         presenter.restartPager(newQuery)
         updatePopLatestIcons()
+        updateRefinementRibbon()
     }
 
     /**
@@ -703,7 +695,7 @@ open class BrowseSourceController(bundle: Bundle) :
         adapter.onLoadMoreComplete(null)
         hideProgressBar()
 
-        if (error is NoResultsException && !adapter.isEmpty) {
+        if (error is NoResultsException && !adapter.isEmpty && presenter.page > 1) {
             adapter.endlessTargetCount = 1
             snack?.dismiss()
             snack = null
@@ -711,6 +703,11 @@ open class BrowseSourceController(bundle: Bundle) :
         }
 
         snack?.dismiss()
+
+        if (presenter.page <= 1 && !adapter.isEmpty) {
+            adapter.clear()
+            resetProgressItem()
+        }
 
         val message = getErrorMessage(error)
         val retryAction = {
@@ -725,6 +722,21 @@ open class BrowseSourceController(bundle: Bundle) :
 
         if (adapter.isEmpty) {
             val actions = emptyList<EmptyView.Action>().toMutableList()
+
+            if (error is NoResultsException && presenter.activeConstraints().isNotEmpty()) {
+                actions += EmptyView.Action(MR.strings.filter_edit) { showFilters() }
+                actions += EmptyView.Action(MR.strings.filter_remove_last) {
+                    presenter.activeConstraints().lastOrNull()?.let(::removeRefinement)
+                }
+                actions += EmptyView.Action(MR.strings.filter_clear_all) {
+                    if (presenter.clearRefinement()) {
+                        showProgressBar()
+                        syncSearchQuery("")
+                        updatePopLatestIcons()
+                        updateRefinementRibbon()
+                    }
+                }
+            }
 
             actions += if (presenter.source is LocalSource) {
                 EmptyView.Action(
@@ -850,7 +862,6 @@ open class BrowseSourceController(bundle: Bundle) :
         val adapter = adapter ?: return
 
         showProgressBar()
-        adapter.clear()
         updatePopLatestIcons()
 
         val searchItem = activityBinding?.searchToolbar?.searchItem
@@ -862,6 +873,64 @@ open class BrowseSourceController(bundle: Bundle) :
         presenter.filtersChanged = false
 
         presenter.restartPager("")
+        updateRefinementRibbon()
+    }
+
+    private fun syncSearchQuery(query: String) {
+        val searchView = activityBinding?.searchToolbar?.searchView ?: return
+        if (query.isBlank()) {
+            activityBinding?.searchToolbar?.searchItem?.collapseActionView()
+            searchView.setQuery("", false)
+        } else {
+            activityBinding?.searchToolbar?.searchItem?.expandActionView()
+            searchView.setQuery(query, false)
+            searchView.clearFocus()
+        }
+    }
+
+    private fun updateRefinementRibbon() {
+        val constraints = if (presenter.sourceIsInitialized) presenter.activeConstraints() else emptyList()
+        ribbonConstraints.value = constraints
+        binding.refinementRibbon.isVisible = constraints.isNotEmpty()
+        updateRecyclerTopPadding()
+    }
+
+    private fun updateRecyclerTopPadding() {
+        val ribbonHeight = if (binding.refinementRibbon.isVisible) 56.dpToPx else 0
+        recycler?.updatePadding(top = browseHeaderHeight + ribbonHeight)
+    }
+
+    private fun openRefinement(constraint: ActiveConstraint) {
+        if (constraint.semantic == ConstraintSemantic.QUERY) {
+            val item = activityBinding?.searchToolbar?.searchItem
+            item?.expandActionView()
+            activityBinding?.searchToolbar?.searchView?.apply {
+                setQuery(presenter.query, false)
+                requestFocus()
+            }
+        } else {
+            showFilters(constraint.path)
+        }
+    }
+
+    private fun removeRefinement(constraint: ActiveConstraint) {
+        val previous = presenter.removeConstraint(constraint.removal) ?: return
+        showProgressBar()
+        syncSearchQuery(presenter.query)
+        updatePopLatestIcons()
+        updateRefinementRibbon()
+        snack?.dismiss()
+        snack = binding.sourceLayout.snack(MR.strings.filter_refinement_removed) {
+            anchorView = activityBinding?.bottomNav
+            setAction(MR.strings.undo) {
+                if (presenter.applyRefinement(previous)) {
+                    showProgressBar()
+                    syncSearchQuery(presenter.query)
+                    updatePopLatestIcons()
+                    updateRefinementRibbon()
+                }
+            }
+        }
     }
 
     private fun updatePopLatestIcons() {
@@ -910,6 +979,8 @@ open class BrowseSourceController(bundle: Bundle) :
     private fun showProgressBar() {
         binding.emptyView.isVisible = false
         binding.progress.isVisible = true
+        binding.progress.translationZ = 8.dpToPx.toFloat()
+        resultsUpdating.value = true
         snack?.dismiss()
         snack = null
     }
@@ -920,6 +991,7 @@ open class BrowseSourceController(bundle: Bundle) :
     private fun hideProgressBar() {
         binding.emptyView.isVisible = false
         binding.progress.isVisible = false
+        resultsUpdating.value = false
     }
 
     fun unsubscribe() {

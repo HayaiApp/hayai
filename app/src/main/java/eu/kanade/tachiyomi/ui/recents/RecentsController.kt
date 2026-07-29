@@ -199,6 +199,17 @@ class RecentsController(bundle: Bundle? = null) :
     private var ogRadius = 0f
     private var deviceRadius = 0f to 0f
     private var lastScale = 1f
+    private var libraryUpdateRunning = false
+
+    private fun setRootUiActive(active: Boolean) {
+        rootUiActive = active
+        if (isBindingInitialized) {
+            if (active) {
+                binding.swipeRefresh.isRefreshing = libraryUpdateRunning
+            }
+        }
+        presenter.setUiActive(active)
+    }
 
     /**
      * Active contextual action mode toolbar, owned by the host activity. Non-null
@@ -479,7 +490,10 @@ class RecentsController(bundle: Bundle? = null) :
         )
         viewScope.launch {
             LibraryUpdateJob.isRunningFlow(view.context).collect {
-                binding.swipeRefresh.isRefreshing = it
+                libraryUpdateRunning = it
+                if (rootUiActive) {
+                    binding.swipeRefresh.isRefreshing = it
+                }
             }
         }
         binding.swipeRefresh.setOnRefreshListener {
@@ -638,7 +652,7 @@ class RecentsController(bundle: Bundle? = null) :
 
     override fun onActivityResumed(activity: Activity) {
         super.onActivityResumed(activity)
-        if (!isBindingInitialized) return
+        if (!isBindingInitialized || !rootUiActive) return
         if (!presenter.isLoading) {
             refresh()
         }
@@ -647,23 +661,23 @@ class RecentsController(bundle: Bundle? = null) :
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         if (isBindingInitialized) {
-            binding.downloadBottomSheet.root.onDestroy()
+            binding.downloadBottomSheet.dlBottomSheet.onDestroy()
         }
+        super.onDestroy()
         snack?.dismiss()
         snack = null
     }
 
     override fun onDestroyView(view: View) {
-        rootUiActive = false
-        presenter.setUiActive(false)
+        setRootUiActive(false)
         pendingInactiveList = null
         // Drop the action mode before the underlying view is torn down so we
         // don't leak the activity reference.
         destroyActionModeIfNeeded()
         displaySheet?.dismissSafely()
         displaySheet = null
+        binding.downloadBottomSheet.dlBottomSheet.onDestroy()
         binding.recycler.adapter = null
         recentsRecyclerPool?.clear()
         recentsRecyclerPool = null
@@ -742,21 +756,37 @@ class RecentsController(bundle: Bundle? = null) :
     )
 
     fun updateChapterDownload(download: Download) {
+        download.chapter.id?.let(::updateChapterDownload)
+    }
+
+    fun updateChapterDownload(chapterId: Long) {
         if (view == null || !this::adapter.isInitialized) return
-        val id = download.chapter.id ?: return
-        val item = adapter.getItemByChapterId(id) ?: return
+        val item = adapter.getItemByChapterId(chapterId) ?: return
         val holder = binding.recycler.findViewHolderForItemId(item.id!!) as? RecentMangaHolder ?: return
-        if (item.id == id) {
-            holder.notifyStatus(download.status, download.progress, download.chapter.read, true)
+        if (item.chapter.id == chapterId) {
+            holder.notifyStatus(item.status, item.progress, item.chapter.read, true)
         } else {
+            val chapter = item.mch.extraChapters.firstOrNull { it.id == chapterId } ?: return
+            val info = item.downloadInfo.firstOrNull { it.chapterId == chapterId } ?: return
             holder.notifySubStatus(
-                download.chapter,
-                download.status,
-                download.progress,
-                download.chapter.read,
+                chapter,
+                info.status,
+                info.progress,
+                chapter.read,
                 true,
             )
         }
+    }
+
+    fun updateDownloadSheetStatus(download: Download) {
+        if (!showingDownloads || !isBindingInitialized) return
+        binding.downloadBottomSheet.dlBottomSheet.onUpdateDownloadedPages(download)
+    }
+
+    fun updateDownloadSheetProgress(download: Download) {
+        if (!showingDownloads || !isBindingInitialized) return
+        binding.downloadBottomSheet.dlBottomSheet.onUpdateProgress(download)
+        binding.downloadBottomSheet.dlBottomSheet.onUpdateDownloadedPages(download)
     }
 
     fun updateDownloadStatus(isRunning: Boolean) {
@@ -1051,15 +1081,13 @@ class RecentsController(bundle: Bundle? = null) :
                     // calls onSetupLocalChrome + UI setup — we don't duplicate it here.
                 }
                 ControllerChangeType.POP_ENTER -> {
-                    rootUiActive = true
-                    presenter.setUiActive(true)
+                    setRootUiActive(true)
                     // Returning from a pushed controller (e.g. MangaDetails). Refresh the
                     // retained presenter without reinstalling its long-lived flow collectors.
                     onTabActivated()
                 }
                 ControllerChangeType.PUSH_EXIT, ControllerChangeType.POP_EXIT -> {
-                    rootUiActive = false
-                    presenter.setUiActive(false)
+                    setRootUiActive(false)
                     // Drop out of Conductor's menu dispatch while something is on top.
                     setOptionsMenuHidden(true)
                     snack?.dismiss()
@@ -1088,8 +1116,7 @@ class RecentsController(bundle: Bundle? = null) :
      * tab strip back in.
      */
     override fun onTabActivated() {
-        rootUiActive = true
-        presenter.setUiActive(true)
+        setRootUiActive(true)
         if (!isBindingInitialized) return
         binding.downloadBottomSheet.dlBottomSheet.dismiss()
         activateLocalChrome()
@@ -1107,8 +1134,7 @@ class RecentsController(bundle: Bundle? = null) :
      * (snackbars).
      */
     override fun onTabDeactivated() {
-        rootUiActive = false
-        presenter.setUiActive(false)
+        setRootUiActive(false)
         if (!isBindingInitialized) return
         snack?.dismiss()
         setBottomPadding()

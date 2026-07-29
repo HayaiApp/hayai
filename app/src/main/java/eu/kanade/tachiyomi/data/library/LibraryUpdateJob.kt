@@ -65,17 +65,17 @@ import eu.kanade.tachiyomi.util.system.withIOContext
 import java.io.File
 import java.lang.ref.WeakReference
 import java.time.ZonedDateTime
+import java.util.Collections
 import java.util.Date
 import java.util.concurrent.CancellationException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -85,6 +85,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.supervisorScope
 import yokai.util.koin.injectLazy
 import yokai.domain.category.interactor.GetCategories
 import yokai.domain.chapter.interactor.GetChapter
@@ -120,23 +121,22 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     // Release-prediction window for this update run; recomputed when an update starts.
     private var fetchWindow: Pair<Long, Long> = Pair(0, 0)
 
-    private var extraDeferredJobs = mutableListOf<Deferred<Any>>()
+    private val chapterQueue = ChapterQueue()
+    private val mangaToUpdateCount = AtomicInteger()
 
-    private val extraScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val mangaToUpdate = mutableListOf<LibraryManga>()
-
-    private val mangaToUpdateMap = mutableMapOf<Long, List<LibraryManga>>()
-
-    private val categoryIds = mutableSetOf<Int>()
+    private val categoryIds = ConcurrentHashMap.newKeySet<Int>()
 
     // List containing new updates
-    private val newUpdates = mutableMapOf<LibraryManga, Array<Chapter>>()
+    private val newUpdates = Collections.synchronizedMap(mutableMapOf<LibraryManga, Array<Chapter>>())
 
     // List containing failed updates
-    private val failedUpdates = mutableMapOf<Manga, String?>()
+    private val failedUpdates = Collections.synchronizedMap(mutableMapOf<Manga, String?>())
 
     // List containing skipped updates
-    private val skippedUpdates = mutableMapOf<Manga, String?>()
+    private val skippedUpdates = Collections.synchronizedMap(mutableMapOf<Manga, String?>())
+
+    @Volatile
+    private var chapterQueueActive = false
 
     val count = AtomicInteger(0)
 
@@ -177,6 +177,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         }
 
         val target = inputData.getString(KEY_TARGET)?.let { Target.valueOf(it) } ?: Target.CHAPTERS
+        chapterQueueActive = target == Target.CHAPTERS
 
         // If this is a chapter update, set the last update time to now
         if (target == Target.CHAPTERS) {
@@ -216,6 +217,8 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                     Result.failure()
                 }
             } finally {
+                chapterQueueActive = false
+                chapterQueue.close()
                 if (tags.contains(WORK_NAME_MANUAL)) {
                     manualWork.finish(id)
                 }
@@ -231,7 +234,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
             sendUpdate(STARTING_UPDATE_SOURCE)
         }
         when (target) {
-            Target.CHAPTERS -> updateChaptersJob(filterMangaToUpdate(mangaToAdd))
+            Target.CHAPTERS -> updateChaptersJob(mangaToAdd)
             Target.DETAILS -> updateDetails(mangaToAdd)
             else -> updateTrackings(mangaToAdd)
         }
@@ -242,26 +245,125 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     }
 
     private suspend fun updateChaptersJob(mangaToAdd: List<LibraryManga>) {
-        // Initialize the variables holding the progress of the updates.
-        mangaToUpdate.addAll(mangaToAdd)
-        mangaToUpdateMap.putAll(mangaToAdd.groupBy { it.manga.source })
-        checkIfMassiveUpdate()
-        coroutineScope {
-            val list = mangaToUpdateMap.keys.map { source ->
-                async {
-                    try {
-                        requestSemaphore.withPermit { updateMangaInSource(source) }
-                    } catch (e: Exception) {
-                        Logger.e(e) { "Unable to update manga" }
-                        false
-                    }
+        supervisorScope {
+            runChapterQueue(mangaToAdd)
+        }
+        finishUpdates()
+    }
+
+    private suspend fun CoroutineScope.runChapterQueue(initialManga: List<LibraryManga>) {
+        val queuedManga = linkedMapOf<Long, LibraryManga>()
+        val pendingBySource = mutableMapOf<Long, ArrayDeque<LibraryManga>>()
+        val runningSources = mutableSetOf<Long>()
+
+        enqueueManga(
+            resolveQueueRequest(ChapterQueueRequest.Manga(null, initialManga)).manga,
+            queuedManga,
+            pendingBySource,
+            runningSources,
+        )
+
+        var acceptingRequests = true
+        while (true) {
+            if (runningSources.isEmpty() && pendingBySource.isEmpty()) {
+                if (acceptingRequests) {
+                    chapterQueue.stopAccepting()
+                    acceptingRequests = false
                 }
+                val event = chapterQueue.tryReceive() ?: break
+                handleQueueEvent(event, queuedManga, pendingBySource, runningSources)
+            } else {
+                val event = chapterQueue.receive() ?: break
+                handleQueueEvent(event, queuedManga, pendingBySource, runningSources)
             }
-            val results = list.awaitAll()
-            if (!hasDownloads) {
-                hasDownloads = results.any { it }
+        }
+    }
+
+    private suspend fun CoroutineScope.handleQueueEvent(
+        event: ChapterQueueEvent,
+        queuedManga: MutableMap<Long, LibraryManga>,
+        pendingBySource: MutableMap<Long, ArrayDeque<LibraryManga>>,
+        runningSources: MutableSet<Long>,
+    ) {
+        when (event) {
+            is ChapterQueueEvent.Request -> {
+                val queued = resolveQueueRequest(event.request)
+                queued.categoryId?.let(categoryIds::add)
+                enqueueManga(
+                    queued.manga,
+                    queuedManga,
+                    pendingBySource,
+                    runningSources,
+                )
             }
-            finishUpdates()
+            is ChapterQueueEvent.SourceFinished -> {
+                runningSources.remove(event.sourceId)
+                hasDownloads = hasDownloads || event.hasDownloads
+                startNextSourceBatch(event.sourceId, pendingBySource, runningSources)
+            }
+        }
+    }
+
+    private suspend fun resolveQueueRequest(request: ChapterQueueRequest): QueuedManga =
+        when (request) {
+            is ChapterQueueRequest.Manga -> QueuedManga(
+                categoryId = request.categoryId,
+                manga = filterMangaToUpdate(request.manga).sortedBy { it.manga.title },
+            )
+            is ChapterQueueRequest.Category -> QueuedManga(
+                categoryId = request.categoryId,
+                manga = filterMangaToUpdate(getMangaToUpdate(request.categoryId)).sortedBy { it.manga.title },
+            )
+        }
+
+    private fun CoroutineScope.enqueueManga(
+        mangaToAdd: List<LibraryManga>,
+        queuedManga: MutableMap<Long, LibraryManga>,
+        pendingBySource: MutableMap<Long, ArrayDeque<LibraryManga>>,
+        runningSources: MutableSet<Long>,
+    ) {
+        val distinctManga = mangaToAdd.filter { manga ->
+            val mangaId = manga.manga.id ?: return@filter false
+            if (mangaId in queuedManga) {
+                false
+            } else {
+                queuedManga[mangaId] = manga
+                true
+            }
+        }
+        if (distinctManga.isEmpty()) return
+
+        mangaToUpdateCount.set(queuedManga.size)
+        checkIfMassiveUpdate(queuedManga.values)
+        distinctManga.groupBy { it.manga.source }.forEach { (sourceId, manga) ->
+            pendingBySource.getOrPut(sourceId, ::ArrayDeque).addAll(manga)
+            startNextSourceBatch(sourceId, pendingBySource, runningSources)
+        }
+    }
+
+    private fun CoroutineScope.startNextSourceBatch(
+        sourceId: Long,
+        pendingBySource: MutableMap<Long, ArrayDeque<LibraryManga>>,
+        runningSources: MutableSet<Long>,
+    ) {
+        if (!runningSources.add(sourceId)) return
+
+        val manga = pendingBySource.remove(sourceId)?.toList().orEmpty()
+        if (manga.isEmpty()) {
+            runningSources.remove(sourceId)
+            return
+        }
+
+        launch {
+            val hasDownloads = try {
+                requestSemaphore.withPermit { updateMangaInSource(sourceId, manga) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e(e) { "Unable to update manga" }
+                false
+            }
+            chapterQueue.complete(sourceId, hasDownloads)
         }
     }
 
@@ -374,9 +476,6 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     }
 
     private suspend fun finishUpdates(wasStopped: Boolean = false) {
-        if (!wasStopped && !isStopped) {
-            extraDeferredJobs.awaitAll()
-        }
         if (newUpdates.isNotEmpty()) {
             notifier.showResultNotification(newUpdates)
             // Manga details (when refreshCoversToo is on) are now fetched inline in
@@ -435,7 +534,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         }
     }
 
-    private fun checkIfMassiveUpdate() {
+    private fun checkIfMassiveUpdate(mangaToUpdate: Collection<LibraryManga>) {
         val largestSourceSize = mangaToUpdate
             .groupBy { it.manga.source }
             .filterKeys { sourceManager.get(it) !is UnmeteredSource }
@@ -445,20 +544,15 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         }
     }
 
-    private suspend fun updateMangaInSource(source: Long): Boolean {
-        if (mangaToUpdateMap[source] == null) return false
-        var count = 0
+    private suspend fun updateMangaInSource(source: Long, mangaToUpdate: List<LibraryManga>): Boolean {
         var hasDownloads = false
         val sourceObj = sourceManager.get(source) as? CatalogueSource ?: return false
-        while (count < mangaToUpdateMap[source]!!.size) {
-            val manga = mangaToUpdateMap[source]!![count]
+        mangaToUpdate.forEach { manga ->
             val shouldDownload = manga.manga.shouldDownloadNewChapters(preferences)
             if (updateMangaChapters(manga, this.count.andIncrement, sourceObj, shouldDownload)) {
                 hasDownloads = true
             }
-            count++
         }
-        mangaToUpdateMap[source] = emptyList()
         return hasDownloads
     }
 
@@ -471,7 +565,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         try {
             var hasDownloads = false
             ensureActive()
-            notifier.showProgressNotification(manga.manga, progress, mangaToUpdate.size)
+            notifier.showProgressNotification(manga.manga, progress, mangaToUpdateCount.get())
             val fetchDetailsToo = preferences.refreshCoversToo().get()
             val mangaUpdate = source.getMangaUpdate(
                 manga.manga.copy(),
@@ -484,7 +578,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
             // updated manga details in the same response as chapters (e.g. when both are
             // scraped from the same page), regardless of whether details were explicitly
             // requested - persist them instead of dropping them on the floor.
-            mangaUpdate.manga?.let { applyMangaDetailsUpdate(manga, it) }
+            applyMangaDetailsUpdate(manga, mangaUpdate.manga)
 
             val fetchedChapters = mangaUpdate.chapters
 
@@ -706,48 +800,66 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         return File("")
     }
 
-    private fun addMangaToQueue(categoryId: Int, manga: List<LibraryManga>) {
-        extraScope.launch {
-            val mangas = filterMangaToUpdate(manga).sortedBy { it.manga.title }
-            categoryIds.add(categoryId)
-            addManga(mangas)
-        }
+    private fun addMangaToQueue(categoryId: Int, manga: List<LibraryManga>): Boolean =
+        chapterQueueActive && chapterQueue.enqueue(ChapterQueueRequest.Manga(categoryId, manga))
+
+    private fun addCategory(categoryId: Int): Boolean =
+        chapterQueueActive && chapterQueue.enqueue(ChapterQueueRequest.Category(categoryId))
+
+    private sealed class ChapterQueueRequest {
+        abstract val categoryId: Int?
+
+        data class Manga(
+            override val categoryId: Int?,
+            val manga: List<LibraryManga>,
+        ) : ChapterQueueRequest()
+
+        data class Category(
+            override val categoryId: Int,
+        ) : ChapterQueueRequest()
     }
 
-    private fun addCategory(categoryId: Int) {
-        extraScope.launch {
-            val mangas = filterMangaToUpdate(getMangaToUpdate(categoryId)).sortedBy { it.manga.title }
-            categoryIds.add(categoryId)
-            addManga(mangas)
-        }
+    private data class QueuedManga(
+        val categoryId: Int?,
+        val manga: List<LibraryManga>,
+    )
+
+    private sealed class ChapterQueueEvent {
+        data class Request(val request: ChapterQueueRequest) : ChapterQueueEvent()
+
+        data class SourceFinished(
+            val sourceId: Long,
+            val hasDownloads: Boolean,
+        ) : ChapterQueueEvent()
     }
 
-    private fun addManga(mangaToAdd: List<LibraryManga>) {
-        val distinctManga = mangaToAdd.filter { it !in mangaToUpdate }
-        mangaToUpdate.addAll(distinctManga)
-        checkIfMassiveUpdate()
-        distinctManga.groupBy { it.manga.source }.forEach {
-            // if added queue items is a new source not in the async list or an async list has
-            // finished running
-            if (mangaToUpdateMap[it.key].isNullOrEmpty()) {
-                mangaToUpdateMap[it.key] = it.value
-                extraScope.launch {
-                    extraDeferredJobs.add(
-                        async(Dispatchers.IO) {
-                            val hasDLs = try {
-                                requestSemaphore.withPermit { updateMangaInSource(it.key) }
-                            } catch (e: Exception) {
-                                false
-                            }
-                            if (!hasDownloads) {
-                                hasDownloads = hasDLs
-                            }
-                        },
-                    )
-                }
-            } else {
-                val list = mangaToUpdateMap[it.key] ?: emptyList()
-                mangaToUpdateMap[it.key] = (list + it.value)
+    private class ChapterQueue {
+        private val lock = Any()
+        private var accepting = true
+        private val events = Channel<ChapterQueueEvent>(Channel.UNLIMITED)
+
+        fun enqueue(request: ChapterQueueRequest): Boolean = synchronized(lock) {
+            accepting && events.trySend(ChapterQueueEvent.Request(request)).isSuccess
+        }
+
+        suspend fun receive(): ChapterQueueEvent? = events.receiveCatching().getOrNull()
+
+        fun tryReceive(): ChapterQueueEvent? = events.tryReceive().getOrNull()
+
+        suspend fun complete(sourceId: Long, hasDownloads: Boolean) {
+            events.send(ChapterQueueEvent.SourceFinished(sourceId, hasDownloads))
+        }
+
+        fun stopAccepting() {
+            synchronized(lock) {
+                accepting = false
+            }
+        }
+
+        fun close() {
+            synchronized(lock) {
+                accepting = false
+                events.close()
             }
         }
     }
@@ -844,7 +956,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         fun isRunning(@Suppress("UNUSED_PARAMETER") context: Context): Boolean =
             instance?.get() != null || manualWork.isActive
 
-        fun categoryInQueue(id: Int?) = instance?.get()?.categoryIds?.contains(id) ?: false
+        fun categoryInQueue(id: Int?) = id?.let { instance?.get()?.categoryIds?.contains(it) } ?: false
 
         fun startNow(
             context: Context,

@@ -73,8 +73,6 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.text.DateFormat
 import java.util.Calendar
-import java.util.concurrent.TimeoutException
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -98,7 +96,6 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
     private var suggestedStartDate: Long? = null
     private var suggestedFinishDate: Long? = null
     private var currentSearchQuery = ""
-    private var pendingTrackSearch: TrackSearch? = null
     private var searchStatePrimaryAction: (() -> Unit)? = null
     private var searchStateSecondaryAction: (() -> Unit)? = null
     private val dateFormat: DateFormat by lazy {
@@ -346,7 +343,6 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
         presenter.cancelTrackSearch()
         searchItemAdapter.clear()
         searchAdapter.notifyAdapterDataSetChanged()
-        pendingTrackSearch = null
         searchStatePrimaryAction = null
         searchStateSecondaryAction = null
         sheetBehavior.isDraggable = true
@@ -375,7 +371,6 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
     private fun search(query: String) {
         val item = searchingItem ?: return
         currentSearchQuery = query
-        pendingTrackSearch = null
         startTransition()
         binding.textInputLayout.error = null
         binding.textInputLayout.setEndIconVisible(false)
@@ -596,7 +591,6 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
     private fun trackItem(position: Int) {
         val searchingItem = searchingItem
         val selectedItem = searchItemAdapter.getAdapterItem(position).trackSearch
-        pendingTrackSearch = selectedItem
         if (searchingItem != null) {
             if (searchingItem.track != null && searchingItem.service.canRemoveFromService() &&
                 searchingItem.track.tracking_url != selectedItem.tracking_url
@@ -646,7 +640,6 @@ class TrackingBottomSheet(private val controller: MangaDetailsController) :
 
     private fun connectSelectedTrack(item: TrackItem, selectedItem: TrackSearch) {
         val serviceName = activity.getString(item.service.nameRes())
-        pendingTrackSearch = selectedItem
         binding.trackSearch.isEnabled = false
         binding.textInputLayout.setEndIconVisible(false)
         showSearchState(

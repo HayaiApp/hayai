@@ -92,6 +92,7 @@ import eu.kanade.tachiyomi.util.system.pxToDp
 import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
 import eu.kanade.tachiyomi.widget.AutofitRecyclerView
 import eu.kanade.tachiyomi.widget.StaggeredGridLayoutManagerAccurateOffset
+import java.util.WeakHashMap
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -582,34 +583,39 @@ fun TextView.setTextColorAlpha(alpha: Int) {
     setTextColor(ColorUtils.setAlphaComponent(currentTextColor, alpha))
 }
 
+private val gradientCornerRadii = WeakHashMap<GradientDrawable, FloatArray>()
+
 fun View.updateGradiantBGRadius(
     ogRadius: Float,
     deviceRadius: Pair<Float, Float>,
     progress: Float,
-    vararg updateOtherViews: View,
+    updateOtherView: View? = null,
 ) {
-    (background as? GradientDrawable)?.let { drawable ->
-        val hasRail = resources.configuration.screenWidthDp >= 720
-        val lerpL = MathUtils.lerp(
-            ogRadius,
-            if (hasRail && resources.isLTR) 0f else deviceRadius.first,
-            max(0f, progress),
-        )
-        val lerpR = MathUtils.lerp(
-            ogRadius,
-            if (hasRail && !resources.isLTR) 0f else deviceRadius.second,
-            max(0f, progress),
-        )
-        drawable.shape = GradientDrawable.RECTANGLE
-        drawable.cornerRadii = floatArrayOf(lerpL, lerpL, lerpR, lerpR, 0f, 0f, 0f, 0f)
-        background = drawable
-        updateOtherViews.forEach {
-            (it.background as? GradientDrawable)?.let { tDrawable ->
-                tDrawable.shape = GradientDrawable.RECTANGLE
-                tDrawable.cornerRadii = floatArrayOf(lerpL, lerpL, lerpR, lerpR, 0f, 0f, 0f, 0f)
-            }
-        }
+    val hasRail = resources.configuration.screenWidthDp >= 720
+    val lerpL = MathUtils.lerp(
+        ogRadius,
+        if (hasRail && resources.isLTR) 0f else deviceRadius.first,
+        max(0f, progress),
+    )
+    val lerpR = MathUtils.lerp(
+        ogRadius,
+        if (hasRail && !resources.isLTR) 0f else deviceRadius.second,
+        max(0f, progress),
+    )
+    (background as? GradientDrawable)?.updateTopCornerRadii(lerpL, lerpR)
+    (updateOtherView?.background as? GradientDrawable)?.updateTopCornerRadii(lerpL, lerpR)
+}
+
+private fun GradientDrawable.updateTopCornerRadii(left: Float, right: Float) {
+    val radii = gradientCornerRadii.getOrPut(this) {
+        shape = GradientDrawable.RECTANGLE
+        FloatArray(8)
     }
+    radii[0] = left
+    radii[1] = left
+    radii[2] = right
+    radii[3] = right
+    cornerRadii = radii
 }
 
 @RequiresApi(Build.VERSION_CODES.S)

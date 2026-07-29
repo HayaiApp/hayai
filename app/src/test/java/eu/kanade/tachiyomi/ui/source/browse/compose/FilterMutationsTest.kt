@@ -212,6 +212,15 @@ class FilterMutationsTest {
     }
 
     @Test
+    fun `AutoComplete preserves non-exclusion prefix literally`() {
+        val ac = TestAutoComplete(prefixes = listOf("-", "~"), default = listOf("~banana"))
+        FilterMutations.setAutoCompleteTagState(ac, "~banana", AutoCompleteTagState.Excluded)
+        assertEquals(listOf("~banana"), ac.state)
+        FilterMutations.setAutoCompleteTagState(ac, "~banana", AutoCompleteTagState.Off)
+        assertEquals(emptyList<String>(), ac.state)
+    }
+
+    @Test
     fun `AutoComplete removes tag`() {
         val ac = TestAutoComplete(default = listOf("apple", "banana"))
         FilterMutations.removeAutoCompleteTag(ac, "apple")

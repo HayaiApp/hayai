@@ -141,6 +141,8 @@ data class LibraryManga(
                 filteredScanlators = filteredScanlators,
                 updateStrategy = updateStrategy,
                 coverLastModified = coverLastModified,
+                nextUpdate = 0L,
+                fetchInterval = 0L,
                 // Excluded from this lightweight query (see comment above); not needed for
                 // library display, only for the reader's source URL-matching checks.
                 memo = "{}",

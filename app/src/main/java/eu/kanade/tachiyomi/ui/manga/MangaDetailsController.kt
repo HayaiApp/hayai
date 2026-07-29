@@ -9,7 +9,6 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
@@ -18,6 +17,7 @@ import android.os.Build
 import android.os.Bundle
 import android.service.chooser.ChooserAction
 import android.text.format.DateUtils
+import android.util.LruCache
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
@@ -59,9 +59,9 @@ import androidx.recyclerview.widget.RecyclerView
 import co.touchlab.kermit.Logger
 import coil3.asDrawable
 import coil3.imageLoader
+import coil3.request.Disposable
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
-import coil3.size.SizeResolver
 import com.bluelinelabs.conductor.ControllerChangeHandler
 import com.bluelinelabs.conductor.ControllerChangeType
 import com.google.android.material.chip.Chip
@@ -132,7 +132,6 @@ import eu.kanade.tachiyomi.util.system.isOnline
 import eu.kanade.tachiyomi.util.system.isPromptChecked
 import eu.kanade.tachiyomi.util.system.isTablet
 import eu.kanade.tachiyomi.util.system.launchIO
-import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
 import eu.kanade.tachiyomi.util.system.setCustomTitleAndMessage
@@ -169,6 +168,7 @@ import yokai.domain.manga.interactor.FetchInterval
 import yokai.domain.manga.models.cover
 import yokai.i18n.MR
 import yokai.presentation.core.Constants
+import yokai.util.coil.loadManga
 import yokai.util.lang.getString
 import android.R as AR
 
@@ -264,6 +264,13 @@ class MangaDetailsController :
     private var headerHeight = 0
     private var fullCoverActive = false
     private var floatingActionMode: android.view.ActionMode? = null
+    private var coverDisplayRequest: Disposable? = null
+    private var paletteSampleRequest: Disposable? = null
+    private var paletteJob: Job? = null
+    private var displayedCoverKey: String? = null
+    private var loadedCoverKey: String? = null
+    private var paletteCoverKey: String? = null
+    private var paletteSampleKey: String? = null
 
     // Bundle-restore: presenter.manga loads async, so onViewCreated can't touch it. We mark the
     // deferred bits here and replay them once the presenter wakes us via onMangaInitialized().
@@ -472,16 +479,7 @@ class MangaDetailsController :
                 val chapterHolder = binding.recycler.findViewHolderForAdapterPosition(0) as? MangaHeaderHolder
                 chapterHolder?.updateColors()
             }
-            (presenter.chapters).forEach { chapter ->
-                val chapterHolder =
-                    binding.recycler.findViewHolderForItemId(chapter.id!!) as? ChapterHolder
-                        ?: return@forEach
-                chapterHolder.notifyStatus(
-                    chapter.status,
-                    isLocked(),
-                    chapter.progress,
-                )
-            }
+            refreshBoundChapterColors()
         }
 
         val context = view?.context ?: return
@@ -551,12 +549,18 @@ class MangaDetailsController :
         // which would re-load the cover and re-run the deferred ComposeViews (flash/relayout).
         getHeader()?.resetColorsToDefault()
         if ((adapter?.itemCount ?: 0) > 1) {
-            presenter.chapters.forEach { chapter ->
-                val chapterHolder =
-                    binding.recycler.findViewHolderForItemId(chapter.id!!) as? ChapterHolder
-                        ?: return@forEach
-                chapterHolder.notifyStatus(chapter.status, isLocked(), chapter.progress)
-            }
+            refreshBoundChapterColors()
+        }
+    }
+
+    private fun refreshBoundChapterColors() {
+        val chapterAdapter = adapter ?: return
+        chapterAdapter.allBoundViewHolders.forEach { boundHolder ->
+            val chapterHolder = boundHolder as? ChapterHolder ?: return@forEach
+            val position = chapterHolder.flexibleAdapterPosition
+            if (position == RecyclerView.NO_POSITION) return@forEach
+            val chapter = chapterAdapter.getItem(position) as? ChapterItem ?: return@forEach
+            chapterHolder.notifyStatus(chapter.status, isLocked(), chapter.progress)
         }
     }
 
@@ -601,6 +605,15 @@ class MangaDetailsController :
 
     override fun onDestroyView(view: View) {
         snack?.dismiss()
+        coverDisplayRequest?.dispose()
+        coverDisplayRequest = null
+        paletteSampleRequest?.dispose()
+        paletteSampleRequest = null
+        paletteJob?.cancel()
+        paletteJob = null
+        displayedCoverKey = null
+        loadedCoverKey = null
+        paletteSampleKey = null
         // Tear down any active selection/range state so it doesn't leak across view recreation.
         actionMode?.finish()
         actionMode = null
@@ -764,78 +777,124 @@ class MangaDetailsController :
         }
     }
 
-    /** Get the color of the manga cover*/
     fun setPaletteColor() {
-        val view = view ?: return
-        // Bundle-restore can call into here before presenter.manga lateinit is loaded from DB.
-        // onMangaInitialized() will re-invoke us once that completes.
+        if (view == null) return
         if (!presenter.isMangaLateInitInitialized()) return
+        val manga = presenter.manga
+        val coverKey = manga.coverIdentity()
+        val previousCoverKey = paletteCoverKey
+        if (previousCoverKey != coverKey) {
+            paletteCoverKey = coverKey
+            paletteSampleKey = null
+            paletteJob?.cancel()
+            paletteJob = null
+            paletteSampleRequest?.dispose()
+            paletteSampleRequest = null
+            if (previousCoverKey != null) manga.vibrantCoverColor = null
+        }
 
-        val request = ImageRequest.Builder(view.context)
-            .data(presenter.manga.cover())
-            .size(SizeResolver.ORIGINAL)
-            .allowHardware(false)
-            .target(
-                onSuccess = { image ->
-                    val drawable = image.asDrawable(view.context.resources)
+        val themingEnabled = useCoverColorTheming()
+        val cachedColor = if (themingEnabled) {
+            paletteColors.get(coverKey)
+                ?: manga.vibrantCoverColor?.takeIf { previousCoverKey == null }
+        } else {
+            null
+        }
 
-                    val copy = (drawable as? BitmapDrawable)?.let {
-                        BitmapDrawable(
-                            view.context.resources,
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                                it.bitmap.copy(Bitmap.Config.HARDWARE, false)
-                            else
-                                it.bitmap.copy(it.bitmap.config!!, false),
-                        )
-                    } ?: drawable
+        if (cachedColor != null) {
+            paletteJob?.cancel()
+            paletteColors.put(coverKey, cachedColor)
+            paletteSampleKey = coverKey
+            applyPaletteColor(manga, coverKey, cachedColor)
+        }
 
-                    // Don't use 'copy', Palette doesn't like its bitmap, could be caused by mutability is disabled,
-                    // or perhaps because it's HARDWARE configured, not entirely sure why, the behaviour is not
-                    // documented by Google.
-                    val bitmap = (drawable as? BitmapDrawable)?.bitmap
-                    // Skip Palette work on cache hit; cached color is set by MangaCoverMetadata.
-                    val cachedVibrant = manga?.vibrantCoverColor
-                    if (bitmap != null) {
-                        if (cachedVibrant != null && useCoverColorTheming()) {
-                            // Defer one frame so the palette-application work (color blends +
-                            // setItemColors iterating every visible ChapterHolder) doesn't run
-                            // mid-push inside Coil's main-thread onSuccess callback, stalling
-                            // the push animator's frame budget.
-                            launchUI {
-                                setAccentColorValue(cachedVibrant)
-                                setHeaderColorValue(cachedVibrant)
-                                setItemColors()
+        loadCover(manga, coverKey)
+        if (themingEnabled && cachedColor == null && loadedCoverKey == coverKey) {
+            requestPaletteSample(manga, coverKey)
+        }
+    }
+
+    private fun requestPaletteSample(manga: Manga, coverKey: String) {
+        if (!useCoverColorTheming() || paletteSampleKey == coverKey) return
+        val view = view ?: return
+
+        paletteSampleKey = coverKey
+        paletteSampleRequest = view.context.imageLoader.enqueue(
+            ImageRequest.Builder(view.context)
+                .data(manga.cover())
+                .size(PALETTE_SAMPLE_SIZE, PALETTE_SAMPLE_SIZE)
+                .allowHardware(false)
+                .target(
+                    onSuccess = { image ->
+                        if (paletteCoverKey != coverKey || paletteSampleKey != coverKey) return@target
+                        val bitmap = (image.asDrawable(view.resources) as? BitmapDrawable)?.bitmap
+                        if (bitmap == null) {
+                            if (paletteCoverKey == coverKey) paletteSampleKey = null
+                            return@target
+                        }
+                        paletteJob?.cancel()
+                        paletteJob = viewScope.launchIO {
+                            val result = runCatching {
+                                Palette.from(bitmap)
+                                    .maximumColorCount(PALETTE_COLOR_COUNT)
+                                    .generate()
+                                    .getBestColor()
                             }
-                        } else {
-                            Palette.from(bitmap).generate { palette ->
-                                if (useCoverColorTheming()) {
-                                    launchUI {
-                                        val vibrantColor = palette?.getBestColor() ?: return@launchUI
-                                        manga?.vibrantCoverColor = vibrantColor
-                                        setAccentColorValue(vibrantColor)
-                                        setHeaderColorValue(vibrantColor)
-                                        setItemColors()
-                                    }
-                                } else {
-                                    setCoverColorValue()
-                                    coverColor?.let { color -> getHeader()?.setBackDrop(color) }
-                                }
+                            result.getOrNull()?.let { paletteColors.put(coverKey, it) }
+                            withUIContext {
+                                if (paletteCoverKey != coverKey) return@withUIContext
+                                paletteSampleKey = if (result.isSuccess) coverKey else null
+                                result.getOrNull()?.let { applyPaletteColor(manga, coverKey, it) }
                             }
                         }
-                    }
-                    binding.mangaCoverFull.setImageDrawable(copy)
-                    getHeader()?.updateCover(manga!!)
-                },
-                onError = {
-                    val file = presenter.coverCache.getCoverFile(manga!!.thumbnail_url, !manga!!.favorite)
-                    if (file != null && file.exists()) {
-                        file.delete()
-                        setPaletteColor()
-                    }
-                },
-            ).build()
-        view.context.imageLoader.enqueue(request)
+                    },
+                    onError = {
+                        if (paletteCoverKey == coverKey) paletteSampleKey = null
+                    },
+                ).build(),
+        )
     }
+
+    private fun loadCover(manga: Manga, coverKey: String) {
+        if (loadedCoverKey == coverKey && binding.mangaCoverFull.drawable != null) return
+
+        coverDisplayRequest?.dispose()
+        displayedCoverKey = coverKey
+        loadedCoverKey = null
+        coverDisplayRequest = binding.mangaCoverFull.loadManga(manga) {
+            listener(
+                onSuccess = { _, _ ->
+                    if (displayedCoverKey == coverKey && paletteCoverKey == coverKey) {
+                        loadedCoverKey = coverKey
+                        getHeader()?.updateCover(manga)
+                        requestPaletteSample(manga, coverKey)
+                    }
+                },
+                onError = { _, _ ->
+                    if (displayedCoverKey == coverKey) {
+                        displayedCoverKey = null
+                        loadedCoverKey = null
+                        val file = presenter.coverCache.getCoverFile(manga.thumbnail_url, !manga.favorite)
+                        if (file != null && file.exists()) {
+                            file.delete()
+                            setPaletteColor()
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+    private fun applyPaletteColor(manga: Manga, coverKey: String, color: Int) {
+        if (paletteCoverKey != coverKey || !useCoverColorTheming()) return
+        manga.vibrantCoverColor = color
+        setAccentColorValue(color)
+        setHeaderColorValue(color)
+        setItemColors()
+    }
+
+    private fun Manga.coverIdentity(): String =
+        "$id:$source:$thumbnail_url:$cover_last_modified:$favorite"
 
     private fun setStatusBarAndToolbar() {
         val topColor = Color.TRANSPARENT
@@ -1112,7 +1171,7 @@ class MangaDetailsController :
         view ?: return
         val position = adapter?.indexOf(chapterId) ?: return
         if (position >= 0) adapter?.notifyItemChanged(position)
-        getHeader()?.updateReadingButton()
+        getHeader()?.refreshReadingButton()
         updateFab()
         updateMenuVisibility(activityBinding?.toolbar?.menu)
     }
@@ -2068,7 +2127,7 @@ class MangaDetailsController :
     private fun showCategoriesSheet() {
         val adding = !presenter.manga.favorite
         viewScope.launchIO {
-            presenter.manga.moveCategories(activity!!, adding) {
+            presenter.manga.moveCategories(activity!!, adding, viewScope) {
                 updateHeader()
                 if (adding) {
                     showAddedSnack()
@@ -2650,6 +2709,10 @@ class MangaDetailsController :
     }
 
     companion object {
+        private const val PALETTE_SAMPLE_SIZE = 128
+        private const val PALETTE_COLOR_COUNT = 16
+        private val paletteColors = LruCache<String, Int>(64)
+
         const val UPDATE_EXTRA = "update"
         const val SMART_SEARCH_CONFIG_EXTRA = "smartSearchConfig"
 

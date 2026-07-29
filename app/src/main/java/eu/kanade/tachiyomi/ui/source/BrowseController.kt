@@ -125,6 +125,7 @@ class BrowseController :
         )
         appBar.y = 0f
         appBar.updateAppBarAfterY(binding.sourceRecycler)
+        updateBottomSheetTabsTravelY()
         setupToolbarMenu()
     }
 
@@ -168,6 +169,10 @@ class BrowseController :
     private var ogRadius = 0f
     private var deviceRadius = 0f to 0f
     private var lastScale = 1f
+    private var bottomSheetTabsTravelY = 0f
+    private var bottomSheetTabBaseColor = 0
+    private var bottomSheetTabSelectedBaseColor = 0
+    private var bottomSheetTabUnselectedColor = 0
 
     override val mainRecycler: RecyclerView
         get() = binding.sourceRecycler
@@ -227,6 +232,7 @@ class BrowseController :
                 } else {
                     ogRadius to ogRadius
                 }
+                updateBottomSheetTabsTravelY()
             },
             onBottomNavUpdate = {
                 setBottomPadding()
@@ -242,6 +248,7 @@ class BrowseController :
         binding.bottomSheet.root.sheetBehavior =
             BottomSheetBehavior.from(binding.bottomSheet.root)
         binding.sourceRecycler.post {
+            updateBottomSheetTabsTravelY()
             setBottomSheetTabs(if (binding.bottomSheet.root.sheetBehavior.isCollapsed()) 0f else 1f)
             binding.sourceRecycler.updatePaddingRelative(
                 bottom = (activityBinding?.bottomNav?.height ?: 0) + 58.spToPx,
@@ -249,6 +256,7 @@ class BrowseController :
             updateTitleAndMenu()
         }
         ogRadius = view.resources.getDimension(R.dimen.rounded_radius)
+        cacheBottomSheetTabColors()
 
         // Source loading kicks off background coroutines on Dispatchers.Default, so
         // it stays on the cold-entry frame — the recycler is empty until the load
@@ -521,17 +529,8 @@ class BrowseController :
     }
 
     fun setBottomSheetTabs(progress: Float) {
-        val bottomSheet = binding.bottomSheet.root
         val halfStepProgress = (max(0.5f, progress) - 0.5f) * 2
-        binding.bottomSheet.tabs.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-            topMargin = (
-                (
-                    appBar()?.paddingTop
-                        ?.minus(9f.dpToPx)
-                        ?.plus(toolbarHeight ?: 0) ?: 0f
-                    ) * halfStepProgress
-                ).toInt()
-        }
+        binding.bottomSheet.tabs.translationY = bottomSheetTabsTravelY * halfStepProgress
         binding.bottomSheet.pill.alpha = (1 - progress) * 0.25f
         binding.bottomSheet.sheetToolbar.alpha = progress
         if (isControllerVisible) {
@@ -552,23 +551,19 @@ class BrowseController :
         )
 
         val selectedColor = ColorUtils.setAlphaComponent(
-            bottomSheet.context.getResourceColor(R.attr.tabBarIconColor),
+            bottomSheetTabSelectedBaseColor,
             (progress * 255).toInt(),
-        )
-        val unselectedColor = ColorUtils.setAlphaComponent(
-            bottomSheet.context.getResourceColor(R.attr.actionBarTintColor),
-            153,
         )
         binding.bottomSheet.pager.alpha = progress * 10
         binding.bottomSheet.tabs.setSelectedTabIndicatorColor(selectedColor)
         binding.bottomSheet.tabs.setTabTextColors(
             ColorUtils.blendARGB(
-                bottomSheet.context.getResourceColor(R.attr.actionBarTintColor),
-                unselectedColor,
+                bottomSheetTabBaseColor,
+                bottomSheetTabUnselectedColor,
                 progress,
             ),
             ColorUtils.blendARGB(
-                bottomSheet.context.getResourceColor(R.attr.actionBarTintColor),
+                bottomSheetTabBaseColor,
                 selectedColor,
                 progress,
             ),
@@ -581,6 +576,21 @@ class BrowseController :
                 progress
             )
         )*/
+    }
+
+    private fun cacheBottomSheetTabColors() {
+        val context = binding.bottomSheet.root.context
+        bottomSheetTabBaseColor = context.getResourceColor(R.attr.actionBarTintColor)
+        bottomSheetTabSelectedBaseColor = context.getResourceColor(R.attr.tabBarIconColor)
+        bottomSheetTabUnselectedColor = ColorUtils.setAlphaComponent(bottomSheetTabBaseColor, 153)
+    }
+
+    private fun updateBottomSheetTabsTravelY() {
+        bottomSheetTabsTravelY = (
+            appBar()?.paddingTop
+                ?.minus(9f.dpToPx)
+                ?.plus(toolbarHeight ?: 0) ?: 0
+            ).toFloat()
     }
 
     private fun setBottomPadding() {
