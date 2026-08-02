@@ -153,19 +153,6 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         height
     }
 
-    // Scroll background updates used to resolve the same theme attributes through a
-    // TypedArray on every frame. An app bar is recreated when its themed Context changes,
-    // so these values are safe to resolve once per instance.
-    internal val surfaceColor: Int by lazy(LazyThreadSafetyMode.NONE) {
-        context.getResourceColor(materialR.attr.colorSurface)
-    }
-    internal val elevatedSurfaceColor: Int by lazy(LazyThreadSafetyMode.NONE) {
-        context.getResourceColor(materialR.attr.colorPrimaryVariant)
-    }
-    internal val themedStatusBarColor: Int by lazy(LazyThreadSafetyMode.NONE) {
-        context.getResourceColor(AR.attr.statusBarColor)
-    }
-
     val preLayoutHeight: Int
         get() = getEstimatedLayout(
             cardFrame?.isVisible == true && toolbarMode == ToolbarState.EXPANDED,
@@ -737,7 +724,6 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         }
     }
 
-    /** Re-copy newly inflated main-toolbar actions when the pill is already active. */
     internal fun refreshLiftedPillMenu() {
         if (currentActiveToolbar === searchToolbar) liftMenuToPill()
     }
@@ -749,14 +735,15 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
      */
     internal fun dropLiftedPillMenu() {
         val menu = searchToolbar?.menu ?: return
-        // Remove backwards so the menu can be mutated in place without allocating a
-        // temporary list. This method is part of scroll/chrome transitions.
-        var i = menu.size() - 1
-        while (i >= 0) {
+        val toRemove = mutableListOf<Int>()
+        var i = 0
+        val count = menu.size()
+        while (i < count) {
             val id = menu.getItem(i).itemId
-            if (id != R.id.action_search) menu.removeItem(id)
-            i--
+            if (id != R.id.action_search) toRemove.add(id)
+            i++
         }
+        toRemove.forEach { menu.removeItem(it) }
     }
 
     companion object {

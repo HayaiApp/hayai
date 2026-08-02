@@ -1,175 +1,5 @@
 # Hayai navigation & source-browse performance investigation
 
-## 2026-07-14 re-audit — persistent navigation, chrome, and Android motion
-
-This pass re-audited the current persistent-root-tab implementation after the earlier
-device profiling below. No Android device was connected to the workspace, so this section
-does not invent a new jank percentage; it records hot-path work proven directly from the
-current implementation and the validation performed after removing it.
-
-### Root navigation
-
-- `RootTabsController` drove two complete screen trees from a `ValueAnimator` update
-  listener. That executed Kotlin and invalidated both trees on the UI thread for every
-  animation frame. Root swaps now use `ViewPropertyAnimator` with temporary hardware
-  layers, a small direction/RTL-aware translation, deterministic rapid-tap cancellation,
-  and one settle point that restores all sibling visibility/alpha state.
-- Root-tab activation synchronously ran the full activity-global chrome/menu walk even
-  though Library, Recents, and Browse each own a persistent local app bar. Root swaps now
-  do only the navigation/app-bar visibility work needed for the first frame; menu/title
-  reconciliation runs after the motion settles. Preserved pushed detail stacks still use
-  the complete global-chrome path.
-- The activity-global app bar was reset twice for a single Conductor enter event (once by
-  `BaseController`, once by the activity listener). The sync is now idempotent per active
-  controller/visibility state, and local-app-bar-to-local-app-bar swaps no longer clear a
-  hidden global tab/search/menu hierarchy.
-
-### App-bar and library binding
-
-- `ExpandedAppBarLayout.applyTabs()` previously called `clearTabs()` on every activation,
-  removing every tab, inflating every Library badge view again, reattaching listeners, and
-  forcing `TabLayout` to measure from scratch. It now reuses compatible tab views, updates
-  labels/counts in place, changes selection without dispatching a false user callback, and
-  only rebinds a pager listener when the pager instance changes.
-- `LibraryCategoryAdapter.performFilterAsync()` called `updateDataSet()` (which already
-  invokes `notifyDataSetChanged`) and then immediately invoked `notifyDataSetChanged()` a
-  second time. The duplicate full visible-row bind/layout pass was removed.
-
-### Deeper scroll and Recents audit
-
-- `scrollViewWith()` installed a Conductor lifecycle listener and RecyclerView/NestedScrollView
-  callbacks on every view creation without removing them. Controllers outlive their views, so
-  rotations and theme/configuration recreations retained old app bars/recyclers and accumulated
-  change callbacks. The binding is now symmetric: it removes scroll callbacks, cancels its color
-  animator, removes transition shims, and unregisters its lifecycle listener at view destruction.
-- Recents and Browse explicitly set `itemAnimator = null`, but `scrollViewWith()` immediately
-  replaced that with an app-bar-aware `DefaultItemAnimator`. This silently restored full-row
-  change animations on the two screens whose nested rows are most expensive. The helper now
-  preserves a screen's disabled-animator policy.
-- The scroll hot path repeatedly resolved the same Material theme attributes and reapplied
-  identical app-bar/card/status-bar colors. Theme colors are cached per app-bar instance and
-  render properties are only written when their value changes. Toolbar title alpha and
-  main/search toolbar switching are also state-gated; pill-menu cleanup no longer allocates a
-  temporary list.
-- `RecentMangaAdapter.updateDataSet()` always dispatches `notifyDataSetChanged()`. Presenter
-  fan-out can emit the same logical list repeatedly, causing every visible nested Recents row to
-  rebind. Recents now snapshots the fields consumed by its holders and skips only byte-for-byte
-  equivalent logical submissions. Three unit tests cover stable snapshots and visible main/extra
-  chapter changes.
-- `RecentMangaHeaderItem.equals()` treated every `LibraryHeaderItem` as equal due to a self-
-  comparison (`recentsType == recentsType`). Cross-type headers now remain distinct, and Recents
-  header content callbacks include their labels/source metadata for future granular diffing.
-
-### Modern Android motion/back behavior
-
-- Predictive back is now edge-aware: right-edge gestures translate in the opposite
-  direction, RTL pushes use the matching direction, and the completion handler continues
-  from the gesture's actual translation instead of jumping to a hard-coded rightward pop.
-- Cancelling predictive back now animates the current screen, previous screen, and edge
-  shadow back to their resting state instead of snapping in one frame. Reduced-motion mode
-  still settles instantly.
-- The app previously used hidden reflection to force `ValueAnimator`'s process duration
-  scale to either `0` or `1`. Restoring `1` could override Android's system "Remove
-  animations" accessibility setting. The app no longer mutates the platform scale;
-  `ReducedMotion.isEnabled()` combines the app preference with Android's animator-enabled
-  state, while the platform/Compose runtimes retain control of system duration scaling.
-
-### Extension sheet and migration materialization
-
-- Re-analysis of the saved root-navigation trace confirms the remaining worst frames are
-  main-thread traversal/layout bursts, not RenderThread saturation: the largest frames were
-  435–464ms, with 357–383ms in traversal/layout. `extension_card_item` remained the dominant
-  repeated inflation type in that older capture. No new device metric is claimed for this pass.
-- Extension, novel-plugin, migration-source, and migration-manga adapters now snapshot every
-  field their holders bind. Repeated lifecycle/network/database emissions with identical visible
-  content no longer dispatch a full `notifyDataSetChanged()` and rebind all visible rows.
-- Browse startup already launches `firstTimeMigration()` from the sheet presenter; the controller
-  also scheduled `refreshMigrations()` on the same initial enter. That duplicate query/submission
-  is removed while real return/resume refreshes remain intact.
-- Legacy ViewPager eagerly creates its adjacent page. The Migration page is now a lightweight host
-  while Browse enters and the sheet is collapsed; its adapter can receive data detached, and the
-  recycler materializes after the first sheet expansion settles (or immediately if selected first).
-- The shared extension `RecycledViewPool` was process-static. Pooled holders retained the old
-  Activity context and their constructor-time adapter/click listener across controller recreation.
-  It is now scoped to one sheet lifetime, explicitly cleared at destruction, and recycler/adapter
-  attachment is idempotent. Persistent root tabs still preserve the pool for ordinary tab swaps.
-
-### Library/source ownership and remaining UI-thread animation work
-
-- Library, Recents, and Browse also held RecyclerView pools in process-static companion fields.
-  Their holders capture adapter/controller listeners and Activity-themed contexts, so reuse after
-  recreation could retain an old Activity or route clicks through a destroyed controller. Pools
-  are now created and cleared with each view. Persistent root views still retain them throughout
-  normal tab switching, which is the performance-critical reuse window.
-- Library activation refreshed its tabs/mini-bar once through display reconciliation and again
-  immediately through local-chrome setup. Activation now performs one chrome refresh. When the
-  category set changes, old ViewPager pages are no longer fully rebound immediately before
-  `POSITION_NONE` destroys them.
-- Library adapters now snapshot all holder-visible manga, unread/download, cover, category,
-  placeholder, layout, and display-option state. Equivalent presenter/filter emissions skip the
-  full FlexibleAdapter visible-row submission while real content changes still rebind. Deferred
-  title-layout callbacks are cancelled on holder reuse to prevent an old item from changing the
-  newly-bound subtitle.
-- Browse source lists and the scrollable last-used-source header use the same complete-content
-  gate. Source icon cache warming now starts once per process on IO; row holders cancel deferred
-  icon callbacks when rebound, avoiding stale icons and unnecessary main-loop PackageManager work.
-- The activity search-card fade, bottom-navigation fade, and pre-Android-12 splash exit no longer
-  run `ValueAnimator` update callbacks on the UI thread. They use render-property animators with
-  generation-safe cancellation, temporary hardware layers, and immediate reduced-motion settling.
-
-### Cell-binding and Library header depth pass
-
-- Source-browse grid badges no longer call `removeAllViews()` and allocate a new wedge plus
-  `MaterialTextView` hierarchy on every bind. `BrowseBadgeStrip` retains reusable slots, performs
-  a content equality check, and only grows its hierarchy when a row needs more segments.
-- Browse grid/list holders snapshot visible text/badge and cover-request inputs. Equivalent binds
-  do not resolve the same theme/string resources or cancel and restart Coil; recycled holders
-  explicitly cancel their view-target request and clear the snapshot. The list holder also resets
-  its drawable, scale type, and favourite alpha so a null cover cannot expose recycled state.
-- Browse-source teardown now detaches the adapter and clears its view-lifetime pool. Display-mode
-  replacement does the same for the discarded recycler, preventing image work and holder references
-  from surviving through the removed view tree.
-- Library grid/list holders now gate equivalent holder binds, cover requests, deferred title-layout
-  tasks, and freeform cover-ratio layout-param writes independently. FlexibleAdapter recycle events
-  cancel callbacks and Coil targets rather than letting detached rows finish stale work.
-- `LibraryBadge` caches its complete unread/download/total/language/shape input, avoiding repeated
-  resource lookup, shape drawable allocation, padding mutation, and child visibility traversal when
-  the badge has not changed.
-- Category headers previously counted visible manga by scanning the complete adapter once per header
-  bind (O(categories × items)). The adapter now builds the filtered category-count map once per
-  submission and header binds use O(1) lookups; flag resource IDs are cached per holder as well.
-  Header structural content is snapshotted too, so live queue/selection ticks can update their status
-  without rewriting margins, labels, icons, sort controls, and collapse drawables.
-
-### MangaDetails predictive back, chapter binding, and selection motion
-
-- Predictive-back progress previously transformed MangaDetails before the controller could consume
-  the committed press to close chapter selection. The selection cleared, but no pop or cancellation
-  restored the transform, leaving the screen half-transparent and partially translated. Controllers
-  now expose whether gesture progress represents navigation; active MangaDetails selection suppresses
-  only the navigation preview, consumes the committed back normally, and leaves the screen at rest.
-- `MangaDetailsAdapter` now snapshots every chapter field rendered by `ChapterHolder`, plus filter,
-  title-display, and translation-button state. Equivalent presenter emissions stop before
-  `FlexibleAdapter.updateDataSet()` and avoid a complete visible-row binding/layout pass.
-- Chapter holders independently gate full row content and download/status visuals. Theme tint lookup,
-  status-string construction, bookmark drawable work, and download-button updates only run when their
-  inputs change. Recycled holders cancel the swipe tutorial and clear all render state.
-- Download progress averaging no longer allocates an intermediate page-progress list. Exiting chapter
-  selection repaints FlexibleAdapter's bounded attached/cached holder set instead of scanning every
-  chapter and performing a RecyclerView lookup for each.
-- The chapter action bar replaced expanding/shrinking size and animated row weights with fade/slide
-  render motion. This avoids per-frame sibling remeasurement and follows app/system reduced-motion.
-  The swipe tutorial similarly switches its midpoint state at an animator boundary instead of using
-  a Kotlin update listener every frame, and duplicate tutorial animators are prevented.
-
-### Verification
-
-- `:app:compileStandardDebugKotlin` — passed.
-- `:app:testStandardDebugUnitTest` — passed, 95 tests, 0 failures/errors/skips.
-- `git diff --check` — passed.
-- A full `lintStandardDebug` analysis exceeded the 15-minute validation window without
-  producing a report or diagnostic; it was stopped, and is not represented as passing.
-
 Captured during an extended profiling session against a release-equivalent debug build on a
 Samsung A35 (1080×2340 @ 450dpi, 120Hz, animation scales = 1.0). All measurements via
 `adb shell dumpsys gfxinfo <pkg>` and `adb shell perfetto -t … sched gfx view input am wm res`.
@@ -877,9 +707,9 @@ entire visible set. Mostly unavoidable without:
 
 - **Pre-warm `RecycledViewPool`** during app startup so the first attach of
   Library/Recents/Browse recyclers pulls from a hot pool instead of inflating.
-- **Done 2026-07-15 — lazy-bind the extension bottom sheet's adjacent Migration page.**
-  The ViewPager still creates a cheap page host for its adjacent item, but the Migration
-  RecyclerView and its visible row holders are not materialized until the sheet has expanded.
+- **Lazy-bind the extension bottom sheet's inner ViewPager**. Currently both
+  current + adjacent pages are inflated even when the sheet is collapsed —
+  `extension_card_item` rows materialise even when the user can't see them.
 - **Defer Library's `applyDisplayMode`** out of `onChangeStarted.enter`. It's
   the only controller's enter hook over 30ms (~35ms each). Likely candidates:
   the `setupTabbedView` / `teardownTabbedView` path.
@@ -1064,96 +894,19 @@ scroll grids), `fetcherCoroutineContext = Dispatchers.IO.limitedParallelism(8)`,
   `drawBehind` would avoid it entirely. Not worth the surface area until
   someone profiles it as a hotspot.
 
-## Navigation critical path, source restoration, and ART profile (2026-07-15)
-
-This pass moved beyond holder-level churn and removed work that could stall whole-screen
-transitions:
-
-- `MainActivity` no longer calls `runBlocking` for the first-run library query. The root tab
-  can draw and the splash can exit while the database decision runs on IO; only the final
-  onboarding navigation returns to Main.
-- `BrowseSourcePresenter` now has an explicit `LOADING → READY | UNAVAILABLE` source state.
-  Cold plugin/source restoration and extension-provided filter creation run on IO. The
-  controller paints a loading state immediately and only starts the pager after readiness.
-- Saved-search loading is no longer a prerequisite for source first paint or first-page fetch.
-  It arrives as secondary state after the source UI is active.
-- Root-tab motion is now a one-way incoming fade/slide over a stable outgoing screen. This
-  preserves spatial direction while avoiding simultaneous hardware-layer animation of two
-  complete RecyclerView/Compose trees. Rapid retaps reset partial alpha/translation before
-  establishing a fresh deterministic start state.
-- Fade change handlers restore alpha as well as translation on cancellation/reset, closing a
-  class of interrupted-transition visual residue.
-- Added `app/src/main/baseline-prof.txt` plus `androidx.profileinstaller`. The initial targeted
-  rules cover startup, persistent root navigation, Library, Recents, Browse, MangaDetails,
-  source browsing, and reader entry. `mergeStandardReleaseArtProfile` confirms the rules are
-  merged into the release ART profile. Replace/expand these manual rules with device-generated
-  critical-user-journey rules when a profiling device is available.
-
-### Blocking-state, hidden-tab, and bounded-animation depth pass
-
-- Migration search process restoration now persists the original title/source primitives and
-  resolves source objects from the in-memory registry; it no longer queries manga from a
-  controller constructor. Edit-manga process restoration similarly attaches a lightweight view
-  first and loads its manga on IO before enabling Save.
-- Reader initialization loads the unfiltered chapter snapshot inside its existing IO coroutine
-  instead of hiding a database wait behind a lazy `runBlocking`. Duplicate-manga migration option
-  discovery (tracks/custom cover/info) is also computed on IO and passed to the dialog as one
-  immutable snapshot. Tracker web login/logout no longer blocks the lifecycle main thread.
-- Persistent Library and Recents tabs now stop submitting adapter data while inactive or covered
-  by a pushed controller. Each retains only the newest pending presenter snapshot and drains it
-  once on activation, preventing invisible diff/bind/layout work from competing with the visible
-  screen and transition.
-- The inactivity boundary now reaches upstream: Library unsubscribes its SQL/category/preference
-  combine and skips filtering, tracking joins, sorting, and section materialization while hidden.
-  Recents cancels its current query, coalesces refresh requests, and restarts once when activated.
-  Pushed filtered-library screens explicitly opt in because they do not receive root-tab callbacks.
-- Recents previously invoked `presenter.onCreate()` on every return from MangaDetails, reinstalling
-  download, queue, library-update, and preference collectors. Initialization is now idempotent and
-  pop-back only reactivates the retained presenter. MangaDetails similarly owns and replaces its
-  download/library collector jobs across view recreation instead of accumulating subscriptions.
-- Library-update status no longer synchronously waits on WorkManager's database from refresh/menu
-  interactions. Manual pending/running state is tracked in memory; category queue expansion and
-  smart-update filtering run on the worker IO scope. Stop also cancels the known worker directly
-  instead of blocking on a work query. Backup restore uses the same lifecycle-owned state, removing
-  a WorkManager database wait from Recents pagination.
-- Leaving Library selection mode rebinds only selected items and headers. Changing MangaDetails'
-  chapter-title display mode rebinds only attached chapter rows; off-screen rows naturally bind the
-  new mode when recycled. Both paths previously invalidated the complete list.
-- Recents' nested-chapter expansion previously began a RecyclerView-wide transition after mutating
-  the row while a second implicit `LayoutTransition` was active. It now starts one explicit
-  row-scoped bounds/fade transition before the mutation, so a pending animation cannot capture a
-  later presenter submission.
-- Recents and MangaDetails now index each download-queue snapshot by chapter ID once instead of
-  scanning the complete queue for every main and nested chapter. MangaDetails queue emissions no
-  longer reload chapters from the database, redo translation/filter work, or submit the whole
-  adapter; they mutate download state in memory and repaint only attached affected rows.
-- MangaDetails description expansion and Recents nested-chapter expansion begin their transitions
-  before mutation, scope motion to the changed row/header, and honor both app and system reduced
-  motion. This prevents a late transition from capturing an unrelated subsequent layout pass.
-- MangaDetails' header and floating reading actions now share one unfiltered reading target and
-  one numbered label model. Chapter/read/download filters can no longer remove the primary action,
-  and a collapsed or not-yet-composed header action explicitly falls back to the FAB. A single
-  cancel-and-replace Activity-resume refresh awaits the database submission after reader return,
-  replacing the previous nested and attach-time refresh race.
-- The header reading Compose island is installed once per holder and driven by observable text,
-  enabled, visible, and accent states. Chapter mutations no longer reinstall the composition, and
-  ExtendedFloatingActionButton visibility is owned exclusively by its show/hide motion API so a
-  fast refresh cannot strand it halfway through an animation.
-- The manual baseline profile still merges successfully after these changes. The full Standard
-  debug unit suite passes with 101 tests. No new device frame-time claim is made because no device
-  is attached.
-
-## Open backlog (updated 2026-07-15)
+## Open backlog (as of 2026-05-17)
 
 Carrying forward — pick any of these next session.
 
 ### Verification — owed for today's work
 
-- **One-way tab-swap feel at 250 ms.** Verify the incoming fade/12dp slide feels intentional
-  in both LTR and RTL and that backward switching never renders underneath the outgoing tab.
-- **Browse first-entry feel after asynchronous source restoration.** Verify the loading state
-  paints during a cold plugin registry load and transitions directly into the first page
-  without a blank flash or premature "source not installed" pop.
+- **Cross-fade tab-swap feel at 250 ms** (was 150 ms; bumped 2026-05-16). User
+  reported the 150 ms version felt "very subtle, maybe increase it a bit i don't
+  feel it". Verify the 250 ms feels intentional but not sluggish on rapid
+  Library ↔ Recents ↔ Browse taps.
+- **Browse first-entry feel after defer + warmup**. The deferred init lands at
+  +280 ms; cross-fade is 250 ms. Verify the cold frame no longer looks like a
+  blank flash and the sheet doesn't pop in awkwardly when its wiring lands.
 - **"Fast tab swap = content never renders"** — was likely fixed by the
   AsyncLayoutInflater revert (task #35) but never explicitly reconfirmed.
   Reproduce by tapping bottom-nav items as fast as possible across 10-15 swaps;
@@ -1164,10 +917,13 @@ Carrying forward — pick any of these next session.
 - **Recents item open path** (history → reader / history → MangaDetails).
   Never profiled post-refactor; might share the Library → MangaDetails push
   cost (now mostly fixed) but the Recents item path is distinct.
-- **Done structurally 2026-07-15 — Library ↔ Recents "text splatter".** Library and
-  Recents now own separate persistent local app bars, so a shared `TabLayout` is no longer
-  relabeled by two controllers during the same transition. The incoming-only root motion also
-  keeps the outgoing hierarchy stable. Device verification remains in the checklist above.
+- **Library ↔ Recents "text splatter"** in tabbed mode (5.03 % baseline jank).
+  Root cause already understood — cross-controller race where
+  `LibraryController.onChangeStarted` calls `showTabBar(false, animate=true)`
+  while `RecentsController.onChangeStarted` calls `mainTabs.bindStringTabs(...)`
+  + `showTabBar(true)` simultaneously, and TabLayout re-measures during the
+  alpha animation. Fix is surgical to `MainActivity.showTabBar` + the two
+  controllers' `onChangeStarted`.
 
 ### Cold-path improvements (extends today's Browse work)
 
@@ -1177,15 +933,17 @@ Carrying forward — pick any of these next session.
   section/header/footer rows. It also class-loads their controllers, adapters,
   holders, and pager adapter on IO. This extends the existing trace-backed XML
   parse mitigation; no new frame-time claim is made because no device was attached.
-- **Done — replace Library's eager `applyDisplayMode` path with idempotent surface
-  reconciliation.** Tabbed/continuous trees now rebuild only when the computed target or
-  category set changes; ordinary persistent-tab activation reuses the existing surface.
+- **Defer Library's `applyDisplayMode`** out of `onChangeStarted.enter`. It's
+  the only root controller's enter hook over 30 ms (~35 ms each). Candidates
+  inside: `setupTabbedView` / `teardownTabbedView`.
 - **Pre-warm `RecycledViewPool`** during app startup so the first attach of
   Library/Recents/Browse recyclers pulls from a hot pool instead of inflating
   the visible row deficit on the first frame.
-- **Done 2026-07-15 — lazy-bind the extension bottom sheet's adjacent Migration page.**
-  `TabbedSheetAdapter` now leaves page 1 as a lightweight host during Browse entry and
-  materializes its recycler after sheet expansion, with a selection fallback.
+- **Lazy-bind the extension bottom sheet's inner ViewPager**. Even after the
+  `initBottomSheet` defer, `pager.adapter = TabbedSheetAdapter()` immediately
+  inflates pages 0 + 1 of `recycler_with_scroller.xml`. Setting
+  `offscreenPageLimit = 0` (or rolling our own page-bound trigger) would mean
+  only page 0 inflates until the user swipes; pages 1 and 2 inflate on demand.
 
 ### Image loading (extends today's audit)
 
@@ -1204,8 +962,12 @@ Carrying forward — pick any of these next session.
 
 ### Architecture / cleanup (not perf-critical)
 
-- **Done — View-based grid holder for source browse.** The grid now uses pure
-  XML/ViewBinding + ImageView + Coil, including reusable overlay badge views.
+- **View-based grid holder for source browse** (Option B from earlier doc).
+  Mirror `LibraryGridHolder`: pure XML/ViewBinding + ImageView + Coil. Per-cell
+  cost drops to the 2–5 ms View-based range. The three badges
+  (Novel / EH category / In Library) become overlay views. Lower architectural
+  improvement than a Compose port but easier to keep at zero regressions and
+  proven fast.
 
 ### Profiling debt
 

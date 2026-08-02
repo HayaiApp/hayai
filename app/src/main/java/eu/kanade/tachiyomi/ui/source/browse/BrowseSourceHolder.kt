@@ -31,7 +31,4 @@ abstract class BrowseSourceHolder(view: View, adapter: FlexibleAdapter<IFlexible
      * @param manga the manga to bind.
      */
     abstract fun setImage(manga: Manga)
-
-    /** Releases view-target work when FlexibleAdapter recycles this holder. */
-    open fun recycle() = Unit
 }

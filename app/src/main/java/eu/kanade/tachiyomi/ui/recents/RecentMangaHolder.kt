@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.recents
 
+import android.animation.LayoutTransition
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.graphics.Color
@@ -39,7 +40,6 @@ import eu.kanade.tachiyomi.util.view.setCards
 import java.util.Date
 import java.util.concurrent.TimeUnit
 import yokai.i18n.MR
-import yokai.presentation.theme.ReducedMotion
 import yokai.util.coil.loadManga
 import yokai.util.lang.getString
 import android.R as AR
@@ -81,15 +81,6 @@ class RecentMangaHolder(
         binding.removeHistory.setOnClickListener { adapter.delegate.onRemoveHistoryClicked(flexibleAdapterPosition) }
         binding.showMoreChapters.setOnClickListener { _ ->
             val moreVisible = !binding.moreChaptersLayout.isVisible
-            if (!ReducedMotion.isEnabled()) {
-                val transition = TransitionSet()
-                    .addTransition(androidx.transition.ChangeBounds())
-                    .addTransition(androidx.transition.Fade())
-                    .apply {
-                        duration = itemView.resources.getInteger(AR.integer.config_shortAnimTime).toLong()
-                    }
-                TransitionManager.beginDelayedTransition(itemView as ViewGroup, transition)
-            }
             // Lazy inflate: if expanding and we haven't populated rows yet, do it now.
             if (moreVisible) {
                 val pending = adapter.getItem(flexibleAdapterPosition) as? RecentMangaItem
@@ -124,8 +115,15 @@ class RecentMangaHolder(
             binding.endView.updateLayoutParams<ViewGroup.LayoutParams> {
                 height = binding.mainView.height
             }
+            val transition = TransitionSet()
+                .addTransition(androidx.transition.ChangeBounds())
+                .addTransition(androidx.transition.Slide())
+            transition.duration =
+                itemView.resources.getInteger(AR.integer.config_shortAnimTime).toLong()
+            TransitionManager.beginDelayedTransition(adapter.recyclerView, transition)
         }
         updateCards()
+        binding.frontView.layoutTransition?.enableTransitionType(LayoutTransition.APPEARING)
     }
 
     fun updateCards() {
@@ -356,9 +354,8 @@ class RecentMangaHolder(
         // unsafe for recent_sub_chapter_item because the nested DownloadButton owns an
         // Animator, and AnimatorInflater throws "Animators may only be run on Looper
         // threads" off the main thread — the row would silently fail to render, making
-        // Recents look empty after a tab swap. RecyclerView pools these holders across
-        // every Recents re-entry while its persistent root view remains alive, so the inflate cost is paid
-        // once on first bind and never again.
+        // Recents look empty after a tab swap. RecyclerView keeps these holders pooled
+        // for the lifetime of the current Recents view.
         val layoutInflater = LayoutInflater.from(context)
         for (offset in 0 until deficit) {
             val targetIdx = currentChildren + offset

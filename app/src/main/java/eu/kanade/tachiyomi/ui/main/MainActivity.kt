@@ -148,6 +148,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.runBlocking
 import yokai.util.koin.injectLazy
 import yokai.core.migration.Migrator
 import yokai.domain.base.BasePreferences
@@ -627,7 +628,15 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                 if (!hasOnboarding) {
                     goToStartingTab()
                     if (!basePreferences.hasShownOnboarding().get()) {
-                        resolveInitialOnboarding()
+                        val hasLibraryManga = runBlocking { getLibraryManga.await().isNotEmpty() }
+                        if (hasLibraryManga) {
+                            basePreferences.hasShownOnboarding().set(true)
+                        } else {
+                            // Push onto topRouter (not router which forwards to active child
+                            // router) so onboarding occludes all tabs — otherwise the user could
+                            // tap another tab to bypass it.
+                            topRouter.pushController(OnboardingController().withFadeInTransaction())
+                        }
                     }
                 }
             }
@@ -786,33 +795,6 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                             (router.backstack.lastOrNull()?.controller as? HingeSupportedController)?.updateForHinge()
                         }
                     }
-            }
-        }
-    }
-
-    /**
-     * Resolves first-run onboarding without holding the main thread behind a database read.
-     *
-     * The old startup path used `runBlocking` immediately after constructing the first root tab,
-     * which prevented that tab and the splash exit from drawing until the complete library query
-     * returned. The query now runs on IO and only the small navigation decision returns to Main.
-     */
-    private fun resolveInitialOnboarding() {
-        lifecycleScope.launchIO {
-            val hasLibraryManga = getLibraryManga.await().isNotEmpty()
-            withUIContext {
-                if (isFinishing || isDestroyed || basePreferences.hasShownOnboarding().get()) {
-                    return@withUIContext
-                }
-                if (hasLibraryManga) {
-                    basePreferences.hasShownOnboarding().set(true)
-                    return@withUIContext
-                }
-                if (topRouter.backstack.none { it.controller is OnboardingController }) {
-                    // Push onto topRouter (not router which forwards to the active child router)
-                    // so onboarding occludes every tab and cannot be bypassed by switching tabs.
-                    topRouter.pushController(OnboardingController().withFadeInTransaction())
-                }
             }
         }
     }

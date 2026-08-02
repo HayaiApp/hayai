@@ -6,13 +6,12 @@ import eu.davidea.flexibleadapter.items.IFlexible
 class MangaAdapter(listener: Any, val showOutline: Boolean) :
     FlexibleAdapter<IFlexible<*>>(null, listener) {
 
-    private var submittedContentSignatures: List<Int>? = null
+    private var items: List<IFlexible<*>>? = null
 
-    fun updateDataSetIfChanged(items: List<MangaItem>?, animate: Boolean = false): Boolean {
-        val nextSignatures = items.orEmpty().map(MangaItem::bindingContentSignature)
-        if (nextSignatures == submittedContentSignatures) return false
-        submittedContentSignatures = nextSignatures
-        super.updateDataSet(items, animate)
-        return true
+    override fun updateDataSet(items: MutableList<IFlexible<*>>?) {
+        if (this.items !== items) {
+            this.items = items
+            super.updateDataSet(items)
+        }
     }
 }

@@ -1,14 +1,11 @@
 package eu.kanade.tachiyomi.ui.manga.chapter
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -53,7 +50,6 @@ import dev.icerock.moko.resources.compose.stringResource
 import eu.kanade.tachiyomi.R
 import kotlinx.coroutines.delay
 import yokai.i18n.MR
-import yokai.presentation.theme.ReducedMotion
 
 /**
  * State snapshot driving the chapter multi-select bottom action bar. Each flag toggles which
@@ -90,25 +86,10 @@ fun MangaChapterActionBar(
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
-    val reducedMotion = ReducedMotion.isEnabled()
     AnimatedVisibility(
         visible = state.visible,
-        enter = if (reducedMotion) {
-            EnterTransition.None
-        } else {
-            fadeIn(tween(160)) + slideInVertically(
-                animationSpec = tween(220, easing = FastOutSlowInEasing),
-                initialOffsetY = { it / 3 },
-            )
-        },
-        exit = if (reducedMotion) {
-            ExitTransition.None
-        } else {
-            fadeOut(tween(120)) + slideOutVertically(
-                animationSpec = tween(180, easing = FastOutSlowInEasing),
-                targetOffsetY = { it / 3 },
-            )
-        },
+        enter = expandVertically(expandFrom = Alignment.Bottom),
+        exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
     ) {
         Surface(
             modifier = modifier.fillMaxWidth(),
@@ -212,13 +193,14 @@ private fun RowScope.ActionButton(
 ) {
     val label = stringResource(title)
     val haptic = LocalHapticFeedback.current
-    val reducedMotion = ReducedMotion.isEnabled()
+    val animatedWeight by animateFloatAsState(
+        targetValue = if (toConfirm) 2f else 1f,
+        label = "weight",
+    )
     Box(
         modifier = Modifier
             .size(48.dp)
-            // Keep sibling widths stable. Animating weight remeasured the complete action row on
-            // every frame, competing with RecyclerView selection updates on the UI thread.
-            .weight(1f)
+            .weight(animatedWeight)
             .combinedClickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = ripple(bounded = false),
@@ -237,8 +219,8 @@ private fun RowScope.ActionButton(
             Icon(imageVector = icon, contentDescription = label)
             AnimatedVisibility(
                 visible = toConfirm,
-                enter = if (reducedMotion) EnterTransition.None else fadeIn(tween(140)),
-                exit = if (reducedMotion) ExitTransition.None else fadeOut(tween(100)),
+                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
             ) {
                 Text(
                     text = label,

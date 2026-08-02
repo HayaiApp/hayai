@@ -15,6 +15,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.WorkQuery
 import androidx.work.WorkerParameters
 import co.touchlab.kermit.Logger
 import coil3.imageLoader
@@ -38,7 +39,6 @@ import eu.kanade.tachiyomi.data.preference.MANGA_OUTSIDE_RELEASE_PERIOD
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
-import eu.kanade.tachiyomi.data.work.ActiveWorkTracker
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.extension.ExtensionUpdateJob
 import eu.kanade.tachiyomi.source.CatalogueSource
@@ -172,10 +172,6 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         tryToSetForeground()
 
         instance = WeakReference(this)
-        if (tags.contains(WORK_NAME_MANUAL)) {
-            manualWork.tryTrack(id)
-        }
-
         val target = inputData.getString(KEY_TARGET)?.let { Target.valueOf(it) } ?: Target.CHAPTERS
         chapterQueueActive = target == Target.CHAPTERS
 
@@ -219,9 +215,6 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
             } finally {
                 chapterQueueActive = false
                 chapterQueue.close()
-                if (tags.contains(WORK_NAME_MANUAL)) {
-                    manualWork.finish(id)
-                }
                 instance = null
                 sendUpdate(null)
                 notifier.cancelProgressNotification()
@@ -896,8 +889,6 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         private const val KEY_MANGAS = "mangas"
 
         private var instance: WeakReference<LibraryUpdateJob>? = null
-        private val manualWork = ActiveWorkTracker()
-
         private var extraManga = emptyList<Long>()
 
         val updateMutableFlow = MutableSharedFlow<Long?>(
@@ -953,8 +944,10 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
             }
         }
 
-        fun isRunning(@Suppress("UNUSED_PARAMETER") context: Context): Boolean =
-            instance?.get() != null || manualWork.isActive
+        fun isRunning(context: Context): Boolean {
+            val list = WorkManager.getInstance(context).getWorkInfosByTag(TAG).get()
+            return list.any { it.state == WorkInfo.State.RUNNING }
+        }
 
         fun categoryInQueue(id: Int?) = id?.let { instance?.get()?.categoryIds?.contains(it) } ?: false
 
@@ -994,31 +987,26 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 .addTag(WORK_NAME_MANUAL)
                 .setInputData(inputData)
                 .build()
-            if (!manualWork.tryTrack(request.id)) return false
             extraManga = mangaToUse?.drop(1)?.mapNotNull { it.manga.id }.orEmpty()
-            try {
-                WorkManager.getInstance(context)
-                    .enqueueUniqueWork(WORK_NAME_MANUAL, ExistingWorkPolicy.KEEP, request)
-            } catch (error: Throwable) {
-                manualWork.finish(request.id)
-                throw error
-            }
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(WORK_NAME_MANUAL, ExistingWorkPolicy.KEEP, request)
 
             return true
         }
 
         fun stop(context: Context) {
             val wm = WorkManager.getInstance(context)
-            manualWork.clear()
-            wm.cancelUniqueWork(WORK_NAME_MANUAL)
+            val workQuery = WorkQuery.Builder.fromTags(listOf(TAG))
+                .addStates(listOf(WorkInfo.State.RUNNING))
+                .build()
+            wm.getWorkInfos(workQuery).get()
+                .forEach {
+                    wm.cancelWorkById(it.id)
 
-            val activeWorker = instance?.get() ?: return
-            wm.cancelWorkById(activeWorker.id)
-
-            // Re-enqueue cancelled scheduled work.
-            if (activeWorker.tags.contains(WORK_NAME_AUTO)) {
-                setupTask(context)
-            }
+                    if (it.tags.contains(WORK_NAME_AUTO)) {
+                        setupTask(context)
+                    }
+                }
         }
     }
 }

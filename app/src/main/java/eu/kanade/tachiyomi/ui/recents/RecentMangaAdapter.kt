@@ -26,8 +26,6 @@ import java.util.*
 class RecentMangaAdapter(val delegate: RecentsInterface) :
     BaseChapterAdapter<IFlexible<*>>(delegate) {
 
-    private var submittedContentSignatures: List<Int> = emptyList()
-
     val preferences: PreferencesHelper by injectLazy()
     val uiPreferences: UiPreferences by injectLazy()
     val recentsPreferences: RecentsPreferences by injectLazy()
@@ -61,20 +59,6 @@ class RecentMangaAdapter(val delegate: RecentsInterface) :
 
     init {
         setDisplayHeadersAtStartUp(true)
-    }
-
-    /**
-     * FlexibleAdapter's regular updateDataSet() always dispatches notifyDataSetChanged().
-     * Recents can emit the same logical list repeatedly (download reconciliation,
-     * lifecycle refreshes, preference fan-out), and each dispatch rebinds the expensive
-     * visible rows. Skip only when the complete binding snapshot is unchanged.
-     */
-    fun updateDataSetIfChanged(items: List<RecentMangaItem>): Boolean {
-        val nextSignatures = items.map(RecentMangaItem::bindingContentSignature)
-        if (nextSignatures == submittedContentSignatures) return false
-        submittedContentSignatures = nextSignatures
-        updateDataSet(items)
-        return true
     }
 
     fun setPreferenceFlows() {

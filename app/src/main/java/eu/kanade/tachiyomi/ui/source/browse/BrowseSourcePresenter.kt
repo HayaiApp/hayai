@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchNonCancellableIO
+import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.withUIContext
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.encodeToString
@@ -78,12 +80,6 @@ open class BrowseSourcePresenter(
     val sourceIsInitialized
         get() = this::source.isInitialized
 
-    @Volatile
-    var sourceInitializationState = SourceInitializationState.LOADING
-        private set
-
-    private var sourceInitializationStarted = false
-
     var filtersChanged = false
 
     val page: Int
@@ -117,42 +113,26 @@ open class BrowseSourcePresenter(
 
     override fun onCreate() {
         super.onCreate()
-        if (sourceInitializationStarted) return
-        sourceInitializationStarted = true
+        if (sourceIsInitialized) return
 
-        // Source/plugin restoration and extension-provided filter creation are not UI work.
-        // Keeping both off Main lets the destination controller inflate and draw its loading
-        // state while a cold plugin registry finishes loading.
-        presenterScope.launchIO {
-            val resolvedSource = (sourceManager.get(sourceId) as? CatalogueSource)
-                ?: sourceManager.awaitCatalogueSource(sourceId)
-            if (resolvedSource == null) {
-                sourceInitializationState = SourceInitializationState.UNAVAILABLE
-                withUIContext { view?.onSourceUnavailable() }
-                return@launchIO
-            }
+        source = (sourceManager.get(sourceId) as? CatalogueSource)
+            ?: runBlocking { sourceManager.awaitCatalogueSource(sourceId) }
+            ?: return
+        sourceFilters = source.getFilterList()
+        baselineFilters = FilterTree.capture(sourceFilters)
+        appliedRefinement = RefinementSnapshot(query, baselineFilters)
+        filtersChanged = false
 
-            source = resolvedSource
-            sourceFilters = resolvedSource.getFilterList()
-            baselineFilters = FilterTree.capture(sourceFilters)
-            appliedRefinement = RefinementSnapshot(query, baselineFilters)
-            filtersChanged = false
-            sourceInitializationState = SourceInitializationState.READY
-
-            // Source readiness is enough to build the screen and start its first page. Saved
-            // searches are secondary content and must not extend the navigation critical path.
-            withUIContext { view?.onSourceReady() }
-
-            val savedSearches = loadSearches()
-            withUIContext { view?.savedSearches = savedSearches }
-
-            getSavedSearch.subscribeAllBySourceId(sourceId)
-                .map { it.applyAllSave(source::getFilterList) }
-                .onEach {
-                    withUIContext { view?.savedSearches = it }
-                }
-                .launchIn(presenterScope)
+        presenterScope.launchUI {
+            view?.savedSearches = loadSearches()
         }
+
+        getSavedSearch.subscribeAllBySourceId(sourceId)
+            .map { it.applyAllSave(source::getFilterList) }
+            .onEach {
+                withUIContext { view?.savedSearches = it }
+            }
+            .launchIn(presenterScope)
     }
 
     fun filtersMatchDefault(filters: FilterList = sourceFilters): Boolean =
@@ -455,10 +435,4 @@ open class BrowseSourcePresenter(
     suspend fun loadSearches(): List<SavedSearch> {
        return getSavedSearch.awaitAllBySourceId(sourceId).applyAllSave(source::getFilterList)
     }
-}
-
-enum class SourceInitializationState {
-    LOADING,
-    READY,
-    UNAVAILABLE,
 }

@@ -81,13 +81,6 @@ class RecentMangaHeaderItem(
         return result
     }
 
-    override fun shouldNotifyChange(newItem: IFlexible<*>): Boolean {
-        val other = newItem as? RecentMangaHeaderItem ?: return true
-        return recentsType != other.recentsType ||
-            sourceId != other.sourceId ||
-            sourceName != other.sourceName
-    }
-
     class Holder(
         val view: View,
         private val adapter: RecentMangaAdapter,

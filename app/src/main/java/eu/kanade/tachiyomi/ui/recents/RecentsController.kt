@@ -194,22 +194,9 @@ class RecentsController(bundle: Bundle? = null) :
     private var lastChapterId: Long? = null
     private var showingDownloads = false
     private var headerHeight = 0
-    private var rootUiActive = false
-    private var pendingInactiveList: PendingRecentsList? = null
     private var ogRadius = 0f
     private var deviceRadius = 0f to 0f
     private var lastScale = 1f
-    private var libraryUpdateRunning = false
-
-    private fun setRootUiActive(active: Boolean) {
-        rootUiActive = active
-        if (isBindingInitialized) {
-            if (active) {
-                binding.swipeRefresh.isRefreshing = libraryUpdateRunning
-            }
-        }
-        presenter.setUiActive(active)
-    }
 
     /**
      * Active contextual action mode toolbar, owned by the host activity. Non-null
@@ -267,9 +254,6 @@ class RecentsController(bundle: Bundle? = null) :
         binding.recycler.setHasFixedSize(true)
         binding.recycler.setItemViewCacheSize(8)
         binding.recycler.itemAnimator = null
-        // Persistent root tabs keep this view/pool hot during normal swaps. Scope the pool
-        // to the view because RecentMangaHolder captures this newly-created adapter; a static
-        // pool could hand the new RecyclerView a holder still calling the destroyed controller.
         val recyclerPool = RecyclerView.RecycledViewPool().also {
             it.setMaxRecycledViews(R.layout.recent_manga_item, 30)
             it.setMaxRecycledViews(R.layout.recent_chapters_section_item, 8)
@@ -368,7 +352,7 @@ class RecentsController(bundle: Bundle? = null) :
         }
 
         if (presenter.recentItems.isNotEmpty()) {
-            adapter.updateDataSetIfChanged(presenter.recentItems)
+            adapter.updateDataSet(presenter.recentItems)
         } else {
             binding.recentsFrameLayout.alpha = 0f
         }
@@ -490,10 +474,7 @@ class RecentsController(bundle: Bundle? = null) :
         )
         viewScope.launch {
             LibraryUpdateJob.isRunningFlow(view.context).collect {
-                libraryUpdateRunning = it
-                if (rootUiActive) {
-                    binding.swipeRefresh.isRefreshing = it
-                }
+                binding.swipeRefresh.isRefreshing = it
             }
         }
         binding.swipeRefresh.setOnRefreshListener {
@@ -652,7 +633,7 @@ class RecentsController(bundle: Bundle? = null) :
 
     override fun onActivityResumed(activity: Activity) {
         super.onActivityResumed(activity)
-        if (!isBindingInitialized || !rootUiActive) return
+        if (!isBindingInitialized) return
         if (!presenter.isLoading) {
             refresh()
         }
@@ -670,8 +651,6 @@ class RecentsController(bundle: Bundle? = null) :
     }
 
     override fun onDestroyView(view: View) {
-        setRootUiActive(false)
-        pendingInactiveList = null
         // Drop the action mode before the underlying view is torn down so we
         // don't leak the activity reference.
         destroyActionModeIfNeeded()
@@ -691,10 +670,6 @@ class RecentsController(bundle: Bundle? = null) :
         hasNewItems: Boolean,
         shouldMoveToTop: Boolean = false,
     ) {
-        if (!rootUiActive) {
-            pendingInactiveList = PendingRecentsList(recents, hasNewItems, shouldMoveToTop)
-            return
-        }
         if (view == null) return
         if (!binding.progress.isVisible && recents.isNotEmpty()) {
             (activity as? MainActivity)?.showNotificationPermissionPrompt()
@@ -702,7 +677,7 @@ class RecentsController(bundle: Bundle? = null) :
         binding.progress.isVisible = false
         binding.recentsFrameLayout.alpha = 1f
         adapter.removeAllScrollableHeaders()
-        adapter.updateDataSetIfChanged(recents)
+        adapter.updateDataSet(recents)
         adapter.onLoadMoreComplete(null)
         if (isControllerVisible) {
             appBar()?.lockYPos = false
@@ -748,12 +723,6 @@ class RecentsController(bundle: Bundle? = null) :
             lastChapterId = null
         }
     }
-
-    private data class PendingRecentsList(
-        val items: List<RecentMangaItem>,
-        val hasNewItems: Boolean,
-        val shouldMoveToTop: Boolean,
-    )
 
     fun updateChapterDownload(download: Download) {
         download.chapter.id?.let(::updateChapterDownload)
@@ -1081,13 +1050,12 @@ class RecentsController(bundle: Bundle? = null) :
                     // calls onSetupLocalChrome + UI setup — we don't duplicate it here.
                 }
                 ControllerChangeType.POP_ENTER -> {
-                    setRootUiActive(true)
                     // Returning from a pushed controller (e.g. MangaDetails). Refresh the
-                    // retained presenter without reinstalling its long-lived flow collectors.
+                    // presenter, then activation re-wires the local chrome.
+                    presenter.onCreate()
                     onTabActivated()
                 }
                 ControllerChangeType.PUSH_EXIT, ControllerChangeType.POP_EXIT -> {
-                    setRootUiActive(false)
                     // Drop out of Conductor's menu dispatch while something is on top.
                     setOptionsMenuHidden(true)
                     snack?.dismiss()
@@ -1116,16 +1084,11 @@ class RecentsController(bundle: Bundle? = null) :
      * tab strip back in.
      */
     override fun onTabActivated() {
-        setRootUiActive(true)
         if (!isBindingInitialized) return
         binding.downloadBottomSheet.dlBottomSheet.dismiss()
         onSetupLocalChrome()
         setBottomPadding()
         updateTitleAndMenu()
-        pendingInactiveList?.let { pending ->
-            pendingInactiveList = null
-            showLists(pending.items, pending.hasNewItems, pending.shouldMoveToTop)
-        }
     }
 
     /**
@@ -1134,7 +1097,6 @@ class RecentsController(bundle: Bundle? = null) :
      * (snackbars).
      */
     override fun onTabDeactivated() {
-        setRootUiActive(false)
         if (!isBindingInitialized) return
         snack?.dismiss()
         setBottomPadding()

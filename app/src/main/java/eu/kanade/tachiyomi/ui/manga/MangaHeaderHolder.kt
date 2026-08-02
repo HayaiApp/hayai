@@ -104,7 +104,6 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import yokai.i18n.MR
-import yokai.presentation.theme.ReducedMotion
 import yokai.util.lang.getString
 import eu.kanade.tachiyomi.source.PagePreviewSource
 import eu.kanade.tachiyomi.source.online.NamespaceSource
@@ -158,11 +157,6 @@ class MangaHeaderHolder(
 
     private var showReadingButton = true
     private var boundHeaderItem: MangaHeaderItem? = null
-    private val readingButtonTextState = mutableStateOf("")
-    private val readingButtonEnabledState = mutableStateOf(false)
-    private val readingButtonVisibleState = mutableStateOf(false)
-    private var readingButtonContentScheduled = false
-    private var readingButtonContentInstalled = false
     private var showMoreButton = true
     var hadSelection = false
     private var canCollapse = true
@@ -338,23 +332,13 @@ class MangaHeaderHolder(
     private fun expandDesc(animated: Boolean = false) {
         binding ?: return
         if (binding.moreButton.visibility == View.VISIBLE || isTablet) {
-            val shouldAnimate = animated && !ReducedMotion.isEnabled()
-            if (shouldAnimate) {
-                androidx.transition.TransitionManager.endTransitions(binding.root)
-                val transition = TransitionSet()
-                    .addTransition(androidx.transition.ChangeBounds())
-                    .addTransition(androidx.transition.Fade())
-                transition.duration = binding.root.resources.getInteger(
-                    AR.integer.config_shortAnimTime,
-                ).toLong()
-                androidx.transition.TransitionManager.beginDelayedTransition(binding.root, transition)
-            }
+            androidx.transition.TransitionManager.endTransitions(adapter.controller.binding.recycler)
             binding.mangaSummary.maxLines = Integer.MAX_VALUE
             binding.mangaSummary.setTextIsSelectable(true)
             descriptionExpandedState.value = true
             binding.lessButton.isVisible = !isTablet
             binding.moreButtonGroup.isVisible = false
-            if (shouldAnimate) {
+            if (animated) {
                 val animVector = AnimatedVectorDrawableCompat.create(binding.root.context, R.drawable.anim_expand_more_to_less)
                 binding.lessButton.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, animVector, null)
                 animVector?.start()
@@ -362,25 +346,28 @@ class MangaHeaderHolder(
             binding.title.maxLines = Integer.MAX_VALUE
             binding.mangaAuthor.maxLines = Integer.MAX_VALUE
             binding.mangaSummary.requestFocus()
+            if (animated) {
+                val transition = TransitionSet()
+                    .addTransition(androidx.transition.ChangeBounds())
+                    .addTransition(androidx.transition.Fade())
+                    .addTransition(androidx.transition.Slide())
+                transition.duration = binding.root.resources.getInteger(
+                    AR.integer.config_shortAnimTime,
+                ).toLong()
+                androidx.transition.TransitionManager.beginDelayedTransition(
+                    adapter.controller.binding.recycler,
+                    transition,
+                )
+            }
         }
     }
 
     private fun collapseDesc(animated: Boolean = false) {
         binding ?: return
         if (isTablet || !canCollapse) return
-        val shouldAnimate = animated && !ReducedMotion.isEnabled()
-        if (shouldAnimate) {
-            androidx.transition.TransitionManager.endTransitions(binding.root)
-            val transition = TransitionSet()
-                .addTransition(androidx.transition.ChangeBounds())
-                .addTransition(androidx.transition.Fade())
-            transition.duration = binding.root.resources.getInteger(
-                AR.integer.config_shortAnimTime,
-            ).toLong()
-            androidx.transition.TransitionManager.beginDelayedTransition(binding.root, transition)
-        }
         binding.moreButtonGroup.isVisible = !isTablet
-        if (shouldAnimate) {
+        if (animated) {
+            androidx.transition.TransitionManager.endTransitions(adapter.controller.binding.recycler)
             val animVector = AnimatedVectorDrawableCompat.create(
                 binding.root.context,
                 R.drawable.anim_expand_less_to_more,
@@ -392,6 +379,16 @@ class MangaHeaderHolder(
                 null,
             )
             animVector?.start()
+            val transition = TransitionSet()
+                .addTransition(androidx.transition.ChangeBounds())
+                .addTransition(androidx.transition.Fade())
+            transition.duration = binding.root.resources.getInteger(
+                AR.integer.config_shortAnimTime,
+            ).toLong()
+            androidx.transition.TransitionManager.beginDelayedTransition(
+                adapter.controller.binding.recycler,
+                transition,
+            )
         }
         binding.mangaSummary.setTextIsSelectable(false)
         binding.mangaSummary.isClickable = true
@@ -1045,30 +1042,16 @@ class MangaHeaderHolder(
         } ?: run {
             itemView.context.getString(MR.strings.all_chapters_read)
         }
-        readingButtonTextState.value = readText
-        readingButtonEnabledState.value = readEnabled
-        readingButtonVisibleState.value = showButtons
-
         val composeView = binding?.buttonGroupCompose ?: return
-        if (readingButtonContentInstalled || readingButtonContentScheduled) return
-        readingButtonContentScheduled = true
-        // Defer first composition to the next frame so the push transition isn't charged for
-        // Compose startup; subsequent chapter refreshes update state instead of reinstalling the
-        // entire composition. minHeight=56dp reserves layout space so there's no landing shift.
         composeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             postOnAnimation {
-                readingButtonContentScheduled = false
-                if (binding.buttonGroupCompose !== composeView) {
-                    return@postOnAnimation
-                }
-                readingButtonContentInstalled = true
                 setContent {
                     yokai.presentation.theme.YokaiTheme {
                         MangaContinueReadingButton(
-                            readButtonText = readingButtonTextState.value,
-                            readEnabled = readingButtonEnabledState.value,
-                            showButton = readingButtonVisibleState.value,
+                            readButtonText = readText,
+                            readEnabled = readEnabled,
+                            showButton = showButtons,
                             accentColorInt = accentColorState.value,
                             onReadClick = { adapter.delegate.readNextChapter(composeView) },
                         )

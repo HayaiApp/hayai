@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Build
 import android.view.Gravity
@@ -283,8 +284,9 @@ fun <T> Controller.liftAppbarWith(
             if (notAtTop != isToolbarColored) colorToolbar(notAtTop)
         }
     }
-    (recycler as? RecyclerView)?.addOnScrollListener(
-        object : RecyclerView.OnScrollListener() {
+    var recyclerScrollListener: RecyclerView.OnScrollListener? = null
+    (recycler as? RecyclerView)?.let { recyclerView ->
+        val listener = object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 if (router?.backstack?.lastOrNull()
@@ -294,10 +296,11 @@ fun <T> Controller.liftAppbarWith(
                     if (notAtTop != isToolbarColored) colorToolbar(notAtTop)
                 }
             }
-        },
-    )
-    addLifecycleListener(
-        object : Controller.LifecycleListener() {
+        }
+        recyclerScrollListener = listener
+        recyclerView.addOnScrollListener(listener)
+    }
+    val chromeLifecycleListener = object : Controller.LifecycleListener() {
             override fun onChangeStart(
                 controller: Controller,
                 changeHandler: ControllerChangeHandler,
@@ -315,8 +318,22 @@ fun <T> Controller.liftAppbarWith(
                     appBar()?.updateAppBarAfterY(recycler)
                 }
             }
-        },
-    )
+
+            override fun preDestroyView(controller: Controller, view: View) {
+                recyclerScrollListener?.let { listener ->
+                    (recycler as? RecyclerView)?.removeOnScrollListener(listener)
+                }
+                (recycler as? NestedScrollView)?.setOnScrollChangeListener(
+                    null as NestedScrollView.OnScrollChangeListener?,
+                )
+                toolbarColorAnim?.cancel()
+            }
+
+            override fun postDestroyView(controller: Controller) {
+                controller.removeLifecycleListener(this)
+            }
+        }
+    addLifecycleListener(chromeLifecycleListener)
 }
 
 fun Controller.scrollViewWith(
@@ -365,14 +382,7 @@ fun Controller.scrollViewWith(
         updateViewsNearBottom()
     }
 
-    // Respect the screen's animator policy. Recents and Browse deliberately set
-    // itemAnimator = null before calling this helper because rebinding their large,
-    // nested rows during a tab/data change is substantially cheaper without change
-    // animations. Installing our app-bar-aware DefaultItemAnimator unconditionally
-    // silently undid that decision and put the jank back.
-    (recycler as? RecyclerView)?.takeIf { it.itemAnimator != null }?.let {
-        setItemAnimatorForAppBar(it)
-    }
+    (recycler as? RecyclerView)?.let { setItemAnimatorForAppBar(it) }
 
     val randomTag = Random.nextLong()
     var lastY = 0f
@@ -566,10 +576,6 @@ fun Controller.scrollViewWith(
             }
 
             override fun preDestroyView(controller: Controller, view: View) {
-                // A Controller outlives its view across configuration/theme changes.
-                // Without symmetric cleanup this lifecycle listener kept the old
-                // RecyclerView, app bar, activity binding, and callbacks reachable and
-                // every recreated view added another set of change callbacks.
                 recyclerScrollListener?.let { listener ->
                     (recycler as? RecyclerView)?.removeOnScrollListener(listener)
                 }
@@ -635,14 +641,12 @@ fun Controller.scrollViewWith(
                 appBar.updateAppBarAfterY(recycler)
                 if (router.backstackSize == 1 && isInView) {
                     activityBinding!!.bottomNav?.let {
-                        if (it.translationY != 0f) {
-                            val animator = it.animate()?.translationY(0f)
-                                ?.setDuration(shortAnimationDuration.toLong())
-                            animator?.setUpdateListener {
-                                updateViewsNearBottom()
-                            }
-                            animator?.start()
+                        val animator = it.animate()?.translationY(0f)
+                            ?.setDuration(shortAnimationDuration.toLong())
+                        animator?.setUpdateListener {
+                            updateViewsNearBottom()
                         }
+                        animator?.start()
                     }
                 }
                 lastY = 0f
@@ -733,8 +737,7 @@ fun Controller.scrollViewWith(
     }
 
     (recycler as? RecyclerView)?.let { recyclerView ->
-        recyclerScrollListener =
-            object : RecyclerView.OnScrollListener() {
+        recyclerScrollListener = object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 onScrolled(dy)
             }
@@ -870,62 +873,51 @@ fun Controller.moveRecyclerViewUp(allTheWayUp: Boolean = false, scrollUpAnyway: 
 }
 
 fun Controller.setAppBarBG(value: Float, includeTabView: Boolean = false) {
-    view?.context ?: return
-    val appBar = appBar() ?: return
+    val context = view?.context ?: return
     val floatingBar =
         (this as? FloatingSearchInterface)?.showFloatingBar() == true && !includeTabView
     if (!isControllerVisible) return
     if (floatingBar) {
-        (appBar.cardView as? CardView)?.let { card ->
-            if (card.cardBackgroundColor.defaultColor != appBar.elevatedSurfaceColor) {
-                card.setCardBackgroundColor(appBar.elevatedSurfaceColor)
-            }
-        }
-        if (this !is SmallToolbarInterface && appBar.useLargeToolbar &&
-            !appBar.compactSearchMode
+        (appBar()?.cardView as? CardView)?.setCardBackgroundColor(context.getResourceColor(materialR.attr.colorPrimaryVariant))
+        if (this !is SmallToolbarInterface && appBar()?.useLargeToolbar == true &&
+            appBar()?.compactSearchMode != true
         ) {
+            val colorSurface = context.getResourceColor(materialR.attr.colorSurface)
             val color = ColorUtils.blendARGB(
-                appBar.surfaceColor,
-                ColorUtils.setAlphaComponent(appBar.surfaceColor, 0),
+                colorSurface,
+                ColorUtils.setAlphaComponent(colorSurface, 0),
                 value,
             )
-            if (appBar.backgroundColor != color) appBar.backgroundColor = color
+            appBar()?.backgroundColor = color
         } else {
-            if ((appBar.backgroundColor ?: Color.TRANSPARENT) != Color.TRANSPARENT) {
-                appBar.backgroundColor = Color.TRANSPARENT
-            }
+            appBar()?.backgroundColor = Color.TRANSPARENT
         }
-        if (!appBar.isInvisible) {
-            activity?.window?.let { window ->
-                if (window.statusBarColor != appBar.themedStatusBarColor) {
-                    window.statusBarColor = appBar.themedStatusBarColor
-                }
-            }
+        if (appBar()?.isInvisible != true) {
+            activity?.window?.statusBarColor =
+                context.getResourceColor(AR.attr.statusBarColor)
         }
     } else {
         val color = ColorUtils.blendARGB(
-            appBar.surfaceColor,
-            appBar.elevatedSurfaceColor,
+            context.getResourceColor(materialR.attr.colorSurface),
+            context.getResourceColor(materialR.attr.colorPrimaryVariant),
             value,
         )
-        if (appBar.backgroundColor != color) appBar.setBackgroundColor(color)
-        if (!appBar.isInvisible) {
-            val statusColor = ColorUtils.setAlphaComponent(color, (0.87f * 255).roundToInt())
-            activity?.window?.let { window ->
-                if (window.statusBarColor != statusColor) window.statusBarColor = statusColor
-            }
+        appBar()?.setBackgroundColor(color)
+        if (appBar()?.isInvisible != true) {
+            activity?.window?.statusBarColor =
+                ColorUtils.setAlphaComponent(color, (0.87f * 255).roundToInt())
         }
         if ((this as? FloatingSearchInterface)?.showFloatingBar() == true) {
             val invColor = ColorUtils.blendARGB(
-                appBar.surfaceColor,
-                appBar.elevatedSurfaceColor,
+                context.getResourceColor(materialR.attr.colorSurface),
+                context.getResourceColor(materialR.attr.colorPrimaryVariant),
                 1 - value,
             )
-            (appBar.cardView as? CardView)?.let { card ->
-                if (card.cardBackgroundColor.defaultColor != invColor) {
-                    card.setCardBackgroundColor(invColor)
-                }
-            }
+            (appBar()?.cardView as? CardView)?.setCardBackgroundColor(
+                ColorStateList.valueOf(
+                    invColor,
+                ),
+            )
         }
     }
 }
@@ -1076,10 +1068,6 @@ val Router.isCompose: Boolean
     get() = backstack.lastOrNull()?.controller is BaseComposeController
 
 interface BackHandlerControllerInterface {
-    /**
-     * Whether gesture progress should preview a navigation pop. A controller can return false
-     * while a local dismissible state owns back; the committed press is still delivered normally.
-     */
     fun shouldAnimatePredictiveBack(): Boolean = true
 
     fun handleOnBackStarted(backEvent: BackEventCompat) {

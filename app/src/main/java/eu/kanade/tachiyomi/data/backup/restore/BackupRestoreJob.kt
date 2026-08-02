@@ -15,7 +15,7 @@ import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.data.backup.BackupConst
 import eu.kanade.tachiyomi.data.backup.BackupNotifier
 import eu.kanade.tachiyomi.data.notification.Notifications
-import eu.kanade.tachiyomi.data.work.ActiveWorkTracker
+import eu.kanade.tachiyomi.util.system.jobIsRunning
 import eu.kanade.tachiyomi.util.system.localeContext
 import eu.kanade.tachiyomi.util.system.tryToSetForeground
 import eu.kanade.tachiyomi.util.system.withIOContext
@@ -42,41 +42,35 @@ class BackupRestoreJob(val context: Context, workerParams: WorkerParameters) : C
     }
 
     override suspend fun doWork(): Result {
-        activeWork.tryTrack(id)
-        try {
-            val uriPath = inputData.getString(BackupConst.EXTRA_URI) ?: return Result.failure()
-            val uri = Uri.parse(uriPath) ?: return Result.failure()
+        val uriPath = inputData.getString(BackupConst.EXTRA_URI) ?: return Result.failure()
+        val uri = Uri.parse(uriPath) ?: return Result.failure()
 
-            val options = inputData.getBooleanArray(RESTORE_FLAGS_KEY)
-                ?.let(RestoreOptions::fromBooleanArray)
-                ?: RestoreOptions()
+        val options = inputData.getBooleanArray(RESTORE_FLAGS_KEY)
+            ?.let(RestoreOptions::fromBooleanArray)
+            ?: RestoreOptions()
 
-            tryToSetForeground()
+        tryToSetForeground()
 
-            return withIOContext {
-                try {
-                    restorer.restore(uri, options)
+        return withIOContext {
+            try {
+                restorer.restore(uri, options)
+                Result.success()
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    notifier.showRestoreError(context.getString(MR.strings.restoring_backup_canceled))
                     Result.success()
-                } catch (e: Exception) {
-                    if (e is CancellationException) {
-                        notifier.showRestoreError(context.getString(MR.strings.restoring_backup_canceled))
-                        Result.success()
-                    } else {
-                        Logger.e(e) { "Failed to restore backup" }
-                        restorer.writeErrorLog()
-                        notifier.showRestoreError(e.message)
-                        Result.failure()
-                    }
+                } else {
+                    Logger.e(e) { "Failed to restore backup" }
+                    restorer.writeErrorLog()
+                    notifier.showRestoreError(e.message)
+                    Result.failure()
                 }
             }
-        } finally {
-            activeWork.finish(id)
         }
     }
 
     companion object {
         private const val TAG = "BackupRestorer"
-        private val activeWork = ActiveWorkTracker()
         private const val RESTORE_FLAGS_KEY = "restore_flags" // BooleanArray
 
         fun start(context: Context, uri: Uri, options: RestoreOptions = RestoreOptions()) {
@@ -89,20 +83,13 @@ class BackupRestoreJob(val context: Context, workerParams: WorkerParameters) : C
                 .setInputData(inputData)
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
-            activeWork.replace(request.id)
-            try {
-                context.workManager.enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, request)
-            } catch (error: Throwable) {
-                activeWork.finish(request.id)
-                throw error
-            }
+            context.workManager.enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, request)
         }
 
         fun stop(context: Context) {
-            activeWork.clear()
             context.workManager.cancelUniqueWork(TAG)
         }
 
-        fun isRunning(@Suppress("UNUSED_PARAMETER") context: Context): Boolean = activeWork.isActive
+        fun isRunning(context: Context) = context.workManager.jobIsRunning(TAG)
     }
 }

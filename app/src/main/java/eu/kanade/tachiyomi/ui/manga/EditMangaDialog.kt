@@ -18,7 +18,6 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.children
 import androidx.core.view.doOnLayout
-import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
@@ -53,6 +52,7 @@ import eu.kanade.tachiyomi.util.view.liftAppbarWith
 import eu.kanade.tachiyomi.widget.TachiyomiTextInputEditText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import yokai.domain.series.SeriesKnowledgeRepository
 import yokai.domain.series.SeriesPreferences
@@ -74,7 +74,7 @@ import yokai.util.lang.getString
 
 class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallToolbarInterface {
 
-    private lateinit var manga: Manga
+    private val manga: Manga
 
     private var customCoverUri: Uri? = null
 
@@ -114,7 +114,9 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
     }
 
     @Suppress("unused")
-    constructor(bundle: Bundle) : super(bundle)
+    constructor(bundle: Bundle) : super(bundle) {
+        manga = runBlocking { get<GetManga>().awaitById(bundle.getLong(KEY_MANGA))!! }
+    }
 
     override fun createBinding(inflater: LayoutInflater) = EditMangaDialogBinding.inflate(inflater)
 
@@ -137,31 +139,6 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
         binding.scrollView.post {
             updateScrollIndicators()
         }
-
-        if (this::manga.isInitialized) {
-            bindMangaEditor()
-        } else {
-            // Process restoration used to runBlocking the controller constructor, freezing the
-            // navigation transition on a database read. Attach immediately and resolve the model
-            // inside the view lifecycle instead.
-            binding.scrollView.isInvisible = true
-            binding.saveEdit.isEnabled = false
-            viewScope.launch {
-                val restoredManga = withContext(Dispatchers.IO) {
-                    get<GetManga>().awaitById(args.getLong(KEY_MANGA))
-                }
-                if (restoredManga == null) {
-                    router.popCurrentController()
-                    return@launch
-                }
-                manga = restoredManga
-                bindMangaEditor()
-            }
-        }
-    }
-
-    private fun bindMangaEditor() {
-        val manga = manga
 
         val context = binding.root.context
 
@@ -298,8 +275,6 @@ class EditMangaController : BaseLegacyController<EditMangaDialogBinding>, SmallT
         }
         setupSeriesEnrichmentControls(context)
         bindCoverColorThemeControl(context)
-        binding.scrollView.isInvisible = false
-        binding.saveEdit.isEnabled = true
     }
 
     private fun bindBottomActionInsets() {

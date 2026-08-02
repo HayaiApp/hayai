@@ -72,6 +72,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -185,7 +186,10 @@ class ReaderViewModel(
     private var finished = false
     private var chapterToDownload: Download? = null
 
-    private var unfilteredChapterList: List<Chapter> = emptyList()
+    private val unfilteredChapterList by lazy {
+        val manga = manga!!
+        runBlocking { getChapter.awaitAll(manga, filterScanlators = false) }
+    }
 
     private lateinit var chapterList: List<ReaderChapter>
 
@@ -281,10 +285,7 @@ class ReaderViewModel(
                     loader = ChapterLoader(context, downloadManager, downloadProvider, manga, resolvedSource)
 
                     chapterList = getChapterList()
-                    // Populate the full list directly inside the existing IO initialization
-                    // context. The old lazy runBlocking wrapper hid a synchronous database wait
-                    // and made correctness depend on this warm-up line running first.
-                    unfilteredChapterList = getChapter.awaitAll(manga, filterScanlators = false)
+                    unfilteredChapterList
                     loadChapter(loader!!, chapterList.first { chapterId == it.chapter.id }, page)
                     Result.success(true)
                 } else {

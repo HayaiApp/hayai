@@ -158,7 +158,6 @@ open class BrowseSourceController(bundle: Bundle) :
     /** Current filter sheet — Compose + M3 Expressive */
     private var composeFilterSheet: eu.kanade.tachiyomi.ui.source.browse.compose.ComposeSourceFilterSheet? = null
     private var lastPosition: Int = -1
-    private var sourceUiInitialized = false
     private val ribbonConstraints = MutableStateFlow<List<ActiveConstraint>>(emptyList())
     private val resultsUpdating = MutableStateFlow(false)
     private var browseHeaderHeight = 0
@@ -227,39 +226,20 @@ open class BrowseSourceController(bundle: Bundle) :
         adapter = FlexibleAdapter(null, this, false)
         setupRecycler(view)
 
-        when (presenter.sourceInitializationState) {
-            SourceInitializationState.LOADING -> {
-                binding.floatingBrowseBar.isVisible = false
-                binding.progress.isVisible = true
-                return
-            }
-            SourceInitializationState.UNAVAILABLE -> {
-                onSourceUnavailable()
-                return
-            }
-            SourceInitializationState.READY -> finishSourceSetup()
-        }
-    }
-
-    fun onSourceReady() {
-        if (!isAttached || view == null) return
-        finishSourceSetup()
-    }
-
-    fun onSourceUnavailable() {
-        if (!isAttached || view == null) return
+        if (!presenter.sourceIsInitialized) {
         activity?.toast(MR.strings.source_not_installed)
         if (activity is SearchActivity) {
             activity?.finish()
         } else {
             router.popCurrentController()
         }
+            return
+        }
+
+        finishSourceSetup()
     }
 
     private fun finishSourceSetup() {
-        if (sourceUiInitialized || !presenter.sourceIsInitialized) return
-        sourceUiInitialized = true
-
         val hasFilters = presenter.sourceFilters.isNotEmpty()
         val supportsLatest = presenter.source.supportsLatest
         binding.floatingBrowseBar.isVisible = hasFilters || supportsLatest
@@ -298,7 +278,6 @@ open class BrowseSourceController(bundle: Bundle) :
     }
 
     override fun onDestroyView(view: View) {
-        sourceUiInitialized = false
         recycler?.adapter = null
         recycler?.recycledViewPool?.clear()
         adapter = null

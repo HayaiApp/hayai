@@ -189,9 +189,6 @@ class BrowseController :
         binding.sourceRecycler.setHasFixedSize(true)
         binding.sourceRecycler.setItemViewCacheSize(8)
         binding.sourceRecycler.itemAnimator = null
-        // The persistent Browse root keeps this pool across tab swaps. Scope it to the
-        // current view/adapter: SourceHolder captures SourceAdapter and its controller, so
-        // process-static reuse after recreation retained stale click targets and contexts.
         val recyclerPool = RecyclerView.RecycledViewPool().also {
             it.setMaxRecycledViews(R.layout.source_item, 30)
             it.setMaxRecycledViews(R.layout.source_header_item, 8)
@@ -328,13 +325,6 @@ class BrowseController :
                             binding.bottomSheet.root.updatedNestedRecyclers()
                             binding.bottomSheet.root.isExpanding = false
                         }
-                        if (state == BottomSheetBehavior.STATE_EXPANDED) {
-                            // The migration page is adjacent but invisible during first entry.
-                            // Build it after expansion settles so its rows never compete with
-                            // root navigation or the bottom-sheet transform.
-                            binding.bottomSheet.root.prepareMigrationPage()
-                        }
-
                         binding.bottomSheet.root.apply {
                             if ((
                                 state == BottomSheetBehavior.STATE_COLLAPSED ||
@@ -789,11 +779,9 @@ class BrowseController :
             view?.postDelayed(POST_ENTRY_DEFER_MS) {
                 if (!isBindingInitialized) return@postDelayed
                 if (!bottomSheetReady) return@postDelayed
-                if (!type.isPush) {
-                    android.os.Trace.beginSection("Hayai/Browse.refreshMigrations")
-                    binding.bottomSheet.root.presenter.refreshMigrations()
-                    android.os.Trace.endSection()
-                }
+                android.os.Trace.beginSection("Hayai/Browse.refreshMigrations")
+                binding.bottomSheet.root.presenter.refreshMigrations()
+                android.os.Trace.endSection()
                 android.os.Trace.beginSection("Hayai/Browse.updateTitleAndMenu")
                 updateTitleAndMenu()
                 android.os.Trace.endSection()

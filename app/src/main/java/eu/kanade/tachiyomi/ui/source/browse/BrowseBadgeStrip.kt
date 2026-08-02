@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.ui.source.browse
 import android.content.Context
 import android.util.AttributeSet
 import android.view.Gravity
-import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.core.view.isVisible
@@ -24,14 +23,6 @@ class BrowseBadgeStrip @JvmOverloads constructor(context: Context, attrs: Attrib
     data class Segment(val text: String, val backgroundColor: Int, val textColor: Int)
 
     private val slantPx = 6.dpToPx
-    private val endPaddingPx = 8.dpToPx
-    private val slots = mutableListOf<Slot>()
-    private var currentSegments = emptyList<Segment>()
-
-    private data class Slot(
-        val wedge: ImageView,
-        val label: MaterialTextView,
-    )
 
     init {
         orientation = HORIZONTAL
@@ -39,53 +30,40 @@ class BrowseBadgeStrip @JvmOverloads constructor(context: Context, attrs: Attrib
         clipToPadding = false
     }
 
-    /**
-     * Updates the strip without rebuilding its child hierarchy. Browse cells are rebound often
-     * while paging and returning from details; allocating MaterialTextViews during every bind made
-     * those otherwise-small updates trigger repeated measure/layout work across the whole row.
-     */
+    /** Rebuilds the strip from [segments]; hides itself when empty. */
     fun setSegments(segments: List<Segment>) {
-        if (segments == currentSegments) return
-        currentSegments = segments.toList()
-
+        removeAllViews()
         isVisible = segments.isNotEmpty()
-        while (slots.size < segments.size) addSlot(slots.size)
+        if (segments.isEmpty()) return
 
-        slots.forEachIndexed { index, slot ->
-            val segment = segments.getOrNull(index)
-            val visibility = if (segment == null) View.GONE else View.VISIBLE
-            slot.label.visibility = visibility
-            slot.wedge.visibility = if (index > 0 && segment != null) View.VISIBLE else View.GONE
-            if (segment == null) return@forEachIndexed
-
-            slot.wedge.setColorFilter(segment.backgroundColor)
-            slot.label.text = segment.text
-            slot.label.setTextColor(segment.textColor)
-            slot.label.setBackgroundColor(segment.backgroundColor)
+        segments.forEachIndexed { index, segment ->
+            // The forward slant between adjacent segments mirrors the Compose ForwardSlantedShape:
+            // a tinted angled wedge tucked in front of every segment after the first.
+            if (index > 0) {
+                addView(
+                    ImageView(context).apply {
+                        setImageResource(R.drawable.unread_angled_badge)
+                        scaleType = ImageView.ScaleType.FIT_XY
+                        setColorFilter(segment.backgroundColor)
+                        layoutParams = LayoutParams(slantPx, LayoutParams.MATCH_PARENT)
+                    },
+                )
+            }
+            addView(
+                MaterialTextView(context).apply {
+                    text = segment.text
+                    setTextColor(segment.textColor)
+                    setBackgroundColor(segment.backgroundColor)
+                    textSize = 13f
+                    includeFontPadding = false
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    // First segment squares off at the start; later segments butt against the wedge.
+                    val start = if (index == 0) 8.dpToPx else 0
+                    setPadding(start, 0, 8.dpToPx, 0)
+                    layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT)
+                },
+            )
         }
-    }
-
-    private fun addSlot(index: Int) {
-        // The forward slant between adjacent segments mirrors the Compose ForwardSlantedShape:
-        // a tinted angled wedge tucked in front of every segment after the first.
-        val wedge = ImageView(context).apply {
-            setImageResource(R.drawable.unread_angled_badge)
-            scaleType = ImageView.ScaleType.FIT_XY
-            visibility = View.GONE
-            layoutParams = LayoutParams(slantPx, LayoutParams.MATCH_PARENT)
-        }
-        val label = MaterialTextView(context).apply {
-            textSize = 13f
-            includeFontPadding = false
-            gravity = Gravity.CENTER
-            maxLines = 1
-            visibility = View.GONE
-            val start = if (index == 0) endPaddingPx else 0
-            setPadding(start, 0, endPaddingPx, 0)
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT)
-        }
-        addView(wedge)
-        addView(label)
-        slots += Slot(wedge, label)
     }
 }

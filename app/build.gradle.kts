@@ -182,7 +182,6 @@ dependencies {
 
     // Android X libraries
     implementation(androidx.bundles.androidx)
-    implementation(androidx.profileinstaller)
 
     implementation(platform(libs.firebase))
 
