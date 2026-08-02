@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.source.browse
 
+import android.app.Activity
 import android.view.View
+import android.widget.ImageView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import coil3.dispose
@@ -33,6 +35,7 @@ class BrowseSourceListHolder(
     BrowseSourceHolder(view, adapter) {
 
     private val binding = MangaListItemBinding.bind(view)
+    private var boundCover: BrowseCoverIdentity? = null
 
     init {
         setCards(showOutline, binding.card, binding.unreadDownloadBadge.badgeView)
@@ -66,13 +69,22 @@ class BrowseSourceListHolder(
     }
 
     override fun setImage(manga: Manga) {
-        // Update the cover.
-        if (manga.thumbnail_url == null) {
-            binding.coverThumbnail.dispose()
-        } else {
-            manga.id ?: return
-            binding.coverThumbnail.loadManga(manga.cover())
-            binding.coverThumbnail.alpha = if (manga.favorite) 0.34f else 1.0f
-        }
+        val cover = manga.browseCoverIdentity()
+        if (cover == boundCover) return
+        if ((view.context as? Activity)?.isDestroyed == true) return
+
+        binding.coverThumbnail.dispose()
+        binding.coverThumbnail.scaleType = ImageView.ScaleType.CENTER_CROP
+        binding.coverThumbnail.setImageDrawable(null)
+        boundCover = cover
+        binding.coverThumbnail.alpha = if (manga.favorite) 0.34f else 1.0f
+        if (cover.url.isNullOrBlank() || cover.mangaId == null) return
+        binding.coverThumbnail.loadManga(manga.cover())
+    }
+
+    override fun recycle() {
+        binding.coverThumbnail.dispose()
+        binding.coverThumbnail.setImageDrawable(null)
+        boundCover = null
     }
 }

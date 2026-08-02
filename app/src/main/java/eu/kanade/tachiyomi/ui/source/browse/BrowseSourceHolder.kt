@@ -31,4 +31,23 @@ abstract class BrowseSourceHolder(view: View, adapter: FlexibleAdapter<IFlexible
      * @param manga the manga to bind.
      */
     abstract fun setImage(manga: Manga)
+
+    /** Cancels work and clears identity state when FlexibleAdapter recycles this holder. */
+    open fun recycle() = Unit
 }
+
+internal data class BrowseCoverIdentity(
+    val mangaId: Long?,
+    val sourceId: Long,
+    val url: String?,
+    val lastModified: Long,
+    val inLibrary: Boolean,
+)
+
+internal fun Manga.browseCoverIdentity() = BrowseCoverIdentity(
+    mangaId = id,
+    sourceId = source,
+    url = thumbnail_url,
+    lastModified = cover_last_modified,
+    inLibrary = favorite,
+)

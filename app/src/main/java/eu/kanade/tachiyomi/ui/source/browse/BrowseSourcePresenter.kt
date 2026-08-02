@@ -303,18 +303,8 @@ open class BrowseSourcePresenter(
             newManga.copyFrom(sManga)
             newManga.id = insertManga.await(newManga)
             localManga = newManga
-        } else if (localManga.title.isBlank()) {
-            localManga.title = sManga.title
-            updateManga.await(
-                MangaUpdate(
-                    id = localManga.id!!,
-                    title = sManga.title,
-                )
-            )
-        } else if (!localManga.favorite) {
-            // if the manga isn't a favorite, set its display title from source
-            // if it later becomes a favorite, updated title will go to db
-            localManga.title = sManga.title
+        } else {
+            mergeSourceListing(localManga, sManga)?.let { updateManga.await(it) }
         }
         return localManga
     }
@@ -435,4 +425,29 @@ open class BrowseSourcePresenter(
     suspend fun loadSearches(): List<SavedSearch> {
        return getSavedSearch.awaitAllBySourceId(sourceId).applyAllSave(source::getFilterList)
     }
+}
+
+internal fun mergeSourceListing(localManga: Manga, sourceManga: SManga): MangaUpdate? {
+    val titleWasBlank = localManga.title.isBlank()
+    val sourceThumbnail = sourceManga.thumbnail_url?.takeIf { it.isNotBlank() }
+    val thumbnailChanged = !localManga.favorite &&
+        sourceThumbnail != null &&
+        sourceThumbnail != localManga.thumbnail_url
+
+    // Non-library rows are source-owned snapshots. Always use the current listing title in
+    // memory, and persist a newly supplied thumbnail so a stale database row cannot leave Coil
+    // without a URL indefinitely. Library covers remain governed by the normal details refresh.
+    if (!localManga.favorite || titleWasBlank) {
+        localManga.title = sourceManga.title
+    }
+    if (thumbnailChanged) {
+        localManga.thumbnail_url = sourceThumbnail
+    }
+
+    if (!titleWasBlank && !thumbnailChanged) return null
+    return MangaUpdate(
+        id = checkNotNull(localManga.id),
+        title = sourceManga.title.takeIf { titleWasBlank },
+        thumbnailUrl = sourceThumbnail.takeIf { thumbnailChanged },
+    )
 }

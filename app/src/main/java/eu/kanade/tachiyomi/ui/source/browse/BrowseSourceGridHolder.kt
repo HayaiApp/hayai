@@ -36,6 +36,7 @@ class BrowseSourceGridHolder(
 ) : BrowseSourceHolder(view, adapter) {
 
     private val binding = BrowseSourceGridItemBinding.bind(view)
+    private var boundCover: BrowseCoverIdentity? = null
 
     init {
         binding.card.strokeWidth = if (showOutline) 1.dpToPx else 0
@@ -97,6 +98,8 @@ class BrowseSourceGridHolder(
     }
 
     override fun setImage(manga: Manga) {
+        val cover = manga.browseCoverIdentity()
+        if (cover == boundCover) return
         if ((view.context as? Activity)?.isDestroyed == true) return
         binding.coverThumbnail.dispose()
         // dispose() leaves the prior drawable in place; CoverViewTarget.onError swaps in a
@@ -104,9 +107,17 @@ class BrowseSourceGridHolder(
         // glyph before the new request lands. Reset scale + clear the drawable to the placeholder.
         binding.coverThumbnail.scaleType = ImageView.ScaleType.CENTER_CROP
         binding.coverThumbnail.setImageDrawable(null)
+        boundCover = cover
+        if (cover.url.isNullOrBlank()) return
         // loadManga applies the singleton's maxBitmapSize(2048) + precision(INEXACT) defaults, so
         // covers decode at view bounds instead of over-decoding. Coil shows the XML placeholder
         // background until the cover (or error) lands; matches the Compose cell behaviour.
         binding.coverThumbnail.loadManga(manga.cover())
+    }
+
+    override fun recycle() {
+        binding.coverThumbnail.dispose()
+        binding.coverThumbnail.setImageDrawable(null)
+        boundCover = null
     }
 }
