@@ -153,6 +153,15 @@ Hayai also incorporates extension-ecosystem maintenance and stability fixes from
 
 </div>
 
+<details>
+    <summary><h3>From Tsundoku</h3></summary>
+
+* Fixes and ideas.
+
+</details>
+
+</div>
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
