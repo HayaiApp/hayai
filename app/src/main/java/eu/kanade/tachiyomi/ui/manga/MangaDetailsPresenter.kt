@@ -1336,16 +1336,7 @@ class MangaDetailsPresenter(
 
             presenterScope.launch {
                 val binding = try {
-                    withTimeout(TRACK_BIND_TIMEOUT_MS) {
-                        service.bind(item)
-                    }
-                } catch (e: TimeoutCancellationException) {
-                    if (onComplete == null) {
-                        trackError(e)
-                    } else {
-                        onComplete(Result.failure(e))
-                    }
-                    return@launch
+                    service.bind(item)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -1359,7 +1350,6 @@ class MangaDetailsPresenter(
                 try {
                     withContext(Dispatchers.IO) {
                         insertTrack.await(binding)
-                        syncChaptersWithTrackServiceTwoWay(chapters, binding, service)
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -1370,6 +1360,13 @@ class MangaDetailsPresenter(
                         onComplete(Result.failure(e))
                     }
                     return@launch
+                }
+                try {
+                    syncChaptersWithTrackServiceTwoWay(chapters, binding, service)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.w(e) { "Tracking was linked, but the initial chapter sync failed" }
                 }
                 val metadataSearch = (binding as? TrackSearch) ?: (item as? TrackSearch)
                 if (metadataSearch != null) {
@@ -1498,7 +1495,6 @@ class MangaDetailsPresenter(
 
     companion object {
         private const val TRACK_SEARCH_TIMEOUT_MS = 25_000L
-        private const val TRACK_BIND_TIMEOUT_MS = 30_000L
         const val MULTIPLE_VOLUMES = 1
         const val TENS_OF_CHAPTERS = 2
         const val MULTIPLE_SEASONS = 3
