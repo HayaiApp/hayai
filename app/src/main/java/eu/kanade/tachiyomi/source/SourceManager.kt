@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.source
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.ExtensionManager
@@ -16,14 +17,17 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 
 class SourceManager(
     private val context: Context,
     private val extensionManager: ExtensionManager,
+    private val novelPluginManager: NovelPluginManager,
 ) {
     private val scope = CoroutineScope(Job() + Dispatchers.IO)
 
@@ -45,24 +49,33 @@ class SourceManager(
 
     init {
         scope.launch {
-            extensionManager.installedExtensionsFlow
-                .collectLatest { extensions ->
-                    val mutableMap =
-                        ConcurrentHashMap<Long, Source>(
-                            mapOf(
-                                LocalSource.ID to LocalSource(context),
-                                LocalNovelSource.ID to LocalNovelSource(context),
-                            ),
-                        )
-                    extensions.forEach { extension ->
-                        extension.sources.forEach {
-                            mutableMap[it.id] = it
-                            delegatedSources[it.id]?.delegatedHttpSource?.delegate = it as? HttpSource
+            combine(extensionManager.installedExtensionsFlow, novelPluginManager.catalog) { extensions, plugins ->
+                extensions to
+                    plugins.sources
+            }.collectLatest { (extensions, pluginSources) ->
+                val mutableMap =
+                    ConcurrentHashMap<Long, Source>(
+                        mapOf(
+                            LocalSource.ID to LocalSource(context),
+                            LocalNovelSource.ID to LocalNovelSource(context),
+                        ),
+                    )
+                extensions.forEach { extension ->
+                    extension.sources.forEach {
+                        mutableMap[it.id] = it
+                        delegatedSources[it.id]?.delegatedHttpSource?.delegate = it as? HttpSource
 //                            registerStubSource(it)
-                        }
                     }
-                    sourcesMapFlow.value = mutableMap
                 }
+                pluginSources.forEach { source ->
+                    if (mutableMap.containsKey(source.id)) {
+                        Timber.e("Rejected novel plugin %s: source ID %d is already registered", source.pluginId, source.id)
+                    } else {
+                        mutableMap[source.id] = source
+                    }
+                }
+                sourcesMapFlow.value = mutableMap
+            }
         }
 
 //        scope.launch {
@@ -97,7 +110,7 @@ class SourceManager(
         override val id: Long,
     ) : Source {
         override val name: String
-            get() = extensionManager.getStubSource(id)?.name ?: id.toString()
+            get() = novelPluginManager.sourceName(id) ?: extensionManager.getStubSource(id)?.name ?: id.toString()
 
         override suspend fun getMangaDetails(manga: SManga): SManga = throw getSourceNotInstalledException()
 
@@ -111,7 +124,7 @@ class SourceManager(
             SourceNotFoundException(
                 context.getString(
                     R.string.source_not_installed_,
-                    extensionManager.getStubSource(id)?.name ?: id.toString(),
+                    novelPluginManager.sourceName(id) ?: extensionManager.getStubSource(id)?.name ?: id.toString(),
                 ),
                 id,
             )

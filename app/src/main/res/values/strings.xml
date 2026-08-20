@@ -1272,4 +1272,15 @@
     <string name="view_chapters">View chapters</string>
     <string name="warning">Warning</string>
     <string name="wifi">Wi-Fi</string>
+    <string name="hayai_novel_plugins">Novel plugins</string>
+    <string name="hayai_novel_plugins_summary">Manage LNReader-compatible novel repositories and sources</string>
+    <string name="hayai_novel_repositories">Plugin repositories</string>
+    <string name="hayai_no_novel_repositories">No repositories added. Add a trusted LNReader plugin index to begin.</string>
+    <string name="hayai_no_novel_plugins">No matching plugins. Refresh enabled repositories or change the search.</string>
+    <string name="hayai_novel_plugins_security_summary">Repository plugins run as code inside an isolated JavaScript runtime. Add only repositories you trust.</string>
+    <string name="hayai_add_novel_repository">Add novel repository</string>
+    <string name="hayai_novel_repository_trust_warning">Hayai requires HTTPS and verifies installed files against repository checksums when supplied. The repository owner can still publish executable updates, so continue only if you trust them.</string>
+    <string name="hayai_novel_plugin_install_warning">This plugin can access websites and store source settings through Hayai’s restricted JavaScript bridge. Install only if you trust its repository.</string>
+    <string name="hayai_remove_repository_confirmation">Remove %1$s? Installed plugins from this repository stay installed until you uninstall them.</string>
+    <string name="refresh">Refresh</string>
 </resources>

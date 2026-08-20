@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi
 
 import android.app.Application
 import androidx.core.content.ContextCompat
+import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -51,8 +52,9 @@ class AppModule(
 
         addSingletonFactory { JavaScriptEngine(app) }
 
-        addSingletonFactory { SourceManager(app, get()) }
         addSingletonFactory { ExtensionManager(app) }
+        addSingletonFactory { NovelPluginManager(app, get(), get()) }
+        addSingletonFactory { SourceManager(app, get(), get()) }
 
         addSingletonFactory { DownloadManager(app) }
 
