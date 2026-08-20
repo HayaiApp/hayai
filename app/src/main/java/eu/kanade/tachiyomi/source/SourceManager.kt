@@ -6,6 +6,7 @@ import dev.ahmedmohamed.hayai.adult.eh.source.EhSourceProvider
 import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.source.AdultSourceVisibility
+import dev.ahmedmohamed.hayai.source.enhanced.EnhancedSourceRegistry
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.model.Page
@@ -83,8 +84,9 @@ class SourceManager(
                         if (ehSourceProvider.owns(it.id)) {
                             Timber.e("Rejected extension source %s: source ID %d is reserved by Hayai", it.name, it.id)
                         } else {
-                            mutableMap[it.id] = it
-                            delegatedSources[it.id]?.delegatedHttpSource?.delegate = it as? HttpSource
+                            val registered = (it as? HttpSource)?.let(EnhancedSourceRegistry::wrap) ?: it
+                            mutableMap[it.id] = registered
+                            delegatedSources[it.id]?.delegatedHttpSource?.delegate = registered as? HttpSource
                         }
 //                            registerStubSource(it)
                     }
