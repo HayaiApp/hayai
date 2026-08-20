@@ -47,6 +47,12 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 
 Tsundoku areas audited include its novel source/text-fetch contract, extension and repository handling, dedicated reader, downloads, TTS, reader tools, local/EPUB flows, tracking, statistics, and backup/import paths.
 
+## Application workflows
+
+| Capability | Hayai boundary | Status |
+|---|---|---|
+| Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
+
 ## Completion rules
 
 - Never copy code from `legacy/hayai-pre-j2k`; that branch is schema/data evidence only.

@@ -30,6 +30,13 @@
             android:textColor="?attr/colorOnBackground" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/hidden_sources"
+            style="@style/Widget.Material3Expressive.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/recents_hidden_sources" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/clear_history"
             style="@style/Widget.Material3Expressive.Button.TextButton"
             android:layout_width="match_parent"

@@ -318,6 +318,9 @@
     <string name="only_downloaded">Only downloaded</string>
     <string name="unread_or_downloaded">Unread or downloaded</string>
     <string name="clear_history">Clear history</string>
+    <string name="recents_hidden_sources">Hidden sources</string>
+    <string name="recents_hidden_sources_count">Hidden sources (%1$d)</string>
+    <string name="recents_no_sources_available">No sources are available.</string>
 
     <!-- Browse -->
     <string name="search_filters">Search filters</string>
