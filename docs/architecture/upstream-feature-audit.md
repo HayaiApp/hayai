@@ -28,7 +28,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 |---|---|---|
 | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
 | Dedicated reader, central routing, and J2K history | `NovelReaderActivity` and `ReaderLauncher` | port |
-| Novel extension discovery | J2K loader plus Hayai ABI | contract foundation; compatibility port |
+| Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+| Remote novel extension catalogs and installation | J2K extension API plus repository adapters | audit |
 | JavaScript repository sources and custom-source builder | Sandboxed novel runtime and signed repositories | audit |
 | Local novels and EPUB import/export | Document storage and local novel source | import port; export audit |
 | Text downloads/offline reading | Document downloader, separate from image pages | port |
