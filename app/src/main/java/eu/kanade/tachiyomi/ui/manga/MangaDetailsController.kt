@@ -51,6 +51,7 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
+import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.SelectableAdapter
 import eu.kanade.tachiyomi.R
@@ -1119,7 +1120,9 @@ class MangaDetailsController :
         sharedElement: View? = null,
     ) {
         (activity as? AppCompatActivity)?.apply {
-            if (sharedElement != null) {
+            if (ReaderLauncher.isNovel(manga!!)) {
+                startActivity(ReaderLauncher.newIntent(this, manga!!, chapter))
+            } else if (sharedElement != null) {
                 val (intent, bundle) =
                     ReaderActivity
                         .newIntentWithTransitionOptions(this, manga!!, chapter, sharedElement)
@@ -1138,7 +1141,7 @@ class MangaDetailsController :
                 intent.putExtra(ReaderActivity.VISIBLE_CHAPTERS, chapterRange)
                 startActivity(intent, bundle)
             } else {
-                startActivity(ReaderActivity.newIntent(this, manga!!, chapter))
+                startActivity(ReaderLauncher.newIntent(this, manga!!, chapter))
             }
         }
     }

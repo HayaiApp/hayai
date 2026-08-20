@@ -29,6 +29,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
+import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.backup.BackupRestoreJob
@@ -923,13 +924,15 @@ class RecentsController(
     ) {
         val activity = activity ?: return
         activity.apply {
-            if (view != null) {
+            if (ReaderLauncher.isNovel(manga)) {
+                startActivity(ReaderLauncher.newIntent(activity, manga, chapter))
+            } else if (view != null) {
                 val (intent, bundle) =
                     ReaderActivity
                         .newIntentWithTransitionOptions(activity, manga, chapter, view)
                 startActivity(intent, bundle)
             } else {
-                val intent = ReaderActivity.newIntent(activity, manga, chapter)
+                val intent = ReaderLauncher.newIntent(activity, manga, chapter)
                 startActivity(intent)
             }
         }

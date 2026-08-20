@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#B11A3B</color>
+    <color name="hayai_background_blue">#1E3A5F</color>
+    <color name="hayai_background_orange">#5C2E0E</color>
+    <color name="hayai_background_gray">#374151</color>
+</resources>

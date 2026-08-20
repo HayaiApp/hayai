@@ -42,7 +42,7 @@ open class DatabaseHelper(
         SupportSQLiteOpenHelper.Configuration
             .builder(context)
             .name(DbOpenCallback.DATABASE_NAME)
-            .callback(DbOpenCallback())
+            .callback(DbOpenCallback(context))
             .build()
 
     override val db =

@@ -1,7 +1,10 @@
 package eu.kanade.tachiyomi.data.database
 
+import android.content.Context
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
+import dev.ahmedmohamed.hayai.migration.HayaiLegacyMigration
+import dev.ahmedmohamed.hayai.migration.HayaiSchema
 import eu.kanade.tachiyomi.data.database.tables.CategoryTable
 import eu.kanade.tachiyomi.data.database.tables.ChapterTable
 import eu.kanade.tachiyomi.data.database.tables.HistoryTable
@@ -9,12 +12,16 @@ import eu.kanade.tachiyomi.data.database.tables.MangaCategoryTable
 import eu.kanade.tachiyomi.data.database.tables.MangaTable
 import eu.kanade.tachiyomi.data.database.tables.TrackTable
 
-class DbOpenCallback : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
+class DbOpenCallback(
+    context: Context,
+) : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
+    private val hayaiMigration = HayaiLegacyMigration(context.applicationContext)
+
     companion object {
         /**
          * Name of the database file.
          */
-        const val DATABASE_NAME = "tachiyomi.db"
+        const val DATABASE_NAME = HayaiLegacyMigration.ACTIVE_DATABASE_NAME
 
         /**
          * Version of the database.
@@ -27,6 +34,8 @@ class DbOpenCallback : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
         setPragma(db, "foreign_keys = ON")
         setPragma(db, "journal_mode = WAL")
         setPragma(db, "synchronous = NORMAL")
+        HayaiSchema.ensure(db)
+        hayaiMigration.runIfNeeded(db)
     }
 
     private fun setPragma(
@@ -46,6 +55,7 @@ class DbOpenCallback : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
             execSQL(CategoryTable.createTableQuery)
             execSQL(MangaCategoryTable.createTableQuery)
             execSQL(HistoryTable.createTableQuery)
+            HayaiSchema.ensure(this)
 
             // DB indexes
             execSQL(MangaTable.createUrlIndexQuery)

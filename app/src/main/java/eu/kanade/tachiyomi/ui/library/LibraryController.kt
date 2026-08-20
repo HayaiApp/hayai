@@ -59,6 +59,7 @@ import com.fredporciuncula.flow.preferences.Preference
 import com.github.florent37.viewtooltip.ViewTooltip
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
+import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.SelectableAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
@@ -1666,13 +1667,15 @@ open class LibraryController(
         val activity = activity ?: return
         val chapter = presenter.getFirstUnread(manga) ?: return
         activity.apply {
-            if (view != null) {
+            if (ReaderLauncher.isNovel(manga)) {
+                startActivity(ReaderLauncher.newIntent(activity, manga, chapter))
+            } else if (view != null) {
                 val (intent, bundle) =
                     ReaderActivity
                         .newIntentWithTransitionOptions(activity, manga, chapter, view)
                 startActivity(intent, bundle)
             } else {
-                startActivity(ReaderActivity.newIntent(activity, manga, chapter))
+                startActivity(ReaderLauncher.newIntent(activity, manga, chapter))
             }
         }
         destroyActionModeIfNeeded()
