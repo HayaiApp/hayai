@@ -1,6 +1,8 @@
 package dev.ahmedmohamed.hayai.adult.eh.session
 
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhProfileSlot
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteCookies
 import eu.kanade.tachiyomi.data.preference.Preference
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -132,6 +134,21 @@ class EhSessionStore(
             EhSite.EHentai -> ehSettingsProfile.set(profile ?: -1)
             EhSite.ExHentai -> exhSettingsProfile.set(profile ?: -1)
         }
+    }
+
+    @Synchronized
+    fun commitRemoteProfile(
+        site: EhSite,
+        slot: EhProfileSlot,
+        cookies: EhRemoteCookies,
+    ) {
+        when (site) {
+            EhSite.EHentai -> ehSettingsProfile.set(slot.value)
+            EhSite.ExHentai -> exhSettingsProfile.set(slot.value)
+        }
+        cookies.settingsKey?.let(settingsKey::set)
+        cookies.session?.let(sessionCookie::set)
+        cookies.hathPerks?.let(hathPerksCookie::set)
     }
 
     private fun readState(): EhSessionState {

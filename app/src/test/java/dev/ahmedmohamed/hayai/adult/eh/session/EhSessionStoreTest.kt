@@ -1,6 +1,8 @@
 package dev.ahmedmohamed.hayai.adult.eh.session
 
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhProfileSlot
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteCookies
 import eu.kanade.tachiyomi.data.preference.Preference
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
 import kotlinx.coroutines.CoroutineScope
@@ -139,6 +141,28 @@ class EhSessionStoreTest {
         assertEquals(2, preferences.value<Int>(EhSessionStore.KEY_EXH_SETTINGS_PROFILE))
         assertEquals("keep-me", preferences.value<String>("unrelated"))
         assertEquals(1, cookies.clearCount)
+    }
+
+    @Test
+    fun `remote profile commit retains absent cookies and updates returned cookies`() {
+        val preferences =
+            FakePreferenceStore(
+                EhSessionStore.KEY_SETTINGS_KEY to "old-settings",
+                EhSessionStore.KEY_SESSION_COOKIE to "old-session",
+                EhSessionStore.KEY_HATH_PERKS_COOKIE to "old-perks",
+            )
+        val store = EhSessionStore(preferences, FakeCookieStore())
+
+        store.commitRemoteProfile(
+            EhSite.ExHentai,
+            EhProfileSlot(3),
+            EhRemoteCookies(settingsKey = "new-settings"),
+        )
+
+        assertEquals(3, store.settingsProfile(EhSite.ExHentai))
+        assertEquals("new-settings", preferences.value<String>(EhSessionStore.KEY_SETTINGS_KEY))
+        assertEquals("old-session", preferences.value<String>(EhSessionStore.KEY_SESSION_COOKIE))
+        assertEquals("old-perks", preferences.value<String>(EhSessionStore.KEY_HATH_PERKS_COOKIE))
     }
 }
 
