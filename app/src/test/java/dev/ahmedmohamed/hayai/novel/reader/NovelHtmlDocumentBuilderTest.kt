@@ -49,9 +49,12 @@ class NovelHtmlDocumentBuilderTest {
         textSelectable = true,
         hideChapterTitle = hideTitle,
         sourceCssPriority = false,
+        renderingMode = "default",
         customCss = "",
         customJs = "",
         ttsHighlightColor = 0xFFFFFF00.toInt(),
         ttsHighlightTextColor = 0xFF000000.toInt(),
+        ttsHighlightStyle = "background",
+        keepTtsHighlightInView = true,
     )
 }

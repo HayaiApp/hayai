@@ -5,15 +5,18 @@ import kotlinx.serialization.protobuf.ProtoNumber
 
 @Serializable
 data class HayaiBackupData(
-    @ProtoNumber(1) val version: Int = CURRENT_VERSION,
+    @ProtoNumber(1) val version: Int = 1,
     @ProtoNumber(2) val quotes: List<HayaiBackupQuote> = emptyList(),
     @ProtoNumber(3) val novelRepositories: List<HayaiBackupNovelRepository> = emptyList(),
     @ProtoNumber(4) val chapterStats: List<HayaiBackupChapterStat> = emptyList(),
     @ProtoNumber(5) val ehFavorites: List<HayaiBackupEhFavorite> = emptyList(),
     @ProtoNumber(6) val novelPlugins: List<HayaiBackupNovelPlugin> = emptyList(),
+    @ProtoNumber(7) val ehGalleryAliases: List<HayaiBackupEhGalleryAlias> = emptyList(),
+    @ProtoNumber(8) val sourceMetadata: List<HayaiBackupSourceMetadata> = emptyList(),
 ) {
     companion object {
-        const val CURRENT_VERSION = 1
+        const val CURRENT_VERSION = 2
+        const val MINIMUM_SUPPORTED_VERSION = 1
     }
 }
 
@@ -52,6 +55,39 @@ data class HayaiBackupEhFavorite(
     @ProtoNumber(2) val token: String,
     @ProtoNumber(3) val title: String,
     @ProtoNumber(4) val category: Int,
+)
+
+@Serializable
+data class HayaiBackupEhGalleryAlias(
+    @ProtoNumber(1) val canonicalGid: String,
+    @ProtoNumber(2) val canonicalToken: String,
+    @ProtoNumber(3) val alternateGid: String,
+    @ProtoNumber(4) val alternateToken: String,
+)
+
+@Serializable
+data class HayaiBackupSourceMetadata(
+    @ProtoNumber(1) val sourceId: Long,
+    @ProtoNumber(2) val mangaUrl: String,
+    @ProtoNumber(3) val uploader: String? = null,
+    @ProtoNumber(4) val extra: String,
+    @ProtoNumber(5) val indexedExtra: String? = null,
+    @ProtoNumber(6) val extraVersion: Int,
+    @ProtoNumber(7) val tags: List<HayaiBackupSourceMetadataTag> = emptyList(),
+    @ProtoNumber(8) val titles: List<HayaiBackupSourceMetadataTitle> = emptyList(),
+)
+
+@Serializable
+data class HayaiBackupSourceMetadataTag(
+    @ProtoNumber(1) val namespace: String? = null,
+    @ProtoNumber(2) val name: String,
+    @ProtoNumber(3) val type: Int,
+)
+
+@Serializable
+data class HayaiBackupSourceMetadataTitle(
+    @ProtoNumber(1) val title: String,
+    @ProtoNumber(2) val type: Int,
 )
 
 @Serializable

@@ -23,6 +23,8 @@ import eu.kanade.tachiyomi.ui.main.SearchActivity
 import eu.kanade.tachiyomi.ui.recents.RecentsPresenter
 import eu.kanade.tachiyomi.ui.source.browse.BrowseSourceController
 import eu.kanade.tachiyomi.util.system.launchIO
+import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+import eu.kanade.tachiyomi.source.isNovelSource
 import kotlinx.coroutines.Job
 import timber.log.Timber
 import uy.kohesive.injekt.Injekt
@@ -34,6 +36,7 @@ class MangaShortcutManager(
     val db: DatabaseHelper = Injekt.get(),
     val coverCache: CoverCache = Injekt.get(),
     val sourceManager: SourceManager = Injekt.get(),
+    val novelIntegration: NovelJ2kIntegration = Injekt.get(),
 ) {
     private var updateShortcutsJob: Job? = null
 
@@ -90,7 +93,7 @@ class MangaShortcutManager(
                                     ShortcutInfo
                                         .Builder(
                                             context,
-                                            "Manga-${item.id?.toString() ?: item.title}",
+                                            "${if (novelIntegration.isNovel(item)) "Novel" else "Manga"}-${item.id?.toString() ?: item.title}",
                                         ).setShortLabel(
                                             item.title.takeUnless { it.isBlank() }
                                                 ?: context.getString(R.string.manga),
@@ -105,7 +108,10 @@ class MangaShortcutManager(
                                                     Icon.createWithBitmap(bitmap)
                                                 }
                                             } else {
-                                                Icon.createWithResource(context, R.drawable.ic_book_24dp)
+                                                Icon.createWithResource(
+                                                    context,
+                                                    if (novelIntegration.isNovel(item)) R.drawable.ic_book_open_variant_24dp else R.drawable.ic_book_24dp,
+                                                )
                                             },
                                         ).setIntent(
                                             SearchActivity
@@ -130,7 +136,7 @@ class MangaShortcutManager(
                                             } else {
                                                 Icon.createWithResource(
                                                     context,
-                                                    R.drawable.sc_extensions_48dp,
+                                                    if (item.isNovelSource()) R.drawable.ic_book_open_variant_24dp else R.drawable.sc_extensions_48dp,
                                                 )
                                             },
                                         ).setIntent(

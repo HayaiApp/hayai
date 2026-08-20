@@ -9,21 +9,22 @@ internal object NovelHtmlDocumentBuilder {
         val readerCss = buildReaderCss(style)
         val styleBlocks =
             if (style.sourceCssPriority) {
-                "<style>$readerCss</style><style>${style.customCss}</style>"
+                "<style>$readerCss</style><style>${style.customCss.safeStyleText()}</style>"
             } else {
-                "<style>${style.customCss}</style><style>$readerCss</style>"
+                "<style>${style.customCss.safeStyleText()}</style><style>$readerCss</style>"
             }
         val heading = if (style.hideChapterTitle) "" else "<h1 class=\"hayai-chapter-title\">${escape(chapterTitle)}</h1>"
+        val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
         return """
             <!doctype html>
-            <html><head>
+            <html class="hayai-$renderingMode" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
               $styleBlocks
             </head><body>
               <main id="hayai-reader">$heading${content.html}</main>
               <script>${BRIDGE_SCRIPT}</script>
-              <script>${style.customJs}</script>
+              <script>${style.customJs.safeScriptText()}</script>
             </body></html>
             """.trimIndent()
     }
@@ -47,6 +48,8 @@ internal object NovelHtmlDocumentBuilder {
               line-height:${style.lineHeight.coerceIn(0.8f, 3f)}; text-align:$align;
               overflow-wrap:anywhere; -webkit-user-select:$selection; user-select:$selection;
             }
+            html.hayai-paged, html.hayai-paged body { height:100%; overflow-y:hidden; }
+            html.hayai-paged body { column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:32px; overflow-x:auto; }
             *, *::before, *::after { box-sizing:border-box; max-width:100%; }
             p { margin:${style.paragraphSpacing.coerceIn(0f, 5f)}em 0; text-indent:${style.paragraphIndent.coerceIn(0f, 10f)}em; }
             img, image, svg, video { height:auto; max-width:100%; }
@@ -54,9 +57,20 @@ internal object NovelHtmlDocumentBuilder {
             table { display:block; overflow-x:auto; border-collapse:collapse; }
             a { color:${color(style.linkColor)}; }
             .hayai-chapter-title { text-indent:0; line-height:1.25; margin:0 0 1em; font-size:1.5em; }
-            .hayai-tts-active { background:$highlightColor; color:$highlightTextColor; border-radius:.2em; }
+            ${ttsHighlightCss(style.ttsHighlightStyle, highlightColor, highlightTextColor)}
         """.trimIndent()
     }
+
+    private fun ttsHighlightCss(
+        style: String,
+        background: String,
+        foreground: String,
+    ): String =
+        when (style) {
+            "underline" -> ".hayai-tts-active { text-decoration:underline 3px $background; text-underline-offset:.18em; }"
+            "text" -> ".hayai-tts-active { color:$background; }"
+            else -> ".hayai-tts-active { background:$background; color:$foreground; border-radius:.2em; }"
+        }
 
     internal fun color(value: Int): String =
         "#%02X%02X%02X%02X".format(
@@ -75,6 +89,10 @@ internal object NovelHtmlDocumentBuilder {
             .replace(">", "&gt;")
             .replace("\"", "&quot;")
 
+    private fun String.safeStyleText(): String = replace("</style", "<\\/style", ignoreCase = true)
+
+    private fun String.safeScriptText(): String = replace("</script", "<\\/script", ignoreCase = true)
+
     private fun isDark(color: Int): Boolean =
         (color ushr 16 and 0xFF) * 0.299 +
             (color ushr 8 and 0xFF) * 0.587 +
@@ -82,9 +100,13 @@ internal object NovelHtmlDocumentBuilder {
 
     private const val BRIDGE_SCRIPT = """
         (() => {
+          const paged = () => document.documentElement.classList.contains('hayai-paged');
           const progress = () => {
-            const max = Math.max(1, document.documentElement.scrollHeight - innerHeight);
-            return Math.max(0, Math.min(100, Math.round(scrollY * 100 / max)));
+            const max = paged()
+              ? Math.max(1, document.documentElement.scrollWidth - innerWidth)
+              : Math.max(1, document.documentElement.scrollHeight - innerHeight);
+            const current = paged() ? scrollX : scrollY;
+            return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
           };
           let scheduled = false;
           let lastSelection = '';
@@ -103,8 +125,22 @@ internal object NovelHtmlDocumentBuilder {
           window.hayaiReader = {
             progress,
             scrollToPercent(value) {
-              const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
-              scrollTo({top:max * Math.max(0, Math.min(100, value)) / 100, behavior:'auto'});
+              const ratio = Math.max(0, Math.min(100, value)) / 100;
+              if (paged()) {
+                const max = Math.max(0, document.documentElement.scrollWidth - innerWidth);
+                scrollTo({left:max * ratio, top:0, behavior:'auto'});
+              } else {
+                const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+                scrollTo({top:max * ratio, left:0, behavior:'auto'});
+              }
+            },
+            step(direction, fraction = .85) {
+              if (paged()) scrollBy({left:innerWidth * fraction * direction, behavior:'smooth'});
+              else scrollBy({top:innerHeight * fraction * direction, behavior:'smooth'});
+            },
+            stepPixels(pixels) {
+              if (paged()) scrollBy({left:pixels, behavior:'auto'});
+              else scrollBy({top:pixels, behavior:'auto'});
             },
             paragraphs() {
               return [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]
@@ -119,7 +155,10 @@ internal object NovelHtmlDocumentBuilder {
               document.querySelectorAll('.hayai-tts-active').forEach(it => it.classList.remove('hayai-tts-active'));
               const nodes = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')];
               const node = nodes[index];
-              if (node) { node.classList.add('hayai-tts-active'); node.scrollIntoView({block:'center', behavior:'smooth'}); }
+              if (node) {
+                node.classList.add('hayai-tts-active');
+                if (document.documentElement.dataset.keepHighlight === 'true') node.scrollIntoView({block:'center', inline:'center', behavior:'smooth'});
+              }
             },
             clearHighlight() { document.querySelectorAll('.hayai-tts-active').forEach(it => it.classList.remove('hayai-tts-active')); }
           };
@@ -146,8 +185,11 @@ internal data class NovelReaderStyle(
     val textSelectable: Boolean,
     val hideChapterTitle: Boolean,
     val sourceCssPriority: Boolean,
+    val renderingMode: String,
     val customCss: String,
     val customJs: String,
     val ttsHighlightColor: Int,
     val ttsHighlightTextColor: Int,
+    val ttsHighlightStyle: String,
+    val keepTtsHighlightInView: Boolean,
 )

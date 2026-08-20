@@ -12,6 +12,7 @@ class HayaiBackupDataTest {
     fun `protobuf round trip retains every typed side payload`() {
         val data =
             HayaiBackupData(
+                version = HayaiBackupData.CURRENT_VERSION,
                 quotes =
                     listOf(
                         HayaiBackupQuote(
@@ -30,6 +31,20 @@ class HayaiBackupDataTest {
                 novelRepositories = listOf(HayaiBackupNovelRepository("https://repo.test", "Repo")),
                 chapterStats = listOf(HayaiBackupChapterStat(7, "/novel", "/chapter", 900)),
                 ehFavorites = listOf(HayaiBackupEhFavorite("1", "token", "Gallery", 2)),
+                ehGalleryAliases = listOf(HayaiBackupEhGalleryAlias("1", "token", "2", "replacement")),
+                sourceMetadata =
+                    listOf(
+                        HayaiBackupSourceMetadata(
+                            sourceId = 7,
+                            mangaUrl = "/g/1/token/",
+                            uploader = "uploader",
+                            extra = "{}",
+                            indexedExtra = "1",
+                            extraVersion = 1,
+                            tags = listOf(HayaiBackupSourceMetadataTag("artist", "Creator", 0)),
+                            titles = listOf(HayaiBackupSourceMetadataTitle("Alternative title", 1)),
+                        ),
+                    ),
             )
 
         val encoded = ProtoBuf.encodeToByteArray(HayaiBackupData.serializer(), data)
@@ -51,6 +66,51 @@ class HayaiBackupDataTest {
         assertTrue(errors.any { it.contains("version") })
         assertTrue(errors.any { it.contains("quote") })
         assertTrue(errors.any { it.contains("statistic") })
+    }
+
+    @Test
+    fun `version one payload remains supported after adding EH persistence`() {
+        val versionOne =
+            HayaiBackupData(
+                version = 1,
+                ehFavorites = listOf(HayaiBackupEhFavorite("1", "token", "Gallery", 0)),
+            )
+
+        assertTrue(HayaiBackupLimits.validate(versionOne).isEmpty())
+        assertEquals(
+            versionOne,
+            ProtoBuf.decodeFromByteArray(
+                HayaiBackupData.serializer(),
+                ProtoBuf.encodeToByteArray(HayaiBackupData.serializer(), versionOne),
+            ),
+        )
+    }
+
+    @Test
+    fun `validation rejects conflicting EH identities but accepts exact repeats`() {
+        val favorite = HayaiBackupEhFavorite("1", "token", "Gallery", 0)
+        val metadata = HayaiBackupSourceMetadata(7, "/gallery", extra = "{}", extraVersion = 1)
+        val exactRepeats =
+            HayaiBackupData(
+                ehFavorites = listOf(favorite, favorite),
+                sourceMetadata = listOf(metadata, metadata),
+            )
+        val conflicts =
+            exactRepeats.copy(
+                ehFavorites = listOf(favorite, favorite.copy(category = 1)),
+                ehGalleryAliases =
+                    listOf(
+                        HayaiBackupEhGalleryAlias("1", "canonical", "2", "alternate"),
+                        HayaiBackupEhGalleryAlias("3", "other", "2", "alternate"),
+                    ),
+                sourceMetadata = listOf(metadata, metadata.copy(extra = "{\"changed\":true}")),
+            )
+
+        assertTrue(HayaiBackupLimits.validate(exactRepeats).isEmpty())
+        val errors = HayaiBackupLimits.validate(conflicts)
+        assertTrue(errors.any { it.contains("duplicate E-Hentai favorite") })
+        assertTrue(errors.any { it.contains("duplicate E-Hentai gallery alias") })
+        assertTrue(errors.any { it.contains("duplicate source metadata") })
     }
 
     @Test

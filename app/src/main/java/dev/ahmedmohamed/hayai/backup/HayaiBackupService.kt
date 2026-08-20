@@ -6,6 +6,10 @@ import android.database.Cursor
 import com.pushtorefresh.storio.sqlite.queries.InsertQuery
 import com.pushtorefresh.storio.sqlite.queries.RawQuery
 import com.pushtorefresh.storio.sqlite.queries.UpdateQuery
+import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryAlias
+import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
+import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
+import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginStore
@@ -61,11 +65,14 @@ class HayaiBackupService(
             }
         }
         return HayaiBackupData(
+            version = HayaiBackupData.CURRENT_VERSION,
             quotes = quotes,
             novelRepositories = readNovelRepositories(),
             chapterStats = stats,
             ehFavorites = readEhFavorites(),
             novelPlugins = readNovelPlugins(),
+            ehGalleryAliases = readEhGalleryAliases(),
+            sourceMetadata = readSourceMetadata(mangas),
         )
     }
 
@@ -117,7 +124,7 @@ class HayaiBackupService(
                     )
                 }.also { if (it) restored++ }
             }
-            data.ehFavorites.forEach { favorite ->
+            data.ehFavorites.distinct().forEach { favorite ->
                 process("E-Hentai favorite ${favorite.gid}", errors, { skipped++ }) {
                     upsert(
                         table = "hayai_eh_favorites",
@@ -132,6 +139,24 @@ class HayaiBackupService(
                             },
                     )
                 }.also { if (it) restored++ }
+            }
+            data.ehGalleryAliases.distinct().forEach { alias ->
+                process("E-Hentai gallery alias ${alias.alternateGid}", errors, { skipped++ }) {
+                    restoreEhGalleryAlias(alias)
+                }.also { if (it) restored++ }
+            }
+            data.sourceMetadata.distinct().forEach { metadata ->
+                process("source metadata ${metadata.mangaUrl}", errors, { skipped++ }) {
+                    val manga = findManga(metadata.sourceId, metadata.mangaUrl, mangaCache) ?: return@process false
+                    restoreSourceMetadata(metadata, requireNotNull(manga.id))
+                }.also { if (it) restored++ }
+            }
+            if (data.ehFavorites.isNotEmpty() || data.ehGalleryAliases.isNotEmpty() || data.sourceMetadata.isNotEmpty()) {
+                database.lowLevel().executeSQL(
+                    RawQuery.builder().query(
+                        "UPDATE hayai_eh_sync_checkpoint SET requires_full_reconcile = 1 WHERE singleton = 1",
+                    ).build(),
+                )
             }
         }
         restoreNovelPlugins(data.novelPlugins, errors, { restored++ }, { skipped++ })
@@ -253,6 +278,144 @@ class HayaiBackupService(
             }
         }
 
+    private fun readEhGalleryAliases(): List<HayaiBackupEhGalleryAlias> =
+        HayaiEhPersistenceStore(database).aliases().map { alias ->
+            HayaiBackupEhGalleryAlias(
+                alias.canonical.gid,
+                alias.canonical.token,
+                alias.alternate.gid,
+                alias.alternate.token,
+            )
+        }
+
+    private fun readSourceMetadata(mangas: List<Manga>): List<HayaiBackupSourceMetadata> {
+        val store = HayaiEhPersistenceStore(database)
+        return mangas
+            .asSequence()
+            .map { SourceMangaIdentity(it.source, it.url) }
+            .distinct()
+            .mapNotNull(store::metadata)
+            .map { metadata ->
+                HayaiBackupSourceMetadata(
+                    sourceId = metadata.identity.sourceId,
+                    mangaUrl = metadata.identity.mangaUrl,
+                    uploader = metadata.uploader,
+                    extra = metadata.extra,
+                    indexedExtra = metadata.indexedExtra,
+                    extraVersion = metadata.extraVersion,
+                    tags = metadata.tags.map { HayaiBackupSourceMetadataTag(it.namespace, it.name, it.type) },
+                    titles = metadata.titles.map { HayaiBackupSourceMetadataTitle(it.title, it.type) },
+                )
+            }.toList()
+    }
+
+    private fun restoreEhGalleryAlias(alias: HayaiBackupEhGalleryAlias): Boolean {
+        val value =
+            EhGalleryAlias(
+                EhGalleryIdentity(alias.canonicalGid, alias.canonicalToken),
+                EhGalleryIdentity(alias.alternateGid, alias.alternateToken),
+            )
+        val conflict =
+            query(
+                "SELECT canonical_gid, canonical_token FROM hayai_eh_gallery_aliases WHERE alternate_gid = ? AND alternate_token = ? LIMIT 1",
+                value.alternate.gid,
+                value.alternate.token,
+            ).use { cursor ->
+                cursor.moveToFirst() &&
+                    (cursor.getString(0) != value.canonical.gid || cursor.getString(1) != value.canonical.token)
+            }
+        check(!conflict) { "Alternate gallery belongs to another canonical gallery" }
+        val exists =
+            query(
+                "SELECT 1 FROM hayai_eh_gallery_aliases WHERE canonical_gid = ? AND canonical_token = ? AND alternate_gid = ? AND alternate_token = ?",
+                value.canonical.gid,
+                value.canonical.token,
+                value.alternate.gid,
+                value.alternate.token,
+            ).use(Cursor::moveToFirst)
+        if (!exists) {
+            check(
+                database.lowLevel().insert(
+                    insertQuery("hayai_eh_gallery_aliases"),
+                    ContentValues(4).apply {
+                        put("canonical_gid", value.canonical.gid)
+                        put("canonical_token", value.canonical.token)
+                        put("alternate_gid", value.alternate.gid)
+                        put("alternate_token", value.alternate.token)
+                    },
+                ) >= 0,
+            )
+        }
+        return true
+    }
+
+    private fun restoreSourceMetadata(
+        metadata: HayaiBackupSourceMetadata,
+        mangaId: Long,
+    ): Boolean {
+        val identity = SourceMangaIdentity(metadata.sourceId, metadata.mangaUrl)
+        val currentManga = query("SELECT source, url FROM mangas WHERE _id = ?", mangaId).use { cursor ->
+            check(cursor.moveToFirst()) { "Matching manga disappeared" }
+            SourceMangaIdentity(cursor.getLong(0), cursor.getString(1))
+        }
+        check(currentManga == identity) { "Stable manga identity conflicts" }
+        upsert(
+            table = "hayai_source_metadata",
+            where = "source_id = ? AND manga_url = ?",
+            whereArgs = arrayOf<Any>(metadata.sourceId, metadata.mangaUrl),
+            values =
+                ContentValues(7).apply {
+                    put("source_id", metadata.sourceId)
+                    put("manga_url", metadata.mangaUrl)
+                    put("uploader", metadata.uploader)
+                    put("extra", metadata.extra)
+                    put("indexed_extra", metadata.indexedExtra)
+                    put("extra_version", metadata.extraVersion)
+                    put("updated_at", System.currentTimeMillis())
+                },
+        )
+        executeDelete("hayai_source_metadata_tags", metadata.sourceId, metadata.mangaUrl)
+        executeDelete("hayai_source_metadata_titles", metadata.sourceId, metadata.mangaUrl)
+        metadata.tags.distinct().forEach { tag ->
+            check(
+                database.lowLevel().insert(
+                    insertQuery("hayai_source_metadata_tags"),
+                    ContentValues(5).apply {
+                        put("source_id", metadata.sourceId)
+                        put("manga_url", metadata.mangaUrl)
+                        put("namespace", tag.namespace.orEmpty())
+                        put("name", tag.name)
+                        put("type", tag.type)
+                    },
+                ) >= 0,
+            )
+        }
+        metadata.titles.distinct().forEach { title ->
+            check(
+                database.lowLevel().insert(
+                    insertQuery("hayai_source_metadata_titles"),
+                    ContentValues(4).apply {
+                        put("source_id", metadata.sourceId)
+                        put("manga_url", metadata.mangaUrl)
+                        put("title", title.title)
+                        put("type", title.type)
+                    },
+                ) >= 0,
+            )
+        }
+        return true
+    }
+
+    private fun executeDelete(
+        table: String,
+        sourceId: Long,
+        mangaUrl: String,
+    ) {
+        database.lowLevel().executeSQL(
+            RawQuery.builder().query("DELETE FROM $table WHERE source_id = ? AND manga_url = ?").args(sourceId, mangaUrl).build(),
+        )
+    }
+
     private fun readNovelPlugins(): List<HayaiBackupNovelPlugin> {
         val appContext = context?.applicationContext ?: return emptyList()
         val store = NovelPluginStore(appContext, database, json)
@@ -346,7 +509,8 @@ class HayaiBackupService(
     private fun Cursor.stringOrNull(index: Int): String? = if (isNull(index)) null else getString(index)
 
     private fun HayaiBackupData.itemCount() =
-        quotes.size + novelRepositories.size + chapterStats.size + ehFavorites.size + novelPlugins.size
+        quotes.size + novelRepositories.size + chapterStats.size + ehFavorites.size + novelPlugins.size +
+            ehGalleryAliases.size + sourceMetadata.size
 
     private data class MangaIdentity(
         val sourceId: Long,
@@ -381,11 +545,28 @@ class HayaiBackupService(
 internal object HayaiBackupLimits {
     fun validate(data: HayaiBackupData): List<String> =
         buildList {
-            if (data.version != HayaiBackupData.CURRENT_VERSION) add("Unsupported Hayai backup version ${data.version}")
+            if (data.version !in HayaiBackupData.MINIMUM_SUPPORTED_VERSION..HayaiBackupData.CURRENT_VERSION) {
+                add("Unsupported Hayai backup version ${data.version}")
+            }
             if (data.quotes.size > 100_000) add("Too many Hayai quotes")
             if (data.novelRepositories.size > 1_000) add("Too many novel repositories")
             if (data.chapterStats.size > 1_000_000) add("Too many novel chapter statistics")
             if (data.ehFavorites.size > 100_000) add("Too many E-Hentai favorites")
+            if (data.ehGalleryAliases.size > 100_000) add("Too many E-Hentai gallery aliases")
+            if (data.sourceMetadata.size > 100_000) add("Too many source metadata records")
+            if (data.sourceMetadata.sumOf { it.extra.length.toLong() } > 64L * 1024 * 1024) {
+                add("Source metadata backup data is too large")
+            }
+            if (data.sourceMetadata.sumOf { it.tags.size.toLong() } > 2_000_000) add("Too many source metadata tags")
+            if (data.sourceMetadata.sumOf { it.titles.size.toLong() } > 100_000) add("Too many source metadata titles")
+            if (
+                data.sourceMetadata.sumOf { metadata ->
+                    metadata.tags.sumOf { (it.namespace?.length ?: 0).toLong() + it.name.length } +
+                        metadata.titles.sumOf { it.title.length.toLong() }
+                } > 128L * 1024 * 1024
+            ) {
+                add("Source metadata labels are too large")
+            }
             if (data.novelPlugins.size > 500) add("Too many novel plugins")
             if (data.novelPlugins.sumOf { it.code.size.toLong() } > 64L * 1024 * 1024) add("Novel plugin backup data is too large")
             if (data.novelPlugins.sumOf { plugin -> plugin.preferences.sumOf { it.key.length.toLong() + it.value.length } } > 16L * 1024 * 1024) {
@@ -410,11 +591,33 @@ internal object HayaiBackupLimits {
                 ?.let { add("Invalid novel chapter statistic") }
             data.ehFavorites
                 .firstOrNull {
-                    it.gid.length !in 1..128 ||
-                        it.token.length !in 1..512 ||
+                    !validGalleryIdentity(it.gid, it.token) ||
                         it.title.length !in 1..8_192 ||
                         it.category !in 0..9
                 }?.let { add("Invalid E-Hentai favorite") }
+            validateEhDuplicates(data).forEach(::add)
+            data.ehGalleryAliases
+                .firstOrNull {
+                    !validGalleryIdentity(it.canonicalGid, it.canonicalToken) ||
+                        !validGalleryIdentity(it.alternateGid, it.alternateToken) ||
+                        (it.canonicalGid == it.alternateGid && it.canonicalToken == it.alternateToken)
+                }?.let { add("Invalid E-Hentai gallery alias") }
+            data.sourceMetadata
+                .firstOrNull {
+                    it.mangaUrl.length !in 1..8_192 ||
+                        it.extra.length !in 1..1_048_576 ||
+                        (it.uploader?.length ?: 0) > 2_048 ||
+                        (it.indexedExtra?.length ?: 0) > 2_048 ||
+                        it.extraVersion < 0 ||
+                        it.tags.size > 20_000 ||
+                        it.titles.size > 1_000 ||
+                        it.tags.any { tag ->
+                            (tag.namespace?.length ?: 0) > 256 || tag.name.length !in 1..2_048
+                        } ||
+                        it.titles.any { title -> title.title.length !in 1..8_192 } ||
+                        it.tags.distinct().size != it.tags.size ||
+                        it.titles.distinct().size != it.titles.size
+                }?.let { add("Invalid source metadata") }
             data.novelPlugins
                 .firstOrNull {
                     it.descriptorJson.length !in 1..65_536 ||
@@ -428,4 +631,32 @@ internal object HayaiBackupLimits {
                         it.preferences.map(HayaiBackupPluginPreference::key).distinct().size != it.preferences.size
                 }?.let { add("Invalid novel plugin backup") }
         }
+
+    private fun validateEhDuplicates(data: HayaiBackupData): List<String> =
+        buildList {
+            if (data.ehFavorites.groupBy { it.gid to it.token }.values.any { it.distinct().size > 1 }) {
+                add("Conflicting duplicate E-Hentai favorite")
+            }
+            val aliasesByAlternate = data.ehGalleryAliases.groupBy { it.alternateGid to it.alternateToken }
+            if (aliasesByAlternate.values.any { aliases -> aliases.map { it.canonicalGid to it.canonicalToken }.distinct().size > 1 }) {
+                add("Conflicting duplicate E-Hentai gallery alias")
+            }
+            if (data.sourceMetadata.groupBy { it.sourceId to it.mangaUrl }.values.any { metadata ->
+                    metadata.map(::normalizedMetadata).distinct().size > 1
+                }
+            ) {
+                add("Conflicting duplicate source metadata")
+            }
+        }
+
+    private fun normalizedMetadata(metadata: HayaiBackupSourceMetadata): HayaiBackupSourceMetadata =
+        metadata.copy(
+            tags = metadata.tags.distinct().sortedWith(compareBy({ it.namespace }, { it.name }, { it.type })),
+            titles = metadata.titles.distinct().sortedWith(compareBy({ it.type }, { it.title })),
+        )
+
+    private fun validGalleryIdentity(
+        gid: String,
+        token: String,
+    ): Boolean = gid.toLongOrNull()?.let { it > 0 } == true && token.matches(Regex("[A-Za-z0-9_-]{1,128}"))
 }

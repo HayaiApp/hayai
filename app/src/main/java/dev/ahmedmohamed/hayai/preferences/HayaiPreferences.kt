@@ -12,6 +12,9 @@ class HayaiPreferences(
     val lewdLibraryFilter: Preference<Int> =
         store.getInt(KEY_LEWD_LIBRARY_FILTER, LewdLibraryFilter.Disabled.persistedValue)
 
+    val novelLibraryFilter: Preference<Int> =
+        store.getInt(KEY_NOVEL_LIBRARY_FILTER, NovelLibraryFilter.Disabled.persistedValue)
+
     val novelFontSize = store.getInt("pref_novel_font_size", 16)
     val novelFontFamily = store.getString("pref_novel_font_family", "sans-serif")
     val novelTheme = store.getString("pref_novel_theme", "app")
@@ -85,6 +88,28 @@ class HayaiPreferences(
     companion object {
         const val KEY_HENTAI_FEATURES = "eh_is_hentai_enabled"
         const val KEY_LEWD_LIBRARY_FILTER = "pref_filter_library_lewd_v2"
+        const val KEY_NOVEL_LIBRARY_FILTER = "pref_filter_library_novel_v1"
+    }
+}
+
+enum class NovelLibraryFilter(
+    val persistedValue: Int,
+) {
+    Disabled(0),
+    NovelsOnly(1),
+    MangaOnly(2),
+    ;
+
+    fun includes(isNovel: Boolean): Boolean =
+        when (this) {
+            Disabled -> true
+            NovelsOnly -> isNovel
+            MangaOnly -> !isNovel
+        }
+
+    companion object {
+        fun fromPersistedValue(value: Int): NovelLibraryFilter =
+            entries.firstOrNull { it.persistedValue == value } ?: Disabled
     }
 }
 

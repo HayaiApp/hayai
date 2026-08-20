@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.BatteryManager
+import android.text.format.DateFormat
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
@@ -29,6 +31,7 @@ import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
 import dev.ahmedmohamed.hayai.novel.quote.NovelQuote
 import dev.ahmedmohamed.hayai.novel.quote.NovelQuoteStore
 import dev.ahmedmohamed.hayai.novel.quote.QuoteAddResult
+import dev.ahmedmohamed.hayai.novel.settings.NovelCustomizationStore
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
@@ -62,10 +65,12 @@ class NovelReaderActivity :
         )
     }
     private val contentProcessor = NovelContentProcessor()
+    private val customization by lazy { NovelCustomizationStore(preferences) }
     private val quoteStore by lazy { NovelQuoteStore(Injekt.get<DatabaseHelper>()) }
     private lateinit var webView: WebView
     private lateinit var titleView: TextView
     private lateinit var chapterView: TextView
+    private lateinit var statusView: TextView
     private lateinit var loading: ProgressBar
     private lateinit var progressSlider: SeekBar
     private lateinit var previousButton: Button
@@ -74,12 +79,15 @@ class NovelReaderActivity :
     private lateinit var ttsController: NovelTtsController
     private var loaded: LoadedNovelChapter? = null
     private var loadJob: Job? = null
+    private var renderJob: Job? = null
+    private var prefetchJob: Job? = null
     private var currentProgress = 0
     private var programmaticProgress = false
     private var autoLoadArmed = true
     private var ttsAutoStartPending = false
     private var autoScroll = false
     private var autoScrollRunnable: Runnable? = null
+    private var statusRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,7 +116,10 @@ class NovelReaderActivity :
 
     override fun onDestroy() {
         loadJob?.cancel()
+        renderJob?.cancel()
+        prefetchJob?.cancel()
         stopAutoScroll()
+        stopStatusUpdates()
         ttsController.destroy()
         webView.removeJavascriptInterface(JS_INTERFACE)
         webView.stopLoading()
@@ -122,7 +133,7 @@ class NovelReaderActivity :
     ): Boolean {
         if (preferences.novelVolumeKeysScroll.get() && keyCode in setOf(KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN)) {
             val direction = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) -1 else 1
-            webView.scrollBy(0, direction * (webView.height * 0.85f).toInt())
+            stepReader(direction)
             return true
         }
         return super.onKeyDown(keyCode, event)
@@ -132,11 +143,13 @@ class NovelReaderActivity :
         loaded = chapter
         currentProgress = chapter.chapter.last_page_read.coerceIn(0, 100)
         autoLoadArmed = true
+        ttsAutoStartPending = ttsAutoStartPending || preferences.novelTtsAutoStartOnPanelOpen.get()
         loading.visibility = View.VISIBLE
         titleView.text = chapter.manga.title
+        val displayedChapterTitle = displayedChapterTitle(chapter)
         chapterView.text =
             buildString {
-                append(chapter.chapter.name, "  •  ", chapter.position + 1, "/", chapter.total)
+                append(displayedChapterTitle, "  •  ", chapter.position + 1, "/", chapter.total)
                 if (chapter.isDownloaded) append("  •  Offline")
                 append(
                     "  •  ",
@@ -150,19 +163,33 @@ class NovelReaderActivity :
         nextButton.isEnabled = chapter.hasNext
 
         val options = contentOptions()
-        val processed = contentProcessor.process(chapter.document, chapter.chapter.name, options)
-        val html = NovelHtmlDocumentBuilder.build(processed, chapter.chapter.name, readerStyle(options))
-        webView.webViewClient =
-            NovelAssetWebViewClient(
-                assetProvider = session,
-                chapterUrl = { loaded?.chapter?.url.orEmpty() },
-                offline = { loaded?.let { session.isOffline(it.chapter.url) } == true },
-                blockMedia = { preferences.novelBlockMedia.get() },
-            )
-        val baseUrl = processed.baseUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-        webView.loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
+        val style = readerStyle(options)
+        renderJob?.cancel()
+        renderJob =
+            lifecycleScope.launch {
+                val rendered =
+                    withContext(Dispatchers.Default) {
+                        val processed = contentProcessor.process(chapter.document, chapter.chapter.name, options)
+                        RenderedNovelDocument(
+                            html = NovelHtmlDocumentBuilder.build(processed, displayedChapterTitle, style),
+                            baseUrl = processed.baseUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") },
+                        )
+                    }
+                if (loaded?.chapter?.id != chapter.chapter.id) return@launch
+                webView.webViewClient =
+                    NovelAssetWebViewClient(
+                        assetProvider = session,
+                        chapterUrl = { loaded?.chapter?.url.orEmpty() },
+                        offline = { loaded?.let { session.isOffline(it.chapter.url) } == true },
+                        blockMedia = { preferences.novelBlockMedia.get() },
+                    )
+                webView.loadDataWithBaseURL(rendered.baseUrl, rendered.html, "text/html", "UTF-8", null)
+            }
+        prefetchJob?.cancel()
+        prefetchJob = lifecycleScope.launch(Dispatchers.IO) { session.prefetchAdjacent(preferences.novelKeepChaptersLoaded.get()) }
         updateProgressSlider(currentProgress)
         configureWindow()
+        startStatusUpdates()
     }
 
     private fun contentOptions() =
@@ -180,8 +207,15 @@ class NovelReaderActivity :
 
     private fun readerStyle(options: NovelContentOptions): NovelReaderStyle {
         val dark = resources.configuration.uiMode and 0x30 == 0x20
-        val defaultBackground = if (dark) 0xFF121212.toInt() else 0xFFFFFBFE.toInt()
-        val defaultText = if (dark) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
+        val themeColors =
+            when (preferences.novelTheme.get()) {
+                "light" -> 0xFFFFFFFF.toInt() to 0xFF202124.toInt()
+                "dark" -> 0xFF121212.toInt() to 0xFFE6E1E5.toInt()
+                "sepia" -> 0xFFF4ECD8.toInt() to 0xFF3B2F2F.toInt()
+                else -> if (dark) 0xFF121212.toInt() to 0xFFE6E1E5.toInt() else 0xFFFFFBFE.toInt() to 0xFF1C1B1F.toInt()
+            }
+        val defaultBackground = themeColors.first
+        val defaultText = themeColors.second
         return NovelReaderStyle(
             fontSize = preferences.novelFontSize.get(),
             fontFamily = preferences.novelFontFamily.get(),
@@ -200,12 +234,22 @@ class NovelReaderActivity :
             textSelectable = preferences.novelTextSelectable.get(),
             hideChapterTitle = options.hideChapterTitle,
             sourceCssPriority = preferences.novelSourceCssPriority.get(),
-            customCss = preferences.novelCustomCss.get(),
-            customJs = preferences.novelCustomJs.get(),
+            renderingMode = preferences.novelRenderingMode.get(),
+            customCss = listOf(preferences.novelCustomCss.get(), customization.enabledCss()).filter(String::isNotBlank).joinToString("\n"),
+            customJs = listOf(preferences.novelCustomJs.get(), customization.enabledJs()).filter(String::isNotBlank).joinToString("\n"),
             ttsHighlightColor = preferences.novelTtsHighlightColor.get(),
             ttsHighlightTextColor = preferences.novelTtsHighlightTextColor.get(),
+            ttsHighlightStyle = preferences.novelTtsHighlightStyle.get(),
+            keepTtsHighlightInView = preferences.novelTtsKeepHighlightInView.get(),
         )
     }
+
+    private fun displayedChapterTitle(chapter: LoadedNovelChapter): String =
+        when (preferences.novelChapterTitleDisplay.get()) {
+            0 -> chapter.chapter.name
+            1 -> "Chapter ${chapter.position + 1}"
+            else -> "Chapter ${chapter.position + 1}: ${chapter.chapter.name}"
+        }
 
     private fun navigate(next: Boolean) {
         if (loadJob?.isActive == true) return
@@ -249,6 +293,7 @@ class NovelReaderActivity :
     private fun onReaderProgress(progress: Int) {
         currentProgress = progress.coerceIn(0, 100)
         updateProgressSlider(currentProgress)
+        updateStatus()
         val threshold = preferences.novelAutoLoadNextChapterAt.get().coerceIn(1, 100)
         if (autoLoadArmed && preferences.novelInfiniteScroll.get() && currentProgress >= threshold && session.hasNext) {
             autoLoadArmed = false
@@ -464,7 +509,7 @@ class NovelReaderActivity :
             object : Runnable {
                 override fun run() {
                     if (!autoScroll || isFinishing) return
-                    webView.scrollBy(0, 2)
+                    webView.evaluateJavascript("window.hayaiReader.stepPixels(2)", null)
                     webView.postDelayed(this, delay)
                 }
             }.also(webView::post)
@@ -474,6 +519,49 @@ class NovelReaderActivity :
         autoScroll = false
         autoScrollRunnable?.let(webView::removeCallbacks)
         autoScrollRunnable = null
+    }
+
+    private fun stepReader(direction: Int) {
+        webView.evaluateJavascript("window.hayaiReader.step(${direction.coerceIn(-1, 1)})", null)
+    }
+
+    private fun startStatusUpdates() {
+        stopStatusUpdates()
+        updateStatus()
+        if (!preferences.novelStatusBarEnabled.get() || !preferences.novelStatusBarShowTime.get()) return
+        statusRunnable =
+            object : Runnable {
+                override fun run() {
+                    updateStatus()
+                    statusView.postDelayed(this, 30_000L)
+                }
+            }.also { statusView.postDelayed(it, 30_000L) }
+    }
+
+    private fun stopStatusUpdates() {
+        statusRunnable?.let { if (::statusView.isInitialized) statusView.removeCallbacks(it) }
+        statusRunnable = null
+    }
+
+    private fun updateStatus() {
+        if (!::statusView.isInitialized) return
+        statusView.visibility = if (preferences.novelStatusBarEnabled.get()) View.VISIBLE else View.GONE
+        if (statusView.visibility != View.VISIBLE) return
+        val chapter = loaded
+        val parts = mutableListOf<String>()
+        if (preferences.novelStatusBarShowTime.get()) parts += DateFormat.getTimeFormat(this).format(java.util.Date())
+        if (preferences.novelStatusBarShowBattery.get()) {
+            val battery = (getSystemService(BATTERY_SERVICE) as BatteryManager).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (battery in 0..100) parts += "$battery%"
+        }
+        if (preferences.novelStatusBarShowCharging.get()) {
+            val charging = (getSystemService(BATTERY_SERVICE) as BatteryManager).isCharging
+            if (charging) parts += "Charging"
+        }
+        if (chapter != null && preferences.novelStatusBarShowChapterNumber.get()) parts += "${chapter.position + 1}/${chapter.total}"
+        if (chapter != null && preferences.novelStatusBarShowChapterTitle.get()) parts += displayedChapterTitle(chapter)
+        if (preferences.novelStatusBarShowProgress.get()) parts += "$currentProgress%"
+        statusView.text = parts.joinToString("  •  ")
     }
 
     private fun configureWindow() {
@@ -523,6 +611,20 @@ class NovelReaderActivity :
         header.addView(chapterView)
         root.addView(header)
 
+        statusView =
+            TextView(this).apply {
+                textSize =
+                    when (preferences.novelStatusBarSize.get()) {
+                        "large" -> 14f
+                        "medium" -> 12f
+                        else -> 10f
+                    }
+                gravity = Gravity.CENTER
+                setPadding((8 * density).toInt(), (3 * density).toInt(), (8 * density).toInt(), (3 * density).toInt())
+                visibility = if (preferences.novelStatusBarEnabled.get()) View.VISIBLE else View.GONE
+            }
+        if (preferences.novelStatusBarPosition.get() == "top") root.addView(statusView)
+
         val content = FrameLayout(this)
         webView =
             WebView(this).apply {
@@ -534,6 +636,19 @@ class NovelReaderActivity :
                 settings.javaScriptCanOpenWindowsAutomatically = false
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 isVerticalScrollBarEnabled = preferences.novelVerticalScrollbar.get()
+                verticalScrollbarPosition =
+                    if (preferences.novelVerticalScrollbarPosition.get() == "left") {
+                        View.SCROLLBAR_POSITION_LEFT
+                    } else {
+                        View.SCROLLBAR_POSITION_RIGHT
+                    }
+                scrollBarSize =
+                    (resources.displayMetrics.density *
+                        when (preferences.novelVerticalProgressSliderSize.get()) {
+                            "quarter" -> 2
+                            "full" -> 6
+                            else -> 4
+                        }).toInt()
                 addJavascriptInterface(ReaderBridge(), JS_INTERFACE)
                 setOnTouchListener { _, event ->
                     gestureDetector.onTouchEvent(event)
@@ -573,6 +688,8 @@ class NovelReaderActivity :
             }
         root.addView(progressSlider)
 
+        if (preferences.novelStatusBarPosition.get() != "top") root.addView(statusView)
+
         val controls =
             LinearLayout(this).apply {
                 gravity = Gravity.CENTER
@@ -583,9 +700,9 @@ class NovelReaderActivity :
             controlButton("Read") { if (ttsController.isPlaying) ttsController.pause() else extractTtsParagraphs(autoStart = true) }
         nextButton = controlButton("›") { navigate(next = true) }
         controls.addView(previousButton)
-        controls.addView(controlButton("◀") { ttsController.previousParagraph() })
+        if (preferences.novelTtsControlsVisible.get()) controls.addView(controlButton("◀") { ttsController.previousParagraph() })
         controls.addView(playButton)
-        controls.addView(controlButton("▶") { ttsController.nextParagraph() })
+        if (preferences.novelTtsControlsVisible.get()) controls.addView(controlButton("▶") { ttsController.nextParagraph() })
         controls.addView(nextButton)
         controls.addView(controlButton("❝") { captureSelectedQuote() })
         controls.addView(controlButton("Aa") { showReaderSettings() })
@@ -613,7 +730,7 @@ class NovelReaderActivity :
                 override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
                     if (!preferences.novelTapToScroll.get()) return false
                     val direction = if (event.y < webView.height / 2f) -1 else 1
-                    webView.scrollBy(0, direction * (webView.height * 0.85f).toInt())
+                    stepReader(direction)
                     return true
                 }
 
@@ -679,6 +796,11 @@ class NovelReaderActivity :
     private data class TtsParagraph(
         val index: Int,
         val text: String,
+    )
+
+    private data class RenderedNovelDocument(
+        val html: String,
+        val baseUrl: String?,
     )
 
     companion object {

@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.bluelinelabs.conductor.Router
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
@@ -40,6 +41,7 @@ class PreMigrationController(
     StartMigrationListener {
     private val sourceManager: SourceManager by injectLazy()
     private val prefs: PreferencesHelper by injectLazy()
+    private val novelMigrationPolicy: NovelMigrationPolicy by injectLazy()
 
     private var adapter: MigrationSourceAdapter? = null
 
@@ -168,7 +170,7 @@ class PreMigrationController(
             } +
             sources.filterNot { isEnabled(it.id.toString()) }
 
-        return sources
+        return novelMigrationPolicy.compatibleSources(config.toList(), sources)
     }
 
     fun isEnabled(id: String): Boolean {

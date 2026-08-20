@@ -395,6 +395,7 @@ class MangaHeaderHolder(
             return
         }
         binding.title.text = manga.title
+        binding.hayaiSourceDetailsFeaturesContent?.let(adapter.delegate::bindSourceDetailsFeatures)
 
         setGenreTags(binding, manga)
 

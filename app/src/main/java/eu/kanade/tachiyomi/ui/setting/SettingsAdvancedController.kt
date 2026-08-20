@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
 import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
@@ -107,6 +108,12 @@ class SettingsAdvancedController : SettingsController() {
                     titleRes = R.string.hayai_novel_plugins
                     summaryRes = R.string.hayai_novel_plugins_summary
                     onClick { startActivity(Intent(context, NovelPluginManagerActivity::class.java)) }
+                }
+
+                preference {
+                    titleRes = R.string.hayai_eh_account
+                    summaryRes = R.string.hayai_eh_account_summary
+                    onClick { startActivity(Intent(context, EhSettingsActivity::class.java)) }
                 }
 
                 preference {

@@ -37,6 +37,23 @@ internal class NovelChapterStatStore(
     fun get(chapterId: Long): NovelChapterStatistics? =
         getWordCount(chapterId)?.let { NovelChapterStatistics(it.coerceAtLeast(0)) }
 
+    fun getMany(chapterIds: Collection<Long>): Map<Long, NovelChapterStatistics> =
+        chapterIds.asSequence().filter { it >= 0 }.distinct().chunked(MAX_QUERY_ARGUMENTS).flatMap { ids ->
+            val placeholders = ids.joinToString(",") { "?" }
+            database.lowLevel().rawQuery(
+                RawQuery.builder()
+                    .query("SELECT chapter_id, word_count FROM $TABLE WHERE chapter_id IN ($placeholders)")
+                    .args(*ids.toTypedArray())
+                    .build(),
+            ).use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(cursor.getLong(0) to NovelChapterStatistics(cursor.getLong(1).coerceAtLeast(0)))
+                    }
+                }
+            }.asSequence()
+        }.toMap()
+
     private fun getWordCount(chapterId: Long): Long? =
         database
             .lowLevel()
@@ -52,6 +69,7 @@ internal class NovelChapterStatStore(
 
     private companion object {
         const val TABLE = "hayai_novel_chapter_stats"
+        const val MAX_QUERY_ARGUMENTS = 900
         val writeLock = Any()
     }
 }

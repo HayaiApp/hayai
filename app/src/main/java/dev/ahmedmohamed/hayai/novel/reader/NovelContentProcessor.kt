@@ -2,7 +2,8 @@ package dev.ahmedmohamed.hayai.novel.reader
 
 import dev.ahmedmohamed.hayai.novel.source.NovelContentType
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
-import kotlinx.serialization.Serializable
+import dev.ahmedmohamed.hayai.novel.settings.NovelRegexReplacement
+import dev.ahmedmohamed.hayai.novel.settings.NovelRegexSafety
 import kotlinx.serialization.json.Json
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
@@ -61,13 +62,14 @@ internal class NovelContentProcessor(
         rulesJson: String,
     ) {
         if (rulesJson.isBlank() || rulesJson == "[]") return
-        val rules = runCatching { json.decodeFromString<List<RegexReplacement>>(rulesJson) }.getOrDefault(emptyList())
+        val rules = runCatching { json.decodeFromString<List<NovelRegexReplacement>>(rulesJson) }.getOrDefault(emptyList()).take(100)
         var html = document.body().html()
         rules.filter { it.enabled && it.pattern.isNotBlank() }.forEach { rule ->
             runCatching {
                 val options = if (rule.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
                 val pattern =
                     if (rule.isRegex) {
+                        if (NovelRegexSafety.rejectionReason(rule.pattern) != null) return@runCatching
                         rule.pattern
                     } else {
                         val escaped = Regex.escape(rule.pattern)
@@ -168,16 +170,4 @@ internal data class NovelContentOptions(
 internal data class ProcessedNovelContent(
     val html: String,
     val baseUrl: String?,
-)
-
-@Serializable
-internal data class RegexReplacement(
-    val title: String,
-    val pattern: String,
-    val replacement: String,
-    val enabled: Boolean = true,
-    val isRegex: Boolean = true,
-    val matchWholeWord: Boolean = false,
-    val caseSensitive: Boolean = false,
-    val id: String = "",
 )

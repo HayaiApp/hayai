@@ -3,6 +3,16 @@ package eu.kanade.tachiyomi
 import android.app.Application
 import androidx.core.content.ContextCompat
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+import dev.ahmedmohamed.hayai.adult.eh.session.AndroidEhCookieStore
+import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieStore
+import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
+import dev.ahmedmohamed.hayai.adult.eh.source.EhSourceProvider
+import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhDetailsPreviewLoader
+import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -54,7 +64,15 @@ class AppModule(
 
         addSingletonFactory { ExtensionManager(app) }
         addSingletonFactory { NovelPluginManager(app, get(), get()) }
-        addSingletonFactory { SourceManager(app, get(), get()) }
+        addSingletonFactory<EhCookieStore> { AndroidEhCookieStore() }
+        addSingletonFactory { EhSessionStore(get(), get()) }
+        addSingletonFactory { HayaiEhPersistenceStore(get()) }
+        addSingletonFactory { EhHttpGateway(get<NetworkHelper>().client, get()) }
+        addSingletonFactory { EhSourceProvider(get(), get(), get()) }
+        addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get())) }
+        addSingletonFactory { SourceManager(app, get(), get(), get()) }
+        addSingletonFactory { NovelJ2kIntegration(get(), get()) }
+        addSingletonFactory { NovelMigrationPolicy(get(), get()) }
 
         addSingletonFactory { DownloadManager(app) }
 
