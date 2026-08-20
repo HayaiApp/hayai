@@ -1,25 +1,40 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
+import dev.ahmedmohamed.hayai.novel.download.NovelAssetReferences
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadResult
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
+import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import dev.ahmedmohamed.hayai.novel.source.NovelDocumentLoader
+import dev.ahmedmohamed.hayai.novel.source.NovelSource
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.History
 import eu.kanade.tachiyomi.data.database.models.Manga
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.chapter.ChapterSort
+import kotlinx.coroutines.CancellationException
+import java.io.InputStream
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Request
 
 internal class NovelReaderSession(
     private val database: DatabaseHelper,
     private val sourceManager: SourceManager,
-) {
+    private val downloadStore: NovelDownloadStore,
+    private val network: NetworkHelper,
+) : NovelAssetProvider {
     lateinit var manga: Manga
         private set
     lateinit var source: Source
         private set
     private lateinit var chapters: List<Chapter>
     private var chapterIndex = -1
+    private var offlineChapterUrl: String? = null
 
     val currentChapter: Chapter
         get() = chapters[chapterIndex]
@@ -75,9 +90,34 @@ internal class NovelReaderSession(
             ).executeAsBlocking()
     }
 
+    suspend fun saveOffline(chapter: LoadedNovelChapter): NovelDownloadResult =
+        downloadStore.save(source.id, chapter.chapter.url, chapter.document) { reference ->
+            openDownloadAsset(chapter, reference)
+        }
+
+    fun removeOffline(chapter: LoadedNovelChapter) {
+        check(downloadStore.remove(source.id, chapter.chapter.url)) { "The offline copy no longer exists." }
+    }
+
+    suspend fun reload(): LoadedNovelChapter = loadCurrent()
+
+    override suspend fun getChapterAsset(
+        chapterUrl: String,
+        assetPath: String,
+    ): InputStream? =
+        downloadStore.openAsset(source.id, chapterUrl, assetPath)
+            ?: if (chapterUrl == offlineChapterUrl) null else (source as? NovelAssetProvider)?.getChapterAsset(chapterUrl, assetPath)
+
+    fun isOffline(chapterUrl: String): Boolean = chapterUrl == offlineChapterUrl
+
     private suspend fun loadCurrent(): LoadedNovelChapter {
         val chapter = currentChapter
-        val document = NovelDocumentLoader.load(source, chapter)
+        val offlineDocument = downloadStore.loadDocument(source.id, chapter.url)
+        offlineChapterUrl = chapter.url.takeIf { offlineDocument != null }
+        val document =
+            offlineDocument
+                ?: (source as? NovelSource)?.getChapterDocument(chapter)
+                ?: NovelDocumentLoader.load(source, chapter)
         database
             .upsertHistoryLastRead(
                 History.create(chapter).apply { last_read = System.currentTimeMillis() },
@@ -90,7 +130,39 @@ internal class NovelReaderSession(
             total = chapters.size,
             hasPrevious = hasPrevious,
             hasNext = hasNext,
+            isDownloaded = offlineDocument != null,
         )
+    }
+
+    private suspend fun openDownloadAsset(
+        chapter: LoadedNovelChapter,
+        reference: String,
+    ): InputStream? {
+        val provider = source as? NovelAssetProvider
+        val providerPath = NovelAssetReferences.providerPath(reference) ?: return null
+        try {
+            provider?.getChapterAsset(chapter.chapter.url, providerPath)?.let { return it }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Remote references can still use the source's authenticated HTTP path below.
+        }
+        if (NovelAssetReferences.isSourceAsset(reference)) return null
+
+        val url =
+            reference.toHttpUrlOrNull()
+                ?: chapter.document.baseUrl?.toHttpUrlOrNull()?.resolve(reference)
+                ?: return null
+        (source as? HttpSource)?.let { httpSource ->
+            val response = httpSource.getImage(Page(index = 0, url = url.toString(), imageUrl = url.toString()))
+            return response.body.byteStream()
+        }
+        val response = network.client.newCall(Request.Builder().url(url).get().build()).execute()
+        if (!response.isSuccessful) {
+            response.close()
+            return null
+        }
+        return response.body.byteStream()
     }
 }
 
@@ -123,4 +195,5 @@ internal data class LoadedNovelChapter(
     val total: Int,
     val hasPrevious: Boolean,
     val hasNext: Boolean,
+    val isDownloaded: Boolean,
 )
