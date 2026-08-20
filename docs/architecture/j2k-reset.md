@@ -31,7 +31,7 @@ Extensions remain standard J2K `Source`/`SourceFactory` extensions. `SourceCapab
 
 `NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources, downloaded source chapters, and installed Tsundoku novel APK discovery are production implementations; remote repository catalogs and JavaScript plugins remain explicit ports in the feature audit.
 
-The text reader owns its lifecycle. It loads text off the main thread, renders bounded selectable documents, updates J2K history, supports typography/navigation/search, speaks chapters through TTS, captures and manages quotes, and saves authenticated source assets into a self-contained integrity-checked offline store. Translation/dictionary adapters and JS/custom repository runtimes remain future Hayai-owned slices rather than changes to the image reader.
+The text reader owns its lifecycle. It loads text off the main thread, renders bounded selectable documents, updates J2K history, supports typography/navigation/search, speaks chapters through TTS, captures and manages quotes, persists Unicode-aware chapter word counts and reading-time estimates, and saves authenticated source assets into a self-contained integrity-checked offline store. Derived-stat persistence failure never prevents reading. Translation/dictionary adapters and JS/custom repository runtimes remain future Hayai-owned slices rather than changes to the image reader.
 
 ## Backup ownership
 
