@@ -45,6 +45,7 @@ import kotlinx.serialization.json.Json
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.text.NumberFormat
 import kotlin.math.abs
 
 class NovelReaderActivity :
@@ -137,6 +138,13 @@ class NovelReaderActivity :
             buildString {
                 append(chapter.chapter.name, "  •  ", chapter.position + 1, "/", chapter.total)
                 if (chapter.isDownloaded) append("  •  Offline")
+                append(
+                    "  •  ",
+                    NumberFormat.getIntegerInstance().format(chapter.statistics.wordCount),
+                    " words  •  ",
+                    chapter.statistics.estimatedMinutes(),
+                    " min",
+                )
             }
         previousButton.isEnabled = chapter.hasPrevious
         nextButton.isEnabled = chapter.hasNext
@@ -292,6 +300,7 @@ class NovelReaderActivity :
                 "Toggle auto-scroll",
                 if (loaded?.isDownloaded == true) "Remove offline copy" else "Save chapter offline",
                 "Saved quotes",
+                "Chapter statistics",
                 "Reset chapter progress",
             )
         AlertDialog
@@ -306,14 +315,34 @@ class NovelReaderActivity :
                     4 -> if (autoScroll) stopAutoScroll() else startAutoScroll()
                     5 -> toggleOfflineCopy()
                     6 -> showSavedQuotes()
-                    7 -> {
+                    7 -> showChapterStatistics()
+                    8 -> {
                         currentProgress = 0
                         loaded?.chapter?.let(NovelProgress::reset)
                         saveProgress()
                     }
                 }
-                if (which !in setOf(4, 5, 6)) loaded?.let(::showChapter)
+                if (which !in setOf(4, 5, 6, 7)) loaded?.let(::showChapter)
             }.show()
+    }
+
+    private fun showChapterStatistics() {
+        val chapter = loaded ?: return
+        val statistics = chapter.statistics
+        val number = NumberFormat.getIntegerInstance()
+        AlertDialog
+            .Builder(this)
+            .setTitle("Chapter statistics")
+            .setMessage(
+                buildString {
+                    append("Words: ", number.format(statistics.wordCount))
+                    append("\nEstimated reading time: ", statistics.estimatedMinutes(), " min")
+                    append("\nEstimated words read: ", number.format(statistics.wordsRead(currentProgress)))
+                    append("\nEstimated time remaining: ", statistics.remainingMinutes(currentProgress), " min")
+                    append("\nProgress: ", currentProgress.coerceIn(0, 100), "%")
+                },
+            ).setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun captureSelectedQuote() {

@@ -38,7 +38,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | TTS and playback controls | Reader-owned lifecycle-aware engine and controls | port |
 | Quotes | Typed `hayai_quotes`, selection capture, browse/copy/delete UI | port |
 | Persistent highlights | Reader ranges anchored to document identity | audit |
-| Word count, chapter stats, analytics | `hayai_novel_chapter_stats` | migration foundation; runtime audit |
+| Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, reader header and progress-aware details | port |
 | Novel trackers | J2K tracking boundary adapters | audit |
 | Hayai backup | Versioned side payload after stable core ID remapping | port |
 | LNReader/Tsundoku imports | Validated external import adapters | audit |
