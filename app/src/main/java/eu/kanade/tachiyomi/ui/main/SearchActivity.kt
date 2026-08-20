@@ -8,6 +8,7 @@ import androidx.core.view.isVisible
 import com.bluelinelabs.conductor.Controller
 import com.bluelinelabs.conductor.RouterTransaction
 import com.bluelinelabs.conductor.changehandler.SimpleSwapChangeHandler
+import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
@@ -16,7 +17,6 @@ import eu.kanade.tachiyomi.ui.base.controller.BaseController
 import eu.kanade.tachiyomi.ui.base.controller.DialogController
 import eu.kanade.tachiyomi.ui.base.controller.FadeChangeHandler
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
-import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.security.SecureActivityDelegate
 import eu.kanade.tachiyomi.ui.setting.SettingsController
 import eu.kanade.tachiyomi.ui.setting.SettingsMainController
@@ -165,7 +165,7 @@ class SearchActivity : MainActivity() {
                             val nextUnreadChapter = ChapterSort(manga).getNextUnreadChapter(chapters, false)
                             if (nextUnreadChapter != null) {
                                 val activity =
-                                    ReaderActivity.newIntent(this, manga, nextUnreadChapter)
+                                    ReaderLauncher.newIntent(this, manga, nextUnreadChapter)
                                 startActivity(activity)
                                 finish()
                                 return true

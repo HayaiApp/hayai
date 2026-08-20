@@ -137,6 +137,11 @@
                 android:resource="@xml/s_pen_actions" />
         </activity>
         <activity
+            android:name="dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity"
+            android:configChanges="screenLayout|smallestScreenSize|screenSize"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
+        <activity
             android:name=".ui.webview.WebViewActivity"
             android:configChanges="uiMode|orientation|screenSize"/>
         <activity

@@ -26,7 +26,7 @@ android {
     defaultConfig {
         minSdk = AndroidVersions.minSdk
         targetSdk = AndroidVersions.targetSdk
-        applicationId = "eu.kanade.tachiyomi"
+        applicationId = "dev.ahmedmohamed.hayai"
         versionCode = AndroidVersions.versionCode
         versionName = AndroidVersions.versionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -60,11 +60,10 @@ android {
 
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".debugJ2K"
+            applicationIdSuffix = ".debug"
             versionNameSuffix = "-d${getCommitCount()}"
         }
         getByName("release") {
-            applicationIdSuffix = ".j2k"
             isShrinkResources = true
             isMinifyEnabled = true
             proguardFiles("proguard-android-optimize.txt", "proguard-rules.pro")
@@ -73,6 +72,7 @@ android {
             initWith(getByName("release"))
             buildConfigField("boolean", "BETA", "true")
             versionNameSuffix = "-b${getBetaCount()}"
+            applicationIdSuffix = ".beta"
         }
     }
 
@@ -295,6 +295,8 @@ dependencies {
 
     // TLS 1.3 support for Android < 10
     implementation("org.conscrypt:conscrypt-android:2.6.1")
+
+    testImplementation("junit:junit:4.13.2")
 
     // Android Chart
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")

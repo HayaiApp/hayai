@@ -135,6 +135,6 @@ val RELEASE_TAG: String by lazy {
     "v${BuildConfig.VERSION_NAME}"
 }
 
-const val GITHUB_REPO: String = "Jays2Kings/tachiyomiJ2K"
+const val GITHUB_REPO: String = "HayaiApp/hayai"
 
 val RELEASE_URL = "https://github.com/$GITHUB_REPO/releases/tag/$RELEASE_TAG"
