@@ -177,7 +177,7 @@ class SettingsBrowseController : SettingsController() {
                         val hiddenCatalogues = preferences.hiddenSources().get()
                         val enabledSources =
                             sourceManager
-                                .getCatalogueSources()
+                                .getDiscoverableCatalogueSources()
                                 .filter { it.lang in languages }
                                 .filterNot { it.id.toString() in hiddenCatalogues }
                                 .sortedBy { "(${it.lang}) ${it.name}" }

@@ -96,7 +96,7 @@ open class GlobalSearchPresenter(
 
         val list =
             sourceManager
-                .getCatalogueSources()
+                .getDiscoverableCatalogueSources()
                 .filter { it.lang in languages }
                 .filterNot { it.id.toString() in hiddenCatalogues }
                 .sortedBy { "(${it.lang}) ${it.name}" }
