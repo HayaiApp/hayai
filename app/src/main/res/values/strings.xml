@@ -323,6 +323,7 @@
     <string name="no_more_results">No more results</string>
     <string name="no_results_found">No results found</string>
     <string name="local_source">Local source</string>
+    <string name="local_novel_source">Local novels</string>
     <string name="other">Other</string>
     <string name="global_search">Global search…</string>
     <string name="label_global_search">Global search</string>

@@ -14,6 +14,15 @@ open class Page(
     var imageUrl: String? = null,
     @Transient var uri: Uri? = null, // Deprecated but can't be deleted due to extensions
 ) : ProgressListener {
+    /**
+     * Optional text supplied directly by a novel source.
+     *
+     * This remains a body property to preserve the upstream four-argument
+     * constructor used by existing extensions.
+     */
+    @Transient
+    var text: String? = null
+
     val number: Int
         get() = index + 1
 
