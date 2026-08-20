@@ -37,6 +37,12 @@ val betaCount by lazy {
     }.toString()
 }
 val commitCount by lazy { runCommand("git rev-list --count HEAD") }
+val nightlyBuildNumber by lazy {
+    providers.environmentVariable("NIGHTLY_BUILD_NUMBER").orNull
+        ?.trim()
+        ?.takeIf { it.matches(Regex("[0-9]+")) }
+        ?: commitCount
+}
 val commitHash by lazy { runCommand("git rev-parse --short HEAD") }
 val buildTime: String by lazy {
     val df = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
@@ -100,10 +106,11 @@ android {
             initWith(getByName("release"))
             buildConfigField("boolean", "BETA", "true")
             buildConfigField("boolean", "NIGHTLY", "true")
+            buildConfigField("String", "COMMIT_COUNT", "\"${nightlyBuildNumber}\"")
 
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks.add("release")
-            versionNameSuffix = "-r${commitCount}"
+            versionNameSuffix = "-r${nightlyBuildNumber}"
             applicationIdSuffix = ".nightly"
         }
     }

@@ -114,12 +114,27 @@ jobs:
       # NIGHTLY
       - name: Prepare nightly build
         if: steps.branch_name.outputs.NAME == 'master' && github.event.inputs.version == ''
+        env:
+          GH_TOKEN: ${{ secrets.NIGHTLY_PAT }}
         run: |
-          set -x
-          echo "VERSION_TAG=r$(git rev-list --count HEAD)" >> $GITHUB_ENV
-          echo "BUILD_TYPE=StandardNightly" >> $GITHUB_ENV
-          echo "COMMIT_HASH=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          echo "COMMIT_SHORT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          commit_count=$(git rev-list --count HEAD)
+          latest_tag=$(gh api repos/HayaiApp/hayai-nightly/releases/latest --jq '.tag_name')
+
+          if [[ ! "$latest_tag" =~ ^r([0-9]+)$ ]]; then
+            echo "Unexpected latest nightly tag: $latest_tag" >&2
+            exit 1
+          fi
+
+          build_number=$((BASH_REMATCH[1] + 1))
+          if (( commit_count > build_number )); then
+            build_number=$commit_count
+          fi
+
+          echo "NIGHTLY_BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
+          echo "VERSION_TAG=r$build_number" >> "$GITHUB_ENV"
+          echo "BUILD_TYPE=StandardNightly" >> "$GITHUB_ENV"
+          echo "COMMIT_HASH=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "COMMIT_SHORT_HASH=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
       - name: Build and test
         if: startsWith(env.BUILD_TYPE, 'Standard')
