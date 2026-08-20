@@ -87,6 +87,11 @@ internal object NovelHtmlDocumentBuilder {
             return Math.max(0, Math.min(100, Math.round(scrollY * 100 / max)));
           };
           let scheduled = false;
+          let lastSelection = '';
+          document.addEventListener('selectionchange', () => {
+            const selected = (getSelection() ? getSelection().toString() : '').trim();
+            if (selected) lastSelection = selected;
+          });
           addEventListener('scroll', () => {
             if (scheduled) return;
             scheduled = true;
@@ -104,6 +109,11 @@ internal object NovelHtmlDocumentBuilder {
             paragraphs() {
               return [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]
                 .map((node, index) => ({index, text:(node.innerText || '').trim()})).filter(it => it.text);
+            },
+            takeSelection() {
+              const selected = (getSelection() ? getSelection().toString() : '').trim() || lastSelection;
+              lastSelection = '';
+              return selected;
             },
             highlight(index) {
               document.querySelectorAll('.hayai-tts-active').forEach(it => it.classList.remove('hayai-tts-active'));
