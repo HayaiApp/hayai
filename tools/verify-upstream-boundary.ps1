@@ -6,6 +6,7 @@ Push-Location $repositoryRoot
 try {
     $changed = @(git diff --name-only $Base; git ls-files --others --exclude-standard) | Sort-Object -Unique
     $allowedUpstreamKotlin = @(
+        "app/src/main/java/eu/kanade/tachiyomi/AppModule.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"

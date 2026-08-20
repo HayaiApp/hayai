@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.backup
 import android.content.Context
 import android.net.Uri
 import dev.ahmedmohamed.hayai.backup.HayaiBackupService
+import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
@@ -114,7 +115,9 @@ class BackupRestorer(
                     mangaChunk.forEach { restoreManga(it, backup.backupCategories) }
                 }
             }
-            val hayaiReport = HayaiBackupService(db).restore(backup.hayaiData)
+            val novelPluginManager = Injekt.get<NovelPluginManager>()
+            val hayaiReport = HayaiBackupService(db, context, novelPluginManager).restore(backup.hayaiData)
+            novelPluginManager.reloadLocalState()
             hayaiReport.errors.forEach { error -> errors.add(Date() to "Hayai data: $error") }
             restoreProgress += 1
             showRestoreProgress(restoreProgress, restoreAmount, "Hayai data")

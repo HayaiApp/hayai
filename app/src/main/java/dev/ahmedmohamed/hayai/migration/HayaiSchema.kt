@@ -59,6 +59,18 @@ object HayaiSchema {
             )
             """.trimIndent(),
         )
+        ensureColumn(db, "hayai_novel_repos", "enabled", "INTEGER NOT NULL DEFAULT 1")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS hayai_novel_plugin_sources(
+                source_id INTEGER NOT NULL PRIMARY KEY,
+                plugin_id TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                lang TEXT NOT NULL,
+                last_seen INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
         db.execSQL(
             """
             CREATE TABLE IF NOT EXISTS hayai_novel_chapter_stats(
@@ -89,5 +101,19 @@ object HayaiSchema {
             )
             """.trimIndent(),
         )
+    }
+
+    private fun ensureColumn(
+        db: SupportSQLiteDatabase,
+        table: String,
+        column: String,
+        declaration: String,
+    ) {
+        val exists =
+            db.query("PRAGMA table_info($table)").use { cursor ->
+                val nameIndex = cursor.getColumnIndex("name")
+                generateSequence { if (cursor.moveToNext()) cursor.getString(nameIndex) else null }.any { it == column }
+            }
+        if (!exists) db.execSQL("ALTER TABLE $table ADD COLUMN $column $declaration")
     }
 }

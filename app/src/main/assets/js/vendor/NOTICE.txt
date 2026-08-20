@@ -1,0 +1,8 @@
+Hayai includes bundled JavaScript compatibility assets used only inside the
+LNReader novel-plugin runtime:
+
+- Cheerio (MIT): https://github.com/cheeriojs/cheerio
+- protobuf.js (BSD-3-Clause): https://github.com/protobufjs/protobuf.js
+
+The Kotlin/Java bridge was rebuilt for Hayai from Tsundoku's LNReader plugin
+compatibility implementation, under Tsundoku's project license.

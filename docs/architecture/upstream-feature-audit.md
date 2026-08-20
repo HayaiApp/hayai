@@ -30,7 +30,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | Dedicated reader, central routing, and J2K history | `NovelReaderActivity` and `ReaderLauncher` | port |
 | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
 | Remote novel extension catalogs and installation | J2K extension API plus repository adapters | audit |
-| JavaScript repository sources and custom-source builder | Sandboxed novel runtime and signed repositories | audit |
+| LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
+| Visual custom-source builder | Hayai-owned source-definition compiler and editor | audit |
 | Local novels and EPUB import/export | Document storage and local novel source | import port; export audit |
 | Text downloads/offline reading | Document downloader, separate from image pages | port |
 | Typography, themes, spacing, navigation, search/replace | Text-reader profiles and document transforms | foundation; replace audit |
@@ -40,7 +41,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | Persistent highlights | Reader ranges anchored to document identity | audit |
 | Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, reader header and progress-aware details | port |
 | Novel trackers | J2K tracking boundary adapters | audit |
-| Hayai backup | Versioned side payload after stable core ID remapping | port |
+| Hayai backup | Versioned side payload after stable core ID remapping, including installed JS plugin code and settings | port |
 | LNReader/Tsundoku imports | Validated external import adapters | audit |
 
 Tsundoku areas audited include its novel source/text-fetch contract, extension and repository handling, dedicated reader, downloads, TTS, reader tools, local/EPUB flows, tracking, statistics, and backup/import paths.
