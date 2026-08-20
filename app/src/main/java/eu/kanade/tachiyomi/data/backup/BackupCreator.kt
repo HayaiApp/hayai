@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.backup
 import android.content.Context
 import android.net.Uri
 import com.hippo.unifile.UniFile
+import dev.ahmedmohamed.hayai.backup.HayaiBackupService
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS
 import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS_MASK
@@ -96,6 +97,7 @@ class BackupCreator(
                     backupExtensionInfo(databaseManga),
                     backupAppPreferences(flags),
                     backupSourcePreferences(flags),
+                    HayaiBackupService(db).create(databaseManga),
                 )
         }
 
