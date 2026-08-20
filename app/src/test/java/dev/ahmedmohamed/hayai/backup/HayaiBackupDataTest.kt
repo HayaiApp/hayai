@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.backup
 
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import kotlinx.serialization.protobuf.ProtoBuf
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,6 +66,51 @@ class HayaiBackupDataTest {
 
         assertEquals(data, restoredWithHayai.hayaiData)
         assertEquals(null, restoredWithoutHayai.hayaiData)
+    }
+
+    @Test
+    fun `protobuf round trip preserves installed novel plugin code`() {
+        val plugin =
+            HayaiBackupNovelPlugin(
+                descriptorJson = """{"id":"example"}""",
+                repositoryUrl = "https://repo.test/plugins.json",
+                code = "exports.default = class Example {}".toByteArray(),
+                preferences =
+                    listOf(
+                        HayaiBackupPluginPreference("username", "reader"),
+                        HayaiBackupPluginPreference("showAdult", "true"),
+                    ),
+            )
+        val restored =
+            ProtoBuf
+                .decodeFromByteArray(
+                    HayaiBackupData.serializer(),
+                    ProtoBuf.encodeToByteArray(HayaiBackupData.serializer(), HayaiBackupData(novelPlugins = listOf(plugin))),
+                ).novelPlugins
+                .single()
+
+        assertEquals(plugin.descriptorJson, restored.descriptorJson)
+        assertEquals(plugin.repositoryUrl, restored.repositoryUrl)
+        assertArrayEquals(plugin.code, restored.code)
+        assertEquals(plugin.preferences, restored.preferences)
+    }
+
+    @Test
+    fun `validation rejects duplicate or oversized plugin settings`() {
+        val plugin =
+            HayaiBackupNovelPlugin(
+                descriptorJson = """{"id":"example"}""",
+                repositoryUrl = "https://repo.test/plugins.json",
+                code = "plugin".toByteArray(),
+                preferences =
+                    listOf(
+                        HayaiBackupPluginPreference("duplicate", "first"),
+                        HayaiBackupPluginPreference("duplicate", "second"),
+                        HayaiBackupPluginPreference("large", "x".repeat(1024 * 1024 + 1)),
+                    ),
+            )
+
+        assertTrue(HayaiBackupLimits.validate(HayaiBackupData(novelPlugins = listOf(plugin))).any { it.contains("plugin backup") })
     }
 
     @Test

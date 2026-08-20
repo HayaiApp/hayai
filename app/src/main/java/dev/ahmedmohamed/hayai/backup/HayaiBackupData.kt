@@ -10,6 +10,7 @@ data class HayaiBackupData(
     @ProtoNumber(3) val novelRepositories: List<HayaiBackupNovelRepository> = emptyList(),
     @ProtoNumber(4) val chapterStats: List<HayaiBackupChapterStat> = emptyList(),
     @ProtoNumber(5) val ehFavorites: List<HayaiBackupEhFavorite> = emptyList(),
+    @ProtoNumber(6) val novelPlugins: List<HayaiBackupNovelPlugin> = emptyList(),
 ) {
     companion object {
         const val CURRENT_VERSION = 1
@@ -34,6 +35,7 @@ data class HayaiBackupQuote(
 data class HayaiBackupNovelRepository(
     @ProtoNumber(1) val baseUrl: String,
     @ProtoNumber(2) val name: String,
+    @ProtoNumber(3) val enabled: Boolean = true,
 )
 
 @Serializable
@@ -50,6 +52,20 @@ data class HayaiBackupEhFavorite(
     @ProtoNumber(2) val token: String,
     @ProtoNumber(3) val title: String,
     @ProtoNumber(4) val category: Int,
+)
+
+@Serializable
+data class HayaiBackupNovelPlugin(
+    @ProtoNumber(1) val descriptorJson: String,
+    @ProtoNumber(2) val repositoryUrl: String,
+    @ProtoNumber(3) val code: ByteArray,
+    @ProtoNumber(4) val preferences: List<HayaiBackupPluginPreference> = emptyList(),
+)
+
+@Serializable
+data class HayaiBackupPluginPreference(
+    @ProtoNumber(1) val key: String,
+    @ProtoNumber(2) val value: String,
 )
 
 data class HayaiRestoreReport(

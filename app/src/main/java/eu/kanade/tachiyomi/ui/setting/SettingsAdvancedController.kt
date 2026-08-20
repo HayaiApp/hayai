@@ -15,6 +15,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
@@ -114,6 +115,12 @@ class SettingsAdvancedController : SettingsController() {
                     entryValues = listOf(0, 1, 2)
                     key = hayaiPreferences.lewdLibraryFilter.key()
                     defaultValue = hayaiPreferences.lewdLibraryFilter.defaultValue()
+                }
+
+                preference {
+                    titleRes = R.string.hayai_novel_plugins
+                    summaryRes = R.string.hayai_novel_plugins_summary
+                    onClick { startActivity(Intent(context, NovelPluginManagerActivity::class.java)) }
                 }
 
                 preference {

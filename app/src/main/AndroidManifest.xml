@@ -142,6 +142,10 @@
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
         <activity
+            android:name="dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
+        <activity
             android:name=".ui.webview.WebViewActivity"
             android:configChanges="uiMode|orientation|screenSize"/>
         <activity

@@ -101,7 +101,7 @@ class BackupCreator(
                     backupExtensionInfo(databaseManga),
                     backupAppPreferences(flags) + backupExtensionRepoPreferences(flags),
                     backupSourcePreferences(flags),
-                    HayaiBackupService(db).create(databaseManga),
+                    HayaiBackupService(db, context).create(databaseManga),
                 )
         }
 
