@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.pkgName
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
 import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
@@ -537,13 +538,16 @@ open class BrowseSourceController(
             activity?.let { startActivity(Intent(it, EhSettingsActivity::class.java)) }
             return
         }
-        presenter.source.pkgName()?.let { pkgName ->
+        val pkgName = presenter.source.pkgName()
+        if (pkgName != null) {
             router.pushController(
                 ExtensionDetailsController(
                     pkgName,
                     presenter.source.id,
                 ).withFadeTransaction(),
             )
+        } else if (presenter.source is ConfigurableSource) {
+            router.pushController(SourceSettingsController(presenter.source.id).withFadeTransaction())
         }
     }
 

@@ -17,7 +17,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewbinding.ViewBinding
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.switchmaterial.SwitchMaterial
+import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionMutationResult
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionState
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
@@ -25,6 +28,7 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionVerifier
 import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
+import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import kotlinx.coroutines.launch
@@ -32,6 +36,7 @@ import uy.kohesive.injekt.injectLazy
 
 class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private val sessionStore by injectLazy<EhSessionStore>()
+    private val ehPreferences by injectLazy<EhPreferences>()
     private val network by injectLazy<NetworkHelper>()
     private val verifier by lazy { EhSessionVerifier(network.client) }
 
@@ -39,6 +44,8 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private lateinit var recheck: MaterialButton
     private lateinit var ehProfile: EditText
     private lateinit var exhProfile: EditText
+    private lateinit var watchedTags: MaterialButton
+    private lateinit var categories: MaterialButton
 
     private val loginLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -99,6 +106,45 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         content.addView(recheck)
         content.addView(button("Log out") { confirmLogout() })
 
+        content.addView(sectionLabel("Browsing and details"))
+        content.addView(
+            settingSwitch(
+                title = "Use Japanese gallery titles",
+                summary = "Prefer the Japanese title when a gallery provides one.",
+                checked = ehPreferences.useJapaneseTitle.get(),
+                onChanged = ehPreferences.useJapaneseTitle::set,
+            ),
+        )
+        content.addView(
+            settingSwitch(
+                title = "Open on watched list",
+                summary = "Enable the Watched list filter by default on a fresh filter sheet.",
+                checked = ehPreferences.watchedListDefault.get(),
+                onChanged = ehPreferences.watchedListDefault::set,
+            ),
+        )
+        content.addView(
+            settingSwitch(
+                title = "Enhanced gallery details",
+                summary = "Load tappable gallery page previews in manga details.",
+                checked = ehPreferences.enhancedView.get(),
+                onChanged = ehPreferences.enhancedView::set,
+            ),
+        )
+        categories = button(categoryButtonText(), ::editDefaultCategories)
+        content.addView(categories)
+        watchedTags = button("Manage watched tags") {
+            startActivity(
+                WebViewActivity.newIntent(
+                    this,
+                    "https://exhentai.org/mytags",
+                    EhSite.ExHentai.sourceId,
+                    "ExHentai watched tags",
+                ),
+            )
+        }
+        content.addView(watchedTags)
+
         content.addView(sectionLabel("Server settings profiles"))
         ehProfile = profileInput("E-Hentai profile", sessionStore.settingsProfile(EhSite.EHentai))
         exhProfile = profileInput("ExHentai profile", sessionStore.settingsProfile(EhSite.ExHentai))
@@ -122,6 +168,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
                 is EhSessionState.InvalidCredentials -> "Invalid credentials. ${state.reason}"
             }
         recheck.isEnabled = state !is EhSessionState.LoggedOut
+        watchedTags.isEnabled = state is EhSessionState.Verified
     }
 
     private fun recheckSession() {
@@ -185,6 +232,60 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             textSize = 18f
             setPadding(0, 24.dpToPx, 0, 8.dpToPx)
         }
+
+    private fun settingSwitch(
+        title: String,
+        summary: String,
+        checked: Boolean,
+        onChanged: (Boolean) -> Unit,
+    ): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 8.dpToPx, 0, 8.dpToPx)
+            addView(
+                SwitchMaterial(context).apply {
+                    text = title
+                    isChecked = checked
+                    setOnCheckedChangeListener { _, value -> onChanged(value) }
+                },
+                matchWidth(),
+            )
+            addView(
+                TextView(context).apply {
+                    text = summary
+                    alpha = 0.72f
+                    setPadding(48.dpToPx, 0, 0, 0)
+                },
+                matchWidth(),
+            )
+        }
+
+    private fun editDefaultCategories() {
+        val all = EhCategory.entries
+        val selected = ehPreferences.excludedCategories().toMutableSet()
+        materialAlertDialog()
+            .setTitle("Categories excluded by default")
+            .setMultiChoiceItems(
+                all.map(::categoryName).toTypedArray(),
+                BooleanArray(all.size) { all[it] in selected },
+            ) { _, index, checked ->
+                if (checked) selected += all[index] else selected -= all[index]
+            }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                ehPreferences.setExcludedCategories(selected)
+                categories.text = categoryButtonText()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun categoryButtonText(): String {
+        val count = ehPreferences.excludedCategories().size
+        return if (count == 0) "Default category filters: show all" else "Default category filters: hide $count"
+    }
+
+    private fun categoryName(category: EhCategory): String =
+        category.name.replace("Cg", " CG").replace("NonH", "Non-H").replace("ImageSet", "Image Set").replace("AsianPorn", "Asian Porn")
 
     private fun button(
         text: String,
