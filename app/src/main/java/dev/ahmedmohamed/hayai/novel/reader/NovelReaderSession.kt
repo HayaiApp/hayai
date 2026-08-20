@@ -7,6 +7,9 @@ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import dev.ahmedmohamed.hayai.novel.source.NovelDocumentLoader
 import dev.ahmedmohamed.hayai.novel.source.NovelSource
+import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatStore
+import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatistics
+import dev.ahmedmohamed.hayai.novel.statistics.NovelStatisticsResolver
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.History
@@ -28,6 +31,7 @@ internal class NovelReaderSession(
     private val downloadStore: NovelDownloadStore,
     private val network: NetworkHelper,
 ) : NovelAssetProvider {
+    private val chapterStatStore = NovelChapterStatStore(database)
     lateinit var manga: Manga
         private set
     lateinit var source: Source
@@ -118,6 +122,11 @@ internal class NovelReaderSession(
             offlineDocument
                 ?: (source as? NovelSource)?.getChapterDocument(chapter)
                 ?: NovelDocumentLoader.load(source, chapter)
+        val chapterId = requireNotNull(chapter.id)
+        // Derived analytics must never make otherwise readable content unavailable.
+        val statistics =
+            NovelStatisticsResolver.resolve(document, persisted = { chapterStatStore.get(chapterId) })
+        runCatching { chapterStatStore.store(chapterId, statistics) }
         database
             .upsertHistoryLastRead(
                 History.create(chapter).apply { last_read = System.currentTimeMillis() },
@@ -131,6 +140,7 @@ internal class NovelReaderSession(
             hasPrevious = hasPrevious,
             hasNext = hasNext,
             isDownloaded = offlineDocument != null,
+            statistics = statistics,
         )
     }
 
@@ -196,4 +206,5 @@ internal data class LoadedNovelChapter(
     val hasPrevious: Boolean,
     val hasNext: Boolean,
     val isDownloaded: Boolean,
+    val statistics: NovelChapterStatistics,
 )
