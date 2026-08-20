@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.backup.models
 
+import dev.ahmedmohamed.hayai.backup.HayaiBackupData
 import eu.kanade.tachiyomi.BuildConfig
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
@@ -15,6 +16,7 @@ data class Backup(
     @ProtoNumber(101) var backupSources: List<BackupSource> = emptyList(),
     @ProtoNumber(104) var backupPreferences: List<BackupPreference> = emptyList(),
     @ProtoNumber(105) var backupSourcePreferences: List<BackupSourcePreferences> = emptyList(),
+    @ProtoNumber(900) var hayaiData: HayaiBackupData? = null,
 ) {
     companion object {
         val filenameRegex = """(${BuildConfig.APPLICATION_ID}|tachiyomi)?_\d+-\d+-\d+_\d+-\d+\.(tachibk|proto\.gz)""".toRegex()

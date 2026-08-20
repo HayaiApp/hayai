@@ -10,9 +10,12 @@ J2K owns manga, chapters, history, categories, tracking, downloads, image readin
 - `source`: typed source capabilities and enhanced-source families.
 - `novel`: the text-source contract and dedicated reader.
 - `migration`: read-only legacy import and typed Hayai side tables.
+- `backup`: versioned serialization and stable-ID remapping for Hayai-owned side data.
 - `preferences`: stable Hayai and TachiyomiSY-compatible preference keys.
 
 `tools/verify-upstream-boundary.ps1` rejects unreviewed Kotlin edits outside this namespace. `App.kt`, `MainActivity.kt`, and the J2K image `ReaderActivity.kt` are protected explicitly.
+
+The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one optional high-numbered Hayai field, `BackupCreator` fills it, and `BackupRestorer` applies it only after J2K has restored manga and chapters. All payload validation, serialization models, stable identity mapping, and database behavior remain Hayai-owned. This preserves old-backup compatibility and avoids teaching J2K models about Hayai tables.
 
 ## Database reset and migration
 
@@ -24,9 +27,15 @@ On first database open, an idempotent importer validates the legacy schema and r
 
 Extensions remain standard J2K `Source`/`SourceFactory` extensions. `SourceCapabilityRegistry` adds behavior by stable source ID or recognized family name instead of scattering source checks through presenters.
 
-`NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. No production novel source implementation or Tsundoku compatibility bridge ships in this foundation yet; those are explicit ports in the feature audit.
+`NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources and downloaded source chapters are production implementations; remote extension discovery and Tsundoku compatibility remain explicit ports in the feature audit.
 
-The text reader owns its lifecycle. It loads text off the main thread, renders selectable HTML/text, and updates J2K history. TTS, typography profiles, quote capture, translations, downloads, and JS/custom/local source runtimes belong in this Hayai-owned vertical slice rather than in the image reader.
+The text reader owns its lifecycle. It loads text off the main thread, renders bounded selectable documents, updates J2K history, supports typography/navigation/search, speaks chapters through TTS, captures and manages quotes, and saves authenticated source assets into a self-contained integrity-checked offline store. Translation/dictionary adapters and JS/custom repository runtimes remain future Hayai-owned slices rather than changes to the image reader.
+
+## Backup ownership
+
+J2K continues to own backup of library, chapter, category, history, tracking, and selected preferences. Hayai appends a versioned optional protobuf payload for quotes, novel repositories, chapter word counts, and E-Hentai favorites. References to J2K rows use `(sourceId, mangaUrl, chapterUrl)` rather than transient database IDs and are resolved only after core restore. Quote ID collisions are deterministically remapped from the complete quote payload, so repeated restores are idempotent without collapsing distinct quotes. Invalid or unsupported side payloads are rejected without invalidating the core J2K restore.
+
+Offline novel files are deliberately excluded, matching J2K's treatment of downloaded image pages: backup contains durable user data and state, not potentially large downloaded content.
 
 ## Updating upstreams
 
