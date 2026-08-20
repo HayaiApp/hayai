@@ -1,10 +1,14 @@
-| Download | Contribute | Support Server |
-|-------|----------|---------|
-| [![release](https://img.shields.io/github/release/jays2kings/tachiyomi.svg?maxAge=3600&label=download)](https://github.com/jays2kings/tachiyomiJ2K/releases) | [![Translation status](https://hosted.weblate.org/widgets/tachiyomi/-/tachiyomi-j2k/svg-badge.svg)](https://hosted.weblate.org/engage/tachiyomi/?utm_source=widget) | [![Discord](https://img.shields.io/discord/349436576037732353.svg?label=discord&labelColor=7289da&color=2c2f33&style=flat)](https://discord.gg/mihon) |
+# Hayai
 
+![Hayai app icon](./.github/readme-images/app-icon.webp)
 
-# ![app icon](./.github/readme-images/app-icon.png)TachiyomiJ2K
-TachiyomiJ2K is a free and open source manga reader for Android 6.0 and above. Based on the original Tachiyomi, now continued as [Mihon](https://mihon.app)
+Hayai is an Android reader built as a direct fork of [TachiyomiJ2K](https://github.com/Jays2Kings/tachiyomiJ2K). It preserves J2K's library and image-reader architecture while establishing Hayai-owned boundaries for novel support and opt-in adult/source enhancements inspired by [Tsundoku](https://github.com/tsundoku-otaku/tsundoku) and [TachiyomiSY](https://github.com/jobobby04/TachiyomiSY).
+
+This branch is the clean J2K reset. The former Hayai/Rokku implementation is retained only as an archival branch and migration source; its application code is not part of the new baseline.
+
+This reset currently ships the migration, policy, source-contract, launch-routing, and basic text-reader foundation—not the complete SY/Tsundoku runtime. See [the reset architecture](docs/architecture/j2k-reset.md) and [the feature audit](docs/architecture/upstream-feature-audit.md) for the exact implemented/remaining split.
+
+<!-- Upstream J2K feature list retained below. -->
 
 ![screenshots of app](./.github/readme-images/screens.gif)
 

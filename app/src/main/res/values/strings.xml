@@ -1,11 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">TachiyomiJ2K</string>
-    <string name="app_short_name" translatable="false">TachiJ2K</string>
+    <string name="app_name" translatable="false">Hayai</string>
+    <string name="app_short_name" translatable="false">Hayai</string>
 
     <string name="all_files_permission_required">File permissions required</string>
-    <string name="external_storage_permission_notice">TachiyomiJ2K requires access to all files in Android 11 to download chapters, create automatic backups, and read local series. \n\nOn the next screen, enable \"Allow access to manage all files.\"</string>
-    <string name="external_storage_download_notice">TachiyomiJ2K requires access to all files to download chapters. Tap here, then enable \"Allow access to manage all files.\"</string>
+    <string name="external_storage_permission_notice">Hayai requires access to all files in Android 11 to download chapters, create automatic backups, and read local series. \n\nOn the next screen, enable \"Allow access to manage all files.\"</string>
+    <string name="external_storage_download_notice">Hayai requires access to all files to download chapters. Tap here, then enable \"Allow access to manage all files.\"</string>
+
+    <string name="hayai_features">Hayai features</string>
+    <string name="hayai_hentai_features">Hentai features</string>
+    <string name="hayai_hentai_features_summary">Enable adult sources and source-specific enhancements</string>
+    <string name="hayai_lewd_library_filter">Lewd library entries</string>
+    <string name="hayai_lewd_library_filter_summary">Choose whether lewd entries appear in the library</string>
+    <string name="hayai_lewd_show">Show</string>
+    <string name="hayai_lewd_hide">Hide</string>
+    <string name="hayai_lewd_only">Show only</string>
 
     <!--Models-->
 

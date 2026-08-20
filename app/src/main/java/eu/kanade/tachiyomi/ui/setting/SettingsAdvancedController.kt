@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceScreen
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.cache.ChapterCache
@@ -67,6 +68,8 @@ import uy.kohesive.injekt.injectLazy
 import java.io.File
 
 class SettingsAdvancedController : SettingsController() {
+    private val hayaiPreferences by lazy { HayaiPreferences(Injekt.get()) }
+
     private val network: NetworkHelper by injectLazy()
 
     private val chapterCache: ChapterCache by injectLazy()
@@ -87,6 +90,31 @@ class SettingsAdvancedController : SettingsController() {
             titleRes = R.string.advanced
 
             (activity as? MainActivity)?.showNotificationPermissionPrompt(true)
+
+            preferenceCategory {
+                titleRes = R.string.hayai_features
+
+                switchPreference {
+                    titleRes = R.string.hayai_hentai_features
+                    summaryRes = R.string.hayai_hentai_features_summary
+                    key = hayaiPreferences.hentaiFeaturesEnabled.key()
+                    defaultValue = hayaiPreferences.hentaiFeaturesEnabled.defaultValue()
+                }
+
+                intListPreference(activity) {
+                    titleRes = R.string.hayai_lewd_library_filter
+                    summaryRes = R.string.hayai_lewd_library_filter_summary
+                    entriesRes =
+                        arrayOf(
+                            R.string.hayai_lewd_show,
+                            R.string.hayai_lewd_hide,
+                            R.string.hayai_lewd_only,
+                        )
+                    entryValues = listOf(0, 1, 2)
+                    key = hayaiPreferences.lewdLibraryFilter.key()
+                    defaultValue = hayaiPreferences.lewdLibraryFilter.defaultValue()
+                }
+            }
 
             preference {
                 key = "dump_crash_logs"

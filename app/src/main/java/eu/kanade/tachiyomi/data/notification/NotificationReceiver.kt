@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.kanade.tachiyomi.data.backup.BackupRestoreJob
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
@@ -20,7 +21,6 @@ import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
 import eu.kanade.tachiyomi.ui.more.AboutController
-import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.util.chapter.updateTrackChapterMarkedAsRead
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.getUriCompat
@@ -473,7 +473,7 @@ class NotificationReceiver : BroadcastReceiver() {
             manga: Manga,
             chapter: Chapter,
         ): PendingIntent {
-            val newIntent = ReaderActivity.newIntent(context, manga, chapter)
+            val newIntent = ReaderLauncher.newIntent(context, manga, chapter)
             return PendingIntent.getActivity(
                 context,
                 manga.id.hashCode(),

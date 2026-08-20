@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.library
 
+import dev.ahmedmohamed.hayai.adult.HayaiLibraryPolicy
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -86,6 +88,7 @@ class LibraryPresenter(
     private val customMangaManager: CustomMangaManager = Injekt.get(),
 ) : BaseCoroutinePresenter<LibraryController>() {
     private val context = preferences.context
+    private val hayaiLibraryPolicy = HayaiLibraryPolicy(HayaiPreferences(Injekt.get()), sourceManager)
     private val viewContext
         get() = view?.view?.context
 
@@ -387,6 +390,7 @@ class LibraryPresenter(
 
         val filtersOff =
             view?.isSubClass != true &&
+                !hayaiLibraryPolicy.isFiltering() &&
                 (filterDownloaded == 0 && filterUnread == 0 && filterCompleted == 0 && filterTracked == 0 && filterMangaType == 0)
         hasActiveFilters = !filtersOff
         val missingCategorySet = categories.mapNotNull { it.id }.toMutableSet()
@@ -455,6 +459,8 @@ class LibraryPresenter(
         filterBookmarked: Int,
         filterTrackers: String,
     ): Boolean {
+        if (!hayaiLibraryPolicy.includes(item.manga)) return false
+
         (view as? FilteredLibraryController)?.let {
             return matchesCustomFilters(item, it, filterTrackers)
         }
