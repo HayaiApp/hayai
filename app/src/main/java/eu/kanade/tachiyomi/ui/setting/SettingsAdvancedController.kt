@@ -103,20 +103,6 @@ class SettingsAdvancedController : SettingsController() {
                     defaultValue = hayaiPreferences.hentaiFeaturesEnabled.defaultValue()
                 }
 
-                intListPreference(activity) {
-                    titleRes = R.string.hayai_lewd_library_filter
-                    summaryRes = R.string.hayai_lewd_library_filter_summary
-                    entriesRes =
-                        arrayOf(
-                            R.string.hayai_lewd_show,
-                            R.string.hayai_lewd_hide,
-                            R.string.hayai_lewd_only,
-                        )
-                    entryValues = listOf(0, 1, 2)
-                    key = hayaiPreferences.lewdLibraryFilter.key()
-                    defaultValue = hayaiPreferences.lewdLibraryFilter.defaultValue()
-                }
-
                 preference {
                     titleRes = R.string.hayai_novel_plugins
                     summaryRes = R.string.hayai_novel_plugins_summary

@@ -10,18 +10,12 @@ class HayaiLibraryPolicy(
     private val sourceManager: SourceManager,
 ) {
     fun includes(manga: Manga): Boolean {
-        if (!preferences.hentaiFeaturesEnabled.get()) {
-            return !LewdClassifier.isLewd(manga, sourceManager.getOrStub(manga.source))
-        }
         val isLewd = LewdClassifier.isLewd(manga, sourceManager.getOrStub(manga.source))
-        return when (LewdLibraryFilter.fromPersistedValue(preferences.lewdLibraryFilter.get())) {
-            LewdLibraryFilter.Show -> true
-            LewdLibraryFilter.Hide -> !isLewd
-            LewdLibraryFilter.Only -> isLewd
-        }
+        return LewdLibraryFilter
+            .fromPersistedValue(preferences.lewdLibraryFilter.get())
+            .includes(isLewd)
     }
 
     fun isFiltering(): Boolean =
-        !preferences.hentaiFeaturesEnabled.get() ||
-            LewdLibraryFilter.fromPersistedValue(preferences.lewdLibraryFilter.get()) != LewdLibraryFilter.Show
+        LewdLibraryFilter.fromPersistedValue(preferences.lewdLibraryFilter.get()) != LewdLibraryFilter.Disabled
 }

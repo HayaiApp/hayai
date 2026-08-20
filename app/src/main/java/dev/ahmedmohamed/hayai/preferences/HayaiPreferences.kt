@@ -10,7 +10,7 @@ class HayaiPreferences(
         store.getBoolean(KEY_HENTAI_FEATURES, true)
 
     val lewdLibraryFilter: Preference<Int> =
-        store.getInt(KEY_LEWD_LIBRARY_FILTER, LewdLibraryFilter.Show.persistedValue)
+        store.getInt(KEY_LEWD_LIBRARY_FILTER, LewdLibraryFilter.Disabled.persistedValue)
 
     val novelFontSize = store.getInt("pref_novel_font_size", 16)
     val novelFontFamily = store.getString("pref_novel_font_family", "sans-serif")
@@ -91,12 +91,20 @@ class HayaiPreferences(
 enum class LewdLibraryFilter(
     val persistedValue: Int,
 ) {
-    Show(0),
-    Hide(1),
-    Only(2),
+    Disabled(0),
+    Include(1),
+    Exclude(2),
     ;
 
+    fun includes(isLewd: Boolean): Boolean =
+        when (this) {
+            Disabled -> true
+            Include -> isLewd
+            Exclude -> !isLewd
+        }
+
     companion object {
-        fun fromPersistedValue(value: Int): LewdLibraryFilter = entries.firstOrNull { it.persistedValue == value } ?: Show
+        fun fromPersistedValue(value: Int): LewdLibraryFilter =
+            entries.firstOrNull { it.persistedValue == value } ?: Disabled
     }
 }

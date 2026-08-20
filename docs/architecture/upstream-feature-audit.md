@@ -8,9 +8,9 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
 
 | Capability | Hayai boundary | Status |
 |---|---|---|
-| Global hentai enable (`eh_is_hentai_enabled`) | Stable SY-compatible key and central policy | foundation |
-| Library lewd filter show/hide/only (`pref_filter_library_lewd_v2`) | `LewdClassifier` and `HayaiLibraryPolicy` | foundation |
-| Fixed adult IDs, adult-source rules, tags, and `Non-H` exemption | Typed source registry and classifier | foundation |
+| Global hentai enable (`eh_is_hentai_enabled`) | Reactive discovery-source visibility; installed/library sources remain addressable | port |
+| Library lewd filter show/only/hide (`pref_filter_library_lewd_v2`) | J2K library filter sheet plus typed `HayaiLibraryPolicy` | port |
+| Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
 | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | audit |
 | EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
 | EH metadata, gallery versions, archives/H@H, thumbnails, tag filtering | Metadata gateway and EH delegate | audit |
