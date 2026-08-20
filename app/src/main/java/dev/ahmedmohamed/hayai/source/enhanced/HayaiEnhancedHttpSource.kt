@@ -50,7 +50,14 @@ open class HayaiEnhancedHttpSource(
 
     override suspend fun getMangaDetails(manga: SManga): SManga {
         val details = originalSource.getMangaDetails(manga)
-        details.url = details.url.ifBlank { manga.url }
+        return enhanceDetails(details, manga.url)
+    }
+
+    private suspend fun enhanceDetails(
+        details: SManga,
+        fallbackUrl: String,
+    ): SManga {
+        details.url = details.url.ifBlank { fallbackUrl }
         val enhanced = fetchEnhancedDetails(details) ?: return details
         enhanced.title?.takeIf { details.title.isBlank() }?.let { details.title = it }
         enhanced.author?.let { details.author = it }
@@ -72,9 +79,9 @@ open class HayaiEnhancedHttpSource(
         fetchDetails: Boolean,
         fetchChapters: Boolean,
     ): SMangaUpdate {
-        val updatedManga = if (fetchDetails) getMangaDetails(manga) else manga
-        val updatedChapters = if (fetchChapters) originalSource.getChapterList(updatedManga) else chapters
-        return SMangaUpdate(updatedManga, updatedChapters)
+        val update = originalSource.getMangaUpdate(manga, chapters, fetchDetails, fetchChapters)
+        val updatedManga = if (fetchDetails) enhanceDetails(update.manga, manga.url) else update.manga
+        return SMangaUpdate(updatedManga, update.chapters)
     }
 
     override suspend fun getChapterList(manga: SManga): List<SChapter> = originalSource.getChapterList(manga)
