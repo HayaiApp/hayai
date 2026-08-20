@@ -10,6 +10,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/source/Source.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/source/model/Page.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/main/SearchActivity.kt"

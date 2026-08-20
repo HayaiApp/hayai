@@ -4,7 +4,10 @@ import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.model.SChapter
 
 interface NovelSource : CatalogueSource {
-    suspend fun getChapterDocument(chapter: SChapter): NovelDocument
+    override val isNovelSource: Boolean
+        get() = true
+
+    suspend fun getChapterDocument(chapter: SChapter): NovelDocument = NovelDocumentLoader.load(this, chapter)
 }
 
 data class NovelDocument(
