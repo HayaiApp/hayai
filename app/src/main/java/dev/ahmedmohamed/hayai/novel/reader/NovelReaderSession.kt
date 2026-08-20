@@ -39,6 +39,13 @@ internal class NovelReaderSession(
     private lateinit var chapters: List<Chapter>
     private var chapterIndex = -1
     private var offlineChapterUrl: String? = null
+    private var recordHistory = true
+    private val prefetchedDocuments =
+        java.util.Collections.synchronizedMap(
+            object : LinkedHashMap<String, NovelDocument>(8, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, NovelDocument>?): Boolean = size > MAX_PREFETCHED_DOCUMENTS
+            },
+        )
 
     val currentChapter: Chapter
         get() = chapters[chapterIndex]
@@ -50,7 +57,9 @@ internal class NovelReaderSession(
     suspend fun initialize(
         mangaId: Long,
         chapterId: Long,
+        recordHistory: Boolean = true,
     ): LoadedNovelChapter {
+        this.recordHistory = recordHistory
         manga = requireNotNull(database.getManga(mangaId).executeAsBlocking()) { "Novel not found" }
         source =
             requireNotNull(sourceManager.get(manga.source)) { "Novel source is not installed" }
@@ -88,10 +97,12 @@ internal class NovelReaderSession(
     ) {
         NovelProgress.apply(chapter, progress, markReadAt)
         database.updateChapterProgress(chapter).executeAsBlocking()
-        database
-            .upsertHistoryLastRead(
-                History.create(chapter).apply { last_read = System.currentTimeMillis() },
-            ).executeAsBlocking()
+        if (recordHistory) {
+            database
+                .upsertHistoryLastRead(
+                    History.create(chapter).apply { last_read = System.currentTimeMillis() },
+                ).executeAsBlocking()
+        }
     }
 
     suspend fun saveOffline(chapter: LoadedNovelChapter): NovelDownloadResult =
@@ -104,6 +115,25 @@ internal class NovelReaderSession(
     }
 
     suspend fun reload(): LoadedNovelChapter = loadCurrent()
+
+    suspend fun prefetchAdjacent(radius: Int) {
+        val bounded = radius.coerceIn(0, MAX_PREFETCHED_DOCUMENTS / 2)
+        if (bounded == 0 || chapterIndex !in chapters.indices) return
+        val indices = (1..bounded).flatMap { distance -> listOf(chapterIndex - distance, chapterIndex + distance) }
+        for (index in indices) {
+            val chapter = chapters.getOrNull(index) ?: continue
+            if (prefetchedDocuments.containsKey(chapter.url) || downloadStore.contains(source.id, chapter.url)) continue
+            val document =
+                try {
+                    (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    continue
+                }
+            prefetchedDocuments[chapter.url] = document
+        }
+    }
 
     override suspend fun getChapterAsset(
         chapterUrl: String,
@@ -120,6 +150,7 @@ internal class NovelReaderSession(
         offlineChapterUrl = chapter.url.takeIf { offlineDocument != null }
         val document =
             offlineDocument
+                ?: prefetchedDocuments.remove(chapter.url)
                 ?: (source as? NovelSource)?.getChapterDocument(chapter)
                 ?: NovelDocumentLoader.load(source, chapter)
         val chapterId = requireNotNull(chapter.id)
@@ -173,6 +204,10 @@ internal class NovelReaderSession(
             return null
         }
         return response.body.byteStream()
+    }
+
+    private companion object {
+        const val MAX_PREFETCHED_DOCUMENTS = 10
     }
 }
 

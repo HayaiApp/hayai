@@ -3,7 +3,10 @@ package eu.kanade.tachiyomi.ui.manga
 import android.view.ActionMode
 import android.view.View
 import android.widget.TextView
+import android.widget.LinearLayout
 import androidx.recyclerview.widget.ItemTouchHelper
+import dev.ahmedmohamed.hayai.novel.integration.NovelChapterPresentation
+import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
@@ -30,11 +33,14 @@ class MangaDetailsAdapter(
     val controller: MangaDetailsController,
 ) : BaseChapterAdapter<IFlexible<*>>(controller) {
     val preferences: PreferencesHelper by injectLazy()
+    private val novelIntegration: NovelJ2kIntegration by injectLazy()
 
     val hasShownSwipeTut
         get() = preferences.shownChapterSwipeTutorial()
 
     var items: List<ChapterItem> = emptyList()
+    private var novelPresentations: Map<Long, NovelChapterPresentation> = emptyMap()
+    private var novelOfflineChapterIds: Set<Long> = emptySet()
 
     val delegate: MangaDetailsInterface = controller
     val presenter = controller.presenter
@@ -48,7 +54,29 @@ class MangaDetailsAdapter(
 
     fun setChapters(items: List<ChapterItem>?) {
         this.items = items ?: emptyList()
+        novelPresentations = emptyMap()
+        novelOfflineChapterIds = emptySet()
         performFilter()
+        controller.loadNovelChapterPresentations(this.items)
+    }
+
+    fun isNovel(manga: eu.kanade.tachiyomi.data.database.models.Manga): Boolean = novelIntegration.isNovel(manga)
+
+    fun novelPresentation(chapterId: Long?): NovelChapterPresentation? = chapterId?.let(novelPresentations::get)
+
+    fun isNovelOffline(chapterId: Long?): Boolean = chapterId != null && chapterId in novelOfflineChapterIds
+
+    fun setNovelPresentations(presentations: Map<Long, NovelChapterPresentation>) {
+        novelPresentations = presentations
+        notifyDataSetChanged()
+    }
+
+    fun setNovelOfflineChapterIds(chapterIds: Set<Long>) {
+        novelOfflineChapterIds = chapterIds
+        items.forEach { item ->
+            item.status = if (item.chapter.id in chapterIds) eu.kanade.tachiyomi.data.download.model.Download.State.DOWNLOADED else eu.kanade.tachiyomi.data.download.model.Download.State.NOT_DOWNLOADED
+        }
+        notifyDataSetChanged()
     }
 
     fun indexOf(item: ChapterItem): Int = items.indexOf(item)
@@ -242,5 +270,7 @@ class MangaDetailsAdapter(
         fun updateScroll()
 
         fun setFavButtonPopup(popupView: View)
+
+        fun bindSourceDetailsFeatures(container: LinearLayout)
     }
 }

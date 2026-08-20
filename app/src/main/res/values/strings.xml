@@ -1272,6 +1272,34 @@
     <string name="wifi">Wi-Fi</string>
     <string name="hayai_novel_plugins">Novel plugins</string>
     <string name="hayai_novel_plugins_summary">Manage LNReader-compatible novel repositories and sources</string>
+    <string name="hayai_eh_account">E-Hentai and ExHentai</string>
+    <string name="hayai_eh_account_summary">Sign in, verify ExHentai access, and manage remote profiles</string>
+    <string name="hayai_novel_library_filter">Content type</string>
+    <string name="hayai_gallery_previews">Gallery previews</string>
+    <string name="hayai_novels_only_filter">Novels only</string>
+    <string name="hayai_manga_only_filter">Manga only</string>
+    <string name="hayai_novel_progress_percent">%1$d%% read</string>
+    <plurals name="hayai_novel_words">
+        <item quantity="one">%1$d word</item>
+        <item quantity="other">%1$d words</item>
+    </plurals>
+    <plurals name="hayai_novel_minutes">
+        <item quantity="one">%1$d min</item>
+        <item quantity="other">%1$d min</item>
+    </plurals>
+    <plurals name="hayai_novel_hours">
+        <item quantity="one">%1$d h</item>
+        <item quantity="other">%1$d h</item>
+    </plurals>
+    <string name="hayai_novel_hours_minutes">%1$d h %2$d min</string>
+    <string name="hayai_novel_statistics">Novel reading</string>
+    <string name="hayai_novel_titles">Novel titles</string>
+    <string name="hayai_novel_measured_chapters">Measured chapters</string>
+    <string name="hayai_novel_words_read">Words read</string>
+    <string name="hayai_novel_total_words">Total words</string>
+    <string name="hayai_novel_reading_time">Reading time</string>
+    <string name="hayai_novel_reader_settings">Novel reader</string>
+    <string name="hayai_novel_reader_settings_summary">Typography, navigation, TTS, progress, source styles, and reading behavior</string>
     <string name="hayai_novel_repositories">Plugin repositories</string>
     <string name="hayai_no_novel_repositories">No repositories added. Add a trusted LNReader plugin index to begin.</string>
     <string name="hayai_no_novel_plugins">No matching plugins. Refresh enabled repositories or change the search.</string>

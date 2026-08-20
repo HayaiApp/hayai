@@ -19,6 +19,11 @@ class NovelDownloadStore(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
+    fun contains(
+        sourceId: Long,
+        chapterUrl: String,
+    ): Boolean = loadDocument(sourceId, chapterUrl) != null
+
     fun loadDocument(
         sourceId: Long,
         chapterUrl: String,

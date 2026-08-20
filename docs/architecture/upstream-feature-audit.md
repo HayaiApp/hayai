@@ -11,14 +11,14 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
 | Global hentai enable (`eh_is_hentai_enabled`) | Reactive discovery-source visibility; installed/library sources remain addressable | port |
 | Library lewd filter show/only/hide (`pref_filter_library_lewd_v2`) | J2K library filter sheet plus typed `HayaiLibraryPolicy` | port |
 | Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
-| E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | audit |
+| E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; emulator login pending |
 | EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
-| EH metadata, gallery versions, archives/H@H, thumbnails, tag filtering | Metadata gateway and EH delegate | audit |
+| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic manga-details feature seam | foundation verified; emulator details flow pending |
 | 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | Registered enhanced-source families | registry foundation; behavior audit |
 | Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | audit |
 | Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI audit |
 | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
-| Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | audit |
+| Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | preview foundation verified; remaining items audit |
 
 SY areas audited include its EH/ExHentai source, login and preferences; metadata models/parsers; adult classifier and library filters; favorites/update flows; enhanced source handlers; merged/feed/saved-search systems; and reader/network extras. Exact behavior is rebuilt behind Hayai contracts rather than copied into J2K presenters.
 
@@ -33,13 +33,14 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
 | Visual custom-source builder | Hayai-owned source-definition compiler and editor | audit |
 | Local novels and EPUB import/export | Document storage and local novel source | import port; export audit |
-| Text downloads/offline reading | Document downloader, separate from image pages | port |
-| Typography, themes, spacing, navigation, search/replace | Text-reader profiles and document transforms | foundation; replace audit |
+| Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | integration foundation verified; emulator bulk-flow pending |
+| Typography, themes, spacing, navigation, presets, snippets, search/replace | Text-reader profiles, typed customization store, and bounded document transforms | integration foundation verified; emulator settings-flow pending |
 | Translation and dictionary handoff | Reader-owned adapters | audit |
 | TTS and playback controls | Reader-owned lifecycle-aware engine and controls | port |
 | Quotes | Typed `hayai_quotes`, selection capture, browse/copy/delete UI | port |
 | Persistent highlights | Reader ranges anchored to document identity | audit |
-| Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, reader header and progress-aware details | port |
+| Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, progress-aware J2K chapter rows, and library statistics | integration foundation verified; emulator presentation pending |
+| Library content filter, shortcuts, and migration compatibility | Typed content policy with narrow J2K presentation and migration adapters | integration foundation verified; emulator flows pending |
 | Novel trackers | J2K tracking boundary adapters | audit |
 | Hayai backup | Versioned side payload after stable core ID remapping, including installed JS plugin code and settings | port |
 | LNReader/Tsundoku imports | Validated external import adapters | audit |

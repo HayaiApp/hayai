@@ -28,6 +28,9 @@ import eu.kanade.tachiyomi.util.view.scrollViewWith
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import timber.log.Timber
 import kotlin.math.roundToInt
+import eu.kanade.tachiyomi.util.system.launchIO
+import eu.kanade.tachiyomi.util.system.withUIContext
+import java.text.NumberFormat
 
 class StatsController : BaseController<StatsControllerBinding>() {
     val presenter = StatsPresenter()
@@ -46,6 +49,7 @@ class StatsController : BaseController<StatsControllerBinding>() {
         super.onViewCreated(view)
         scrollViewWith(binding.statsScrollView, true)
         handleGeneralStats()
+        handleNovelStats()
         if (mangaDistinct.isNotEmpty()) {
             binding.viewDetailLayout.setOnClickListener {
                 router.pushController(StatsDetailsController().withFadeTransaction())
@@ -96,6 +100,32 @@ class StatsController : BaseController<StatsControllerBinding>() {
                     .mapNotNull { track -> presenter.get10PointScore(track) }
                     .average()
             }.filter { it > 0.0 }
+
+    private fun handleNovelStats() {
+        viewScope.launchIO {
+            val stats = presenter.getNovelStatistics()
+            withUIContext {
+                if (stats.titles == 0) return@withUIContext
+                val numbers = NumberFormat.getIntegerInstance()
+                binding.novelStatsLayout.isVisible = true
+                binding.statsNovelTitlesText.text = numbers.format(stats.titles)
+                binding.statsNovelMeasuredText.text = numbers.format(stats.measuredChapters)
+                binding.statsNovelWordsReadText.text = numbers.format(stats.wordsRead)
+                binding.statsNovelTotalWordsText.text = numbers.format(stats.totalWords)
+                binding.statsNovelReadingTimeText.text = formatMinutes(stats.minutesRead)
+            }
+        }
+    }
+
+    private fun formatMinutes(minutes: Long): String {
+        val hours = minutes / 60
+        val remainder = minutes % 60
+        return when {
+            hours == 0L -> resources?.getQuantityString(R.plurals.hayai_novel_minutes, remainder.toInt(), remainder) ?: "$remainder min"
+            remainder == 0L -> resources?.getQuantityString(R.plurals.hayai_novel_hours, hours.toInt(), hours) ?: "$hours h"
+            else -> activity?.getString(R.string.hayai_novel_hours_minutes, hours, remainder) ?: "$hours h $remainder min"
+        }
+    }
 
     private fun Manga.getTags(): List<String> = getGenres()?.map { it.uppercase() } ?: emptyList()
 

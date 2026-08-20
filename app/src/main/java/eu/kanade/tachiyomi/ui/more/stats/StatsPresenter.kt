@@ -16,6 +16,8 @@ import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.more.stats.StatsHelper.getReadDuration
+import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+import dev.ahmedmohamed.hayai.novel.integration.NovelLibraryStatistics
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -28,6 +30,7 @@ class StatsPresenter(
     private val trackManager: TrackManager = Injekt.get(),
     private val downloadManager: DownloadManager = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
+    private val novelIntegration: NovelJ2kIntegration = Injekt.get(),
 ) {
     private val libraryMangas = getLibrary()
     val mangaDistinct = libraryMangas.distinct()
@@ -74,4 +77,6 @@ class StatsPresenter(
         val chaptersTime = db.getTotalReadDuration()
         return chaptersTime.getReadDuration(prefs.context.getString(R.string.none))
     }
+
+    fun getNovelStatistics(): NovelLibraryStatistics = novelIntegration.libraryStatistics(mangaDistinct)
 }

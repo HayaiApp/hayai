@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.source
 
 import android.content.Context
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+import dev.ahmedmohamed.hayai.adult.eh.source.EhSourceProvider
 import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.source.AdultSourceVisibility
@@ -32,6 +33,7 @@ class SourceManager(
     private val context: Context,
     private val extensionManager: ExtensionManager,
     private val novelPluginManager: NovelPluginManager,
+    private val ehSourceProvider: EhSourceProvider,
 ) {
     private val scope = CoroutineScope(Job() + Dispatchers.IO)
 
@@ -44,8 +46,14 @@ class SourceManager(
         sourcesMapFlow.map { it.values.filterIsInstance<CatalogueSource>() }
     val onlineSources: Flow<List<HttpSource>> = catalogueSources.map { it.filterIsInstance<HttpSource>() }
     val discoverableCatalogueSources: Flow<List<CatalogueSource>> =
-        combine(sourcesMapFlow, hayaiPreferences.hentaiFeaturesEnabled.changes()) { sources, adultEnabled ->
-            sources.values.filterIsInstance<CatalogueSource>().filter { AdultSourceVisibility.includes(it, adultEnabled) }
+        combine(
+            sourcesMapFlow,
+            hayaiPreferences.hentaiFeaturesEnabled.changes(),
+            ehSourceProvider.discoveryChanges,
+        ) { sources, adultEnabled, _ ->
+            sources.values.filterIsInstance<CatalogueSource>().filter {
+                AdultSourceVisibility.includes(it, adultEnabled) && ehSourceProvider.isDiscoverable(it.id)
+            }
         }
 
     private val delegatedSources =
@@ -68,12 +76,16 @@ class SourceManager(
                         mapOf(
                             LocalSource.ID to LocalSource(context),
                             LocalNovelSource.ID to LocalNovelSource(context),
-                        ),
+                        ) + ehSourceProvider.allSources().associateBy(Source::id),
                     )
                 extensions.forEach { extension ->
                     extension.sources.forEach {
-                        mutableMap[it.id] = it
-                        delegatedSources[it.id]?.delegatedHttpSource?.delegate = it as? HttpSource
+                        if (ehSourceProvider.owns(it.id)) {
+                            Timber.e("Rejected extension source %s: source ID %d is reserved by Hayai", it.name, it.id)
+                        } else {
+                            mutableMap[it.id] = it
+                            delegatedSources[it.id]?.delegatedHttpSource?.delegate = it as? HttpSource
+                        }
 //                            registerStubSource(it)
                     }
                 }
@@ -119,7 +131,7 @@ class SourceManager(
 
     fun getDiscoverableCatalogueSources() =
         sourcesMapFlow.value.values.filterIsInstance<CatalogueSource>().filter {
-            AdultSourceVisibility.includes(it, hayaiPreferences.hentaiFeaturesEnabled.get())
+            AdultSourceVisibility.includes(it, hayaiPreferences.hentaiFeaturesEnabled.get()) && ehSourceProvider.isDiscoverable(it.id)
         }
 
     @Suppress("OverridingDeprecatedMember")

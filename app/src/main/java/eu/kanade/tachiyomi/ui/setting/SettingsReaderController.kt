@@ -19,6 +19,8 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
 import eu.kanade.tachiyomi.util.lang.addBetaTag
 import eu.kanade.tachiyomi.util.system.isTablet
 import eu.kanade.tachiyomi.util.view.activityBinding
+import dev.ahmedmohamed.hayai.novel.settings.NovelSettingsController
+import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import kotlinx.coroutines.flow.launchIn
 import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
 
@@ -26,6 +28,16 @@ class SettingsReaderController : SettingsController() {
     override fun setupPreferenceScreen(screen: PreferenceScreen) =
         screen.apply {
             titleRes = R.string.reader
+
+            preferenceCategory {
+                title = "Novels"
+                preference {
+                    titleRes = R.string.hayai_novel_reader_settings
+                    summaryRes = R.string.hayai_novel_reader_settings_summary
+                    iconRes = R.drawable.ic_book_open_variant_24dp
+                    onClick { router.pushController(NovelSettingsController().withFadeTransaction()) }
+                }
+            }
 
             preferenceCategory {
                 titleRes = R.string.general
