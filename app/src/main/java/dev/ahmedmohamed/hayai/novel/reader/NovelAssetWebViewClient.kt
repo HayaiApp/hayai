@@ -6,14 +6,14 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
-import eu.kanade.tachiyomi.source.Source
 import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayInputStream
 import java.net.URLConnection
 
 internal class NovelAssetWebViewClient(
-    private val source: Source,
+    private val assetProvider: NovelAssetProvider,
     private val chapterUrl: () -> String,
+    private val offline: () -> Boolean,
     private val blockMedia: () -> Boolean,
 ) : WebViewClient() {
     override fun shouldInterceptRequest(
@@ -40,10 +40,10 @@ internal class NovelAssetWebViewClient(
 
     private fun intercept(uri: Uri): WebResourceResponse? {
         if (blockMedia() && isMedia(uri)) return emptyResponse()
+        if (offline() && uri.scheme in REMOTE_SCHEMES) return notFoundResponse()
         if (uri.scheme !in ASSET_SCHEMES) return null
-        val provider = source as? NovelAssetProvider ?: return notFoundResponse()
         val path = decodeAssetPath(uri) ?: return notFoundResponse()
-        val stream = runBlocking { provider.getChapterAsset(chapterUrl(), path) } ?: return notFoundResponse()
+        val stream = runBlocking { assetProvider.getChapterAsset(chapterUrl(), path) } ?: return notFoundResponse()
         return WebResourceResponse(mimeType(path), null, stream)
     }
 
@@ -81,6 +81,7 @@ internal class NovelAssetWebViewClient(
 
     private companion object {
         val ASSET_SCHEMES = setOf("hayai-novel-image", "novel-image")
+        val REMOTE_SCHEMES = setOf("http", "https")
         val MEDIA_EXTENSIONS =
             setOf("jpg", "jpeg", "png", "gif", "webp", "svg", "avif", "bmp", "mp3", "m4a", "aac", "ogg", "wav", "mp4", "webm")
     }

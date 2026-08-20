@@ -23,9 +23,11 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.File
 import kotlin.math.abs
 
 class NovelReaderActivity :
@@ -44,7 +47,14 @@ class NovelReaderActivity :
     NovelTtsController.Callbacks {
     private val preferences by lazy { HayaiPreferences(Injekt.get<PreferenceStore>()) }
     private val json = Json { ignoreUnknownKeys = true }
-    private val session by lazy { NovelReaderSession(Injekt.get<DatabaseHelper>(), Injekt.get<SourceManager>()) }
+    private val session by lazy {
+        NovelReaderSession(
+            Injekt.get<DatabaseHelper>(),
+            Injekt.get<SourceManager>(),
+            NovelDownloadStore(File(filesDir, "hayai/novel-downloads")),
+            Injekt.get<NetworkHelper>(),
+        )
+    }
     private val contentProcessor = NovelContentProcessor()
     private lateinit var webView: WebView
     private lateinit var titleView: TextView
@@ -117,7 +127,11 @@ class NovelReaderActivity :
         autoLoadArmed = true
         loading.visibility = View.VISIBLE
         titleView.text = chapter.manga.title
-        chapterView.text = "${chapter.chapter.name}  •  ${chapter.position + 1}/${chapter.total}"
+        chapterView.text =
+            buildString {
+                append(chapter.chapter.name, "  •  ", chapter.position + 1, "/", chapter.total)
+                if (chapter.isDownloaded) append("  •  Offline")
+            }
         previousButton.isEnabled = chapter.hasPrevious
         nextButton.isEnabled = chapter.hasNext
 
@@ -126,8 +140,9 @@ class NovelReaderActivity :
         val html = NovelHtmlDocumentBuilder.build(processed, chapter.chapter.name, readerStyle(options))
         webView.webViewClient =
             NovelAssetWebViewClient(
-                source = session.source,
+                assetProvider = session,
                 chapterUrl = { loaded?.chapter?.url.orEmpty() },
+                offline = { loaded?.let { session.isOffline(it.chapter.url) } == true },
                 blockMedia = { preferences.novelBlockMedia.get() },
             )
         val baseUrl = processed.baseUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
@@ -263,7 +278,15 @@ class NovelReaderActivity :
 
     private fun showReaderSettings() {
         val labels =
-            arrayOf("Smaller text", "Larger text", "Toggle alignment", "Toggle media", "Toggle auto-scroll", "Reset chapter progress")
+            arrayOf(
+                "Smaller text",
+                "Larger text",
+                "Toggle alignment",
+                "Toggle media",
+                "Toggle auto-scroll",
+                if (loaded?.isDownloaded == true) "Remove offline copy" else "Save chapter offline",
+                "Reset chapter progress",
+            )
         AlertDialog
             .Builder(this)
             .setTitle("Novel reader")
@@ -274,14 +297,54 @@ class NovelReaderActivity :
                     2 -> preferences.novelTextAlign.set(if (preferences.novelTextAlign.get() == "justify") "left" else "justify")
                     3 -> preferences.novelBlockMedia.set(!preferences.novelBlockMedia.get())
                     4 -> if (autoScroll) stopAutoScroll() else startAutoScroll()
-                    5 -> {
+                    5 -> toggleOfflineCopy()
+                    6 -> {
                         currentProgress = 0
                         loaded?.chapter?.let(NovelProgress::reset)
                         saveProgress()
                     }
                 }
-                if (which != 4) loaded?.let(::showChapter)
+                if (which !in setOf(4, 5)) loaded?.let(::showChapter)
             }.show()
+    }
+
+    private fun toggleOfflineCopy() {
+        val chapter = loaded ?: return
+        if (loadJob?.isActive == true) return
+        val progress = currentProgress
+        loadJob =
+            lifecycleScope.launch {
+                val removing = chapter.isDownloaded
+                val result =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            session.saveProgress(chapter.chapter, progress, preferences.novelMarkAsReadThreshold.get())
+                            val download =
+                                if (removing) {
+                                    session.removeOffline(chapter)
+                                    null
+                                } else {
+                                    session.saveOffline(chapter)
+                                }
+                            val refreshed = session.reload()
+                            check(refreshed.isDownloaded != removing) { "The offline copy could not be verified." }
+                            download to refreshed
+                        }
+                    }
+                result.fold(
+                    onSuccess = { (download, refreshed) ->
+                        showChapter(refreshed)
+                        when {
+                            removing -> toast("Offline copy removed")
+                            download == null -> Unit
+                            download.unavailableAssetCount > 0 ->
+                                toast("Chapter saved; ${download.unavailableAssetCount} source assets were unavailable")
+                            else -> toast("Chapter saved for offline reading")
+                        }
+                    },
+                    onFailure = { toast(it.message ?: "The offline copy could not be changed") },
+                )
+            }
     }
 
     private fun startAutoScroll() {
