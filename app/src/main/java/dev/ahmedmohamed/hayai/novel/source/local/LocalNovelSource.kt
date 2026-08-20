@@ -3,6 +3,7 @@ package dev.ahmedmohamed.hayai.novel.source.local
 import android.content.Context
 import dev.ahmedmohamed.hayai.novel.archive.ArchiveReader
 import dev.ahmedmohamed.hayai.novel.archive.EpubReader
+import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import dev.ahmedmohamed.hayai.novel.source.NovelSource
 import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelCatalog.Companion.ARCHIVE_EXTENSIONS
 import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelCatalog.Companion.EPUB_EXTENSIONS
@@ -36,6 +37,7 @@ import java.util.concurrent.TimeUnit
 class LocalNovelSource(
     private val context: Context,
 ) : NovelSource,
+    NovelAssetProvider,
     UnmeteredSource {
     private val baseDirectories = getBaseDirectories(context)
     private val catalog = LocalNovelCatalog(baseDirectories)
@@ -193,7 +195,7 @@ class LocalNovelSource(
         }
     }
 
-    suspend fun getChapterAsset(
+    override suspend fun getChapterAsset(
         chapterUrl: String,
         assetPath: String,
     ): InputStream? = withContext(Dispatchers.IO) {

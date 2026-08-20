@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.source
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.model.Page
@@ -46,7 +47,13 @@ class SourceManager(
         scope.launch {
             extensionManager.installedExtensionsFlow
                 .collectLatest { extensions ->
-                    val mutableMap = ConcurrentHashMap<Long, Source>(mapOf(LocalSource.ID to LocalSource(context)))
+                    val mutableMap =
+                        ConcurrentHashMap<Long, Source>(
+                            mapOf(
+                                LocalSource.ID to LocalSource(context),
+                                LocalNovelSource.ID to LocalNovelSource(context),
+                            ),
+                        )
                     extensions.forEach { extension ->
                         extension.sources.forEach {
                             mutableMap[it.id] = it

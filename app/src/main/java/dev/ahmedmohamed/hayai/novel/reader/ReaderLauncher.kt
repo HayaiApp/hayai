@@ -2,7 +2,6 @@ package dev.ahmedmohamed.hayai.novel.reader
 
 import android.content.Context
 import android.content.Intent
-import dev.ahmedmohamed.hayai.novel.source.NovelSource
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.source.SourceManager
@@ -14,7 +13,7 @@ object ReaderLauncher {
     fun isNovel(
         manga: Manga,
         sourceManager: SourceManager = Injekt.get(),
-    ): Boolean = sourceManager.get(manga.source) is NovelSource
+    ): Boolean = sourceManager.get(manga.source)?.isNovelSource == true
 
     fun newIntent(
         context: Context,
