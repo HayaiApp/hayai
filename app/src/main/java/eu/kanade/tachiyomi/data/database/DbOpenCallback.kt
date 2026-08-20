@@ -5,6 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import dev.ahmedmohamed.hayai.migration.HayaiLegacyMigration
 import dev.ahmedmohamed.hayai.migration.HayaiSchema
+import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
 import eu.kanade.tachiyomi.data.database.tables.CategoryTable
 import eu.kanade.tachiyomi.data.database.tables.ChapterTable
 import eu.kanade.tachiyomi.data.database.tables.HistoryTable
@@ -16,6 +17,7 @@ class DbOpenCallback(
     context: Context,
 ) : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
     private val hayaiMigration = HayaiLegacyMigration(context.applicationContext)
+    private val migrationRetry = LegacyMigrationRetryRequest(context.applicationContext)
 
     companion object {
         /**
@@ -35,7 +37,15 @@ class DbOpenCallback(
         setPragma(db, "journal_mode = WAL")
         setPragma(db, "synchronous = NORMAL")
         HayaiSchema.ensure(db)
-        hayaiMigration.runIfNeeded(db)
+        if (migrationRetry.isRequested()) {
+            try {
+                hayaiMigration.retry(db)
+            } finally {
+                migrationRetry.clear()
+            }
+        } else {
+            hayaiMigration.runIfNeeded(db)
+        }
     }
 
     private fun setPragma(

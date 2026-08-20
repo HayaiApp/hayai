@@ -10,6 +10,7 @@ import androidx.core.database.getLongOrNull
 import androidx.core.database.getStringOrNull
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONObject
+import java.security.MessageDigest
 import timber.log.Timber
 
 class HayaiLegacyMigration(
@@ -18,8 +19,20 @@ class HayaiLegacyMigration(
     private val legacyFile = context.getDatabasePath(LEGACY_DATABASE_NAME)
 
     fun runIfNeeded(target: SupportSQLiteDatabase) {
+        run(target, explicitRetry = false)
+    }
+
+    /** Explicit user/support action for retrying a previously failed, rolled-back import. */
+    fun retry(target: SupportSQLiteDatabase) {
+        run(target, explicitRetry = true)
+    }
+
+    private fun run(
+        target: SupportSQLiteDatabase,
+        explicitRetry: Boolean,
+    ) {
         HayaiSchema.ensure(target)
-        if (!legacyFile.isFile || migrationState(target) != null) return
+        if (!legacyFile.isFile || !MigrationRunPolicy.shouldRun(migrationState(target), explicitRetry)) return
 
         val startedAt = System.currentTimeMillis()
         val legacy =
@@ -52,30 +65,35 @@ class HayaiLegacyMigration(
             }
 
             val counts = linkedMapOf<String, Int>()
+            var failure: Exception? = null
+            var transactionStarted = false
             try {
                 target.beginTransaction()
+                transactionStarted = true
                 LegacyImportPlan.coreTables.forEach { counts[it.targetTable] = copyTable(source, target, it) }
                 LegacyImportPlan.typedHayaiTables.forEach { counts[it.targetTable] = copyTable(source, target, it) }
-                counts["hayai_legacy_rows"] = archiveAllTables(source, target)
+                val archivedCounts = archiveAllTables(source, target)
+                archivedCounts.forEach { (table, count) -> counts["archive:$table"] = count }
+                counts["hayai_legacy_rows"] = archivedCounts.values.sum()
                 val foreignKeyErrors = foreignKeyErrors(target)
                 check(foreignKeyErrors == 0) { "Imported database has $foreignKeyErrors foreign-key violations" }
                 recordSuccess(target, startedAt, legacyVersion, counts)
                 target.setTransactionSuccessful()
             } catch (error: Exception) {
                 Timber.e(error, "Hayai legacy data import failed")
-                recordFailureAfterRollback = Triple(startedAt, legacyVersion, error)
+                failure = error
             } finally {
-                target.endTransaction()
+                if (transactionStarted) {
+                    try {
+                        target.endTransaction()
+                    } catch (endError: Exception) {
+                        failure?.addSuppressed(endError) ?: run { failure = endError }
+                    }
+                }
             }
-        }
-
-        recordFailureAfterRollback?.let { (startedAt, version, error) ->
-            recordFailure(target, startedAt, version, error)
-            recordFailureAfterRollback = null
+            failure?.let { error -> recordFailure(target, startedAt, legacyVersion, error) }
         }
     }
-
-    private var recordFailureAfterRollback: Triple<Long, Int, Exception>? = null
 
     private fun copyTable(
         source: SQLiteDatabase,
@@ -99,14 +117,15 @@ class HayaiLegacyMigration(
     private fun archiveAllTables(
         source: SQLiteDatabase,
         target: SupportSQLiteDatabase,
-    ): Int {
-        var archived = 0
+    ): Map<String, Int> {
+        val archived = linkedMapOf<String, Int>()
         val tables = mutableListOf<String>()
         source.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", null).use { cursor ->
             while (cursor.moveToNext()) tables += cursor.getString(0)
         }
         tables.sorted().forEach { table ->
             var row = 0L
+            val duplicateKeys = mutableMapOf<String, Int>()
             source.rawQuery("SELECT * FROM ${quoteIdentifier(table)}", null).use { cursor ->
                 while (cursor.moveToNext()) {
                     val payload = JSONObject()
@@ -114,7 +133,11 @@ class HayaiLegacyMigration(
                         payload.put(cursor.getColumnName(index), cursorValue(cursor, index) ?: JSONObject.NULL)
                     }
                     val stableKey = firstStableKey(cursor) ?: "row"
-                    val key = "$stableKey#row=$row"
+                    val payloadHash = sha256(payload.toString())
+                    val contentKey = "$stableKey#sha256=$payloadHash"
+                    val duplicate = duplicateKeys.getOrDefault(contentKey, 0)
+                    duplicateKeys[contentKey] = duplicate + 1
+                    val key = if (duplicate == 0) contentKey else "$contentKey#duplicate=$duplicate"
                     val values =
                         ContentValues(3).apply {
                             put("table_name", table)
@@ -123,9 +146,9 @@ class HayaiLegacyMigration(
                         }
                     target.insert("hayai_legacy_rows", SQLiteDatabase.CONFLICT_REPLACE, values)
                     row++
-                    archived++
                 }
             }
+            archived[table] = row.toInt()
         }
         return archived
     }
@@ -232,10 +255,23 @@ class HayaiLegacyMigration(
 
     private fun quoteIdentifier(value: String): String = "\"${value.replace("\"", "\"\"")}\""
 
+    private fun sha256(value: String): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte) }
+
     companion object {
         const val ACTIVE_DATABASE_NAME = "hayai-j2k.db"
         const val LEGACY_DATABASE_NAME = "tachiyomi.db"
         const val PLAN_ID = "hayai-v36-to-j2k-v20"
         const val MINIMUM_SUPPORTED_LEGACY_VERSION = 36
     }
+}
+
+internal object MigrationRunPolicy {
+    fun shouldRun(
+        status: String?,
+        explicitRetry: Boolean,
+    ): Boolean = status == null || (status == "failed" && explicitRetry)
 }
