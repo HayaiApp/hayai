@@ -23,6 +23,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.ColorInt
 import androidx.annotation.FloatRange
@@ -52,6 +53,10 @@ import com.google.android.material.chip.ChipGroup
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
 import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
+import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhDetailsPreviewLoader
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.SelectableAdapter
 import eu.kanade.tachiyomi.R
@@ -137,10 +142,14 @@ import eu.kanade.tachiyomi.util.view.toolbarHeight
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import eu.kanade.tachiyomi.widget.LinearLayoutManagerAccurateOffset
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Job
+import eu.kanade.tachiyomi.util.system.launchIO
+import eu.kanade.tachiyomi.util.system.withUIContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import uy.kohesive.injekt.injectLazy
 import java.io.File
 import java.io.IOException
 import java.util.Locale
@@ -213,6 +222,13 @@ class MangaDetailsController :
     var refreshTracker: Int? = null
     private var chapterPopupMenu: Pair<Int, PopupMenu>? = null
     private var isPushing = true
+    private val novelIntegration: NovelJ2kIntegration by injectLazy()
+    private val ehDetailsPreviewLoader: EhDetailsPreviewLoader by injectLazy()
+    private val novelOfflineManager by lazy {
+        NovelOfflineManager(activity!!, Injekt.get(), Injekt.get(), Injekt.get<NetworkHelper>())
+    }
+    private var novelPresentationJob: Job? = null
+    private var sourceDetailsFeaturesJob: Job? = null
 
     // Prevents the favorite button's drag-to-open popup from firing underneath
     // the categories sheet when a long press opens it mid-gesture
@@ -453,6 +469,9 @@ class MangaDetailsController :
     }
 
     override fun onDestroyView(view: View) {
+        novelPresentationJob?.cancel()
+        sourceDetailsFeaturesJob?.cancel()
+        novelPresentationJob = null
         snack?.dismiss()
         adapter = null
         finishFloatingActionMode()
@@ -875,6 +894,27 @@ class MangaDetailsController :
         updateMenuVisibility(activityBinding?.toolbar?.menu)
     }
 
+    fun loadNovelChapterPresentations(chapters: List<ChapterItem>) {
+        val currentManga = manga ?: return
+        val chapterIds = chapters.mapNotNull { it.chapter.id }
+        novelPresentationJob?.cancel()
+        if (!novelIntegration.isNovel(currentManga)) {
+            adapter?.setNovelPresentations(emptyMap())
+            return
+        }
+        novelPresentationJob = viewScope.launchIO {
+            val presentations = novelIntegration.chapterPresentations(currentManga, chapters.map(ChapterItem::chapter))
+            val offlineChapterIds = novelOfflineManager.downloadedChapterIds(currentManga, chapters.map(ChapterItem::chapter))
+            withUIContext {
+                val boundIds = adapter?.items?.mapNotNull { it.chapter.id }
+                if (boundIds == chapterIds) {
+                    adapter?.setNovelPresentations(presentations)
+                    adapter?.setNovelOfflineChapterIds(offlineChapterIds)
+                }
+            }
+        }
+    }
+
     private fun addMangaHeader() {
         if (tabletAdapter?.scrollableHeaders?.isEmpty() == true) {
             tabletAdapter?.removeAllScrollableHeaders()
@@ -914,10 +954,14 @@ class MangaDetailsController :
                 when (rangeMode) {
                     RangeMode.Download -> downloadChapters(chapterList)
                     RangeMode.RemoveDownload ->
-                        massDeleteChapters(
-                            chapterList.filter { it.status != Download.State.NOT_DOWNLOADED },
-                            false,
-                        )
+                        if (novelIntegration.isNovel(presenter.manga)) {
+                            removeNovelChapters(chapterList.filter { adapter?.isNovelOffline(it.chapter.id) == true })
+                        } else {
+                            massDeleteChapters(
+                                chapterList.filter { it.status != Download.State.NOT_DOWNLOADED },
+                                false,
+                            )
+                        }
                     RangeMode.Read -> markAsRead(chapterList)
                     RangeMode.Unread -> markAsUnread(chapterList)
                 }
@@ -1087,7 +1131,11 @@ class MangaDetailsController :
                             super.onDismissed(transientBottomBar, event)
                             if (!undoing && !read) {
                                 if (preferences.removeAfterMarkedAsRead()) {
-                                    presenter.deleteChapters(listOf(item))
+                                    if (novelIntegration.isNovel(presenter.manga)) {
+                                        removeNovelChapters(listOf(item))
+                                    } else {
+                                        presenter.deleteChapters(listOf(item))
+                                    }
                                 }
                                 updateTrackChapterMarkedAsRead(db, preferences, chapter, manga?.id) {
                                     presenter.fetchTracks()
@@ -1368,6 +1416,61 @@ class MangaDetailsController :
         startActivity(intent)
     }
 
+    override fun bindSourceDetailsFeatures(container: LinearLayout) {
+        val manga = presenter.manga
+        val featureRoot = container.parent?.parent as? View ?: return
+        if (!ehDetailsPreviewLoader.owns(manga)) {
+            sourceDetailsFeaturesJob?.cancel()
+            container.removeAllViews()
+            container.tag = null
+            featureRoot.visibility = View.GONE
+            return
+        }
+        val identity = "${manga.source}:${manga.url}"
+        if (container.tag == identity) return
+        container.tag = identity
+        container.removeAllViews()
+        featureRoot.visibility = View.GONE
+        sourceDetailsFeaturesJob?.cancel()
+        sourceDetailsFeaturesJob = viewScope.launchIO {
+            val result = runCatching { ehDetailsPreviewLoader.load(manga) }
+            withUIContext {
+                if (container.tag != identity) return@withUIContext
+                val previews = result.getOrDefault(emptyList())
+                container.removeAllViews()
+                val density = container.resources.displayMetrics.density
+                previews.forEach { rendered ->
+                    val image =
+                        ImageView(container.context).apply {
+                            scaleType = ImageView.ScaleType.CENTER_CROP
+                            contentDescription = "Gallery page ${rendered.preview.index}"
+                            setImageBitmap(rendered.bitmap)
+                            setOnClickListener { openEhPreview(rendered.preview.pageUrl) }
+                        }
+                    container.addView(
+                        image,
+                        LinearLayout.LayoutParams((96 * density).toInt(), (136 * density).toInt()).apply {
+                            marginEnd = (8 * density).toInt()
+                        },
+                    )
+                }
+                featureRoot.visibility = if (previews.isEmpty()) View.GONE else View.VISIBLE
+            }
+        }
+    }
+
+    private fun openEhPreview(pageUrl: String) {
+        val activity = activity ?: return
+        startActivity(
+            WebViewActivity.newIntent(
+                activity.applicationContext,
+                pageUrl,
+                presenter.manga.source,
+                presenter.manga.title,
+            ),
+        )
+    }
+
     fun openChapterInWebView(item: ChapterItem) {
         if (isNotOnline()) return
         val source = presenter.source as? HttpSource ?: return
@@ -1386,6 +1489,7 @@ class MangaDetailsController :
     }
 
     private fun massDeleteChapters(choice: Int) {
+        val novel = novelIntegration.isNovel(presenter.manga)
         val chaptersToDelete =
             when (choice) {
                 R.id.remove_all -> presenter.allChapters
@@ -1397,7 +1501,7 @@ class MangaDetailsController :
                     return
                 }
                 else -> emptyList()
-            }.filter { it.isDownloaded }
+            }.filter { if (novel) adapter?.isNovelOffline(it.chapter.id) == true else it.isDownloaded }
         if (chaptersToDelete.isNotEmpty() || choice == R.id.remove_all) {
             massDeleteChapters(chaptersToDelete, choice == R.id.remove_all)
         } else {
@@ -1424,7 +1528,11 @@ class MangaDetailsController :
                     )
                 },
             ).setPositiveButton(R.string.remove) { _, _ ->
-                presenter.deleteChapters(chapters, isEverything = isEverything)
+                if (novelIntegration.isNovel(presenter.manga)) {
+                    removeNovelChapters(chapters)
+                } else {
+                    presenter.deleteChapters(chapters, isEverything = isEverything)
+                }
             }.setNegativeButton(android.R.string.cancel, null)
             .show()
     }
@@ -1510,6 +1618,10 @@ class MangaDetailsController :
 
     private fun downloadChapters(chapters: List<ChapterItem>) {
         val view = view ?: return
+        if (novelIntegration.isNovel(presenter.manga)) {
+            downloadNovelChapters(chapters)
+            return
+        }
         presenter.downloadChapters(chapters)
         val text =
             view.context.getString(
@@ -1542,6 +1654,40 @@ class MangaDetailsController :
                     )
                 }
             (activity as? MainActivity)?.setUndoSnackBar(snack)
+        }
+    }
+
+    private fun downloadNovelChapters(chapters: List<ChapterItem>) {
+        if (chapters.isEmpty()) return
+        val manga = presenter.manga
+        viewScope.launchIO {
+            val result = novelOfflineManager.download(manga, chapters.map(ChapterItem::chapter))
+            val downloaded = novelOfflineManager.downloadedChapterIds(manga, presenter.chapters.map(ChapterItem::chapter))
+            withUIContext {
+                adapter?.setNovelOfflineChapterIds(downloaded)
+                val message =
+                    when {
+                        result.failures.isNotEmpty() -> "Saved ${result.completed}; ${result.failures.size} failed"
+                        result.unavailableAssets > 0 -> "Saved ${result.completed}; ${result.unavailableAssets} embedded assets were unavailable"
+                        else -> "Saved ${result.completed} novel chapter${if (result.completed == 1) "" else "s"} offline"
+                    }
+                view?.context?.toast(message)
+            }
+        }
+    }
+
+    private fun removeNovelChapters(chapters: List<ChapterItem>) {
+        if (chapters.isEmpty()) return
+        val manga = presenter.manga
+        viewScope.launchIO {
+            val result = novelOfflineManager.remove(manga, chapters.map(ChapterItem::chapter))
+            val downloaded = novelOfflineManager.downloadedChapterIds(manga, presenter.chapters.map(ChapterItem::chapter))
+            withUIContext {
+                adapter?.setNovelOfflineChapterIds(downloaded)
+                view?.context?.toast(
+                    if (result.failures.isEmpty()) "Removed ${result.completed} offline novel chapter${if (result.completed == 1) "" else "s"}" else "Removed ${result.completed}; ${result.failures.size} failed",
+                )
+            }
         }
     }
 
@@ -1599,6 +1745,10 @@ class MangaDetailsController :
         val chapter = (adapter?.getItem(position) as? ChapterItem) ?: return
         if (actionMode != null) {
             onItemClick(null, position)
+            return
+        }
+        if (novelIntegration.isNovel(presenter.manga)) {
+            if (adapter?.isNovelOffline(chapter.chapter.id) == true) removeNovelChapters(listOf(chapter)) else downloadNovelChapters(listOf(chapter))
             return
         }
         if (chapter.status != Download.State.NOT_DOWNLOADED && chapter.status != Download.State.ERROR) {

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.source.browse
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -34,6 +35,8 @@ import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.pkgName
+import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
 import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
@@ -353,7 +356,7 @@ open class BrowseSourceController(
         val isHttpSource = presenter.source is HttpSource
         menu.findItem(R.id.action_open_in_web_view).isVisible = isHttpSource
 
-        val isConfigurableSource = presenter.source is ConfigurableSource
+        val isConfigurableSource = presenter.source is ConfigurableSource || EhSite.entries.any { it.sourceId == presenter.source.id }
         menu.findItem(R.id.action_source_settings).isVisible = isConfigurableSource
 
         val isLocalSource = presenter.source is LocalSource
@@ -530,6 +533,10 @@ open class BrowseSourceController(
     }
 
     private fun openSourceSettings() {
+        if (EhSite.entries.any { it.sourceId == presenter.source.id }) {
+            activity?.let { startActivity(Intent(it, EhSettingsActivity::class.java)) }
+            return
+        }
         presenter.source.pkgName()?.let { pkgName ->
             router.pushController(
                 ExtensionDetailsController(

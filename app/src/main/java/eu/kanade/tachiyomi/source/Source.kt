@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.source
 
+import android.app.Application
 import android.graphics.drawable.Drawable
+import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.model.Page
@@ -141,7 +143,12 @@ interface Source {
     fun fetchPageList(chapter: SChapter): Observable<List<Page>> = throw IllegalStateException("Not used")
 }
 
-fun Source.icon(): Drawable? = Injekt.get<ExtensionManager>().getAppIconForSource(this)
+fun Source.icon(): Drawable? =
+    Injekt.get<ExtensionManager>().getAppIconForSource(this)
+        ?: takeIf { source -> EhSite.entries.any { it.sourceId == source.id } }?.let {
+            val app = Injekt.get<Application>()
+            app.applicationInfo.loadIcon(app.packageManager)
+        }
 
 fun Source.pkgName() = Injekt.get<ExtensionManager>().getPackageName(id)
 

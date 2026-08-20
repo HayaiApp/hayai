@@ -45,6 +45,8 @@ class ChapterHolder(
     ) {
         val chapter = item.chapter
         val isLocked = item.isLocked
+        val isNovel = adapter.isNovel(manga)
+        val novelPresentation = adapter.novelPresentation(chapter.id)
         itemView.transitionName = "details chapter ${chapter.id ?: 0L} transition"
         binding.chapterTitle.text =
             chapter.preferredChapterName(itemView.context, manga, adapter.preferences)
@@ -59,7 +61,7 @@ class ChapterHolder(
 
         ChapterUtil.relativeDate(chapter)?.let { statuses.add(it) }
 
-        val showPagesLeft = !chapter.read && chapter.last_page_read > 0 && !isLocked
+        val showPagesLeft = !isNovel && !chapter.read && chapter.last_page_read > 0 && !isLocked
 
         if (showPagesLeft && chapter.pages_left > 0) {
             statuses.add(
@@ -76,6 +78,24 @@ class ChapterHolder(
                     chapter.last_page_read + 1,
                 ),
             )
+        }
+
+        if (isNovel && !chapter.read && chapter.last_page_read > 0 && !isLocked) {
+            statuses.add(itemView.context.getString(R.string.hayai_novel_progress_percent, chapter.last_page_read.coerceIn(0, 100)))
+        }
+
+        novelPresentation?.wordCount?.let { words ->
+            statuses.add(
+                itemView.resources.getQuantityString(
+                    R.plurals.hayai_novel_words,
+                    words.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                    words,
+                ),
+            )
+        }
+        val minutes = if (chapter.read) novelPresentation?.estimatedMinutes else novelPresentation?.remainingMinutes
+        minutes?.takeIf { it > 0 }?.let {
+            statuses.add(itemView.resources.getQuantityString(R.plurals.hayai_novel_minutes, it, it))
         }
 
         if (chapter.scanlator?.isNotBlank() == true) {

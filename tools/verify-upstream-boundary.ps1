@@ -24,13 +24,23 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/main/SearchActivity.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsAdapter.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/util/manga/MangaShortcutManager.kt"
     )
     $violations = $changed | Where-Object {
         $_ -like "app/src/main/java/*.kt" -and

@@ -17,6 +17,7 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
+import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
@@ -81,6 +82,7 @@ class MigrationListController(
     private val db: DatabaseHelper by injectLazy()
     private val preferences: PreferencesHelper by injectLazy()
     private val sourceManager: SourceManager by injectLazy()
+    private val novelMigrationPolicy: NovelMigrationPolicy by injectLazy()
 
     private val smartSearchEngine = SmartSearchEngine(coroutineContext, config?.extraSearchParams)
 
@@ -167,7 +169,7 @@ class MigrationListController(
                                         sources
                                     } else {
                                         sources.filter { it.id != mangaSource.id }
-                                    }
+                                    }.let { novelMigrationPolicy.compatibleSources(mangaObj, it) }
                                 if (useSourceWithMost) {
                                     val sourceSemaphore = Semaphore(3)
                                     val processedSources = AtomicInteger()
@@ -373,7 +375,7 @@ class MigrationListController(
                             sources
                         } else {
                             sources.filter { it.id != manga.source }
-                        }
+                        }.let { novelMigrationPolicy.compatibleSources(manga, it) }
                     manga.title = manga.title.toNormalized()
                     val searchController = SearchController(manga, validSources)
                     searchController.targetController = this@MigrationListController
