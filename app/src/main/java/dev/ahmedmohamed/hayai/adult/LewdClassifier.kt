@@ -25,7 +25,7 @@ object LewdClassifier {
     ): Boolean {
         val genres = manga.getGenres().orEmpty()
         val descriptor = SourceCapabilityRegistry.descriptor(source)
-        if (descriptor.capabilities.contains(SourceCapability.Adult) && genres.any(::isNonHentai)) {
+        if (descriptor.capabilities.contains(SourceCapability.NonHentaiGenreOverride) && genres.any(::isNonHentai)) {
             return false
         }
         return descriptor.capabilities.contains(SourceCapability.Adult) ||

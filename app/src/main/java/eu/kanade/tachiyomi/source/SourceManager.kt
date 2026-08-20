@@ -3,6 +3,8 @@ package eu.kanade.tachiyomi.source
 import android.content.Context
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.source.AdultSourceVisibility
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.model.Page
@@ -22,6 +24,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.util.concurrent.ConcurrentHashMap
 
 class SourceManager(
@@ -32,11 +36,17 @@ class SourceManager(
     private val scope = CoroutineScope(Job() + Dispatchers.IO)
 
     private val sourcesMapFlow = MutableStateFlow(ConcurrentHashMap<Long, Source>())
+    private val hayaiPreferences = HayaiPreferences(Injekt.get())
 
     private val stubSourcesMap = ConcurrentHashMap<Long, StubSource>()
 
-    val catalogueSources: Flow<List<CatalogueSource>> = sourcesMapFlow.map { it.values.filterIsInstance<CatalogueSource>() }
+    val catalogueSources: Flow<List<CatalogueSource>> =
+        sourcesMapFlow.map { it.values.filterIsInstance<CatalogueSource>() }
     val onlineSources: Flow<List<HttpSource>> = catalogueSources.map { it.filterIsInstance<HttpSource>() }
+    val discoverableCatalogueSources: Flow<List<CatalogueSource>> =
+        combine(sourcesMapFlow, hayaiPreferences.hentaiFeaturesEnabled.changes()) { sources, adultEnabled ->
+            sources.values.filterIsInstance<CatalogueSource>().filter { AdultSourceVisibility.includes(it, adultEnabled) }
+        }
 
     private val delegatedSources =
         listOf(
@@ -104,6 +114,13 @@ class SourceManager(
     fun getOnlineSources() = sourcesMapFlow.value.values.filterIsInstance<HttpSource>()
 
     fun getCatalogueSources() = sourcesMapFlow.value.values.filterIsInstance<CatalogueSource>()
+
+    fun getDiscoverableOnlineSources() = getDiscoverableCatalogueSources().filterIsInstance<HttpSource>()
+
+    fun getDiscoverableCatalogueSources() =
+        sourcesMapFlow.value.values.filterIsInstance<CatalogueSource>().filter {
+            AdultSourceVisibility.includes(it, hayaiPreferences.hentaiFeaturesEnabled.get())
+        }
 
     @Suppress("OverridingDeprecatedMember")
     inner class StubSource(

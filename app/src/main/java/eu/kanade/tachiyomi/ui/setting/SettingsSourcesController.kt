@@ -31,7 +31,7 @@ class SettingsSourcesController :
         setHasOptionsMenu(true)
     }
 
-    private val onlineSources by lazy { Injekt.get<SourceManager>().getOnlineSources() }
+    private val onlineSources by lazy { Injekt.get<SourceManager>().getDiscoverableOnlineSources() }
 
     private var query = ""
 

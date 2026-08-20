@@ -176,7 +176,15 @@ class LibraryPresenter(
 
             val filterMangaType = preferences.filterMangaType().get()
 
-            !(filterDownloaded == 0 && filterUnread == 0 && filterCompleted == 0 && filterTracked == 0 && filterMangaType == 0)
+            val filterBookmarked = preferences.filterBookmarked().get()
+
+            hayaiLibraryPolicy.isFiltering() ||
+                !(filterDownloaded == 0 &&
+                    filterUnread == 0 &&
+                    filterCompleted == 0 &&
+                    filterTracked == 0 &&
+                    filterMangaType == 0 &&
+                    filterBookmarked == 0)
         }
 
     /** Save the current list to speed up loading later */
@@ -391,7 +399,12 @@ class LibraryPresenter(
         val filtersOff =
             view?.isSubClass != true &&
                 !hayaiLibraryPolicy.isFiltering() &&
-                (filterDownloaded == 0 && filterUnread == 0 && filterCompleted == 0 && filterTracked == 0 && filterMangaType == 0)
+                (filterDownloaded == 0 &&
+                    filterUnread == 0 &&
+                    filterCompleted == 0 &&
+                    filterTracked == 0 &&
+                    filterMangaType == 0 &&
+                    filterBookmarked == 0)
         hasActiveFilters = !filtersOff
         val missingCategorySet = categories.mapNotNull { it.id }.toMutableSet()
         val filteredItems =

@@ -13,6 +13,8 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePaddingRelative
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import com.google.android.material.bottomsheet.BottomSheetBehavior
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.preferences.LewdLibraryFilter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
@@ -59,6 +61,7 @@ class FilterBottomSheet
          * Preferences helper.
          */
         private val preferences: PreferencesHelper by injectLazy()
+        private val hayaiPreferences = HayaiPreferences(Injekt.get())
 
         private lateinit var binding: FilterBottomSheetBinding
 
@@ -76,6 +79,8 @@ class FilterBottomSheet
         private lateinit var completed: FilterTagGroup
 
         private lateinit var bookmarked: FilterTagGroup
+
+        private lateinit var lewd: FilterTagGroup
 
         private var tracked: FilterTagGroup? = null
 
@@ -99,6 +104,7 @@ class FilterBottomSheet
             list.add(downloaded)
             list.add(completed)
             list.add(bookmarked)
+            list.add(lewd)
             if (hasTracking) {
                 tracked?.let { list.add(it) }
             }
@@ -344,6 +350,7 @@ class FilterBottomSheet
                 preferences.filterTracked().get() > 0 ||
                 preferences.filterMangaType().get() > 0 ||
                 preferences.filterBookmarked().get() > 0 ||
+                currentLewdFilter() != LewdLibraryFilter.Disabled ||
                 FILTER_TRACKER.isNotEmpty()
 
         private fun createTags() {
@@ -361,6 +368,9 @@ class FilterBottomSheet
 
             bookmarked = inflate(R.layout.filter_tag_group) as FilterTagGroup
             bookmarked.setup(this, R.string.bookmarked, R.string.not_bookmarked)
+
+            lewd = inflate(R.layout.filter_tag_group) as FilterTagGroup
+            lewd.setup(this, R.string.hayai_lewd_only_filter, R.string.hayai_lewd_hide_filter)
 
             if (hasTracking) {
                 tracked = inflate(R.layout.filter_tag_group) as FilterTagGroup
@@ -457,6 +467,7 @@ class FilterBottomSheet
                     unreadProgress.state = unreadP - 3
                 }
                 tracked?.setState(preferences.filterTracked())
+                lewd.state = currentLewdFilter().persistedValue - 1
                 reorderFilters()
                 reSortViews()
             }
@@ -470,7 +481,7 @@ class FilterBottomSheet
                     filterItems.add(it)
                 }
             }
-            listOfNotNull(unreadProgress, unread, downloaded, completed, mangaType, bookmarked, tracked)
+            listOfNotNull(unreadProgress, unread, downloaded, completed, mangaType, bookmarked, lewd, tracked)
                 .forEach {
                     if (!filterItems.contains(it)) {
                         filterItems.add(it)
@@ -488,6 +499,7 @@ class FilterBottomSheet
                 Filters.Completed -> completed
                 Filters.SeriesType -> mangaType
                 Filters.Bookmarked -> bookmarked
+                Filters.Lewd -> lewd
                 Filters.Tracked -> if (hasTracking) tracked else null
                 else -> null
             }
@@ -544,6 +556,10 @@ class FilterBottomSheet
                 downloaded -> preferences.filterDownloaded()
                 completed -> preferences.filterCompleted()
                 bookmarked -> preferences.filterBookmarked()
+                lewd -> {
+                    hayaiPreferences.lewdLibraryFilter.set(index + 1)
+                    null
+                }
                 tracked -> preferences.filterTracked()
                 mangaType -> {
                     val newIndex =
@@ -560,6 +576,9 @@ class FilterBottomSheet
                 else -> null
             }?.set(index + 1)
         }
+
+        private fun currentLewdFilter(): LewdLibraryFilter =
+            LewdLibraryFilter.fromPersistedValue(hayaiPreferences.lewdLibraryFilter.get())
 
         private fun massUpdateFilters(views: List<FilterTagGroup>) {
             if (controller?.isSubClass != true) {
@@ -596,6 +615,7 @@ class FilterBottomSheet
             preferences.filterBookmarked().set(0)
             preferences.filterTracked().set(0)
             preferences.filterMangaType().set(0)
+            hayaiPreferences.lewdLibraryFilter.set(0)
             FILTER_TRACKER = ""
 
             val transition = androidx.transition.AutoTransition()
@@ -652,6 +672,7 @@ class FilterBottomSheet
             Completed('c', R.string.status),
             SeriesType('m', R.string.series_type),
             Bookmarked('b', R.string.bookmarked),
+            Lewd('l', R.string.hayai_lewd_library_filter),
             Tracked('t', R.string.tracking),
             ;
 
@@ -664,6 +685,7 @@ class FilterBottomSheet
                         Completed,
                         SeriesType,
                         Bookmarked,
+                        Lewd,
                         Tracked,
                     ).joinToString("") { it.value.toString() }
 

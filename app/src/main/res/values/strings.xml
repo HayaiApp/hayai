@@ -11,10 +11,8 @@
     <string name="hayai_hentai_features">Hentai features</string>
     <string name="hayai_hentai_features_summary">Enable adult sources and source-specific enhancements</string>
     <string name="hayai_lewd_library_filter">Lewd library entries</string>
-    <string name="hayai_lewd_library_filter_summary">Choose whether lewd entries appear in the library</string>
-    <string name="hayai_lewd_show">Show</string>
-    <string name="hayai_lewd_hide">Hide</string>
-    <string name="hayai_lewd_only">Show only</string>
+    <string name="hayai_lewd_only_filter">Lewd only</string>
+    <string name="hayai_lewd_hide_filter">Hide lewd</string>
     <string name="hayai_retry_legacy_migration">Retry legacy data migration</string>
     <string name="hayai_retry_legacy_migration_summary">Schedule one explicit retry on the next app start. Existing J2K data is never overwritten.</string>
     <string name="hayai_retry_legacy_migration_scheduled">Migration retry scheduled for the next app start</string>

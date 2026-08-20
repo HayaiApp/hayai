@@ -155,7 +155,7 @@ class PreMigrationController(
         val sourcesSaved = prefs.migrationSources().get().split("/")
         var sources =
             sourceManager
-                .getCatalogueSources()
+                .getDiscoverableCatalogueSources()
                 .filterIsInstance<HttpSource>()
                 .filter { it.lang in languages }
                 .sortedBy { "(${it.lang}) ${it.name}" }

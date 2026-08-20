@@ -16,6 +16,12 @@ class LewdClassifierTest {
     @Test
     fun `non-h tag exempts an adult source`() {
         assertFalse(LewdClassifier.isLewd(manga("Non-H"), source(SourceCapabilityRegistry.EH_SOURCE_ID, "E-Hentai")))
+        assertFalse(LewdClassifier.isLewd(manga("Non-H"), source(43, "nHentai")))
+    }
+
+    @Test
+    fun `non-h tag does not exempt other adult sources`() {
+        assertTrue(LewdClassifier.isLewd(manga("Non-H"), source(44, "Hentai2Read")))
     }
 
     @Test

@@ -14,6 +14,7 @@ enum class SourceCapability {
     EhFavorites,
     InAppOpen,
     Metadata,
+    NonHentaiGenreOverride,
     NovelText,
     Recommendations,
     RelatedEntries,
@@ -56,9 +57,17 @@ object SourceCapabilityRegistry {
     private val fixed =
         mapOf(
             EH_SOURCE_ID to
-                SourceDescriptor(HayaiSourceId(EH_SOURCE_ID), SourceFamily.EHentai, adultMetadata + SourceCapability.EhFavorites),
+                SourceDescriptor(
+                    HayaiSourceId(EH_SOURCE_ID),
+                    SourceFamily.EHentai,
+                    adultMetadata + SourceCapability.EhFavorites + SourceCapability.NonHentaiGenreOverride,
+                ),
             EXH_SOURCE_ID to
-                SourceDescriptor(HayaiSourceId(EXH_SOURCE_ID), SourceFamily.ExHentai, adultMetadata + SourceCapability.EhFavorites),
+                SourceDescriptor(
+                    HayaiSourceId(EXH_SOURCE_ID),
+                    SourceFamily.ExHentai,
+                    adultMetadata + SourceCapability.EhFavorites + SourceCapability.NonHentaiGenreOverride,
+                ),
             PURURIN_SOURCE_ID to SourceDescriptor(HayaiSourceId(PURURIN_SOURCE_ID), SourceFamily.Pururin, adultMetadata),
             EIGHT_MUSES_SOURCE_ID to
                 SourceDescriptor(HayaiSourceId(EIGHT_MUSES_SOURCE_ID), SourceFamily.EightMuses, adultMetadata + SourceCapability.BatchAdd),
@@ -77,7 +86,8 @@ object SourceCapabilityRegistry {
                         SourceCapability.Recommendations,
                         SourceCapability.RelatedEntries,
                     )
-                SourceFamily.NHentai -> adultMetadata + SourceCapability.BatchAdd
+                SourceFamily.NHentai ->
+                    adultMetadata + SourceCapability.BatchAdd + SourceCapability.NonHentaiGenreOverride
                 SourceFamily.Lanraragi ->
                     setOf(
                         SourceCapability.BatchAdd,
@@ -88,10 +98,17 @@ object SourceCapabilityRegistry {
                 SourceFamily.Novel -> setOf(SourceCapability.NovelText)
                 SourceFamily.EightMuses -> adultMetadata + SourceCapability.BatchAdd
                 SourceFamily.HBrowse, SourceFamily.Pururin -> adultMetadata
-                SourceFamily.EHentai, SourceFamily.ExHentai -> adultMetadata + SourceCapability.EhFavorites
-                SourceFamily.Other -> emptySet()
+                SourceFamily.EHentai, SourceFamily.ExHentai ->
+                    adultMetadata + SourceCapability.EhFavorites + SourceCapability.NonHentaiGenreOverride
+                SourceFamily.Other ->
+                    if (source.id in LEGACY_ADULT_SOURCE_IDS || isAdultSourceName(source.name)) adultMetadata else emptySet()
             }
         return SourceDescriptor(HayaiSourceId(source.id), family, capabilities)
+    }
+
+    private fun isAdultSourceName(name: String): Boolean {
+        val normalized = name.lowercase()
+        return ADULT_SOURCE_NAMES.any(normalized::contains)
     }
 
     private fun familyFromName(name: String): SourceFamily {
@@ -109,4 +126,32 @@ object SourceCapabilityRegistry {
             else -> SourceFamily.Other
         }
     }
+
+    private val LEGACY_ADULT_SOURCE_IDS = 6905L..6913L
+    private val ADULT_SOURCE_NAMES =
+        setOf(
+            "allporncomic",
+            "hentai cafe",
+            "hentai2read",
+            "hentaifox",
+            "hentainexus",
+            "manhwahentai.me",
+            "milftoon",
+            "myhentaicomics",
+            "myhentaigallery",
+            "ninehentai",
+            "pururin",
+            "simply hentai",
+            "tsumino",
+            "8muses",
+            "hbrowse",
+            "nhentai",
+            "erofus",
+            "luscious",
+            "doujins",
+            "multporn",
+            "vcp",
+            "vmp",
+            "hentai",
+        )
 }

@@ -141,7 +141,7 @@ class SourcePresenter(
         val hiddenCatalogues = preferences.hiddenSources().get()
 
         return sourceManager
-            .getCatalogueSources()
+            .getDiscoverableCatalogueSources()
             .filter { it.lang in languages || it.id == LocalSource.ID }
             .filterNot { it.id.toString() in hiddenCatalogues }
             .sortedBy { "(${it.lang}) ${it.name}" }
