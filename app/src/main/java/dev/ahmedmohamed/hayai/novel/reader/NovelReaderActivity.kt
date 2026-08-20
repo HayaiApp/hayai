@@ -1,6 +1,8 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -24,6 +26,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
+import dev.ahmedmohamed.hayai.novel.quote.NovelQuote
+import dev.ahmedmohamed.hayai.novel.quote.NovelQuoteStore
+import dev.ahmedmohamed.hayai.novel.quote.QuoteAddResult
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
@@ -56,6 +61,7 @@ class NovelReaderActivity :
         )
     }
     private val contentProcessor = NovelContentProcessor()
+    private val quoteStore by lazy { NovelQuoteStore(Injekt.get<DatabaseHelper>()) }
     private lateinit var webView: WebView
     private lateinit var titleView: TextView
     private lateinit var chapterView: TextView
@@ -285,6 +291,7 @@ class NovelReaderActivity :
                 "Toggle media",
                 "Toggle auto-scroll",
                 if (loaded?.isDownloaded == true) "Remove offline copy" else "Save chapter offline",
+                "Saved quotes",
                 "Reset chapter progress",
             )
         AlertDialog
@@ -298,14 +305,87 @@ class NovelReaderActivity :
                     3 -> preferences.novelBlockMedia.set(!preferences.novelBlockMedia.get())
                     4 -> if (autoScroll) stopAutoScroll() else startAutoScroll()
                     5 -> toggleOfflineCopy()
-                    6 -> {
+                    6 -> showSavedQuotes()
+                    7 -> {
                         currentProgress = 0
                         loaded?.chapter?.let(NovelProgress::reset)
                         saveProgress()
                     }
                 }
-                if (which !in setOf(4, 5)) loaded?.let(::showChapter)
+                if (which !in setOf(4, 5, 6)) loaded?.let(::showChapter)
             }.show()
+    }
+
+    private fun captureSelectedQuote() {
+        val chapter = loaded ?: return
+        webView.evaluateJavascript("window.hayaiReader.takeSelection()") { encoded ->
+            val selection = runCatching { json.decodeFromString<String>(encoded) }.getOrNull().orEmpty()
+            lifecycleScope.launch {
+                val result =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            quoteStore.add(
+                                mangaId = requireNotNull(chapter.manga.id),
+                                novelName = chapter.manga.title,
+                                chapterName = chapter.chapter.name,
+                                selectedText = selection,
+                            )
+                        }
+                    }
+                result.fold(
+                    onSuccess = { added ->
+                        toast(if (added is QuoteAddResult.Created) "Quote saved" else "This quote is already saved")
+                    },
+                    onFailure = { toast(it.message ?: "The quote could not be saved") },
+                )
+            }
+        }
+    }
+
+    private fun showSavedQuotes() {
+        val mangaId = loaded?.manga?.id ?: return
+        lifecycleScope.launch {
+            val quotes = withContext(Dispatchers.IO) { quoteStore.forManga(mangaId) }
+            if (quotes.isEmpty()) {
+                toast("No saved quotes for this novel")
+                return@launch
+            }
+            val labels = quotes.map { quote -> "${quote.chapterName}  •  ${quote.displayedContent.replace('\n', ' ').take(80)}" }.toTypedArray()
+            AlertDialog
+                .Builder(this@NovelReaderActivity)
+                .setTitle("Saved quotes")
+                .setItems(labels) { _, index -> showQuote(quotes[index]) }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+    }
+
+    private fun showQuote(quote: NovelQuote) {
+        AlertDialog
+            .Builder(this)
+            .setTitle(quote.chapterName)
+            .setMessage(quote.displayedContent)
+            .setPositiveButton("Copy") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Novel quote", quote.displayedContent))
+                toast("Quote copied")
+            }.setNeutralButton("Delete") { _, _ -> confirmDeleteQuote(quote) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun confirmDeleteQuote(quote: NovelQuote) {
+        AlertDialog
+            .Builder(this)
+            .setTitle("Delete quote?")
+            .setMessage("This cannot be undone.")
+            .setPositiveButton("Delete") { _, _ ->
+                lifecycleScope.launch {
+                    val deleted = withContext(Dispatchers.IO) { quoteStore.delete(quote.id) }
+                    toast(if (deleted) "Quote deleted" else "The quote no longer exists")
+                }
+            }.setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun toggleOfflineCopy() {
@@ -478,6 +558,7 @@ class NovelReaderActivity :
         controls.addView(playButton)
         controls.addView(controlButton("▶") { ttsController.nextParagraph() })
         controls.addView(nextButton)
+        controls.addView(controlButton("❝") { captureSelectedQuote() })
         controls.addView(controlButton("Aa") { showReaderSettings() })
         root.addView(controls)
         return root
