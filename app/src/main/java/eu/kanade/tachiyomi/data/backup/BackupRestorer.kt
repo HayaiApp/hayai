@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.backup
 
 import android.content.Context
 import android.net.Uri
+import dev.ahmedmohamed.hayai.backup.HayaiBackupService
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
@@ -104,7 +105,7 @@ class BackupRestorer(
             (if (restoreCategories) 1 else 0) +
             (if (restoreAppPrefs) 1 else 0) +
             (if (restoreExtensionRepos) 1 else 0) +
-            (if (restoreSourcePrefs) 1 else 0)
+            (if (restoreSourcePrefs) 1 else 0) + 1
 
         // Restore categories
         if (restoreCategories && backup.backupCategories.isNotEmpty()) {
@@ -135,6 +136,10 @@ class BackupRestorer(
                     }
                 }
             }
+            val hayaiReport = HayaiBackupService(db).restore(backup.hayaiData)
+            hayaiReport.errors.forEach { error -> errors.add(Date() to "Hayai data: $error") }
+            restoreProgress += 1
+            showRestoreProgress(restoreProgress, restoreAmount, "Hayai data")
             true
         }
         // TODO: optionally trigger online library + tracker update
