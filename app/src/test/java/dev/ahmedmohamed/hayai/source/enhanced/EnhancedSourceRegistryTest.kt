@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -59,6 +60,19 @@ class EnhancedSourceRegistryTest {
         assertEquals(listOf("https://example.com/g/123/"), original.searchQueries)
         assertEquals("Imported", imported.mangas.single().title)
     }
+
+    @Test
+    fun `combined updates remain one delegate operation`() = runBlocking {
+        val original = FakeHttpSource(77L, "NHentai", "https://nhentai.net")
+        val wrapped = EnhancedSourceRegistry.wrap(original)
+        val manga = SManga.create().apply { url = "/g/123/"; title = "Existing" }
+
+        val update = wrapped.getMangaUpdate(manga, emptyList(), fetchDetails = true, fetchChapters = true)
+
+        assertEquals(1, original.combinedUpdateCalls)
+        assertEquals("Combined", update.manga.title)
+        assertEquals(1, update.chapters.size)
+    }
 }
 
 private class FakeHttpSource(
@@ -71,6 +85,7 @@ private class FakeHttpSource(
     private val filters = FilterList(object : Filter.CheckBox("Enabled") {})
     val detailUrls = mutableListOf<String>()
     val searchQueries = mutableListOf<String>()
+    var combinedUpdateCalls = 0
     override fun getFilterList(): FilterList = filters
 
     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
@@ -84,5 +99,17 @@ private class FakeHttpSource(
             title = "Imported"
             initialized = true
         }
+    }
+
+    override suspend fun getMangaUpdate(
+        manga: SManga,
+        chapters: List<eu.kanade.tachiyomi.source.model.SChapter>,
+        fetchDetails: Boolean,
+        fetchChapters: Boolean,
+    ): SMangaUpdate {
+        combinedUpdateCalls++
+        val updated = manga.apply { title = "Combined"; initialized = true }
+        val updatedChapters = if (fetchChapters) listOf(eu.kanade.tachiyomi.source.model.SChapter.create().apply { url = "/1"; name = "One" }) else chapters
+        return SMangaUpdate(updated, updatedChapters)
     }
 }
