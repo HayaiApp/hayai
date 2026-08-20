@@ -299,6 +299,7 @@ dependencies {
     implementation("org.conscrypt:conscrypt-android:2.6.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:$okhttpVersion")
 
     // Android Chart
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")

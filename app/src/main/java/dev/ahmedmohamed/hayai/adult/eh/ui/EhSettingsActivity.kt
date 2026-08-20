@@ -11,6 +11,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.setPadding
+import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -21,11 +22,17 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhHentaiAtHome
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhImageQuality
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhLanguage
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionMutationResult
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionState
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionVerifier
 import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhSiteUploadResult
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUploadProgress
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
@@ -38,19 +45,31 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private val sessionStore by injectLazy<EhSessionStore>()
     private val ehPreferences by injectLazy<EhPreferences>()
     private val network by injectLazy<NetworkHelper>()
+    private val settingsUploader by injectLazy<EhRemoteSettingsUploader>()
     private val verifier by lazy { EhSessionVerifier(network.client) }
 
     private lateinit var status: TextView
     private lateinit var recheck: MaterialButton
-    private lateinit var ehProfile: EditText
-    private lateinit var exhProfile: EditText
     private lateinit var watchedTags: MaterialButton
     private lateinit var categories: MaterialButton
+    private lateinit var imageQuality: MaterialButton
+    private lateinit var hentaiAtHome: MaterialButton
+    private lateinit var filterThreshold: MaterialButton
+    private lateinit var watchingThreshold: MaterialButton
+    private lateinit var languages: MaterialButton
+    private lateinit var remoteStatus: TextView
+    private lateinit var uploadSettings: MaterialButton
+    private lateinit var retryUpload: MaterialButton
+    private val uploadResults = linkedMapOf<EhSite, EhSiteUploadResult>()
+    private var retrySites = emptySet<EhSite>()
 
     private val loginLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val outcome = result.data?.getStringExtra(EhLoginActivity.EXTRA_OUTCOME)
-            if (outcome != null && outcome != EhLoginOutcome.Success.name) {
+            if (outcome == EhLoginOutcome.Success.name) {
+                ehPreferences.clearRemoteSettingsApplied()
+                remoteChanged()
+            } else if (outcome != null) {
                 status.text =
                     when (outcome) {
                         EhLoginOutcome.Cloudflare.name -> "Cloudflare interrupted login. Reopen login and complete the challenge."
@@ -106,15 +125,55 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         content.addView(recheck)
         content.addView(button("Log out") { confirmLogout() })
 
-        content.addView(sectionLabel("Browsing and details"))
+        content.addView(sectionLabel("Server gallery settings"))
+        remoteStatus = TextView(this).apply { setPadding(0, 0, 0, 8.dpToPx) }
+        content.addView(remoteStatus, matchWidth())
+        imageQuality = button(imageQualityText(), ::chooseImageQuality)
+        content.addView(imageQuality)
+        hentaiAtHome = button(hentaiAtHomeText(), ::chooseHentaiAtHome)
+        content.addView(hentaiAtHome)
         content.addView(
             settingSwitch(
                 title = "Use Japanese gallery titles",
                 summary = "Prefer the Japanese title when a gallery provides one.",
                 checked = ehPreferences.useJapaneseTitle.get(),
-                onChanged = ehPreferences.useJapaneseTitle::set,
+                onChanged = { ehPreferences.useJapaneseTitle.set(it); remoteChanged() },
             ),
         )
+        content.addView(
+            settingSwitch(
+                title = "Use original images",
+                summary = "Request original gallery images instead of resampled images.",
+                checked = ehPreferences.useOriginalImages.get(),
+                onChanged = { ehPreferences.useOriginalImages.set(it); remoteChanged() },
+            ),
+        )
+        filterThreshold = button(filterThresholdText()) {
+            editThreshold("Tag filtering threshold", ehPreferences.tagFilterThreshold.get(), -9999..0) {
+                ehPreferences.tagFilterThreshold.set(it)
+                filterThreshold.text = filterThresholdText()
+                remoteChanged()
+            }
+        }
+        content.addView(filterThreshold)
+        watchingThreshold = button(watchingThresholdText()) {
+            editThreshold("Tag watching threshold", ehPreferences.tagWatchingThreshold.get(), 0..9999) {
+                ehPreferences.tagWatchingThreshold.set(it)
+                watchingThreshold.text = watchingThresholdText()
+                remoteChanged()
+            }
+        }
+        content.addView(watchingThreshold)
+        languages = button(languageButtonText(), ::editLanguages)
+        content.addView(languages)
+        categories = button(categoryButtonText(), ::editDefaultCategories)
+        content.addView(categories)
+        uploadSettings = button("Apply to E-Hentai and ExHentai") { requestUpload(EhSite.entries.toSet()) }
+        content.addView(uploadSettings)
+        retryUpload = button("Retry failed sites") { requestUpload(retrySites) }.apply { isVisible = false }
+        content.addView(retryUpload)
+
+        content.addView(sectionLabel("Browsing and details"))
         content.addView(
             settingSwitch(
                 title = "Open on watched list",
@@ -131,8 +190,6 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
                 onChanged = ehPreferences.enhancedView::set,
             ),
         )
-        categories = button(categoryButtonText(), ::editDefaultCategories)
-        content.addView(categories)
         watchedTags = button("Manage watched tags") {
             startActivity(
                 WebViewActivity.newIntent(
@@ -144,13 +201,6 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             )
         }
         content.addView(watchedTags)
-
-        content.addView(sectionLabel("Server settings profiles"))
-        ehProfile = profileInput("E-Hentai profile", sessionStore.settingsProfile(EhSite.EHentai))
-        exhProfile = profileInput("ExHentai profile", sessionStore.settingsProfile(EhSite.ExHentai))
-        content.addView(ehProfile, matchWidth())
-        content.addView(exhProfile, matchWidth())
-        content.addView(button("Save profiles") { saveProfiles() })
 
         root.addView(
             ScrollView(this).apply { addView(content) },
@@ -169,6 +219,9 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             }
         recheck.isEnabled = state !is EhSessionState.LoggedOut
         watchedTags.isEnabled = state is EhSessionState.Verified
+        uploadSettings.isEnabled = state is EhSessionState.Verified
+        retryUpload.isEnabled = state is EhSessionState.Verified
+        refreshRemoteState()
     }
 
     private fun recheckSession() {
@@ -193,37 +246,12 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         materialAlertDialog()
             .setTitle("Log out of E-Hentai?")
             .setMessage("Hayai will remove only E-Hentai and ExHentai credentials and cookies. Other website sessions are untouched.")
-            .setPositiveButton("Log out") { _, _ -> sessionStore.logout() }
+            .setPositiveButton("Log out") { _, _ ->
+                ehPreferences.clearRemoteSettingsApplied()
+                sessionStore.logout()
+            }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
-    }
-
-    private fun saveProfiles() {
-        val eh = parseProfile(ehProfile) ?: return
-        val exh = parseProfile(exhProfile) ?: return
-        sessionStore.setSettingsProfile(EhSite.EHentai, eh)
-        sessionStore.setSettingsProfile(EhSite.ExHentai, exh)
-        status.text = "Server settings profiles saved."
-    }
-
-    private fun parseProfile(input: EditText): Int? {
-        val text = input.text?.toString()?.trim().orEmpty()
-        if (text.isEmpty()) return null
-        val profile = text.toIntOrNull()
-        if (profile == null || profile !in 0..3) {
-            input.error = "Use 0 to 3, or leave blank for automatic."
-            throw InvalidProfileException()
-        }
-        return profile
-    }
-
-    private fun profileInput(
-        label: String,
-        value: Int?,
-    ) = EditText(this).apply {
-        hint = "$label, blank for automatic"
-        inputType = InputType.TYPE_CLASS_NUMBER
-        setText(value?.toString().orEmpty())
     }
 
     private fun sectionLabel(text: String) =
@@ -274,6 +302,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 ehPreferences.setExcludedCategories(selected)
                 categories.text = categoryButtonText()
+                remoteChanged()
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -287,16 +316,205 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private fun categoryName(category: EhCategory): String =
         category.name.replace("Cg", " CG").replace("NonH", "Non-H").replace("ImageSet", "Image Set").replace("AsianPorn", "Asian Porn")
 
+    private fun chooseImageQuality() {
+        val values = EhImageQuality.entries
+        val labels = arrayOf("Automatic", "2400 px", "1600 px", "1280 px", "980 px", "780 px")
+        val current = values.indexOf(EhImageQuality.fromPreference(ehPreferences.imageQuality.get()))
+        materialAlertDialog()
+            .setTitle("Image resolution")
+            .setSingleChoiceItems(labels, current) { dialog, index ->
+                ehPreferences.imageQuality.set(values[index].preferenceValue)
+                imageQuality.text = imageQualityText()
+                remoteChanged()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseHentaiAtHome() {
+        val values = EhHentaiAtHome.entries
+        val labels = arrayOf("Any client", "Default client only", "Never")
+        val current = values.indexOf(EhHentaiAtHome.fromPreference(ehPreferences.useHentaiAtHome.get()))
+        materialAlertDialog()
+            .setTitle("Hentai@Home")
+            .setSingleChoiceItems(labels, current) { dialog, index ->
+                ehPreferences.useHentaiAtHome.set(values[index].preferenceValue)
+                hentaiAtHome.text = hentaiAtHomeText()
+                remoteChanged()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun editThreshold(
+        title: String,
+        current: Int,
+        range: IntRange,
+        save: (Int) -> Unit,
+    ) {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
+            setText(current.toString())
+            selectAll()
+        }
+        val dialog = materialAlertDialog()
+            .setTitle(title)
+            .setMessage("Allowed range: ${range.first} to ${range.last}")
+            .setView(input)
+            .setPositiveButton(android.R.string.ok, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = input.text?.toString()?.trim()?.toIntOrNull()
+                if (value == null || value !in range) {
+                    input.error = "Enter a value from ${range.first} to ${range.last}."
+                } else {
+                    save(value)
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun editLanguages() {
+        data class Option(val language: EhLanguage, val field: Int, val label: String)
+
+        val selected = ehPreferences.languageSelections().toMutableMap()
+        val options = buildList {
+            EhLanguage.entries.forEach { language ->
+                if (language.originalCode != null) add(Option(language, 0, "${language.displayName} · Original"))
+                add(Option(language, 1, "${language.displayName} · Translated"))
+                add(Option(language, 2, "${language.displayName} · Rewrite"))
+            }
+        }
+        val checked = BooleanArray(options.size) { index ->
+            val value = selected.getValue(options[index].language)
+            when (options[index].field) { 0 -> value.original; 1 -> value.translated; else -> value.rewritten }
+        }
+        materialAlertDialog()
+            .setTitle("Language filtering")
+            .setMultiChoiceItems(options.map(Option::label).toTypedArray(), checked) { _, index, enabled ->
+                val option = options[index]
+                val old = selected.getValue(option.language)
+                selected[option.language] = when (option.field) {
+                    0 -> old.copy(original = enabled)
+                    1 -> old.copy(translated = enabled)
+                    else -> old.copy(rewritten = enabled)
+                }
+            }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                ehPreferences.setLanguageSelections(selected)
+                languages.text = languageButtonText()
+                remoteChanged()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun requestUpload(targets: Set<EhSite>) {
+        if (targets.isEmpty()) return
+        if (sessionStore.state.value !is EhSessionState.Verified) {
+            status.text = "Verify ExHentai access before uploading settings."
+            return
+        }
+        if (ehPreferences.showSettingsUploadWarning.get()) {
+            materialAlertDialog()
+                .setTitle("Create remote Hayai profiles?")
+                .setMessage("Hayai will create or reuse one application profile on each site and replace every setting in those profiles. Your other profiles are left untouched.")
+                .setPositiveButton("Continue") { _, _ ->
+                    ehPreferences.showSettingsUploadWarning.set(false)
+                    performUpload(targets)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        } else {
+            performUpload(targets)
+        }
+    }
+
+    private fun performUpload(targets: Set<EhSite>) {
+        uploadSettings.isEnabled = false
+        retryUpload.isEnabled = false
+        lifecycleScope.launch {
+            try {
+                val report = settingsUploader.upload(ehPreferences.remoteSettings(), targets) { progress ->
+                    if (progress is EhUploadProgress.Started) remoteStatus.text = "Uploading ${progress.site.displayName} settings…"
+                }
+                uploadResults.putAll(report.results)
+                retrySites = uploadResults.values.filterIsInstance<EhSiteUploadResult.Failed>().mapTo(linkedSetOf()) { it.site }
+                retryUpload.isVisible = retrySites.isNotEmpty()
+                refreshRemoteState()
+            } finally {
+                val verified = sessionStore.state.value is EhSessionState.Verified
+                uploadSettings.isEnabled = verified
+                retryUpload.isEnabled = verified
+            }
+        }
+    }
+
+    private fun remoteChanged() {
+        retrySites = emptySet()
+        retryUpload.isVisible = false
+        uploadResults.clear()
+        refreshRemoteState()
+    }
+
+    private fun refreshRemoteState() {
+        val pending = EhSite.entries.filter(ehPreferences::hasPendingRemoteSettings)
+        val summary = buildList {
+            add(if (pending.isEmpty()) "Remote settings match this device." else "Changes are pending for ${pending.joinToString { it.displayName }}.")
+            EhSite.entries.forEach { site ->
+                when (val result = uploadResults[site]) {
+                    is EhSiteUploadResult.Applied -> add("${site.displayName}: applied in profile ${result.slot.value}.")
+                    is EhSiteUploadResult.Failed -> add("${site.displayName}: ${result.failure.message}")
+                    null -> Unit
+                }
+            }
+        }
+        remoteStatus.text = summary.joinToString("\n")
+    }
+
+    private fun imageQualityText(): String {
+        val value = EhImageQuality.fromPreference(ehPreferences.imageQuality.get())
+        val label = when (value) {
+            EhImageQuality.Auto -> "Automatic"
+            EhImageQuality.Size2400 -> "2400 px"
+            EhImageQuality.Size1600 -> "1600 px"
+            EhImageQuality.Size1280 -> "1280 px"
+            EhImageQuality.Size980 -> "980 px"
+            EhImageQuality.Size780 -> "780 px"
+        }
+        return "Image resolution: $label"
+    }
+
+    private fun hentaiAtHomeText(): String =
+        "Hentai@Home: " + when (EhHentaiAtHome.fromPreference(ehPreferences.useHentaiAtHome.get())) {
+            EhHentaiAtHome.Any -> "any client"
+            EhHentaiAtHome.DefaultOnly -> "default client only"
+            EhHentaiAtHome.Never -> "never"
+        }
+
+    private fun filterThresholdText() = "Tag filtering threshold: ${ehPreferences.tagFilterThreshold.get()}"
+    private fun watchingThresholdText() = "Tag watching threshold: ${ehPreferences.tagWatchingThreshold.get()}"
+
+    private fun languageButtonText(): String {
+        val count = ehPreferences.languageSelections().values.sumOf { selection ->
+            listOf(selection.original, selection.translated, selection.rewritten).count { it }
+        }
+        return if (count == 0) "Language filters: none" else "Language filters: $count enabled"
+    }
+
     private fun button(
         text: String,
         action: () -> Unit,
     ) = MaterialButton(this).apply {
         this.text = text
         setOnClickListener {
-            try {
-                action()
-            } catch (_: InvalidProfileException) {
-            }
+            action()
         }
     }
 
@@ -307,5 +525,3 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         fun newIntent(context: Context): Intent = Intent(context, EhSettingsActivity::class.java)
     }
 }
-
-private class InvalidProfileException : IllegalArgumentException()

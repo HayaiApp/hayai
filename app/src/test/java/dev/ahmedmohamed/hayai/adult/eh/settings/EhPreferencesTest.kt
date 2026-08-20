@@ -33,6 +33,31 @@ class EhPreferencesTest {
 
         assertTrue(preferences.excludedCategories().isEmpty())
     }
+
+    @Test
+    fun `language matrix round trips in SY order without Japanese original`() {
+        val store = MemoryPreferenceStore()
+        val preferences = EhPreferences(store)
+        val selections = EhLanguage.entries.associateWithTo(linkedMapOf()) { language ->
+            EhLanguageSelection(original = true, translated = language == EhLanguage.Japanese, rewritten = language == EhLanguage.Other)
+        }
+
+        preferences.setLanguageSelections(selections)
+
+        val restored = preferences.languageSelections()
+        assertEquals(false, restored.getValue(EhLanguage.Japanese).original)
+        assertEquals(true, restored.getValue(EhLanguage.Japanese).translated)
+        assertEquals(true, restored.getValue(EhLanguage.English).original)
+        assertEquals(true, restored.getValue(EhLanguage.Other).rewritten)
+        assertEquals(17, store.value<String>("eh_settings_languages")?.lines()?.size)
+    }
+
+    @Test
+    fun `malformed language matrix safely disables every language filter`() {
+        val preferences = EhPreferences(MemoryPreferenceStore("eh_settings_languages" to "true*false"))
+
+        assertTrue(preferences.languageSelections().values.all { it == EhLanguageSelection() })
+    }
 }
 
 private class MemoryPreferenceStore(

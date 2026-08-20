@@ -11,6 +11,9 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhDetailsPreviewLoader
 import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsRemote
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
+import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUConfigHttpRemote
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
@@ -70,6 +73,8 @@ class AppModule(
         addSingletonFactory { HayaiEhPersistenceStore(get()) }
         addSingletonFactory { EhPreferences(get()) }
         addSingletonFactory { EhHttpGateway(get<NetworkHelper>().client, get()) }
+        addSingletonFactory<EhRemoteSettingsRemote> { EhUConfigHttpRemote(get<NetworkHelper>().client) }
+        addSingletonFactory { EhRemoteSettingsUploader(get(), get(), get()) }
         addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
         addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
         addSingletonFactory { SourceManager(app, get(), get(), get()) }
