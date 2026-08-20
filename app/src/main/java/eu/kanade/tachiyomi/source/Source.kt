@@ -33,6 +33,15 @@ interface Source {
         get() = ""
 
     /**
+     * Whether this source provides text-based novel content instead of images.
+     *
+     * This is part of Tsundoku's extensions-lib 1.5 ABI. Keep the default so
+     * ordinary J2K extensions remain binary compatible.
+     */
+    val isNovelSource: Boolean
+        get() = false
+
+    /**
      * Get the updated details for a manga.
      *
      * @since extensions-lib 1.5
@@ -62,6 +71,14 @@ interface Source {
      */
     @Suppress("DEPRECATION")
     suspend fun getPageList(chapter: SChapter): List<Page> = fetchPageList(chapter).awaitSingle()
+
+    /**
+     * Fetches the text content for a novel page.
+     *
+     * This matches Tsundoku's extensions-lib 1.5 source contract so novel
+     * extensions can run without a Hayai-specific extension API.
+     */
+    suspend fun fetchPageText(page: Page): String = throw UnsupportedOperationException("Not a novel source")
 
     /**
      * Fetches updated information for a manga.

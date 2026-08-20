@@ -219,6 +219,7 @@ dependencies {
     implementation("com.jakewharton:disklrucache:2.0.2")
     implementation("com.github.tachiyomiorg:unifile:17bec43")
     implementation("com.github.junrar:junrar:8.0.0")
+    implementation("me.zhanghai.android.libarchive:library:1.1.6")
 
     // HTML parser
     implementation("org.jsoup:jsoup:1.22.2")
