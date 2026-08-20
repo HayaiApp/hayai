@@ -12,6 +12,7 @@ J2K owns manga, chapters, history, categories, tracking, downloads, image readin
 - `migration`: read-only legacy import and typed Hayai side tables.
 - `backup`: versioned serialization and stable-ID remapping for Hayai-owned side data.
 - `preferences`: stable Hayai and TachiyomiSY-compatible preference keys.
+- `recents`: presentation-only source visibility shared by History, Updates, and mixed views.
 
 `tools/verify-upstream-boundary.ps1` rejects unreviewed Kotlin edits outside this namespace. `App.kt`, `MainActivity.kt`, and the J2K image `ReaderActivity.kt` are protected explicitly.
 
@@ -42,6 +43,14 @@ Novel integration uses a small set of presentation adapters rather than parallel
 Source-specific details use one generic adapter method on the manga header. E-Hentai implements that method through a Hayai-owned preview loader: authenticated listing requests are parsed into typed direct or sprite-crop previews, decoded with byte and dimension limits, and rendered in the existing details header. Tapping a preview uses J2K's authenticated source WebView. No E-Hentai parsing, cookies, bitmap cropping, or feature branching lives in the J2K holder.
 
 Built-in source settings are another deliberate adapter seam. `BrowseSourceController` delegates settings navigation for Hayai-owned sources because J2K's extension-only package lookup cannot route a built-in source. The destination activity, session logic, remote controls, and failures remain under the Hayai namespace.
+
+Recents source visibility uses one Hayai-owned policy seam. History and Updates retain independent
+sets under the legacy Hayai preference keys; Grouped and All derive the union. The presenter takes
+one immutable source-ID snapshot per loaded page before it groups or decorates rows. The options
+sheet delegates source discovery and editing to Hayai, including installed sources, sources still
+referenced by J2K manga rows, and unavailable sources that were hidden previously. This is strictly
+a presentation filter: J2K remains authoritative for every manga, chapter, history, and update row,
+and pagination advances over hidden rows so a page containing only hidden sources cannot loop.
 
 ## Backup ownership
 

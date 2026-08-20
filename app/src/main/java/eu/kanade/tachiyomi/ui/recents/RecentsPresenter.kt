@@ -1,5 +1,8 @@
 package eu.kanade.tachiyomi.ui.recents
 
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.recents.RecentSourceVisibility
+import dev.ahmedmohamed.hayai.recents.RecentSurface
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
@@ -47,6 +50,8 @@ class RecentsPresenter(
     val downloadManager: DownloadManager = Injekt.get(),
     val db: DatabaseHelper = Injekt.get(),
     private val chapterFilter: ChapterFilter = Injekt.get(),
+    private val sourceVisibility: RecentSourceVisibility =
+        RecentSourceVisibility(HayaiPreferences(Injekt.get())),
 ) : BaseCoroutinePresenter<RecentsController>(),
     DownloadQueue.DownloadListener {
     private var recentsJob: Job? = null
@@ -117,6 +122,13 @@ class RecentsPresenter(
                     getRecents()
                 }.launchIn(presenterScope)
         }
+        sourceVisibility
+            .changes()
+            .drop(1)
+            .onEach {
+                resetOffsets()
+                getRecents()
+            }.launchIn(presenterScope)
     }
 
     fun getRecents(updatePageCount: Boolean = false) {
@@ -153,6 +165,13 @@ class RecentsPresenter(
             return
         }
         val viewType = viewType
+        val surface =
+            when (viewType) {
+                RecentsViewType.History -> RecentSurface.History
+                RecentsViewType.Updates -> RecentSurface.Updates
+                RecentsViewType.GroupedAll, RecentsViewType.UngroupedAll -> RecentSurface.Mixed
+            }
+        val hiddenSourceIds = sourceVisibility.hiddenSourceIds(surface)
 
         val showRead = ((preferences.showReadInAllRecents().get() || query.isNotEmpty()) && limit != 0) || includeReadAnyway
         val isUngrouped = viewType != RecentsViewType.GroupedAll || query.isNotEmpty()
@@ -161,7 +180,41 @@ class RecentsPresenter(
         var extraCount = 0
         val cReading: List<MangaChapterHistory> =
             when (viewType) {
-                RecentsViewType.GroupedAll, RecentsViewType.UngroupedAll -> {
+                RecentsViewType.GroupedAll -> {
+                    if (hiddenSourceIds.isEmpty()) {
+                        db
+                            .getAllRecentsTypes(
+                                query,
+                                showRead,
+                                false,
+                                pageOffset,
+                                !updatePageCount && !isOnFirstPage,
+                                limit,
+                            ).executeOnIO()
+                    } else {
+                        val collected = mutableListOf<MangaChapterHistory>()
+                        for (attempt in 0 until MAX_FILTERED_PAGE_FETCHES) {
+                            val batch =
+                                db
+                                    .getAllRecentsTypes(
+                                        query,
+                                        showRead,
+                                        true,
+                                        pageOffset + collected.size,
+                                        false,
+                                        limit,
+                                    ).executeOnIO()
+                            collected += batch
+                            if (batch.size < ENDLESS_LIMIT ||
+                                collected.count { it.manga.source !in hiddenSourceIds } >= SHORT_LIMIT
+                            ) {
+                                break
+                            }
+                        }
+                        collected
+                    }
+                }
+                RecentsViewType.UngroupedAll -> {
                     db
                         .getAllRecentsTypes(
                             query,
@@ -301,8 +354,10 @@ class RecentsPresenter(
         }
 
         if (query != oldQuery) return
+        val sourceRowsRemoved = cReading.count { it.manga.source in hiddenSourceIds }
         val mangaList =
             cReading
+                .filter { it.manga.source !in hiddenSourceIds }
                 .distinctBy {
                     if (query.isEmpty() && viewType.isAll) it.manga.id else it.chapter.id
                 }.filter { mch ->
@@ -438,11 +493,16 @@ class RecentsPresenter(
             } else {
                 recentItems + newItems
             }
-        val newCount = itemCount + newItems.size + newItems.sumOf { it.mch.extraChapters.size } + extraCount
+        val newCount =
+            itemCount +
+                newItems.count { it.mch.manga.id != null } +
+                newItems.sumOf { it.mch.extraChapters.size }
         val hasNewItems = newItems.isNotEmpty()
-        if (updatePageCount &&
+        val needsFilteredPageBackfill =
+            sourceRowsRemoved > 0 && !finished && viewType != RecentsViewType.GroupedAll
+        if ((updatePageCount || needsFilteredPageBackfill) &&
             (newCount < if (limit > 0) limit else 25) &&
-            (viewType != RecentsViewType.GroupedAll || query.isNotEmpty()) &&
+            (viewType != RecentsViewType.GroupedAll || query.isNotEmpty() || needsFilteredPageBackfill) &&
             limit != 0
         ) {
             runRecents(oldQuery, true, retryCount + 1, newCount, limit)
@@ -789,6 +849,7 @@ class RecentsPresenter(
 
         const val ENDLESS_LIMIT = 50
         const val SHORT_LIMIT = 25
+        private const val MAX_FILTERED_PAGE_FETCHES = 5
 
         suspend fun getRecentManga(
             includeRead: Boolean = false,

@@ -85,10 +85,16 @@ class HayaiPreferences(
     val novelStatusBarSize = store.getString("pref_novel_status_bar_size", "small")
     val novelStatusBarShowCharging = store.getBoolean("pref_novel_status_bar_show_charging", true)
 
+    // Keep the legacy Hayai keys so restored and in-place preferences migrate without a copy step.
+    val hiddenSourcesInHistory = store.getStringSet(KEY_HIDDEN_SOURCES_IN_HISTORY, emptySet())
+    val hiddenSourcesInUpdates = store.getStringSet(KEY_HIDDEN_SOURCES_IN_UPDATES, emptySet())
+
     companion object {
         const val KEY_HENTAI_FEATURES = "eh_is_hentai_enabled"
         const val KEY_LEWD_LIBRARY_FILTER = "pref_filter_library_lewd_v2"
         const val KEY_NOVEL_LIBRARY_FILTER = "pref_filter_library_novel_v1"
+        const val KEY_HIDDEN_SOURCES_IN_HISTORY = "hidden_sources_in_history"
+        const val KEY_HIDDEN_SOURCES_IN_UPDATES = "hidden_sources_in_updates"
     }
 }
 
