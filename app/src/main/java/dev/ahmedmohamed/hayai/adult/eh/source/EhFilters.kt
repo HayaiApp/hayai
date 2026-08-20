@@ -6,13 +6,16 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchSpec
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagMode
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagTerm
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhToplist
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 
 internal class EhToplistFilter : Filter.Select<String>("Toplist", arrayOf("None", "All time", "Past year", "Past month", "Yesterday"))
-internal class EhWatchedFilter : Filter.CheckBox("Watched list")
-internal class EhCategoryFilter(val category: EhCategory) : Filter.CheckBox(category.name.replace("Cg", " CG").replace("NonH", "Non-H"))
-internal class EhCategoriesFilter : Filter.Group<EhCategoryFilter>("Categories to exclude", EhCategory.entries.map(::EhCategoryFilter))
+internal class EhWatchedFilter(state: Boolean) : Filter.CheckBox("Watched list", state)
+internal class EhCategoryFilter(val category: EhCategory, state: Boolean) :
+    Filter.CheckBox(category.name.replace("Cg", " CG").replace("NonH", "Non-H"), state)
+internal class EhCategoriesFilter(excluded: Set<EhCategory>) :
+    Filter.Group<EhCategoryFilter>("Categories to exclude", EhCategory.entries.map { EhCategoryFilter(it, it in excluded) })
 internal class EhTagFilter : Filter.Text("Tags (supports namespace, -, ~, and OR)")
 internal class EhExpungedFilter : Filter.CheckBox("Browse expunged galleries")
 internal class EhTorrentFilter : Filter.CheckBox("Require gallery torrent")
@@ -25,11 +28,11 @@ internal class EhDisableTagFilter : Filter.CheckBox("Disable tag filter")
 internal class EhReverseFilter : Filter.CheckBox("Reverse results")
 internal class EhJumpFilter : Filter.Text("Jump or seek (date, year, 7d, 2w, 3m)")
 
-internal fun ehFilterList(): FilterList = FilterList(
+internal fun ehFilterList(preferences: EhPreferences): FilterList = FilterList(
     Filter.Header("A selected toplist ignores the query and other filters"),
     EhToplistFilter(),
-    EhWatchedFilter(),
-    EhCategoriesFilter(),
+    EhWatchedFilter(preferences.watchedListDefault.get()),
+    EhCategoriesFilter(preferences.excludedCategories()),
     EhTagFilter(),
     EhExpungedFilter(),
     EhTorrentFilter(),

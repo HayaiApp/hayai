@@ -13,6 +13,7 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadata
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadataTag
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadataTitle
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.newCachelessCallWithProgress
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -32,6 +33,7 @@ class EhentaiSource(
     private val site: EhSite,
     private val gateway: EhHttpGateway,
     private val metadataStore: HayaiEhPersistenceStore,
+    private val preferences: EhPreferences,
 ) : HttpSource() {
     override val id: Long = site.sourceId
     override val name: String = site.displayName
@@ -115,7 +117,7 @@ class EhentaiSource(
         }
     }
 
-    override fun getFilterList(): FilterList = ehFilterList()
+    override fun getFilterList(): FilterList = ehFilterList(preferences)
 
     override fun getMangaUrl(manga: SManga): String = GalleryKey.parse(manga.url).absoluteUrl(site)
 
@@ -131,7 +133,11 @@ class EhentaiSource(
 
     private fun EhGalleryMetadata.toSManga(): SManga = SManga.create().apply {
         url = key.normalizedPath
-        title = alternateTitle?.takeIf(String::isNotBlank) ?: this@toSManga.title
+        title = if (preferences.useJapaneseTitle.get()) {
+            alternateTitle?.takeIf(String::isNotBlank) ?: this@toSManga.title
+        } else {
+            this@toSManga.title
+        }
         val artists = tags.filter { it.namespace == "artist" }.map { it.name }
         val groups = tags.filter { it.namespace == "group" }.map { it.name }
         artist = artists.takeIf(List<String>::isNotEmpty)?.joinToString()

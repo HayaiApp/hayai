@@ -42,7 +42,11 @@ Novel integration uses a small set of presentation adapters rather than parallel
 
 Source-specific details use one generic adapter method on the manga header. E-Hentai implements that method through a Hayai-owned preview loader: authenticated listing requests are parsed into typed direct or sprite-crop previews, decoded with byte and dimension limits, and rendered in the existing details header. Tapping a preview uses J2K's authenticated source WebView. No E-Hentai parsing, cookies, bitmap cropping, or feature branching lives in the J2K holder.
 
-Built-in source settings are another deliberate adapter seam. `BrowseSourceController` delegates settings navigation for Hayai-owned sources because J2K's extension-only package lookup cannot route a built-in source. The destination activity, session logic, remote controls, and failures remain under the Hayai namespace.
+Built-in source settings are another deliberate adapter seam. `BrowseSourceController` sends E-Hentai sources to the Hayai account screen and sends other built-in `ConfigurableSource` implementations to `SourceSettingsController`. This fixes JavaScript novel source settings without adding a second settings model. Extension sources continue to use `ExtensionDetailsController`.
+
+Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
+
+E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category strings fall back to showing every category. Remote uconfig, favorites sync, and the gallery update worker remain separate ports.
 
 Recents source visibility uses one Hayai-owned policy seam. History and Updates retain independent
 sets under the legacy Hayai preference keys; Grouped and All derive the union. The presenter takes

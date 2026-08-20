@@ -12,6 +12,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
 | Library lewd filter show/only/hide (`pref_filter_library_lewd_v2`) | J2K library filter sheet plus typed `HayaiLibraryPolicy` | port |
 | Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
 | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; emulator login pending |
+| EH source settings, default filters, and enhanced details toggle | SY-compatible typed preferences plus Hayai account/settings activity | foundation verified; remote uconfig audit |
 | EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
 | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic manga-details feature seam | foundation verified; emulator details flow pending |
 | 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | Registered enhanced-source families | registry foundation; behavior audit |
@@ -19,6 +20,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
 | Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI audit |
 | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
 | Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | preview foundation verified; remaining items audit |
+| Source type and origin badges | Hayai presentation resolver plus browse and migration adapters | foundation verified; delegated enhanced badges wait for their ports |
 
 SY areas audited include its EH/ExHentai source, login and preferences; metadata models/parsers; adult classifier and library filters; favorites/update flows; enhanced source handlers; merged/feed/saved-search systems; and reader/network extras. Exact behavior is rebuilt behind Hayai contracts rather than copied into J2K presenters.
 
@@ -31,6 +33,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
 | Remote novel extension catalogs and installation | J2K extension API plus repository adapters | audit |
 | LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
+| JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
 | Visual custom-source builder | Hayai-owned source-definition compiler and editor | audit |
 | Local novels and EPUB import/export | Document storage and local novel source | import port; export audit |
 | Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | integration foundation verified; emulator bulk-flow pending |

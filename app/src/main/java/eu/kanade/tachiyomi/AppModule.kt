@@ -8,6 +8,7 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieStore
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
 import dev.ahmedmohamed.hayai.adult.eh.source.EhSourceProvider
 import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhDetailsPreviewLoader
 import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
@@ -67,9 +68,10 @@ class AppModule(
         addSingletonFactory<EhCookieStore> { AndroidEhCookieStore() }
         addSingletonFactory { EhSessionStore(get(), get()) }
         addSingletonFactory { HayaiEhPersistenceStore(get()) }
+        addSingletonFactory { EhPreferences(get()) }
         addSingletonFactory { EhHttpGateway(get<NetworkHelper>().client, get()) }
-        addSingletonFactory { EhSourceProvider(get(), get(), get()) }
-        addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get())) }
+        addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
+        addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
         addSingletonFactory { SourceManager(app, get(), get(), get()) }
         addSingletonFactory { NovelJ2kIntegration(get(), get()) }
         addSingletonFactory { NovelMigrationPolicy(get(), get()) }

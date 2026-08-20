@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.source
 import android.content.res.ColorStateList
 import android.view.View
 import androidx.core.view.isVisible
+import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.databinding.SourceItemBinding
 import eu.kanade.tachiyomi.source.LocalSource
@@ -36,6 +37,8 @@ class SourceHolder(
         val showLanguage = source.includeLangInName(adapter.enabledLanguages, adapter.extensionManager)
         val sourceName = if (showLanguage && (underPinnedSection || underLastUsedSection)) source.toString() else source.name
         binding.title.text = sourceName
+        binding.sourceBadge.text = SourcePresentation.badgeText(source)
+        binding.sourceBadge.isVisible = binding.sourceBadge.text != null
 
         binding.sourcePin.apply {
             iconTint =

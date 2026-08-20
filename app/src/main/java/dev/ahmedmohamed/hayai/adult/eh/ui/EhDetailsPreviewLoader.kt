@@ -7,14 +7,19 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
 import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import eu.kanade.tachiyomi.data.database.models.Manga
 import kotlinx.coroutines.CancellationException
 
 class EhDetailsPreviewLoader(
     private val gateway: EhHttpGateway,
     private val preferences: HayaiPreferences,
+    private val ehPreferences: EhPreferences,
 ) {
-    fun owns(manga: Manga): Boolean = preferences.hentaiFeaturesEnabled.get() && EhSite.entries.any { it.sourceId == manga.source }
+    fun owns(manga: Manga): Boolean =
+        preferences.hentaiFeaturesEnabled.get() &&
+            ehPreferences.enhancedView.get() &&
+            EhSite.entries.any { it.sourceId == manga.source }
 
     suspend fun load(manga: Manga): List<EhRenderedPreview> {
         val site = EhSite.entries.firstOrNull { it.sourceId == manga.source } ?: return emptyList()
