@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
+import dev.ahmedmohamed.hayai.novel.extension.NovelExtensionManifest
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -14,6 +15,7 @@ import eu.kanade.tachiyomi.extension.model.LoadResult
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.util.lang.Hash
 import eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader
 import eu.kanade.tachiyomi.util.system.withIOContext
@@ -37,10 +39,6 @@ internal object ExtensionLoader {
         preferences.showNsfwSources().get()
     }
 
-    private const val EXTENSION_FEATURE = "tachiyomi.extension"
-    private const val METADATA_SOURCE_CLASS = "tachiyomi.extension.class"
-    private const val METADATA_SOURCE_FACTORY = "tachiyomi.extension.factory"
-    private const val METADATA_NSFW = "tachiyomi.extension.nsfw"
     const val LIB_VERSION_MIN = 1.3
     const val LIB_VERSION_MAX = 1.6
 
@@ -321,8 +319,14 @@ internal object ExtensionLoader {
         val pkgInfo = extensionInfo.packageInfo
         val appInfo = pkgInfo.applicationInfo!!
         val pkgName = pkgInfo.packageName
+        val metadata = appInfo.metaData
 
-        val extName = pkgManager.getApplicationLabel(appInfo).toString().substringAfter("Tachiyomi: ")
+        val extName =
+            NovelExtensionManifest
+                .displayName(
+                    applicationLabel = pkgManager.getApplicationLabel(appInfo).toString(),
+                    metadataName = metadata?.getString(NovelExtensionManifest.DISPLAY_NAME_KEY),
+                ).ifBlank { pkgName }
         val versionName = pkgInfo.versionName
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
 
@@ -332,11 +336,22 @@ internal object ExtensionLoader {
         }
 
         // Validate lib version
-        val libVersion = versionName.substringBeforeLast('.').toDoubleOrNull()
+        val manifestLibVersion =
+            metadata
+                ?.takeIf { it.containsKey(NovelExtensionManifest.EXTENSION_LIB_KEY) }
+                ?.getFloat(NovelExtensionManifest.EXTENSION_LIB_KEY)
+        val libVersion = NovelExtensionManifest.libraryVersion(versionName, manifestLibVersion)
         if (libVersion == null || libVersion < LIB_VERSION_MIN || libVersion > LIB_VERSION_MAX) {
             Timber.w(
                 "Lib version is $libVersion, while only versions $LIB_VERSION_MIN to $LIB_VERSION_MAX are allowed",
             )
+            return LoadResult.Error
+        }
+
+        val requiredFeatures = pkgInfo.reqFeatures.orEmpty().mapNotNull { it.name }.toSet()
+        val manifest = NovelExtensionManifest.resolve(requiredFeatures, metadata?.keySet().orEmpty())
+        if (manifest == null) {
+            Timber.w("Missing supported extension feature for $extName ($pkgName)")
             return LoadResult.Error
         }
 
@@ -362,37 +377,63 @@ internal object ExtensionLoader {
             return LoadResult.Untrusted(extension)
         }
 
-        val isNsfw = appInfo.metaData.getInt(METADATA_NSFW) == 1
+        val isNsfw =
+            (metadata?.getInt(NovelExtensionManifest.CONTENT_WARNING_KEY) ?: 0) > 0 ||
+                (metadata?.getInt(manifest.nsfwKey) ?: 0) == 1
         if (!loadNsfwSource && isNsfw) {
             Timber.w("NSFW extension $pkgName not allowed")
             return LoadResult.Error
         }
 
-        val classLoader = ChildFirstPathClassLoader(appInfo.sourceDir, null, context.classLoader)
+        val classLoader =
+            try {
+                ChildFirstPathClassLoader(appInfo.sourceDir, null, context.classLoader)
+            } catch (error: Exception) {
+                Timber.e(error, "Extension class loader error: $extName ($pkgName)")
+                return LoadResult.Error
+            }
+
+        val declaredClasses = metadata?.getString(manifest.classKey)
+        if (declaredClasses.isNullOrBlank()) {
+            Timber.w("Missing ${manifest.classKey} for extension $extName ($pkgName)")
+            return LoadResult.Error
+        }
 
         val sources =
-            appInfo.metaData
-                .getString(METADATA_SOURCE_CLASS)!!
+            declaredClasses
                 .split(";")
-                .map {
-                    val sourceClass = it.trim()
-                    if (sourceClass.startsWith(".")) {
-                        pkgInfo.packageName + sourceClass
-                    } else {
-                        sourceClass
-                    }
-                }.flatMap {
-                    try {
-                        when (val obj = Class.forName(it, false, classLoader).getDeclaredConstructor().newInstance()) {
-                            is Source -> listOf(obj)
-                            is SourceFactory -> obj.createSources()
-                            else -> throw Exception("Unknown source class type! ${obj.javaClass}")
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .flatMap { declaredClass ->
+                    var lastClassError: ClassNotFoundException? = null
+                    for (className in NovelExtensionManifest.classCandidates(declaredClass, pkgInfo.packageName)) {
+                        try {
+                            val obj = Class.forName(className, false, classLoader).getDeclaredConstructor().newInstance()
+                            return@flatMap when (obj) {
+                                is Source -> listOf(obj)
+                                is SourceFactory -> obj.createSources()
+                                else -> throw Exception("Unknown source class type! ${obj.javaClass}")
+                            }
+                        } catch (error: ClassNotFoundException) {
+                            lastClassError = error
+                        } catch (error: Throwable) {
+                            Timber.e(error, "Extension load error: $extName ($className)")
+                            return LoadResult.Error
                         }
-                    } catch (e: Throwable) {
-                        Timber.e(e, "Extension load error: $extName.")
-                        return LoadResult.Error
                     }
+
+                    Timber.e(lastClassError, "Extension class not found: $extName ($declaredClass)")
+                    return LoadResult.Error
                 }
+
+        if (sources.isEmpty()) {
+            Timber.w("Extension $extName ($pkgName) did not declare any source classes")
+            return LoadResult.Error
+        }
+        if (manifest.isNovel && sources.none { it.isNovelSource() }) {
+            Timber.w("Novel extension $extName ($pkgName) did not expose a novel source")
+            return LoadResult.Error
+        }
 
         val langs =
             sources
@@ -416,7 +457,7 @@ internal object ExtensionLoader {
                 lang = lang,
                 isNsfw = isNsfw,
                 sources = sources,
-                pkgFactory = appInfo.metaData.getString(METADATA_SOURCE_FACTORY),
+                pkgFactory = metadata.getString(manifest.factoryKey),
                 icon = appInfo.loadIcon(pkgManager),
                 isShared = extensionInfo.isShared,
             )
@@ -458,7 +499,8 @@ internal object ExtensionLoader {
      *
      * @param pkgInfo The package info of the application.
      */
-    private fun isPackageAnExtension(pkgInfo: PackageInfo): Boolean = pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }
+    private fun isPackageAnExtension(pkgInfo: PackageInfo): Boolean =
+        NovelExtensionManifest.isSupported(pkgInfo.reqFeatures.orEmpty().map { it.name })
 
     /**
      * Returns the signatures of the package or null if it's not signed.
