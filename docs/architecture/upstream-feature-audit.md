@@ -15,8 +15,8 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
 | EH source settings, default filters, and enhanced details toggle | SY-compatible typed preferences plus Hayai account/settings activity | foundation verified; remote uconfig audit |
 | EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
 | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic manga-details feature seam | foundation verified; emulator details flow pending |
-| 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | Registered enhanced-source families | registry foundation; behavior audit |
-| Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | audit |
+| 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | URL import and detail foundation verified; source-specific parity audit |
+| Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | direct URL and description foundation; batch and relationship actions audit |
 | Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI audit |
 | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
 | Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | preview foundation verified; remaining items audit |

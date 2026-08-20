@@ -19,6 +19,7 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/source/NovelSource.kt"
         "app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt"
         "app/src/main/java/eu/kanade/tachiyomi/source/model/Page.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt"

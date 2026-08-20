@@ -46,6 +46,8 @@ Built-in source settings are another deliberate adapter seam. `BrowseSourceContr
 
 Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
 
+Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, and normal URLs to the installed extension. Hayai adds host-validated direct URL import and bounded detail enrichment for 8Muses, HBrowse, Pururin, NHentai, MangaDex, and LANraragi. A parser or secondary request failure returns the extension result. It never removes a usable source. `HttpSource.headers` is open so a wrapper can preserve extension authentication and request headers without copying them.
+
 E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category strings fall back to showing every category. Remote uconfig, favorites sync, and the gallery update worker remain separate ports.
 
 Recents source visibility uses one Hayai-owned policy seam. History and Updates retain independent

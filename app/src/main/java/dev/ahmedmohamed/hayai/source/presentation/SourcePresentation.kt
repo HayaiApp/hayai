@@ -3,6 +3,9 @@ package dev.ahmedmohamed.hayai.source.presentation
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
 import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+import dev.ahmedmohamed.hayai.source.enhanced.HayaiEnhancedHttpSource
+import dev.ahmedmohamed.hayai.source.SourceCapability
+import dev.ahmedmohamed.hayai.source.SourceCapabilityRegistry
 import eu.kanade.tachiyomi.source.Source
 
 enum class SourceBadge(
@@ -12,6 +15,7 @@ enum class SourceBadge(
     JavaScript("JS"),
     Novel("Novel"),
     Adult("Adult"),
+    Enhanced("Enhanced"),
 }
 
 object SourcePresentation {
@@ -21,7 +25,8 @@ object SourcePresentation {
             source.id == LocalNovelSource.ID || EhSite.entries.any { it.sourceId == source.id } -> add(SourceBadge.Bundled)
         }
         if (source.isNovelSource) add(SourceBadge.Novel)
-        if (EhSite.entries.any { it.sourceId == source.id }) add(SourceBadge.Adult)
+        if (SourceCapability.Adult in SourceCapabilityRegistry.descriptor(source).capabilities) add(SourceBadge.Adult)
+        if (source is HayaiEnhancedHttpSource) add(SourceBadge.Enhanced)
     }
 
     fun badgeText(source: Source): String? =

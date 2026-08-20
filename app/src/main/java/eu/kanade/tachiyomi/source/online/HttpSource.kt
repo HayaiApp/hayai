@@ -86,7 +86,7 @@ abstract class HttpSource : CatalogueSource {
     /**
      * Headers used for requests.
      */
-    val headers: Headers by lazy { headersBuilder().build() }
+    open val headers: Headers by lazy { headersBuilder().build() }
 
     /**
      * Default network client for doing requests.
@@ -150,10 +150,10 @@ abstract class HttpSource : CatalogueSource {
                 popularMangaParse(response)
             }
 
-    fun getExtension(extensionManager: ExtensionManager? = null): Extension.Installed? =
+    open fun getExtension(extensionManager: ExtensionManager? = null): Extension.Installed? =
         (extensionManager ?: Injekt.get()).installedExtensionsFlow.value.find { it.sources.contains(this) }
 
-    fun extOnlyHasAllLanguage(extensionManager: ExtensionManager? = null) =
+    open fun extOnlyHasAllLanguage(extensionManager: ExtensionManager? = null) =
         getExtension(extensionManager)?.sources?.all { it.lang == "all" } ?: true
 
     /**
