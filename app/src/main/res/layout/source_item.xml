@@ -73,11 +73,26 @@
             android:paddingStart="0dp"
             android:paddingEnd="8dp"
             android:textColor="?attr/colorOnBackground"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/source_badge"
             app:layout_constraintEnd_toStartOf="@+id/source_latest"
             app:layout_constraintStart_toEndOf="@+id/source_image"
             app:layout_constraintTop_toTopOf="parent"
             tools:text="Source title" />
+
+        <TextView
+            android:id="@+id/source_badge"
+            style="?textAppearanceLabelSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/source_badge_background"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?attr/colorOnSecondaryContainer"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="@id/title"
+            app:layout_constraintStart_toStartOf="@id/title"
+            app:layout_constraintTop_toBottomOf="@id/title"
+            tools:text="JS · Novel" />
 
         <View
             android:id="@+id/source_divider"

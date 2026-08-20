@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.migration.manga.design
 
 import android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
 import android.view.View
+import androidx.core.view.isVisible
+import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
 import eu.kanade.tachiyomi.databinding.MigrationSourceItemBinding
 import eu.kanade.tachiyomi.source.icon
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -22,6 +24,8 @@ class MigrationSourceHolder(
         sourceEnabled: Boolean,
     ) {
         binding.title.text = source.nameBasedOnEnabledLanguages(adapter.enabledLanguages, adapter.extensionManager)
+        binding.sourceBadge.text = SourcePresentation.badgeText(source)
+        binding.sourceBadge.isVisible = binding.sourceBadge.text != null
         // Update circle letter image.
         itemView.post {
             val icon = source.icon()
@@ -31,10 +35,12 @@ class MigrationSourceHolder(
         if (sourceEnabled) {
             binding.title.alpha = 1.0f
             binding.sourceImage.alpha = 1.0f
+            binding.sourceBadge.alpha = 1.0f
             binding.title.paintFlags = binding.title.paintFlags and STRIKE_THRU_TEXT_FLAG.inv()
         } else {
             binding.title.alpha = DISABLED_ALPHA
             binding.sourceImage.alpha = DISABLED_ALPHA
+            binding.sourceBadge.alpha = DISABLED_ALPHA
             binding.title.paintFlags = binding.title.paintFlags or STRIKE_THRU_TEXT_FLAG
         }
     }

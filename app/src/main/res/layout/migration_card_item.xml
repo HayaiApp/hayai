@@ -53,9 +53,25 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toBottomOf="@id/title"
             app:layout_constraintStart_toStartOf="@id/title"
-            app:layout_constraintEnd_toEndOf="@id/title"
+            app:layout_constraintEnd_toStartOf="@id/source_badge"
             tools:text="English"
             tools:visibility="visible" />
+
+        <TextView
+            android:id="@+id/source_badge"
+            style="?textAppearanceLabelSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/source_badge_background"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?attr/colorOnSecondaryContainer"
+            app:layout_constraintBottom_toBottomOf="@id/lang"
+            app:layout_constraintEnd_toEndOf="@id/title"
+            app:layout_constraintStart_toEndOf="@id/lang"
+            app:layout_constraintTop_toTopOf="@id/lang"
+            tools:text="Bundled · Adult" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/migration_all"

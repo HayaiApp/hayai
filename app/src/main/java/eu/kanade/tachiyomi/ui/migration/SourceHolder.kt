@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.migration
 
 import android.view.View
+import androidx.core.view.isVisible
 import androidx.core.text.buildSpannedString
 import androidx.core.text.color
 import eu.kanade.tachiyomi.R
@@ -10,6 +11,7 @@ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
 import eu.kanade.tachiyomi.util.lang.withColor
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.getResourceColor
+import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
 import java.util.Locale
 
 class SourceHolder(
@@ -30,6 +32,8 @@ class SourceHolder(
         // Set source name
         val sourceName = source.name.replaceFirstChar { it.titlecase(Locale.getDefault()) } + " (${item.numberOfItems})"
         binding.title.text = sourceName
+        binding.sourceBadge.text = SourcePresentation.badgeText(source)
+        binding.sourceBadge.isVisible = binding.sourceBadge.text != null
         binding.lang.text =
             when {
                 item.isUninstalled ->
