@@ -84,6 +84,32 @@ object HtmlAssetRewriter {
         }
     }
 
+    /** Collects fetchable resource references using the same tags and CSS rules as [rewriteHtml]. */
+    fun extractResourceUrls(content: String): Set<String> {
+        val urls = linkedSetOf<String>()
+        fun add(value: String) {
+            value.trim().takeIf { it.isNotEmpty() && !it.startsWith("data:", ignoreCase = true) }?.let(urls::add)
+        }
+        RESOURCE_TAG_REGEX.findAll(content).forEach { tag ->
+            URL_ATTR_REGEX.findAll(tag.value).forEach { attr ->
+                val name = attr.groupValues[1]
+                val value = attr.attrValue(quoteGroup = 3)
+                if (name.equals("srcset", ignoreCase = true)) {
+                    value.split(',').forEach { candidate -> add(candidate.trim().substringBefore(' ')) }
+                } else {
+                    add(value)
+                }
+            }
+        }
+        STYLE_BLOCK_REGEX.findAll(content).forEach { block ->
+            CSS_URL_REGEX.findAll(block.groupValues[2]).forEach { add(it.groupValues[2]) }
+        }
+        STYLE_ATTR_REGEX.findAll(content).forEach { style ->
+            CSS_URL_REGEX.findAll(style.groupValues[3]).forEach { add(it.groupValues[2]) }
+        }
+        return urls
+    }
+
     fun rewriteCssUrls(css: String, toScheme: (String) -> String?): String {
         return CSS_URL_REGEX.replace(css) { m ->
             val quote = m.groupValues[1]
