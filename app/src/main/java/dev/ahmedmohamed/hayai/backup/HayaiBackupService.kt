@@ -73,6 +73,7 @@ class HayaiBackupService(
             novelPlugins = readNovelPlugins(),
             ehGalleryAliases = readEhGalleryAliases(),
             sourceMetadata = readSourceMetadata(mangas),
+            ehCategoryMappings = readEhCategoryMappings(),
         )
     }
 
@@ -145,13 +146,36 @@ class HayaiBackupService(
                     restoreEhGalleryAlias(alias)
                 }.also { if (it) restored++ }
             }
+            data.ehCategoryMappings.distinct().forEach { mapping ->
+                process("E-Hentai category mapping ${mapping.slot}", errors, { skipped++ }) {
+                    val categoryId = query("SELECT _id FROM categories WHERE name = ?", mapping.localCategoryName).use { cursor ->
+                        if (!cursor.moveToFirst()) return@process false
+                        val id = cursor.getInt(0)
+                        if (cursor.moveToNext()) return@process false
+                        id
+                    }
+                    upsert(
+                        table = "hayai_eh_category_map",
+                        where = "slot = ?",
+                        whereArgs = arrayOf(mapping.slot),
+                        values = ContentValues(3).apply {
+                            put("slot", mapping.slot)
+                            put("category_id", categoryId)
+                            put("remote_name", mapping.remoteName)
+                        },
+                    )
+                }.also { if (it) restored++ }
+            }
             data.sourceMetadata.distinct().forEach { metadata ->
                 process("source metadata ${metadata.mangaUrl}", errors, { skipped++ }) {
                     val manga = findManga(metadata.sourceId, metadata.mangaUrl, mangaCache) ?: return@process false
                     restoreSourceMetadata(metadata, requireNotNull(manga.id))
                 }.also { if (it) restored++ }
             }
-            if (data.ehFavorites.isNotEmpty() || data.ehGalleryAliases.isNotEmpty() || data.sourceMetadata.isNotEmpty()) {
+            if (
+                data.ehFavorites.isNotEmpty() || data.ehGalleryAliases.isNotEmpty() ||
+                data.ehCategoryMappings.isNotEmpty() || data.sourceMetadata.isNotEmpty()
+            ) {
                 database.lowLevel().executeSQL(
                     RawQuery.builder().query(
                         "UPDATE hayai_eh_sync_checkpoint SET requires_full_reconcile = 1 WHERE singleton = 1",
@@ -286,6 +310,15 @@ class HayaiBackupService(
                 alias.alternate.gid,
                 alias.alternate.token,
             )
+        }
+
+    private fun readEhCategoryMappings(): List<HayaiBackupEhCategoryMapping> =
+        query(
+            "SELECT m.slot, m.remote_name, c.name FROM hayai_eh_category_map m JOIN categories c ON c._id = m.category_id ORDER BY m.slot",
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(HayaiBackupEhCategoryMapping(cursor.getInt(0), cursor.getString(1), cursor.getString(2)))
+            }
         }
 
     private fun readSourceMetadata(mangas: List<Manga>): List<HayaiBackupSourceMetadata> {
@@ -510,7 +543,7 @@ class HayaiBackupService(
 
     private fun HayaiBackupData.itemCount() =
         quotes.size + novelRepositories.size + chapterStats.size + ehFavorites.size + novelPlugins.size +
-            ehGalleryAliases.size + sourceMetadata.size
+            ehGalleryAliases.size + sourceMetadata.size + ehCategoryMappings.size
 
     private data class MangaIdentity(
         val sourceId: Long,
@@ -553,6 +586,7 @@ internal object HayaiBackupLimits {
             if (data.chapterStats.size > 1_000_000) add("Too many novel chapter statistics")
             if (data.ehFavorites.size > 100_000) add("Too many E-Hentai favorites")
             if (data.ehGalleryAliases.size > 100_000) add("Too many E-Hentai gallery aliases")
+            if (data.ehCategoryMappings.size > 10) add("Too many E-Hentai category mappings")
             if (data.sourceMetadata.size > 100_000) add("Too many source metadata records")
             if (data.sourceMetadata.sumOf { it.extra.length.toLong() } > 64L * 1024 * 1024) {
                 add("Source metadata backup data is too large")
@@ -602,6 +636,9 @@ internal object HayaiBackupLimits {
                         !validGalleryIdentity(it.alternateGid, it.alternateToken) ||
                         (it.canonicalGid == it.alternateGid && it.canonicalToken == it.alternateToken)
                 }?.let { add("Invalid E-Hentai gallery alias") }
+            data.ehCategoryMappings
+                .firstOrNull { it.slot !in 0..9 || it.remoteName.length !in 1..255 || it.localCategoryName.length !in 1..255 }
+                ?.let { add("Invalid E-Hentai category mapping") }
             data.sourceMetadata
                 .firstOrNull {
                     it.mangaUrl.length !in 1..8_192 ||

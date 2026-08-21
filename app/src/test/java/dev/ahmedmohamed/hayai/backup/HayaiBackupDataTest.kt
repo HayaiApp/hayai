@@ -32,6 +32,7 @@ class HayaiBackupDataTest {
                 chapterStats = listOf(HayaiBackupChapterStat(7, "/novel", "/chapter", 900)),
                 ehFavorites = listOf(HayaiBackupEhFavorite("1", "token", "Gallery", 2)),
                 ehGalleryAliases = listOf(HayaiBackupEhGalleryAlias("1", "token", "2", "replacement")),
+                ehCategoryMappings = listOf(HayaiBackupEhCategoryMapping(2, "Remote", "Remote (E-Hentai)")),
                 sourceMetadata =
                     listOf(
                         HayaiBackupSourceMetadata(
