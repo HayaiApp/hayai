@@ -41,11 +41,14 @@ import dev.ahmedmohamed.hayai.novel.settings.NovelCustomizationStore
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationCache
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationService
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
+import dev.ahmedmohamed.hayai.novel.tracker.J2kNovelChapterTrackSync
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
+import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,11 +69,13 @@ class NovelReaderActivity :
     private val preferences by lazy { HayaiPreferences(Injekt.get<PreferenceStore>()) }
     private val json = Json { ignoreUnknownKeys = true }
     private val session by lazy {
+        val database = Injekt.get<DatabaseHelper>()
         NovelReaderSession(
-            Injekt.get<DatabaseHelper>(),
+            database,
             Injekt.get<SourceManager>(),
             NovelDownloadStore(File(filesDir, "hayai/novel-downloads")),
             Injekt.get<NetworkHelper>(),
+            J2kNovelChapterTrackSync(database, Injekt.get<PreferencesHelper>()),
         )
     }
     private val contentProcessor = NovelContentProcessor()
@@ -300,8 +305,9 @@ class NovelReaderActivity :
         val chapter = loaded?.chapter ?: return
         val progress = currentProgress
         runBlocking(Dispatchers.IO) {
-            session.saveProgress(chapter, progress, preferences.novelMarkAsReadThreshold.get())
+            session.saveProgress(chapter, progress, preferences.novelMarkAsReadThreshold.get(), syncTracking = false)
         }
+        launchIO { session.syncTracking(chapter) }
     }
 
     private fun onReaderProgress(progress: Int) {

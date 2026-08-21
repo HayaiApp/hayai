@@ -52,6 +52,8 @@ internal class RanobeDbApi(
         if (!cookie.substringAfter("auth_session=", "").substringBefore(';').trim().any()) {
             throw NovelTrackerFailure.InvalidCredentials("RanobeDB requires the auth_session cookie")
         }
+        val response = http.execute(Request.Builder().url("$baseUrl/api/v0/user/me").get().headers(secret = secret).build())
+        parseObject(response.body, "RanobeDB authenticated user")
     }
 
     override suspend fun search(query: String): List<NovelTrackerSearchItem> {
@@ -128,12 +130,15 @@ internal class RanobeDbApi(
         http.execute(request)
     }
 
-    private fun Request.Builder.headers(includeAuthentication: Boolean = true): Request.Builder =
+    private fun Request.Builder.headers(
+        includeAuthentication: Boolean = true,
+        secret: String? = null,
+    ): Request.Builder =
         header("User-Agent", USER_AGENT)
             .header("Accept", "application/json")
             .header("Origin", baseUrl)
             .header("Referer", "$baseUrl/")
-            .apply { if (includeAuthentication) header("Cookie", normalizedCookie(sessionCookie())) }
+            .apply { if (includeAuthentication) header("Cookie", normalizedCookie(secret ?: sessionCookie())) }
 
     private fun normalizedCookie(value: String): String {
         val safe = requireSafeCredential(value, "RanobeDB session cookie")
@@ -146,8 +151,8 @@ internal class RanobeDbApi(
                 ?: throw NovelTrackerFailure.InvalidResponse("$label did not return an object")
         } catch (error: NovelTrackerFailure) {
             throw error
-        } catch (error: Exception) {
-            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON", error)
+        } catch (_: Exception) {
+            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON")
         }
 
     private fun requirePositiveId(value: String): Long =

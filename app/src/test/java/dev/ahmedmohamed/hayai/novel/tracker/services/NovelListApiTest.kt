@@ -53,6 +53,36 @@ class NovelListApiTest {
     }
 
     @Test
+    fun `valid token requires an authenticated bounded server round trip`() = runBlocking {
+        server.enqueue(MockResponse().setBody("{\"id\":\"51f55f33-2d67-46dc-a444-a9ad7fcc4198\"}"))
+        val token = jwt(4_000)
+        val api = NovelListApi(NovelTrackerHttp(OkHttpClient()), { "" }, server.url("").toString().removeSuffix("/")) { 1_000 }
+
+        api.validateSession("reader", token)
+
+        val request = server.takeRequest()
+        assertEquals("/api/users/current", request.path)
+        assertEquals("Bearer $token", request.getHeader("Authorization"))
+    }
+
+    @Test
+    fun `server authentication and rate limit failures remain distinct`() {
+        val token = jwt(4_000)
+        server.enqueue(MockResponse().setResponseCode(401))
+        server.enqueue(MockResponse().setResponseCode(429).setHeader("Retry-After", "30"))
+        val api = NovelListApi(NovelTrackerHttp(OkHttpClient()), { "" }, server.url("").toString().removeSuffix("/")) { 1_000 }
+
+        assertThrows(NovelTrackerFailure.SessionExpired::class.java) {
+            runBlocking { api.validateSession("reader", token) }
+        }
+        val limited =
+            assertThrows(NovelTrackerFailure.RateLimited::class.java) {
+                runBlocking { api.validateSession("reader", token) }
+            }
+        assertEquals(30L, limited.retryAfterSeconds)
+    }
+
+    @Test
     fun `update maps chapter status and score and authenticates the request`() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(204))
         val token = jwt(4_000)

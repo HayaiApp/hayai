@@ -206,8 +206,8 @@ internal class NovelUpdatesApi(
                     ?: throw NovelTrackerFailure.InvalidResponse("NovelUpdates notes did not return an object")
             } catch (error: NovelTrackerFailure) {
                 throw error
-            } catch (error: Exception) {
-                throw NovelTrackerFailure.InvalidResponse("NovelUpdates notes returned invalid JSON", error)
+            } catch (_: Exception) {
+                throw NovelTrackerFailure.InvalidResponse("NovelUpdates notes returned invalid JSON")
             }
         val notes = root["notes"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val tags = root["tags"]?.jsonPrimitive?.contentOrNull.orEmpty()
