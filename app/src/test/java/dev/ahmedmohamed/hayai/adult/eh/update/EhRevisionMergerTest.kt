@@ -19,12 +19,12 @@ class EhRevisionMergerTest {
         )
 
         val mutation = result.mutations.single()
-        assertEquals(3, mutation.localId)
+        assertEquals(3L, mutation.localId)
         assertTrue(mutation.read)
         assertTrue(mutation.bookmark)
         assertTrue(mutation.downloaded)
         assertEquals(8, mutation.lastPageRead)
-        assertEquals(100, mutation.historyLastRead)
+        assertEquals(100L, mutation.historyLastRead)
         assertEquals(0, result.newRevisionCount)
     }
 
@@ -68,4 +68,3 @@ class EhRevisionMergerTest {
         historyTimeRead = history,
     )
 }
-

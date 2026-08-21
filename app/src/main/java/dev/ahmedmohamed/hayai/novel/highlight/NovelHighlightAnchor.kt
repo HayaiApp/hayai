@@ -45,7 +45,7 @@ data class NovelHighlightAnchor(
                 val found = document.indexOf(seed, from)
                 if (found < 0) break
                 val candidate = found - offset
-                if (candidate >= 0 && candidate + exact.length <= document.length) starts += candidate
+                if (candidate in document.indices) starts += candidate
                 from = found + 1
             }
         }
@@ -57,7 +57,10 @@ data class NovelHighlightAnchor(
             if (end <= start || end - start < exact.length * 0.7) return@forEach
             val candidate = document.substring(start, end)
             val score = tokenSimilarity(exact, candidate)
-            if (score >= FUZZY_THRESHOLD && (best == null || score > best!!.second)) best = TextRange(start, end) to score
+            val previous = best
+            if (score >= FUZZY_THRESHOLD && (previous == null || score > previous.second)) {
+                best = TextRange(start, end) to score
+            }
         }
         return best?.first
     }
@@ -115,8 +118,8 @@ data class NovelHighlightAnchor(
         private fun prefixScore(expected: String, actual: String): Int = expected.zip(actual).takeWhile { it.first == it.second }.size
 
         private fun tokenSimilarity(left: String, right: String): Double {
-            val a = left.lowercase().split(Regex("[^\\p{L}\\p{N}]+" )).filter(String::isNotEmpty).toSet()
-            val b = right.lowercase().split(Regex("[^\\p{L}\\p{N}]+" )).filter(String::isNotEmpty).toSet()
+            val a = left.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter(String::isNotEmpty).toSet()
+            val b = right.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter(String::isNotEmpty).toSet()
             return if (a.isEmpty() || b.isEmpty()) 0.0 else 2.0 * a.intersect(b).size / (a.size + b.size)
         }
 
