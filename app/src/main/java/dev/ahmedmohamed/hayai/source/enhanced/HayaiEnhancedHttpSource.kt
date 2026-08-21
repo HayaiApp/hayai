@@ -18,7 +18,8 @@ import timber.log.Timber
 open class HayaiEnhancedHttpSource(
     val originalSource: HttpSource,
     val definition: EnhancedSourceDefinition,
-) : HttpSource() {
+) : HttpSource(), EnhancedPagePreviewSource {
+    private val pagePreviewGateway = EnhancedPagePreviewGateway(this)
     private val detailsCache = object : LinkedHashMap<String, EnhancedDetails>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, EnhancedDetails>?): Boolean = size > MAX_CACHED_DETAILS
     }
@@ -41,7 +42,7 @@ open class HayaiEnhancedHttpSource(
     override suspend fun getLatestUpdates(page: Int): MangasPage = originalSource.getLatestUpdates(page)
 
     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
-        val mapped = query.takeIf { "://" in it }?.let { EnhancedSourceUrlMapper.map(definition, baseUrl, it) }
+        val mapped = EnhancedSourceUrlMapper.mapQuery(definition, baseUrl, query)
             ?: return originalSource.getSearchManga(page, query, filters)
         if (page > 1) return MangasPage(emptyList(), false)
         val manga = SManga.create().apply { url = mapped }
@@ -93,10 +94,28 @@ open class HayaiEnhancedHttpSource(
     override fun getFilterList(): FilterList = originalSource.getFilterList()
     override fun mangaDetailsRequest(manga: SManga) = originalSource.mangaDetailsRequest(manga)
 
+    override suspend fun getPagePreviews(
+        manga: SManga,
+        chapters: List<SChapter>,
+        page: Int,
+    ): EnhancedPagePreviewPage {
+        check(pagePreviewGateway.supportsPreviews()) { "$name does not expose page previews" }
+        return pagePreviewGateway.page(manga, page)
+    }
+
+    override suspend fun fetchPreviewImage(page: EnhancedPagePreview, cacheControl: okhttp3.CacheControl?): Response {
+        check(pagePreviewGateway.supportsPreviews()) { "$name does not expose page previews" }
+        return pagePreviewGateway.image(page, cacheControl)
+    }
+
     override fun fetchPopularManga(page: Int): Observable<MangasPage> = originalSource.fetchPopularManga(page)
     override fun fetchLatestUpdates(page: Int): Observable<MangasPage> = originalSource.fetchLatestUpdates(page)
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> =
-        if (query.contains("://")) runAsObservable { getSearchManga(page, query, filters) } else originalSource.fetchSearchManga(page, query, filters)
+        if (EnhancedSourceUrlMapper.mapQuery(definition, baseUrl, query) != null) {
+            runAsObservable { getSearchManga(page, query, filters) }
+        } else {
+            originalSource.fetchSearchManga(page, query, filters)
+        }
     override fun fetchMangaDetails(manga: SManga): Observable<SManga> = runAsObservable { getMangaDetails(manga) }
     override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> = originalSource.fetchChapterList(manga)
     override fun fetchPageList(chapter: SChapter): Observable<List<Page>> = originalSource.fetchPageList(chapter)
