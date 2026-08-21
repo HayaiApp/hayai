@@ -3,6 +3,9 @@ package dev.ahmedmohamed.hayai.adult.eh.update
 import android.content.Context
 import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.json.JSONObject
 import java.security.MessageDigest
 
@@ -88,36 +91,9 @@ class EhGalleryUpdateStateStore(
 }
 
 object EhGalleryUpdaterStatsCodec {
-    fun encode(value: EhGalleryUpdaterStats): String = JSONObject()
-        .put("startedAt", value.startedAt)
-        .put("finishedAt", value.finishedAt)
-        .put("eligible", value.eligible)
-        .put("attempted", value.attempted)
-        .put("updated", value.updated)
-        .put("newRevisions", value.newRevisions)
-        .put("aged", value.aged)
-        .put("notFound", value.notFound)
-        .put("authenticationSkipped", value.authenticationSkipped)
-        .put("transientFailures", value.transientFailures)
-        .put("permanentFailures", value.permanentFailures)
-        .put("stoppedAtFailureCutoff", value.stoppedAtFailureCutoff)
-        .toString()
+    private val json = Json { ignoreUnknownKeys = true }
 
-    fun decode(value: String): EhGalleryUpdaterStats {
-        val json = JSONObject(value)
-        return EhGalleryUpdaterStats(
-            startedAt = json.getLong("startedAt"),
-            finishedAt = json.getLong("finishedAt"),
-            eligible = json.getInt("eligible"),
-            attempted = json.getInt("attempted"),
-            updated = json.getInt("updated"),
-            newRevisions = json.getInt("newRevisions"),
-            aged = json.getInt("aged"),
-            notFound = json.getInt("notFound"),
-            authenticationSkipped = json.getInt("authenticationSkipped"),
-            transientFailures = json.getInt("transientFailures"),
-            permanentFailures = json.getInt("permanentFailures"),
-            stoppedAtFailureCutoff = json.getBoolean("stoppedAtFailureCutoff"),
-        )
-    }
+    fun encode(value: EhGalleryUpdaterStats): String = json.encodeToString(value)
+
+    fun decode(value: String): EhGalleryUpdaterStats = json.decodeFromString(value)
 }
