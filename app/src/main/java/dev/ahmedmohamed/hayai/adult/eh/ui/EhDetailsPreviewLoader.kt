@@ -157,11 +157,13 @@ class EhDetailsPreviewLoader(
         }
 
     private companion object {
-        const val PREVIEWS_PER_PAGE = 12
+        // E-Hentai's gallery preview endpoint is itself paginated in 20-item pages.
+        // Keep that boundary intact so moving to the next UI page never skips thumbnails.
+        const val PREVIEWS_PER_PAGE = 20
         const val MAX_LISTING_PAGES = 200
         const val MAX_IMAGE_BYTES = 4L * 1024L * 1024L
         const val MAX_ENCODED_SPRITE_BYTES = 12L * 1024L * 1024L
-        const val MAX_DECODED_BYTES_PER_PAGE = 12L * 1024L * 1024L
+        const val MAX_DECODED_BYTES_PER_PAGE = 16L * 1024L * 1024L
         const val MAX_SOURCE_DIMENSION = 16_384
         const val MAX_RENDER_DIMENSION = 512
     }
