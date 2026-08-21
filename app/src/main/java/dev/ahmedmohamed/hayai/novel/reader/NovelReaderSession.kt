@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.chapter.ChapterSort
@@ -63,7 +64,7 @@ internal class NovelReaderSession(
         manga = requireNotNull(database.getManga(mangaId).executeAsBlocking()) { "Novel not found" }
         source =
             requireNotNull(sourceManager.get(manga.source)) { "Novel source is not installed" }
-                .takeIf { it.isNovelSource }
+                .takeIf { it.isNovelSource() }
                 ?: error("This source does not provide novel text")
 
         val databaseChapters = database.getChapters(manga).executeAsBlocking()

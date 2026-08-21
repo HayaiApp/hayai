@@ -10,9 +10,14 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryAlias
 import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
 import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightStore
+import dev.ahmedmohamed.hayai.novel.highlight.RestoredHighlightIdentity
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginStore
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceDefinition
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceStore
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
 import kotlinx.serialization.encodeToString
@@ -22,6 +27,7 @@ class HayaiBackupService(
     private val database: DatabaseHelper,
     private val context: Context? = null,
     private val pluginManager: NovelPluginManager? = null,
+    private val novelApkRepositories: NovelApkRepositoryRegistry? = null,
 ) {
     private val json =
         Json {
@@ -74,6 +80,9 @@ class HayaiBackupService(
             ehGalleryAliases = readEhGalleryAliases(),
             sourceMetadata = readSourceMetadata(mangas),
             ehCategoryMappings = readEhCategoryMappings(),
+            novelHighlights = NovelHighlightStore(database, json).exportAll(),
+            novelCustomSources = readNovelCustomSources(),
+            novelApkRepositories = readNovelApkRepositories(),
         )
     }
 
@@ -172,6 +181,25 @@ class HayaiBackupService(
                     restoreSourceMetadata(metadata, requireNotNull(manga.id))
                 }.also { if (it) restored++ }
             }
+            val highlightResult =
+                NovelHighlightStore(database, json).restore(data.novelHighlights) { sourceId, mangaUrl, chapterUrl ->
+                    val manga = findManga(sourceId, mangaUrl, mangaCache) ?: return@restore null
+                    val chapter = database.getChapters(manga).executeAsBlocking().singleOrNull { it.url == chapterUrl }
+                        ?: return@restore null
+                    RestoredHighlightIdentity(requireNotNull(manga.id), requireNotNull(chapter.id))
+                }
+            restored += highlightResult.restored
+            skipped += highlightResult.unresolved.size
+            highlightResult.unresolved.take(MAX_RESTORE_ERROR_EXAMPLES).forEach { unresolved ->
+                errors +=
+                    "novel highlight ${unresolved.highlightId.take(128)}: matching core manga or chapter " +
+                    "was not restored for source ${unresolved.sourceId}"
+            }
+            if (highlightResult.unresolved.size > MAX_RESTORE_ERROR_EXAMPLES) {
+                errors +=
+                    "${highlightResult.unresolved.size - MAX_RESTORE_ERROR_EXAMPLES} additional novel highlights " +
+                    "could not be matched to restored core data"
+            }
             if (
                 data.ehFavorites.isNotEmpty() || data.ehGalleryAliases.isNotEmpty() ||
                 data.ehCategoryMappings.isNotEmpty() || data.sourceMetadata.isNotEmpty()
@@ -184,7 +212,58 @@ class HayaiBackupService(
             }
         }
         restoreNovelPlugins(data.novelPlugins, errors, { restored++ }, { skipped++ })
+        restoreNovelCustomSources(data.novelCustomSources, errors, { restored++ }, { skipped++ })
+        data.novelApkRepositories.distinct().forEach { repository ->
+            process("novel APK repository $repository", errors, { skipped++ }) {
+                val registry = novelApkRepositories ?: return@process false
+                registry.add(repository)
+                true
+            }.also { if (it) restored++ }
+        }
         return HayaiRestoreReport(restored, skipped, errors)
+    }
+
+    private fun readNovelCustomSources(): List<NovelCustomSourceDefinition> {
+        val appContext = context ?: return emptyList()
+        return appContext.getSharedPreferences("hayai_novel_custom_sources", Context.MODE_PRIVATE).all.values
+            .mapNotNull { value ->
+                (value as? String)?.let { encoded ->
+                    runCatching { json.decodeFromString<NovelCustomSourceDefinition>(encoded).requireValid() }.getOrNull()
+                }
+            }
+            .sortedBy(NovelCustomSourceDefinition::id)
+    }
+
+    private fun readNovelApkRepositories(): List<String> {
+        val appContext = context ?: return emptyList()
+        return appContext.getSharedPreferences("hayai_novel_apk_repositories", Context.MODE_PRIVATE)
+            .getStringSet("urls_v1", emptySet()).orEmpty().sorted()
+    }
+
+    private suspend fun restoreNovelCustomSources(
+        definitions: List<NovelCustomSourceDefinition>,
+        errors: MutableList<String>,
+        onRestored: () -> Unit,
+        onSkipped: () -> Unit,
+    ) {
+        val appContext = context
+        val manager = pluginManager
+        if (appContext == null || manager == null) {
+            if (definitions.isNotEmpty()) {
+                errors += "Novel custom sources could not be restored because the plugin manager is unavailable"
+                repeat(definitions.size) { onSkipped() }
+            }
+            return
+        }
+        val store = NovelCustomSourceStore(appContext, manager, json)
+        definitions.distinctBy(NovelCustomSourceDefinition::id).forEach { definition ->
+            runCatching { store.save(definition) }
+                .onSuccess { onRestored() }
+                .onFailure { failure ->
+                    errors += "novel custom source ${definition.id}: ${failure.message ?: failure.javaClass.simpleName}"
+                    onSkipped()
+                }
+        }
     }
 
     private fun restoreQuote(
@@ -541,9 +620,14 @@ class HayaiBackupService(
 
     private fun Cursor.stringOrNull(index: Int): String? = if (isNull(index)) null else getString(index)
 
+    private companion object {
+        const val MAX_RESTORE_ERROR_EXAMPLES = 20
+    }
+
     private fun HayaiBackupData.itemCount() =
         quotes.size + novelRepositories.size + chapterStats.size + ehFavorites.size + novelPlugins.size +
-            ehGalleryAliases.size + sourceMetadata.size + ehCategoryMappings.size
+            ehGalleryAliases.size + sourceMetadata.size + ehCategoryMappings.size + novelHighlights.size +
+            novelCustomSources.size + novelApkRepositories.size
 
     private data class MangaIdentity(
         val sourceId: Long,
@@ -606,6 +690,28 @@ internal object HayaiBackupLimits {
             if (data.novelPlugins.sumOf { plugin -> plugin.preferences.sumOf { it.key.length.toLong() + it.value.length } } > 16L * 1024 * 1024) {
                 add("Novel plugin settings backup data is too large")
             }
+            if (data.novelHighlights.size > 100_000) add("Too many novel highlights")
+            if (data.novelHighlights.map { it.id }.distinct().size != data.novelHighlights.size) {
+                add("Duplicate novel highlight IDs")
+            }
+            if (
+                data.novelHighlights.sumOf {
+                    it.mangaUrl.length.toLong() + it.chapterUrl.length + (it.note?.length ?: 0) +
+                        it.anchor.exact.length + it.anchor.prefix.length + it.anchor.suffix.length
+                } > 64L * 1024 * 1024
+            ) {
+                add("Novel highlight backup data is too large")
+            }
+            if (data.novelCustomSources.size > 500) add("Too many visual novel sources")
+            if (data.novelCustomSources.map { it.id }.distinct().size != data.novelCustomSources.size) {
+                add("Duplicate visual novel source IDs")
+            }
+            if (data.novelCustomSources.sumOf { Json.encodeToString(it).length.toLong() } > 16L * 1024 * 1024) {
+                add("Visual novel source backup data is too large")
+            }
+            if (data.novelApkRepositories.size > 100 || data.novelApkRepositories.distinct().size != data.novelApkRepositories.size) {
+                add("Invalid novel APK repository list")
+            }
             data.quotes
                 .firstOrNull {
                     it.id.length !in 1..128 ||
@@ -667,6 +773,22 @@ internal object HayaiBackupLimits {
                         } ||
                         it.preferences.map(HayaiBackupPluginPreference::key).distinct().size != it.preferences.size
                 }?.let { add("Invalid novel plugin backup") }
+            data.novelHighlights.firstOrNull {
+                it.id.length !in 1..128 ||
+                    it.mangaUrl.length !in 1..8_192 ||
+                    it.chapterUrl.length !in 1..8_192 ||
+                    (it.note?.length ?: 0) > 16_384 ||
+                    it.createdAt < 0 ||
+                    it.updatedAt < it.createdAt
+            }?.let { add("Invalid novel highlight") }
+            data.novelCustomSources.firstOrNull { definition -> definition.validate().isNotEmpty() }
+                ?.let { add("Invalid visual novel source ${it.id.take(32)}") }
+            data.novelApkRepositories.firstOrNull { repository ->
+                repository.length !in 1..8_192 || runCatching {
+                    val uri = java.net.URI(repository)
+                    uri.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null
+                }.getOrDefault(true)
+            }?.let { add("Invalid novel APK repository") }
         }
 
     private fun validateEhDuplicates(data: HayaiBackupData): List<String> =

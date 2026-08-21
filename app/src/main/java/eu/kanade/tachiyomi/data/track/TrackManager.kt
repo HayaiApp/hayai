@@ -1,6 +1,9 @@
 package eu.kanade.tachiyomi.data.track
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.novel.tracker.services.NovelListTrackService
+import dev.ahmedmohamed.hayai.novel.tracker.services.NovelUpdatesTrackService
+import dev.ahmedmohamed.hayai.novel.tracker.services.RanobeDbTrackService
 import eu.kanade.tachiyomi.data.track.anilist.Anilist
 import eu.kanade.tachiyomi.data.track.bangumi.Bangumi
 import eu.kanade.tachiyomi.data.track.hikka.Hikka
@@ -28,6 +31,9 @@ class TrackManager(
         const val SUWAYOMI = 9
         const val HIKKA = 10
         const val MANGABAKA = 11
+        const val NOVEL_UPDATES = 100
+        const val NOVEL_LIST = 101
+        const val RANOBE_DB = 102
     }
 
     val myAnimeList = MyAnimeList(context, MYANIMELIST)
@@ -41,6 +47,9 @@ class TrackManager(
     val suwayomi = Suwayomi(context, SUWAYOMI)
     val hikka = Hikka(context, HIKKA)
     val mangaBaka = MangaBaka(context, MANGABAKA)
+    val novelUpdates = NovelUpdatesTrackService(context, NOVEL_UPDATES)
+    val novelList = NovelListTrackService(context, NOVEL_LIST)
+    val ranobeDb = RanobeDbTrackService(context, RANOBE_DB)
 
     val services =
         listOf(
@@ -55,7 +64,15 @@ class TrackManager(
             suwayomi,
             hikka,
             mangaBaka,
+            novelUpdates,
+            novelList,
+            ranobeDb,
         )
+
+    private val novelOnlyServices: Set<TrackService> = setOf(novelUpdates, novelList, ranobeDb)
+
+    fun servicesFor(isNovel: Boolean): List<TrackService> =
+        if (isNovel) services else services.filterNot(novelOnlyServices::contains)
 
     fun getService(id: Int) = services.find { it.id == id }
 

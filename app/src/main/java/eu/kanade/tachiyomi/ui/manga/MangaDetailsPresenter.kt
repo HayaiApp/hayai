@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.SourceNotFoundException
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
@@ -91,7 +92,9 @@ class MangaDetailsPresenter(
     var isLoading = false
     var scrollType = 0
 
-    private val loggedServices by lazy { Injekt.get<TrackManager>().services.filter { it.isLogged } }
+    private val loggedServices by lazy {
+        Injekt.get<TrackManager>().servicesFor(source.isNovelSource()).filter { it.isLogged }
+    }
     private var tracks = emptyList<Track>()
 
     var trackList: List<TrackItem> = emptyList()

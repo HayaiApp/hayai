@@ -1,5 +1,6 @@
 package dev.ahmedmohamed.hayai.novel.settings
 
+import android.content.Intent
 import android.graphics.Color
 import android.text.InputType
 import android.view.ViewGroup
@@ -10,6 +11,10 @@ import android.widget.ScrollView
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerActivity
+import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderActivity
+import dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsActivity
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.Preference
 import eu.kanade.tachiyomi.ui.setting.SettingsController
@@ -210,6 +215,30 @@ class NovelSettingsController : SettingsController() {
                 title = "Reader presets"
                 summary = "Save the current typography and layout, then restore it later"
                 onClick { showPresetList() }
+            }
+        }
+
+        preferenceCategory {
+            title = "Language, sources, and data"
+            preference {
+                title = "Translation and dictionary"
+                summary = "Choose translation providers, languages, credentials, and dictionary fallback."
+                onClick { startActivity(Intent(context, NovelLanguageToolsSettingsActivity::class.java)) }
+            }
+            preference {
+                title = "Visual novel source builder"
+                summary = "Create, validate, preview, install, edit, export, and remove CSS-selector novel sources."
+                onClick { startActivity(Intent(context, NovelCustomSourceBuilderActivity::class.java)) }
+            }
+            preference {
+                title = "Remote novel extensions"
+                summary = "Manage trusted repositories and install, update, remove, or trust novel APK extensions through J2K."
+                onClick { startActivity(Intent(context, NovelApkExtensionManagerActivity::class.java)) }
+            }
+            preference {
+                title = "Import Tsundoku or LNReader"
+                summary = "Inspect an external backup, review warnings and missing sources, then import it transactionally."
+                onClick { startActivity(Intent(context, NovelDataToolsActivity::class.java)) }
             }
         }
 

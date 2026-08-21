@@ -1,6 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.source
 
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 
@@ -9,7 +10,7 @@ object NovelDocumentLoader {
         source: Source,
         chapter: SChapter,
     ): NovelDocument {
-        require(source.isNovelSource) { "This source does not provide novel text." }
+        require(source.isNovelSource()) { "This source does not provide novel text." }
 
         val pages = source.getPageList(chapter)
         require(pages.isNotEmpty()) { "The novel chapter has no pages." }

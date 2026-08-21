@@ -48,6 +48,7 @@ class NovelPluginManager(
             explicitNulls = false
         }
     private val store = NovelPluginStore(context, database, json)
+    private val trustStore = NovelPluginTrustStore(context)
     private val client: OkHttpClient =
         network.client
             .newBuilder()
@@ -104,6 +105,7 @@ class NovelPluginManager(
             require(name.isNotBlank() && name.length <= 256) { "Invalid repository name" }
             requireSafeUrl(url, allowLocalHttp = true)
             store.saveRepository(NovelPluginRepository(name.trim(), url.trim(), true))
+            trustStore.trustUnsigned(url.trim())
             _catalog.value = rebuild(_catalog.value.copy(repositories = store.repositories()))
             _catalog.value
         }
@@ -120,6 +122,7 @@ class NovelPluginManager(
     suspend fun removeRepository(url: String) =
         mutex.withLock {
             store.removeRepository(url)
+            trustStore.revoke(url)
             _catalog.value = rebuild(_catalog.value.copy(repositories = store.repositories()))
         }
 
@@ -140,6 +143,7 @@ class NovelPluginManager(
         preferences: Map<String, String>,
     ): InstalledNovelPlugin =
         mutex.withLock {
+            if (descriptor.signingKey == null) trustStore.trustUnsigned(repositoryUrl) else trustStore.observeSigningKey(repositoryUrl, descriptor.signingKey)
             val installed = installValidated(descriptor, repositoryUrl, code, preferences)
             val state = _catalog.value
             val replacedSources = state.sources.filter { it.pluginId == descriptor.id }
@@ -209,6 +213,7 @@ class NovelPluginManager(
         require(code.size in 1..NovelPluginStore.MAX_PLUGIN_BYTES.toInt()) { "Plugin code is empty or too large" }
         val codeHash = sha256Hex(code)
         descriptor.sha256?.let { require(codeHash.equals(it, true)) { "Plugin checksum does not match repository metadata" } }
+        trustStore.verify(repositoryUrl, descriptor, code)
         val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
         val previousPreferences = preferences.all.toMap()
         try {
@@ -261,7 +266,11 @@ class NovelPluginManager(
                 else -> error("Invalid repository document")
             }
         require(array.size <= MAX_REPOSITORY_PLUGINS) { "Repository contains too many plugins" }
-        return array.map { json.decodeFromJsonElement<NovelPluginDescriptor>(it).validate(repository.url) }
+        val descriptors = array.map { json.decodeFromJsonElement<NovelPluginDescriptor>(it).validate(repository.url) }
+        val signingKeys = descriptors.mapNotNull(NovelPluginDescriptor::signingKey).distinct()
+        require(signingKeys.size <= 1) { "Repository mixes multiple signing keys" }
+        signingKeys.singleOrNull()?.let { trustStore.observeSigningKey(repository.url, it) }
+        return descriptors
     }
 
     private suspend fun download(

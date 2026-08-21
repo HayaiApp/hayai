@@ -19,6 +19,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.SeekBar
@@ -28,10 +29,18 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
+import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionaryLauncher
+import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettingsStore
+import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightAnchor
+import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlight
+import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightStore
 import dev.ahmedmohamed.hayai.novel.quote.NovelQuote
 import dev.ahmedmohamed.hayai.novel.quote.NovelQuoteStore
 import dev.ahmedmohamed.hayai.novel.quote.QuoteAddResult
 import dev.ahmedmohamed.hayai.novel.settings.NovelCustomizationStore
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationCache
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationService
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
@@ -67,6 +76,11 @@ class NovelReaderActivity :
     private val contentProcessor = NovelContentProcessor()
     private val customization by lazy { NovelCustomizationStore(preferences) }
     private val quoteStore by lazy { NovelQuoteStore(Injekt.get<DatabaseHelper>()) }
+    private val highlightStore by lazy { NovelHighlightStore(Injekt.get<DatabaseHelper>()) }
+    private val translationSettings by lazy { NovelTranslationSettingsStore(this) }
+    private val translationService by lazy { NovelTranslationService(Injekt.get<NetworkHelper>(), NovelTranslationCache(this)) }
+    private val dictionary by lazy { NovelDictionaryLauncher(this) }
+    private val dictionarySettings by lazy { NovelDictionarySettingsStore(this) }
     private lateinit var webView: WebView
     private lateinit var titleView: TextView
     private lateinit var chapterView: TextView
@@ -313,6 +327,7 @@ class NovelReaderActivity :
         val openingProgress = if (chapter.chapter.read && chapter.chapter.last_page_read >= 100) 0 else currentProgress
         webView.evaluateJavascript("window.hayaiReader.scrollToPercent($openingProgress)", null)
         extractTtsParagraphs(autoStart = ttsAutoStartPending)
+        restorePersistentHighlights(chapter)
         ttsAutoStartPending = false
         if (preferences.novelMarkShortChapterAsRead.get()) {
             webView.evaluateJavascript("document.documentElement.scrollHeight <= innerHeight") { short ->
@@ -346,6 +361,12 @@ class NovelReaderActivity :
                 if (loaded?.isDownloaded == true) "Remove offline copy" else "Save chapter offline",
                 "Saved quotes",
                 "Chapter statistics",
+                "Highlight selection",
+                "Saved highlights",
+                "Translate selection",
+                "Translate chapter",
+                "Show original chapter",
+                "Dictionary lookup",
                 "Reset chapter progress",
             )
         AlertDialog
@@ -361,13 +382,19 @@ class NovelReaderActivity :
                     5 -> toggleOfflineCopy()
                     6 -> showSavedQuotes()
                     7 -> showChapterStatistics()
-                    8 -> {
+                    8 -> captureHighlight()
+                    9 -> showHighlights()
+                    10 -> translateSelection()
+                    11 -> translateChapter()
+                    12 -> { webView.evaluateJavascript("window.hayaiReader.showOriginal()", null); restorePersistentHighlights(requireNotNull(loaded)) }
+                    13 -> dictionarySelection()
+                    14 -> {
                         currentProgress = 0
                         loaded?.chapter?.let(NovelProgress::reset)
                         saveProgress()
                     }
                 }
-                if (which !in setOf(4, 5, 6, 7)) loaded?.let(::showChapter)
+                if (which in 0..3 || which == 14) loaded?.let(::showChapter)
             }.show()
     }
 
@@ -413,6 +440,214 @@ class NovelReaderActivity :
                     onFailure = { toast(it.message ?: "The quote could not be saved") },
                 )
             }
+        }
+    }
+
+    private fun captureHighlight() {
+        val chapter = loaded ?: return
+        captureSelection { capture ->
+            val anchor = NovelHighlightAnchor.fromContext(
+                capture.documentText,
+                capture.selectedText,
+                capture.prefix,
+                capture.suffix,
+                capture.occurrence,
+            )
+            if (anchor == null) {
+                toast("Select text to highlight")
+                return@captureSelection
+            }
+            lifecycleScope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        highlightStore.create(
+                            requireNotNull(chapter.manga.id),
+                            requireNotNull(chapter.chapter.id),
+                            chapter.manga.source,
+                            chapter.manga.url,
+                            chapter.chapter.url,
+                            DEFAULT_HIGHLIGHT_COLOR,
+                            null,
+                            anchor,
+                        )
+                    }
+                }
+                result.fold(
+                    onSuccess = {
+                        restorePersistentHighlights(chapter)
+                        toast("Highlight saved")
+                    },
+                    onFailure = { toast(it.message ?: "Highlight could not be saved") },
+                )
+            }
+        }
+    }
+
+    private fun restorePersistentHighlights(chapter: LoadedNovelChapter) {
+        lifecycleScope.launch {
+            val highlights = withContext(Dispatchers.IO) {
+                highlightStore.forStableChapter(chapter.manga.source, chapter.manga.url, chapter.chapter.url)
+            }
+            if (loaded?.chapter?.id != chapter.chapter.id) return@launch
+            val payload = highlights.map {
+                HighlightRender(
+                    it.id,
+                    it.anchor.exact,
+                    it.anchor.prefix,
+                    it.anchor.suffix,
+                    it.anchor.occurrence,
+                    NovelHtmlDocumentBuilder.color(it.color),
+                )
+            }
+            webView.evaluateJavascript("window.hayaiReader.applyPersistentHighlights(${json.encodeToString(payload)})", null)
+        }
+    }
+
+    private fun showHighlights() {
+        val chapter = loaded ?: return
+        lifecycleScope.launch {
+            val highlights = withContext(Dispatchers.IO) {
+                highlightStore.forStableChapter(chapter.manga.source, chapter.manga.url, chapter.chapter.url)
+            }
+            if (highlights.isEmpty()) {
+                toast("No highlights in this chapter")
+                return@launch
+            }
+            val labels = highlights.map {
+                (it.note?.let { note -> "$note · " }.orEmpty()) + it.anchor.exact.take(100)
+            }.toTypedArray()
+            AlertDialog.Builder(this@NovelReaderActivity)
+                .setTitle("Highlights")
+                .setItems(labels) { _, index -> showHighlight(chapter, highlights[index]) }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+    }
+
+    private fun showHighlight(chapter: LoadedNovelChapter, selected: NovelHighlight) {
+        webView.evaluateJavascript(
+            "window.hayaiReader.navigateHighlight(${json.encodeToString(selected.id)})",
+            null,
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Highlight")
+            .setMessage(selected.anchor.exact)
+            .setPositiveButton("Edit") { _, _ -> editHighlight(chapter, selected.id, selected.note, selected.color) }
+            .setNeutralButton("Delete") { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { highlightStore.delete(selected.id) }
+                    restorePersistentHighlights(chapter)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun editHighlight(chapter: LoadedNovelChapter, id: String, note: String?, color: Int) {
+        val input = EditText(this).apply {
+            hint = "Optional note"
+            setText(note)
+        }
+        val colors = intArrayOf(0xFFFFEB3B.toInt(), 0xFF80DEEA.toInt(), 0xFFA5D6A7.toInt(), 0xFFF8BBD0.toInt(), 0xFFFFCC80.toInt())
+        var selectedColor = colors.indexOf(color).takeIf { it >= 0 } ?: 0
+        AlertDialog.Builder(this)
+            .setTitle("Edit highlight")
+            .setView(input)
+            .setSingleChoiceItems(arrayOf("Yellow", "Cyan", "Green", "Pink", "Orange"), selectedColor) { _, which -> selectedColor = which }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton("Save") { _, _ ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        highlightStore.update(id, colors[selectedColor], input.text.toString())
+                    }
+                    restorePersistentHighlights(chapter)
+                }
+            }
+            .show()
+    }
+
+    private fun translateSelection() {
+        val chapter = loaded ?: return
+        captureSelection { capture ->
+            if (capture.selectedText.isBlank()) {
+                toast("Select text to translate")
+                return@captureSelection
+            }
+            lifecycleScope.launch {
+                loading.visibility = View.VISIBLE
+                val settings = translationSettings.get()
+                val cacheKey = "${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}:${capture.selectedText.hashCode()}"
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { translationService.translate(cacheKey, capture.selectedText, settings) }
+                }
+                loading.visibility = View.GONE
+                result.fold(
+                    onSuccess = { translated ->
+                        AlertDialog.Builder(this@NovelReaderActivity)
+                            .setTitle(if (translated.complete) "Translation to ${settings.targetLanguage}" else "Partial translation")
+                            .setMessage(listOfNotNull(translated.warning, translated.text).joinToString("\n\n"))
+                            .setPositiveButton("Copy") { _, _ ->
+                                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(
+                                    ClipData.newPlainText("Translation", translated.text),
+                                )
+                            }
+                            .setNegativeButton(android.R.string.ok, null)
+                            .show()
+                    },
+                    onFailure = { toast(it.message ?: "Translation failed") },
+                )
+            }
+        }
+    }
+
+    private fun dictionarySelection() {
+        captureSelection { capture ->
+            runCatching { dictionary.open(capture.selectedText, dictionarySettings.get()) }
+                .onFailure { toast(it.message ?: "Dictionary lookup failed") }
+        }
+    }
+
+    private fun translateChapter() {
+        val chapter = loaded ?: return
+        webView.evaluateJavascript("window.hayaiReader.documentText()") { encoded ->
+            val text = runCatching { json.decodeFromString<String>(encoded) }.getOrNull().orEmpty()
+            if (text.isBlank()) {
+                toast("Chapter has no translatable text")
+                return@evaluateJavascript
+            }
+            lifecycleScope.launch {
+                loading.visibility = View.VISIBLE
+                val settings = translationSettings.get()
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        translationService.translate(
+                            "chapter:${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}",
+                            text,
+                            settings,
+                        )
+                    }
+                }
+                loading.visibility = View.GONE
+                result.fold(
+                    onSuccess = { translated ->
+                        webView.evaluateJavascript(
+                            "window.hayaiReader.showTranslation(${json.encodeToString(translated.text)})",
+                            null,
+                        )
+                        translated.warning?.let { warning -> toast(warning) }
+                        extractTtsParagraphs()
+                    },
+                    onFailure = { toast(it.message ?: "Chapter translation failed") },
+                )
+            }
+        }
+    }
+
+    private fun captureSelection(action: (SelectionCapture) -> Unit) {
+        webView.evaluateJavascript("JSON.stringify(window.hayaiReader.takeSelectionAnchor())") { encoded ->
+            val payload = runCatching { json.decodeFromString<String>(encoded) }.getOrNull() ?: return@evaluateJavascript
+            val capture = runCatching { json.decodeFromString<SelectionCapture>(payload) }.getOrNull() ?: return@evaluateJavascript
+            action(capture)
         }
     }
 
@@ -790,6 +1025,9 @@ class NovelReaderActivity :
 
         @JavascriptInterface
         fun onReady(progress: Int) = runOnUiThread { onDocumentReady() }
+
+        @JavascriptInterface
+        fun onHighlightReport(applied: Int, orphaned: Int, overlaps: Int) = runOnUiThread { if (orphaned > 0 || overlaps > 0) toast("Highlights restored: $applied. Stale: $orphaned. Overlaps skipped: $overlaps") }
     }
 
     @Serializable
@@ -797,6 +1035,12 @@ class NovelReaderActivity :
         val index: Int,
         val text: String,
     )
+
+    @Serializable
+    private data class SelectionCapture(val documentText: String, val selectedText: String, val prefix: String, val suffix: String, val occurrence: Int)
+
+    @Serializable
+    private data class HighlightRender(val id: String, val exact: String, val prefix: String, val suffix: String, val occurrence: Int, val color: String)
 
     private data class RenderedNovelDocument(
         val html: String,
@@ -807,6 +1051,7 @@ class NovelReaderActivity :
         private const val EXTRA_MANGA_ID = "hayai.manga_id"
         private const val EXTRA_CHAPTER_ID = "hayai.chapter_id"
         private const val JS_INTERFACE = "HayaiReader"
+        private const val DEFAULT_HIGHLIGHT_COLOR = 0xFFFFEB3B.toInt()
 
         fun newIntent(
             context: Context,

@@ -1,6 +1,13 @@
 package dev.ahmedmohamed.hayai.backup
 
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightAnchor
+import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightBackup
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelChapterSelectors
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelContentSelectors
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceDefinition
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelDetailsSelectors
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelListSelectors
 import kotlinx.serialization.protobuf.ProtoBuf
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -46,6 +53,22 @@ class HayaiBackupDataTest {
                             titles = listOf(HayaiBackupSourceMetadataTitle("Alternative title", 1)),
                         ),
                     ),
+                novelHighlights =
+                    listOf(
+                        NovelHighlightBackup(
+                            id = "highlight-id",
+                            sourceId = 7,
+                            mangaUrl = "/novel",
+                            chapterUrl = "/chapter",
+                            color = 0xFFFFEB3B.toInt(),
+                            note = "Important",
+                            anchor = NovelHighlightAnchor("selected text", "before", "after", 0, "0".repeat(64)),
+                            createdAt = 10,
+                            updatedAt = 20,
+                        ),
+                    ),
+                novelCustomSources = listOf(customSource()),
+                novelApkRepositories = listOf("https://extensions.example/index.min.json"),
             )
 
         val encoded = ProtoBuf.encodeToByteArray(HayaiBackupData.serializer(), data)
@@ -67,6 +90,48 @@ class HayaiBackupDataTest {
         assertTrue(errors.any { it.contains("version") })
         assertTrue(errors.any { it.contains("quote") })
         assertTrue(errors.any { it.contains("statistic") })
+    }
+
+    @Test
+    fun `validation rejects conflicting novel side data before writes`() {
+        val highlight =
+            NovelHighlightBackup(
+                id = "same-highlight",
+                sourceId = 7,
+                mangaUrl = "/novel",
+                chapterUrl = "/chapter",
+                color = 1,
+                note = null,
+                anchor = NovelHighlightAnchor("selected text", "before", "after", 0, "0".repeat(64)),
+                createdAt = 10,
+                updatedAt = 20,
+            )
+        val data =
+            HayaiBackupData(
+                novelHighlights = listOf(highlight, highlight.copy(note = "different")),
+                novelCustomSources = listOf(customSource(), customSource().copy(name = "Different")),
+                novelApkRepositories =
+                    listOf(
+                        "https://extensions.example/index.min.json",
+                        "https://extensions.example/index.min.json",
+                    ),
+            )
+
+        val errors = HayaiBackupLimits.validate(data)
+
+        assertTrue(errors.any { it.contains("Duplicate novel highlight") })
+        assertTrue(errors.any { it.contains("Duplicate visual novel source") })
+        assertTrue(errors.any { it.contains("repository list") })
+    }
+
+    @Test
+    fun `validation rejects unsafe novel repository URLs`() {
+        val errors =
+            HayaiBackupLimits.validate(
+                HayaiBackupData(novelApkRepositories = listOf("https://reader:secret@example.org/index.json")),
+            )
+
+        assertTrue(errors.any { it.contains("Invalid novel APK repository") })
     }
 
     @Test
@@ -197,4 +262,18 @@ class HayaiBackupDataTest {
         assertTrue(first != HayaiQuoteRestoreIdentity.remappedId(quote, mangaId = 43, attempt = 0))
         assertTrue(first != HayaiQuoteRestoreIdentity.remappedId(quote, mangaId = 42, attempt = 1))
     }
+
+    private fun customSource() =
+        NovelCustomSourceDefinition(
+            id = "example-source",
+            name = "Example novels",
+            language = "en",
+            baseUrl = "https://novels.example",
+            popularPath = "/popular?page={page}",
+            searchPath = "/search?q={query}&page={page}",
+            list = NovelListSelectors("article", "h2", "a"),
+            details = NovelDetailsSelectors("h1"),
+            chapters = NovelChapterSelectors(".chapter", ".title", "a"),
+            content = NovelContentSelectors("article"),
+        )
 }
