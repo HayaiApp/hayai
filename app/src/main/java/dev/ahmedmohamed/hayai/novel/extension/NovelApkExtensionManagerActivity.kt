@@ -37,7 +37,7 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
                 addView(
                     Button(context).apply {
                         text = "Refresh"
-                        setOnClickListener { run { manager.refresh() } }
+                        setOnClickListener { launchAction { manager.refresh() } }
                     },
                 )
                 addView(
@@ -62,7 +62,7 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
             },
         )
         lifecycleScope.launch { manager.catalog.collect(::render) }
-        run { manager.refresh() }
+        launchAction { manager.refresh() }
     }
     private fun render(state: NovelApkExtensionCatalog) {
         status.text = state.error ?: if (state.refreshing) "Refreshing…" else "${state.installed.size} installed, ${state.updates.size} updates"
@@ -146,7 +146,7 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun run(block: suspend () -> Unit) {
+    private fun launchAction(block: suspend () -> Unit) {
         lifecycleScope.launch {
             runCatching { block() }.onFailure { status.text = it.message }
         }

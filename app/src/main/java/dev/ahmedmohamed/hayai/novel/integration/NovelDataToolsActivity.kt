@@ -41,6 +41,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.net.URI
 import java.security.MessageDigest
+import kotlin.coroutines.coroutineContext
 
 class NovelDataToolsActivity : AppCompatActivity() {
     private val database by lazy { Injekt.get<DatabaseHelper>() }
