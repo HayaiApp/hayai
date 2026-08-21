@@ -58,6 +58,15 @@ internal class NovelListApi(
         payload["exp"]?.jsonPrimitive?.longOrNull?.let { expiry ->
             if (expiry <= nowEpochSeconds()) throw NovelTrackerFailure.InvalidCredentials("NovelList access token has expired")
         }
+        val request =
+            Request.Builder()
+                .url("$apiBaseUrl/api/users/current")
+                .get()
+                .authenticatedHeaders(secret)
+                .build()
+        if (parse(http.execute(request).body, "NovelList authenticated user") !is JsonObject) {
+            throw NovelTrackerFailure.InvalidResponse("NovelList authenticated user returned an invalid response")
+        }
     }
 
     override suspend fun search(query: String): List<NovelTrackerSearchItem> {
@@ -148,14 +157,14 @@ internal class NovelListApi(
             .header("Origin", websiteBaseUrl)
             .header("Referer", "$websiteBaseUrl/")
 
-    private fun Request.Builder.authenticatedHeaders(): Request.Builder =
-        publicHeaders().header("Authorization", "Bearer ${requireSafeCredential(token(), "NovelList access token")}")
+    private fun Request.Builder.authenticatedHeaders(secret: String = token()): Request.Builder =
+        publicHeaders().header("Authorization", "Bearer ${requireSafeCredential(secret, "NovelList access token")}")
 
     private fun parse(body: String, label: String): JsonElement =
         try {
             json.parseToJsonElement(body)
-        } catch (error: Exception) {
-            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON", error)
+        } catch (_: Exception) {
+            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON")
         }
 
     private fun JsonElement.asObject(label: String): JsonObject =

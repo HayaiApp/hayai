@@ -59,7 +59,7 @@ internal sealed class NovelTrackerFailure(message: String, cause: Throwable? = n
             ?: "The tracker rate limit was reached. Try again later.",
     )
     class ResponseTooLarge(val maximumBytes: Long) : NovelTrackerFailure("The tracker returned more than $maximumBytes bytes")
-    class InvalidResponse(message: String, cause: Throwable? = null) : NovelTrackerFailure(message, cause)
+    class InvalidResponse(message: String) : NovelTrackerFailure(message)
     class Remote(val statusCode: Int, message: String) : NovelTrackerFailure(message)
     class Network(cause: Throwable) : NovelTrackerFailure("The tracker could not be reached", cause)
 }

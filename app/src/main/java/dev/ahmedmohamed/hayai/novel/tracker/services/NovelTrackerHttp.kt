@@ -29,6 +29,9 @@ internal class NovelTrackerHttp(
                 401, 403 -> throw NovelTrackerFailure.SessionExpired()
                 429 -> throw NovelTrackerFailure.RateLimited(it.header("Retry-After")?.toLongOrNull())
             }
+            if (!it.isSuccessful) {
+                throw NovelTrackerFailure.Remote(it.code, "The tracker returned HTTP ${it.code}")
+            }
             val body =
                 try {
                     val source = it.body.source()
@@ -41,10 +44,6 @@ internal class NovelTrackerHttp(
                     throw error
                 } catch (error: IOException) {
                     throw NovelTrackerFailure.Network(error)
-                }
-            if (!it.isSuccessful) {
-                val safeMessage = body.lineSequence().firstOrNull()?.take(160).orEmpty()
-                throw NovelTrackerFailure.Remote(it.code, safeMessage.ifBlank { "The tracker returned HTTP ${it.code}" })
             }
             return NovelTrackerHttpResponse(body, it.request.url.toString())
         }

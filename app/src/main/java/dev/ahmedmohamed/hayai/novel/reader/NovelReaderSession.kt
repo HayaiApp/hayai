@@ -10,6 +10,8 @@ import dev.ahmedmohamed.hayai.novel.source.NovelSource
 import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatStore
 import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatistics
 import dev.ahmedmohamed.hayai.novel.statistics.NovelStatisticsResolver
+import dev.ahmedmohamed.hayai.novel.tracker.NovelChapterTrackSync
+import dev.ahmedmohamed.hayai.novel.tracker.syncIfRead
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.History
@@ -31,6 +33,7 @@ internal class NovelReaderSession(
     private val sourceManager: SourceManager,
     private val downloadStore: NovelDownloadStore,
     private val network: NetworkHelper,
+    private val chapterTrackSync: NovelChapterTrackSync = NovelChapterTrackSync.None,
 ) : NovelAssetProvider {
     private val chapterStatStore = NovelChapterStatStore(database)
     lateinit var manga: Manga
@@ -91,10 +94,11 @@ internal class NovelReaderSession(
         return loadCurrent()
     }
 
-    fun saveProgress(
+    suspend fun saveProgress(
         chapter: Chapter,
         progress: Int,
         markReadAt: Int,
+        syncTracking: Boolean = true,
     ) {
         NovelProgress.apply(chapter, progress, markReadAt)
         database.updateChapterProgress(chapter).executeAsBlocking()
@@ -104,6 +108,11 @@ internal class NovelReaderSession(
                     History.create(chapter).apply { last_read = System.currentTimeMillis() },
                 ).executeAsBlocking()
         }
+        if (syncTracking) syncTracking(chapter)
+    }
+
+    suspend fun syncTracking(chapter: Chapter) {
+        chapterTrackSync.syncIfRead(requireNotNull(manga.id), chapter)
     }
 
     suspend fun saveOffline(chapter: LoadedNovelChapter): NovelDownloadResult =

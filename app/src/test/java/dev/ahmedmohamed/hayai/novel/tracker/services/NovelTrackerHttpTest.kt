@@ -7,6 +7,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
@@ -50,5 +51,18 @@ class NovelTrackerHttpTest {
             }
         assertEquals(42L, error.retryAfterSeconds)
     }
-}
 
+    @Test
+    fun `remote error body cannot leak reflected credentials`() {
+        val secret = "auth_session=do-not-report"
+        server.enqueue(MockResponse().setResponseCode(500).setBody("failed request with $secret"))
+        val http = NovelTrackerHttp(OkHttpClient())
+
+        val error =
+            assertThrows(NovelTrackerFailure.Remote::class.java) {
+                runBlocking { http.execute(Request.Builder().url(server.url("/error")).header("Cookie", secret).build()) }
+            }
+
+        assertFalse(error.message.orEmpty().contains(secret))
+    }
+}
