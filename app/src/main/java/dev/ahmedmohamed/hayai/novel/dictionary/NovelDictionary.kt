@@ -5,14 +5,25 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
-enum class NovelDictionaryProvider(val packageName: String?, val uri: (String) -> Uri) {
-    SYSTEM(null, { Uri.EMPTY }),
-    AARD2("itkach.aard2", { Uri.parse("aard2://lookup/${Uri.encode(it)}") }),
-    COLOR_DICT("com.socialnmobile.colordict", { Uri.parse("colordict://lookup/${Uri.encode(it)}") }),
-    LIVIO("livio.pack.lang.en_US", { Uri.parse("dictionary://lookup/${Uri.encode(it)}") }),
-    WEB_GOOGLE(null, { Uri.parse("https://www.google.com/search?q=${Uri.encode("define $it")}") }),
-    WEB_WIKTIONARY(null, { Uri.parse("https://en.wiktionary.org/wiki/${Uri.encode(it.replace(' ', '_'))}") }),
+private fun encodeDictionaryQuery(value: String): String =
+    URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
+
+enum class NovelDictionaryProvider(val packageName: String?, private val urlFactory: (String) -> String) {
+    SYSTEM(null, { "" }),
+    AARD2("itkach.aard2", { "aard2://lookup/${encodeDictionaryQuery(it)}" }),
+    COLOR_DICT("com.socialnmobile.colordict", { "colordict://lookup/${encodeDictionaryQuery(it)}" }),
+    LIVIO("livio.pack.lang.en_US", { "dictionary://lookup/${encodeDictionaryQuery(it)}" }),
+    WEB_GOOGLE(null, { "https://www.google.com/search?q=${encodeDictionaryQuery("define $it")}" }),
+    WEB_WIKTIONARY(null, { "https://en.wiktionary.org/wiki/${encodeDictionaryQuery(it.replace(' ', '_'))}" }),
+    ;
+
+    fun url(query: String): String = urlFactory(query)
+
+    fun uri(query: String): Uri = if (this == SYSTEM) Uri.EMPTY else Uri.parse(url(query))
+
 }
 
 data class NovelDictionarySettings(

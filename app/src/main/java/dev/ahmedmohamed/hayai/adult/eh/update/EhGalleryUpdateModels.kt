@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.adult.eh.update
 
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
+import kotlinx.serialization.Serializable
 
 data class EhGalleryUpdatePolicy(
     val intervalHours: Int = 24,
@@ -82,6 +83,7 @@ data class EhGalleryUpdateResult(
     val failure: String? = null,
 )
 
+@Serializable
 data class EhGalleryUpdaterStats(
     val startedAt: Long,
     val finishedAt: Long,

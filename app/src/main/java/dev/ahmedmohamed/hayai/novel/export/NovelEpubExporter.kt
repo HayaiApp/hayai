@@ -150,6 +150,12 @@ class NovelEpubExporter {
             targetByUrl[canonicalUrl(reference, chapter.sourceUrl)]
         }
         val rewrittenDocument = Jsoup.parseBodyFragment(rewrittenResources, chapter.sourceUrl.orEmpty())
+        rewrittenDocument.outputSettings(
+            Document.OutputSettings()
+                .syntax(Document.OutputSettings.Syntax.xml)
+                .escapeMode(Entities.EscapeMode.xhtml)
+                .prettyPrint(false),
+        )
         rewrittenDocument.select("a[href]").forEach { link ->
             val raw = link.attr("href")
             if (raw.isNotBlank() && !raw.startsWith('#')) {
