@@ -14,6 +14,10 @@ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
 import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsRemote
 import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
 import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUConfigHttpRemote
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesHttpRemote
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesRemote
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncService
+import dev.ahmedmohamed.hayai.adult.eh.favorites.J2kEhFavoritesLocal
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
@@ -75,6 +79,9 @@ class AppModule(
         addSingletonFactory { EhHttpGateway(get<NetworkHelper>().client, get()) }
         addSingletonFactory<EhRemoteSettingsRemote> { EhUConfigHttpRemote(get<NetworkHelper>().client) }
         addSingletonFactory { EhRemoteSettingsUploader(get(), get(), get()) }
+        addSingletonFactory<EhFavoritesRemote> { EhFavoritesHttpRemote(get<NetworkHelper>().client, get()) }
+        addSingletonFactory { J2kEhFavoritesLocal(get(), get(), get()) }
+        addSingletonFactory { EhFavoritesSyncService(get(), get(), get(), get()) }
         addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
         addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
         addSingletonFactory { SourceManager(app, get(), get(), get()) }
