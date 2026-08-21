@@ -20,6 +20,15 @@ data class EhGalleryUpdateState(
     val notFoundAt: Long? = null,
 ) {
     val aged: Boolean get() = agedAt != null
+
+    fun isEligible(now: Long, forceRefresh: Boolean = false): Boolean {
+        if (aged) return false
+        if (forceRefresh) return true
+        if (checkedAt <= 0) return true
+        if (now < checkedAt) return false
+        val interval = if (notFoundAt != null) NOT_FOUND_RECHECK_INTERVAL_MILLIS else MIN_CHECK_INTERVAL_MILLIS
+        return now - checkedAt >= interval
+    }
 }
 
 data class EhGalleryUpdateCandidate(
@@ -102,3 +111,6 @@ data class EhGalleryUpdaterStats(
 internal fun EhGalleryUpdateCandidate.site(): EhSite =
     EhSite.entries.firstOrNull { it.sourceId == sourceId }
         ?: error("Unsupported E-Hentai source $sourceId")
+
+internal const val MIN_CHECK_INTERVAL_MILLIS = 24L * 60 * 60 * 1_000
+internal const val NOT_FOUND_RECHECK_INTERVAL_MILLIS = 7L * 24 * 60 * 60 * 1_000
