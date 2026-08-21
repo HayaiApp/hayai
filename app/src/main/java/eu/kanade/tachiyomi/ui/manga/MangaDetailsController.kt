@@ -50,12 +50,14 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
 import com.bluelinelabs.conductor.ControllerChangeType
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
 import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
-import dev.ahmedmohamed.hayai.adult.eh.ui.EhDetailsPreviewLoader
+import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.SelectableAdapter
@@ -224,12 +226,13 @@ class MangaDetailsController :
     private var chapterPopupMenu: Pair<Int, PopupMenu>? = null
     private var isPushing = true
     private val novelIntegration: NovelJ2kIntegration by injectLazy()
-    private val ehDetailsPreviewLoader: EhDetailsPreviewLoader by injectLazy()
+    private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
     private val novelOfflineManager by lazy {
         NovelOfflineManager(activity!!, Injekt.get(), Injekt.get(), Injekt.get<NetworkHelper>())
     }
     private var novelPresentationJob: Job? = null
     private var sourceDetailsFeaturesJob: Job? = null
+    private var sourceDetailsPreviewPage: SourceRenderedPreviewPage? = null
 
     // Prevents the favorite button's drag-to-open popup from firing underneath
     // the categories sheet when a long press opens it mid-gesture
@@ -472,6 +475,8 @@ class MangaDetailsController :
     override fun onDestroyView(view: View) {
         novelPresentationJob?.cancel()
         sourceDetailsFeaturesJob?.cancel()
+        sourceDetailsPreviewPage?.close()
+        sourceDetailsPreviewPage = null
         novelPresentationJob = null
         snack?.dismiss()
         adapter = null
@@ -1420,33 +1425,51 @@ class MangaDetailsController :
     override fun bindSourceDetailsFeatures(container: LinearLayout) {
         val manga = presenter.manga
         val featureRoot = container.parent?.parent as? View ?: return
-        if (!ehDetailsPreviewLoader.owns(manga)) {
+        if (!sourceDetailsPreviewRegistry.owns(manga)) {
             sourceDetailsFeaturesJob?.cancel()
             container.removeAllViews()
+            sourceDetailsPreviewPage?.close()
+            sourceDetailsPreviewPage = null
             container.tag = null
             featureRoot.visibility = View.GONE
             return
         }
-        val identity = "${manga.source}:${manga.url}"
+        loadSourceDetailsPreview(container, featureRoot, manga, page = 1)
+    }
+
+    private fun loadSourceDetailsPreview(
+        container: LinearLayout,
+        featureRoot: View,
+        manga: Manga,
+        page: Int,
+    ) {
+        val identity = "${manga.source}:${manga.url}:$page"
         if (container.tag == identity) return
         container.tag = identity
         container.removeAllViews()
+        sourceDetailsPreviewPage?.close()
+        sourceDetailsPreviewPage = null
         featureRoot.visibility = View.GONE
         sourceDetailsFeaturesJob?.cancel()
         sourceDetailsFeaturesJob = viewScope.launchIO {
-            val result = runCatching { ehDetailsPreviewLoader.load(manga) }
+            val result = runCatching { sourceDetailsPreviewRegistry.load(manga, page) }
             withUIContext {
-                if (container.tag != identity) return@withUIContext
-                val previews = result.getOrDefault(emptyList())
+                val loaded = result.getOrNull()
+                if (container.tag != identity) {
+                    loaded?.close()
+                    return@withUIContext
+                }
                 container.removeAllViews()
+                sourceDetailsPreviewPage?.close()
+                sourceDetailsPreviewPage = loaded
                 val density = container.resources.displayMetrics.density
-                previews.forEach { rendered ->
+                loaded?.previews.orEmpty().forEach { rendered ->
                     val image =
                         ImageView(container.context).apply {
                             scaleType = ImageView.ScaleType.CENTER_CROP
-                            contentDescription = "Gallery page ${rendered.preview.index}"
+                            contentDescription = "Gallery page ${rendered.index}"
                             setImageBitmap(rendered.bitmap)
-                            setOnClickListener { openEhPreview(rendered.preview.pageUrl) }
+                            rendered.pageUrl?.let { pageUrl -> setOnClickListener { openSourcePreview(pageUrl) } }
                         }
                     container.addView(
                         image,
@@ -1455,12 +1478,32 @@ class MangaDetailsController :
                         },
                     )
                 }
-                featureRoot.visibility = if (previews.isEmpty()) View.GONE else View.VISIBLE
+                if (loaded != null && (loaded.page > 1 || loaded.hasNextPage)) {
+                    container.addView(
+                        LinearLayout(container.context).apply {
+                            orientation = LinearLayout.VERTICAL
+                            if (loaded.page > 1) {
+                                addView(MaterialButton(context).apply {
+                                    text = "Previous previews"
+                                    setOnClickListener { loadSourceDetailsPreview(container, featureRoot, manga, loaded.page - 1) }
+                                })
+                            }
+                            if (loaded.hasNextPage) {
+                                addView(MaterialButton(context).apply {
+                                    text = "Next previews"
+                                    setOnClickListener { loadSourceDetailsPreview(container, featureRoot, manga, loaded.page + 1) }
+                                })
+                            }
+                        },
+                    )
+                }
+                featureRoot.visibility =
+                    if (loaded != null && (loaded.previews.isNotEmpty() || loaded.page > 1)) View.VISIBLE else View.GONE
             }
         }
     }
 
-    private fun openEhPreview(pageUrl: String) {
+    private fun openSourcePreview(pageUrl: String) {
         val activity = activity ?: return
         startActivity(
             WebViewActivity.newIntent(

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hayai_enhanced_batch_title">Batch add galleries</string>
+    <string name="hayai_enhanced_batch_instructions">Paste one supported gallery URL per line. Duplicate galleries are skipped. Each successful gallery is committed to the library atomically.</string>
+    <string name="hayai_enhanced_batch_hint">https://nhentai.net/g/123/</string>
+    <string name="hayai_enhanced_batch_start">Add to library</string>
+    <string name="hayai_enhanced_batch_cancel">Cancel</string>
+    <string name="hayai_enhanced_batch_progress">%1$d of %2$d processed</string>
+    <string name="hayai_enhanced_batch_loading">Loading %1$s</string>
+    <string name="hayai_enhanced_batch_added">Added %1$s from %2$s</string>
+    <string name="hayai_enhanced_batch_present">Already in library: %1$s</string>
+    <string name="hayai_enhanced_batch_duplicate">Skipped duplicate: %1$s</string>
+    <string name="hayai_enhanced_batch_failed">Failed %1$s. %2$s</string>
+    <string name="hayai_enhanced_batch_summary">Added %1$d. Already present %2$d. Duplicates %3$d. Failed %4$d.</string>
+    <string name="hayai_enhanced_batch_settings_title">Batch add supported galleries</string>
+    <string name="hayai_enhanced_batch_settings_summary">Import multiple 8Muses, HBrowse, NHentai, or Pururin gallery links into the J2K library.</string>
+</resources>

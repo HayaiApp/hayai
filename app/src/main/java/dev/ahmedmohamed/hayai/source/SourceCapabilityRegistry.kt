@@ -90,7 +90,6 @@ object SourceCapabilityRegistry {
                     adultMetadata + SourceCapability.BatchAdd + SourceCapability.NonHentaiGenreOverride
                 SourceFamily.Lanraragi ->
                     setOf(
-                        SourceCapability.BatchAdd,
                         SourceCapability.CustomDescription,
                         SourceCapability.InAppOpen,
                         SourceCapability.Metadata,

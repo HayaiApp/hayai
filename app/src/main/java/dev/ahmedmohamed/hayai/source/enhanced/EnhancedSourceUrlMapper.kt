@@ -4,6 +4,20 @@ import dev.ahmedmohamed.hayai.source.SourceFamily
 import java.net.URI
 
 object EnhancedSourceUrlMapper {
+    fun mapQuery(
+        definition: EnhancedSourceDefinition,
+        sourceBaseUrl: String,
+        input: String,
+    ): String? {
+        val query = input.trim()
+        if (definition.family == SourceFamily.Pururin) {
+            val id = query.removePrefix("id:").takeIf { it != query || query.all(Char::isDigit) }
+                ?.takeIf(::isNumericId)
+            if (id != null) return "/gallery/$id/-"
+        }
+        return query.takeIf { "://" in it }?.let { map(definition, sourceBaseUrl, it) }
+    }
+
     fun map(
         definition: EnhancedSourceDefinition,
         sourceBaseUrl: String,

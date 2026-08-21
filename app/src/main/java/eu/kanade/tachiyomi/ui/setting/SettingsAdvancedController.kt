@@ -18,6 +18,7 @@ import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
 import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.cache.ChapterCache
@@ -114,6 +115,18 @@ class SettingsAdvancedController : SettingsController() {
                     titleRes = R.string.hayai_eh_account
                     summaryRes = R.string.hayai_eh_account_summary
                     onClick { startActivity(Intent(context, EhSettingsActivity::class.java)) }
+                }
+
+                preference {
+                    titleRes = R.string.hayai_enhanced_batch_settings_title
+                    summaryRes = R.string.hayai_enhanced_batch_settings_summary
+                    onClick {
+                        if (hayaiPreferences.hentaiFeaturesEnabled.get()) {
+                            startActivity(EnhancedBatchAddActivity.newIntent(context))
+                        } else {
+                            context.toast(R.string.hayai_hentai_features_summary)
+                        }
+                    }
                 }
 
                 preference {
