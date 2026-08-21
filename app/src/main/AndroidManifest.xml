@@ -155,6 +155,10 @@
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
         <activity
+            android:name="dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
+        <activity
             android:name=".ui.webview.WebViewActivity"
             android:configChanges="uiMode|orientation|screenSize"/>
         <activity

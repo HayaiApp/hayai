@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.jsoup.Jsoup
+import java.time.Instant
 
 data class EnhancedDetails(
     val title: String? = null,
@@ -77,13 +78,22 @@ object EnhancedDetailsParser {
             row.child(1).select("a").map { "$namespace: ${it.text().trim()}" }
         }.distinct()
         val fieldText = fields.associate { it.child(0).text().trim().lowercase().removeSuffix(":") to it.child(1).text().trim() }
+        val pages = fieldText["pages"].orEmpty().substringBefore('(').trim().takeIf(String::isNotBlank)
+        val fileSize = fieldText["pages"].orEmpty().substringAfter('(', "").removeSuffix(")").trim().takeIf(String::isNotBlank)
+        val ratings = fields.singleOrNull {
+            it.child(0).text().trim().lowercase().removeSuffix(":") == "ratings"
+        }?.child(1)
+        val ratingCount = ratings?.selectFirst("[itemprop=ratingCount]")?.attr("content")?.takeIf(String::isNotBlank)
+        val ratingValue = ratings?.selectFirst("[itemprop=ratingValue]")?.attr("content")?.takeIf(String::isNotBlank)
         return EnhancedDetails(
             title = wrapper.selectFirst(".title h1")?.text()?.trim(),
             alternateTitle = wrapper.selectFirst(".alt-title")?.text()?.trim()?.takeIf(String::isNotBlank),
             description = description(
                 listOf(
-                    "Pages" to fieldText["pages"],
-                    "Ratings" to fieldText["ratings"],
+                    "Pages" to pages,
+                    "File size" to fileSize,
+                    "Rating" to ratingValue,
+                    "Rating count" to ratingCount,
                     "Uploader" to fieldText["uploader"],
                     "Tags" to tags.joinToString().takeIf(String::isNotBlank),
                 ),
@@ -107,9 +117,15 @@ object EnhancedDetailsParser {
             alternateTitle = titles?.string("japanese"),
             description = description(
                 listOf(
+                    "ID" to root.long("id")?.toString(),
+                    "Media ID" to root.string("media_id"),
+                    "Posted" to root.long("upload_date")?.let { Instant.ofEpochSecond(it).toString() },
                     "Pages" to root.long("num_pages")?.toString(),
                     "Favorites" to root.long("num_favorites")?.toString(),
                     "Scanlator" to root.string("scanlator"),
+                    "English title" to titles?.string("english"),
+                    "Japanese title" to titles?.string("japanese"),
+                    "Short title" to titles?.string("pretty"),
                     "Tags" to tags.joinToString().takeIf(String::isNotBlank),
                 ),
             ),
@@ -154,6 +170,7 @@ object EnhancedDetailsParser {
                     "Summary" to root.string("summary"),
                     "Pages" to root.long("pagecount")?.toString(),
                     "File" to root.string("filename"),
+                    "Archive type" to root.string("extension")?.uppercase(),
                     "Tags" to tags.joinToString().takeIf(String::isNotBlank),
                 ),
             ),

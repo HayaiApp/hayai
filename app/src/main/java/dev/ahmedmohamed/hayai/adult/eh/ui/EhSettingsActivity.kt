@@ -38,6 +38,10 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
 import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
 import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhSiteUploadResult
 import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUploadProgress
+import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
+import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdatePolicy
+import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateStateStore
+import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateWorker
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
@@ -52,7 +56,9 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private val network by injectLazy<NetworkHelper>()
     private val settingsUploader by injectLazy<EhRemoteSettingsUploader>()
     private val favoritesSync by injectLazy<EhFavoritesSyncService>()
+    private val ehPersistence by injectLazy<HayaiEhPersistenceStore>()
     private val verifier by lazy { EhSessionVerifier(network.client) }
+    private val galleryUpdateStore by lazy { EhGalleryUpdateStateStore(this, ehPersistence) }
 
     private lateinit var status: TextView
     private lateinit var recheck: MaterialButton
@@ -69,6 +75,8 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private lateinit var favoritesStatus: TextView
     private lateinit var conflictPolicy: MaterialButton
     private lateinit var categoryMappings: MaterialButton
+    private lateinit var galleryUpdateInterval: MaterialButton
+    private lateinit var galleryUpdateStats: TextView
     private val uploadResults = linkedMapOf<EhSite, EhSiteUploadResult>()
     private var retrySites = emptySet<EhSite>()
 
@@ -249,6 +257,46 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         content.addView(favoritesStatus, matchWidth())
         content.addView(button("Preview favorites sync", ::previewFavoritesSync))
         content.addView(button("Start or resume favorites sync", ::startFavoritesSync))
+
+        content.addView(sectionLabel("Gallery updater"))
+        content.addView(
+            TextView(this).apply {
+                text = "Periodically checks favorite E-Hentai galleries for replacement revisions. Chapter state, history, categories, favorites, and downloaded copies are preserved when revisions are consolidated."
+                alpha = 0.72f
+                setPadding(0, 0, 0, 8.dpToPx)
+            },
+            matchWidth(),
+        )
+        galleryUpdateInterval = button(galleryUpdateIntervalText(), ::chooseGalleryUpdateInterval)
+        content.addView(galleryUpdateInterval)
+        val updatePolicy = galleryUpdateStore.policy()
+        content.addView(
+            settingSwitch(
+                title = "Wi-Fi only",
+                summary = "Require an unmetered connection for gallery revision checks.",
+                checked = updatePolicy.wifiOnly,
+                onChanged = { updateGalleryPolicy(galleryUpdateStore.policy().copy(wifiOnly = it)) },
+            ),
+        )
+        content.addView(
+            settingSwitch(
+                title = "Only while charging",
+                summary = "Run periodic gallery revision checks only while the device is charging.",
+                checked = updatePolicy.requiresCharging,
+                onChanged = { updateGalleryPolicy(galleryUpdateStore.policy().copy(requiresCharging = it)) },
+            ),
+        )
+        galleryUpdateStats = TextView(this).apply { setPadding(0, 4.dpToPx, 0, 8.dpToPx) }
+        content.addView(galleryUpdateStats, matchWidth())
+        content.addView(button("Run gallery updater now") {
+            EhGalleryUpdateWorker.runNow(this, galleryUpdateStore.policy())
+            galleryUpdateStats.text = "Gallery updater queued. Progress appears in notifications."
+        })
+        content.addView(button("Cancel gallery updater") {
+            EhGalleryUpdateWorker.cancel(this)
+            galleryUpdateStats.text = "Gallery updater work was cancelled. Completed gallery changes remain saved."
+        })
+        renderGalleryUpdateStats()
 
         root.addView(
             ScrollView(this).apply { addView(content) },
@@ -633,6 +681,48 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         "remote" -> "prefer remote"
         "local" -> "prefer local"
         else -> "stop and review"
+    }
+
+    private fun chooseGalleryUpdateInterval() {
+        val values = intArrayOf(0, 12, 24, 48, 72, 168)
+        val labels = arrayOf("Disabled", "Every 12 hours", "Every day", "Every 2 days", "Every 3 days", "Every week")
+        val current = values.indexOf(galleryUpdateStore.policy().intervalHours).takeIf { it >= 0 } ?: 0
+        materialAlertDialog()
+            .setTitle("Gallery update interval")
+            .setSingleChoiceItems(labels, current) { dialog, index ->
+                updateGalleryPolicy(galleryUpdateStore.policy().copy(intervalHours = values[index]))
+                galleryUpdateInterval.text = galleryUpdateIntervalText()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun updateGalleryPolicy(policy: EhGalleryUpdatePolicy) {
+        EhGalleryUpdateWorker.schedule(this, policy)
+        galleryUpdateInterval.text = galleryUpdateIntervalText()
+    }
+
+    private fun galleryUpdateIntervalText(): String =
+        when (val hours = galleryUpdateStore.policy().intervalHours) {
+            0 -> "Gallery updater: disabled"
+            24 -> "Gallery updater: every day"
+            48 -> "Gallery updater: every 2 days"
+            72 -> "Gallery updater: every 3 days"
+            168 -> "Gallery updater: every week"
+            else -> "Gallery updater: every $hours hours"
+        }
+
+    private fun renderGalleryUpdateStats() {
+        val stats = galleryUpdateStore.stats()
+        galleryUpdateStats.text =
+            if (stats == null) {
+                "The gallery updater has not completed a run on this device."
+            } else {
+                "Last run checked ${stats.attempted} of ${stats.eligible} eligible galleries. " +
+                    "${stats.updated} updated, ${stats.newRevisions} new revisions, ${stats.aged} aged, " +
+                    "${stats.transientFailures} temporary failures, and ${stats.permanentFailures} permanent failures."
+            }
     }
 
     private fun button(
