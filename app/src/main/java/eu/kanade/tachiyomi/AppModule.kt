@@ -3,6 +3,9 @@ package eu.kanade.tachiyomi
 import android.app.Application
 import androidx.core.content.ContextCompat
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+import dev.ahmedmohamed.hayai.novel.extension.J2kNovelApkRepositoryRegistry
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManager
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
 import dev.ahmedmohamed.hayai.adult.eh.session.AndroidEhCookieStore
 import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieStore
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
@@ -44,6 +47,9 @@ import eu.kanade.tachiyomi.util.chapter.ChapterFilter
 import eu.kanade.tachiyomi.util.manga.MangaShortcutManager
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import uy.kohesive.injekt.api.InjektModule
 import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addSingleton
@@ -76,6 +82,14 @@ class AppModule(
 
         addSingletonFactory { ExtensionManager(app) }
         addSingletonFactory { NovelPluginManager(app, get(), get()) }
+        addSingletonFactory<NovelApkRepositoryRegistry> { J2kNovelApkRepositoryRegistry(app, get()) }
+        addSingletonFactory {
+            NovelApkExtensionManager(
+                get(),
+                get(),
+                CoroutineScope(SupervisorJob() + Dispatchers.IO),
+            )
+        }
         addSingletonFactory<EhCookieStore> { AndroidEhCookieStore() }
         addSingletonFactory { EhSessionStore(get(), get()) }
         addSingletonFactory { HayaiEhPersistenceStore(get()) }

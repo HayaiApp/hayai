@@ -56,6 +56,7 @@ import com.google.android.material.snackbar.Snackbar
 import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
+import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
 import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -1272,6 +1273,8 @@ class MangaDetailsController :
         menu.findItem(R.id.action_migrate)?.isVisible = !presenter.isLockedFromSearch &&
             !presenter.manga.isLocal() &&
             presenter.manga.favorite
+        menu.findItem(R.id.action_export_novel_epub)?.isVisible =
+            !presenter.isLockedFromSearch && novelIntegration.isNovel(presenter.manga)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -1279,6 +1282,15 @@ class MangaDetailsController :
             R.id.action_edit -> openEditMangaDialog()
             R.id.action_open_in_web_view -> openInWebView()
             R.id.action_refresh_tracking -> presenter.refreshTracking(true)
+            R.id.action_export_novel_epub -> {
+                val context = activity ?: return false
+                startActivity(
+                    Intent(context, NovelDataToolsActivity::class.java).putExtra(
+                        NovelDataToolsActivity.EXTRA_MANGA_ID,
+                        presenter.manga.id ?: return false,
+                    ),
+                )
+            }
             R.id.action_migrate ->
                 if (!isNotOnline()) {
                     PreMigrationController.navigateToMigration(

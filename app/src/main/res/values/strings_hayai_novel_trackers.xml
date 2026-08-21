@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hayai_tracker_novel_updates">NovelUpdates</string>
+    <string name="hayai_tracker_novel_list">NovelList</string>
+    <string name="hayai_tracker_ranobe_db">RanobeDB</string>
+    <string name="hayai_novel_tracker_services">Novel services</string>
+    <string name="hayai_novel_tracker_login_help">NovelUpdates uses the Cookie header from an authenticated browser session. NovelList uses its JWT access token. RanobeDB uses its auth_session cookie. Enter a display name in Username and paste the session value into Password. Hayai stores these values in private tracker preferences and never includes them in backups.</string>
+</resources>
