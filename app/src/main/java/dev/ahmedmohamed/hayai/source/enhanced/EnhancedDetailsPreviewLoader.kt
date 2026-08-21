@@ -31,8 +31,8 @@ class EnhancedDetailsPreviewLoader(
 
     override suspend fun load(
         manga: Manga,
-        page: Int = 1,
-        cacheControl: CacheControl? = null,
+        page: Int,
+        cacheControl: CacheControl?,
     ): SourceRenderedPreviewPage {
         require(page > 0)
         val source = sourceManager.get(manga.source) as? HayaiEnhancedHttpSource
