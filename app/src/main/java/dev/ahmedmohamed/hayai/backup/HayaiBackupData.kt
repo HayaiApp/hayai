@@ -13,9 +13,10 @@ data class HayaiBackupData(
     @ProtoNumber(6) val novelPlugins: List<HayaiBackupNovelPlugin> = emptyList(),
     @ProtoNumber(7) val ehGalleryAliases: List<HayaiBackupEhGalleryAlias> = emptyList(),
     @ProtoNumber(8) val sourceMetadata: List<HayaiBackupSourceMetadata> = emptyList(),
+    @ProtoNumber(9) val ehCategoryMappings: List<HayaiBackupEhCategoryMapping> = emptyList(),
 ) {
     companion object {
-        const val CURRENT_VERSION = 2
+        const val CURRENT_VERSION = 3
         const val MINIMUM_SUPPORTED_VERSION = 1
     }
 }
@@ -63,6 +64,13 @@ data class HayaiBackupEhGalleryAlias(
     @ProtoNumber(2) val canonicalToken: String,
     @ProtoNumber(3) val alternateGid: String,
     @ProtoNumber(4) val alternateToken: String,
+)
+
+@Serializable
+data class HayaiBackupEhCategoryMapping(
+    @ProtoNumber(1) val slot: Int,
+    @ProtoNumber(2) val remoteName: String,
+    @ProtoNumber(3) val localCategoryName: String,
 )
 
 @Serializable

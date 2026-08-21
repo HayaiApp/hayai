@@ -6,10 +6,166 @@ import com.pushtorefresh.storio.sqlite.queries.InsertQuery
 import com.pushtorefresh.storio.sqlite.queries.RawQuery
 import com.pushtorefresh.storio.sqlite.queries.UpdateQuery
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteCategoryMapping
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteConflict
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperation
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperationCodec
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteSlot
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesPlan
+import org.json.JSONObject
 
 class HayaiEhPersistenceStore(
     private val database: DatabaseHelper,
 ) {
+    fun categoryMappings(): List<EhFavoriteCategoryMapping> =
+        query("SELECT slot, category_id, remote_name FROM hayai_eh_category_map ORDER BY slot").use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(EhFavoriteCategoryMapping(EhFavoriteSlot(cursor.getInt(0)), cursor.getInt(1), cursor.getString(2)))
+            }
+        }
+
+    fun upsertCategoryMapping(mapping: EhFavoriteCategoryMapping) {
+        upsert(
+            table = "hayai_eh_category_map",
+            where = "slot = ?",
+            whereArgs = arrayOf(mapping.slot.value),
+            values = ContentValues(3).apply {
+                put("slot", mapping.slot.value)
+                put("category_id", mapping.categoryId)
+                put("remote_name", mapping.remoteName)
+            },
+        )
+    }
+
+    fun activeSyncRunId(): String? =
+        query("SELECT run_id FROM hayai_eh_sync_runs WHERE status = 'running' ORDER BY started_at LIMIT 1").use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+
+    fun runExpectedFingerprint(runId: String): String =
+        query("SELECT expected_fingerprint FROM hayai_eh_sync_runs WHERE run_id = ?", runId).use { cursor ->
+            check(cursor.moveToFirst()) { "Unknown E-Hentai sync run $runId" }
+            cursor.getString(0)
+        }
+
+    fun createSyncPlan(
+        runId: String,
+        mode: EhSyncMode,
+        plan: EhFavoritesPlan,
+        startedAt: Long = System.currentTimeMillis(),
+    ) {
+        database.inTransaction {
+            check(activeSyncRunId() == null) { "Another E-Hentai sync is already running" }
+            insert(
+                "hayai_eh_sync_runs",
+                ContentValues(7).apply {
+                    put("run_id", runId)
+                    put("mode", mode.storedValue)
+                    put("status", EhSyncRunStatus.Running.storedValue)
+                    put("started_at", startedAt)
+                    put("remote_fingerprint", plan.expectedRemoteFingerprint)
+                    put("expected_fingerprint", plan.expectedRemoteFingerprint)
+                },
+            )
+            plan.operations.forEach { operation ->
+                appendOperation(
+                    EhSyncJournalOperation(
+                        operationId = operation.operationId,
+                        runId = runId,
+                        sequence = operation.sequence,
+                        kind = EhFavoriteOperationCodec.kind(operation),
+                        gallery = operation.gallery,
+                        payloadJson = EhFavoriteOperationCodec.encode(operation),
+                        status = EhSyncOperationStatus.Pending,
+                        attempts = 0,
+                        lastError = null,
+                        createdAt = startedAt,
+                        updatedAt = startedAt,
+                    ),
+                )
+            }
+            plan.conflicts.forEach { conflict -> insertConflict(runId, conflict, startedAt) }
+        }
+    }
+
+    fun typedPendingOperations(runId: String): List<EhFavoriteOperation> =
+        pendingOperations(runId).map { EhFavoriteOperationCodec.decode(it.kind, it.payloadJson) }
+
+    fun unresolvedConflictMessages(runId: String): List<String> =
+        query("SELECT payload_json FROM hayai_eh_sync_conflicts WHERE run_id = ? AND resolution IS NULL ORDER BY created_at", runId).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(JSONObject(cursor.getString(0)).getString("message")) }
+        }
+
+    fun markAttemptStarted(operationId: String, updatedAt: Long = System.currentTimeMillis()) {
+        val updated = database.lowLevel().update(
+            UpdateQuery.builder().table("hayai_eh_sync_journal").where("operation_id = ? AND status != 'applied'").whereArgs(operationId).build(),
+            ContentValues(2).apply {
+                put("attempts", operationAttempts(operationId) + 1)
+                put("updated_at", updatedAt)
+            },
+        )
+        check(updated == 1) { "Unknown or completed sync operation $operationId" }
+    }
+
+    fun applyLocalOperation(
+        operationId: String,
+        mutation: () -> Unit,
+        updatedAt: Long = System.currentTimeMillis(),
+    ) {
+        database.inTransaction {
+            mutation()
+            val updated = database.lowLevel().update(
+                UpdateQuery.builder().table("hayai_eh_sync_journal").where("operation_id = ? AND status != 'applied'").whereArgs(operationId).build(),
+                ContentValues(3).apply {
+                    put("status", EhSyncOperationStatus.Applied.storedValue)
+                    put("last_error", null as String?)
+                    put("updated_at", updatedAt)
+                },
+            )
+            check(updated == 1) { "Unknown or completed sync operation $operationId" }
+        }
+    }
+
+    fun completeSyncWithSnapshot(
+        runId: String,
+        snapshot: Collection<EhFavoriteSnapshot>,
+        remoteFingerprint: String,
+        completedAt: Long = System.currentTimeMillis(),
+    ) {
+        database.inTransaction {
+            check(pendingOperations(runId).isEmpty()) { "Sync run still has unapplied operations" }
+            execute("DELETE FROM hayai_eh_favorites")
+            snapshot.forEach { favorite ->
+                insert("hayai_eh_favorites", ContentValues(4).apply {
+                    put("gid", favorite.gallery.gid)
+                    put("token", favorite.gallery.token)
+                    put("title", favorite.title)
+                    put("category", favorite.categorySlot)
+                })
+            }
+            finishRun(runId, EhSyncRunStatus.Complete, null, completedAt)
+            execute(
+                "UPDATE hayai_eh_sync_checkpoint SET generation = generation + 1, completed_at = ?, remote_fingerprint = ?, requires_full_reconcile = 0 WHERE singleton = 1",
+                completedAt,
+                remoteFingerprint,
+            )
+        }
+    }
+
+    private fun insertConflict(runId: String, conflict: EhFavoriteConflict, createdAt: Long) {
+        insert(
+            "hayai_eh_sync_conflicts",
+            ContentValues(8).apply {
+                put("conflict_id", conflict.id)
+                put("run_id", runId)
+                put("gid", conflict.gallery?.gid)
+                put("token", conflict.gallery?.token)
+                put("conflict_kind", conflict::class.java.simpleName)
+                put("payload_json", JSONObject().put("message", conflict.message).toString())
+                put("created_at", createdAt)
+            },
+        )
+    }
     fun metadata(identity: SourceMangaIdentity): SourceMetadata? =
         query(
             "SELECT uploader, extra, indexed_extra, extra_version FROM hayai_source_metadata WHERE source_id = ? AND manga_url = ?",
@@ -239,7 +395,6 @@ class HayaiEhPersistenceStore(
                     put("status", status.storedValue)
                     put("last_error", error)
                     put("updated_at", updatedAt)
-                    put("attempts", operationAttempts(operationId) + 1)
                 },
             )
         check(updated == 1) { "Unknown sync operation $operationId" }

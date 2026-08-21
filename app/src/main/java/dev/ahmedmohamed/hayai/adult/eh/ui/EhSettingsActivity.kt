@@ -21,6 +21,11 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhConflictPolicy
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperation
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteSlot
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesStatus
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncService
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhHentaiAtHome
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhImageQuality
@@ -46,6 +51,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private val ehPreferences by injectLazy<EhPreferences>()
     private val network by injectLazy<NetworkHelper>()
     private val settingsUploader by injectLazy<EhRemoteSettingsUploader>()
+    private val favoritesSync by injectLazy<EhFavoritesSyncService>()
     private val verifier by lazy { EhSessionVerifier(network.client) }
 
     private lateinit var status: TextView
@@ -60,6 +66,9 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private lateinit var remoteStatus: TextView
     private lateinit var uploadSettings: MaterialButton
     private lateinit var retryUpload: MaterialButton
+    private lateinit var favoritesStatus: TextView
+    private lateinit var conflictPolicy: MaterialButton
+    private lateinit var categoryMappings: MaterialButton
     private val uploadResults = linkedMapOf<EhSite, EhSiteUploadResult>()
     private var retrySites = emptySet<EhSite>()
 
@@ -88,6 +97,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 sessionStore.state.collect(::renderState)
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                favoritesSync.status.collect(::renderFavoritesStatus)
             }
         }
     }
@@ -201,6 +215,40 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             )
         }
         content.addView(watchedTags)
+
+        content.addView(sectionLabel("Favorites synchronization"))
+        content.addView(
+            settingSwitch(
+                title = "Remote to device only",
+                summary = "Never upload local favorite additions, moves, or removals.",
+                checked = ehPreferences.favoritesReadOnly.get(),
+                onChanged = ehPreferences.favoritesReadOnly::set,
+            ),
+        )
+        content.addView(
+            settingSwitch(
+                title = "Continue independent errors",
+                summary = "Continue unrelated galleries after an error, but never guess how to resolve a conflict.",
+                checked = ehPreferences.favoritesLenient.get(),
+                onChanged = ehPreferences.favoritesLenient::set,
+            ),
+        )
+        conflictPolicy = button(conflictPolicyText(), ::chooseConflictPolicy)
+        content.addView(conflictPolicy)
+        categoryMappings = button("Edit E-Hentai category mappings", ::editCategoryMapping)
+        content.addView(categoryMappings)
+        content.addView(
+            TextView(this).apply {
+                text = "Category moves preserve existing remote favorite notes. Hayai does not edit note contents. Unrelated J2K categories are preserved."
+                alpha = 0.72f
+                setPadding(0, 4.dpToPx, 0, 8.dpToPx)
+            },
+            matchWidth(),
+        )
+        favoritesStatus = TextView(this)
+        content.addView(favoritesStatus, matchWidth())
+        content.addView(button("Preview favorites sync", ::previewFavoritesSync))
+        content.addView(button("Start or resume favorites sync", ::startFavoritesSync))
 
         root.addView(
             ScrollView(this).apply { addView(content) },
@@ -506,6 +554,85 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             listOf(selection.original, selection.translated, selection.rewritten).count { it }
         }
         return if (count == 0) "Language filters: none" else "Language filters: $count enabled"
+    }
+
+    private fun chooseConflictPolicy() {
+        val values = listOf("stop", "remote", "local")
+        val labels = arrayOf("Stop and review", "Prefer remote", "Prefer local")
+        val current = values.indexOf(ehPreferences.favoritesConflictPolicy.get()).coerceAtLeast(0)
+        materialAlertDialog()
+            .setTitle("Favorites conflict policy")
+            .setSingleChoiceItems(labels, current) { dialog, index ->
+                ehPreferences.favoritesConflictPolicy.set(values[index])
+                conflictPolicy.text = conflictPolicyText()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun editCategoryMapping() {
+        val mappings = favoritesSync.categoryMappings()
+        if (mappings.isEmpty()) {
+            favoritesStatus.text = "Run Preview favorites sync once to create safe dedicated category mappings."
+            return
+        }
+        val labels = mappings.map { "Slot ${it.slot.value}: ${it.remoteName} → category ${it.categoryId}" }.toTypedArray()
+        materialAlertDialog()
+            .setTitle("Choose remote slot")
+            .setItems(labels) { _, index -> chooseMappedCategory(mappings[index].slot) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseMappedCategory(slot: EhFavoriteSlot) {
+        val categories = favoritesSync.availableCategories()
+        materialAlertDialog()
+            .setTitle("J2K category for slot ${slot.value}")
+            .setItems(categories.map { it.second }.toTypedArray()) { _, index ->
+                runCatching { favoritesSync.remapCategory(slot, categories[index].first) }
+                    .onSuccess { favoritesStatus.text = "Category mapping updated." }
+                    .onFailure { favoritesStatus.text = it.message ?: "Category mapping failed." }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun previewFavoritesSync() {
+        lifecycleScope.launch {
+            runCatching { favoritesSync.preview() }
+                .onSuccess { plan ->
+                    val remote = plan.operations.count { it is EhFavoriteOperation.SetRemote || it is EhFavoriteOperation.RemoveRemote }
+                    val local = plan.operations.size - remote
+                    val removals = plan.operations.count { it is EhFavoriteOperation.RemoveRemote || it is EhFavoriteOperation.RemoveLocal }
+                    favoritesStatus.text = "Preview: $remote remote changes, $local device changes, $removals removals, ${plan.conflicts.size} conflicts."
+                }
+                .onFailure { favoritesStatus.text = it.message ?: "Favorites preview failed." }
+        }
+    }
+
+    private fun startFavoritesSync() {
+        lifecycleScope.launch {
+            runCatching { favoritesSync.start() }
+                .onFailure { favoritesStatus.text = it.message ?: "Favorites sync failed." }
+        }
+    }
+
+    private fun renderFavoritesStatus(value: EhFavoritesStatus) {
+        favoritesStatus.text = when (value) {
+            EhFavoritesStatus.Idle -> "No favorites sync is running."
+            is EhFavoritesStatus.Planning -> value.message
+            is EhFavoritesStatus.NeedsReview -> "${value.conflicts.size} conflicts need review. Choose a conflict policy and start a new sync."
+            is EhFavoritesStatus.Running -> "${value.completed}/${value.total}: ${value.title ?: "Updating favorite"}"
+            is EhFavoritesStatus.Paused -> "Paused and resumable: ${value.reason}"
+            is EhFavoritesStatus.Complete -> if (value.failures.isEmpty()) "Favorites sync complete." else "Favorites sync complete with ${value.failures.size} errors."
+        }
+    }
+
+    private fun conflictPolicyText(): String = "Conflict policy: " + when (ehPreferences.favoritesConflictPolicy.get()) {
+        "remote" -> "prefer remote"
+        "local" -> "prefer local"
+        else -> "stop and review"
     }
 
     private fun button(

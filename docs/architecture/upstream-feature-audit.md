@@ -13,7 +13,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
 | Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
 | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; emulator login pending |
 | EH source settings, default filters, enhanced details toggle, and remote uconfig | Typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
-| EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
+| EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, watched-tags UI, and pending updater work | favorites sync implemented unverified; gallery updater audit |
 | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic manga-details feature seam | foundation verified; emulator details flow pending |
 | 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | URL import and detail foundation verified; source-specific parity audit |
 | Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | direct URL and description foundation; batch and relationship actions audit |

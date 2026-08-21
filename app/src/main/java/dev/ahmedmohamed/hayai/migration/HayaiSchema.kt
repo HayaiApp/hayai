@@ -6,7 +6,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONObject
 
 object HayaiSchema {
-    const val VERSION = 2
+    const val VERSION = 3
 
     fun ensure(db: SupportSQLiteDatabase) {
         db.execSQL(
@@ -117,6 +117,7 @@ object HayaiSchema {
             arrayOf(System.currentTimeMillis()),
         )
         migrateToVersion2(db)
+        migrateToVersion3(db)
     }
 
     private fun migrateToVersion2(db: SupportSQLiteDatabase) {
@@ -130,6 +131,49 @@ object HayaiSchema {
             backfillArchivedMetadata(db)
             db.execSQL(
                 "INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (2, ?)",
+                arrayOf(System.currentTimeMillis()),
+            )
+            if (ownsTransaction) db.setTransactionSuccessful()
+        } finally {
+            if (ownsTransaction) db.endTransaction()
+        }
+    }
+
+    private fun migrateToVersion3(db: SupportSQLiteDatabase) {
+        if (hasMigration(db, 3)) return
+        val ownsTransaction = !db.inTransaction()
+        if (ownsTransaction) db.beginTransaction()
+        try {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS hayai_eh_category_map(
+                    slot INTEGER NOT NULL PRIMARY KEY CHECK(slot BETWEEN 0 AND 9),
+                    category_id INTEGER NOT NULL UNIQUE,
+                    remote_name TEXT NOT NULL,
+                    FOREIGN KEY(category_id) REFERENCES categories(_id) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS hayai_eh_sync_conflicts(
+                    conflict_id TEXT NOT NULL PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    gid TEXT,
+                    token TEXT,
+                    conflict_kind TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    resolution TEXT,
+                    created_at INTEGER NOT NULL,
+                    FOREIGN KEY(run_id) REFERENCES hayai_eh_sync_runs(run_id) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS hayai_eh_sync_conflicts_run ON hayai_eh_sync_conflicts(run_id, resolution)")
+            ensureColumn(db, "hayai_eh_sync_runs", "remote_fingerprint", "TEXT")
+            ensureColumn(db, "hayai_eh_sync_runs", "expected_fingerprint", "TEXT")
+            db.execSQL(
+                "INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (3, ?)",
                 arrayOf(System.currentTimeMillis()),
             )
             if (ownsTransaction) db.setTransactionSuccessful()

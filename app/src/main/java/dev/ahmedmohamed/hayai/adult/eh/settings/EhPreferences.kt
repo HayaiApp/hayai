@@ -2,6 +2,9 @@ package dev.ahmedmohamed.hayai.adult.eh.settings
 
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhConflictPolicy
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncMode
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhSyncRequest
 import eu.kanade.tachiyomi.data.preference.Preference
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
 
@@ -17,6 +20,9 @@ class EhPreferences(
     val watchedListDefault: Preference<Boolean> = store.getBoolean("eh_watched_list_default_state", false)
     val enhancedView: Preference<Boolean> = store.getBoolean("enhanced_e_hentai_view", true)
     val showSettingsUploadWarning: Preference<Boolean> = store.getBoolean("eh_showSettingsUploadWarning2", true)
+    val favoritesReadOnly: Preference<Boolean> = store.getBoolean("eh_sync_read_only", false)
+    val favoritesLenient: Preference<Boolean> = store.getBoolean("eh_lenient_sync", false)
+    val favoritesConflictPolicy: Preference<String> = store.getString("hayai_eh_favorites_conflict_policy", "stop")
 
     private val settingsLanguages = store.getString("eh_settings_languages", DEFAULT_LANGUAGES)
     private val ehAppliedFingerprint = store.getString("hayai_eh_remote_settings_fingerprint_eh", "")
@@ -103,6 +109,17 @@ class EhPreferences(
     }
 
     fun hasPendingRemoteSettings(site: EhSite): Boolean = appliedFingerprint(site) != remoteSettings().fingerprint()
+
+    fun favoritesSyncRequest(): EhSyncRequest =
+        EhSyncRequest(
+            mode = if (favoritesReadOnly.get()) EhFavoritesSyncMode.RemoteOnly else EhFavoritesSyncMode.Bidirectional,
+            conflictPolicy = when (favoritesConflictPolicy.get()) {
+                "remote" -> EhConflictPolicy.PreferRemote
+                "local" -> EhConflictPolicy.PreferLocal
+                else -> EhConflictPolicy.StopForReview
+            },
+            lenient = favoritesLenient.get(),
+        )
 
     private fun defaultLanguages(): Map<EhLanguage, EhLanguageSelection> =
         EhLanguage.entries.associateWithTo(linkedMapOf()) { EhLanguageSelection() }
