@@ -69,7 +69,7 @@ data class NovelHighlightAnchor(
         private const val CONTEXT_LENGTH = 64
         private const val MAX_EXACT = 8_192
         private const val MIN_CONTEXT_SCORE = 8
-        private const val FUZZY_THRESHOLD = 0.84
+        private const val FUZZY_THRESHOLD = 0.80
         private const val MAX_DOCUMENT_CHARS = 4_000_000
         private const val MAX_FUZZY_CANDIDATES = 128
 
