@@ -213,7 +213,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio:${kotlinSerialization}")
 
     // JavaScript engine
-    implementation("com.github.zhanghai.quickjs-java:quickjs-android:547f5b1597")
     implementation("io.github.dokar3:quickjs-kt:1.0.0-alpha13")
 
     // Disk
