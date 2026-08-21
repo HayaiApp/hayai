@@ -1,0 +1,4 @@
+ts	phase	decision	why	evidence	result
+2026-08-21T20:00:00Z	frame	excluded MangaDex-specific parity but retained its existing delegated wrapper	the user explicitly removed MangaDex from this port	docs/architecture/upstream-feature-audit.md	open
+2026-08-21T20:01:00Z	workflow	write every requested production and test artifact before starting validation	the user requested code-first execution and the machine must not be hit by repeated builds	AGENTS.md; current task plan	open
+2026-08-21T20:02:00Z	architecture	keep enhanced sources, novel features, and the E-Hentai updater in disjoint Hayai-owned modules	the workstreams have separate data ownership and can be reviewed without changing protected J2K lifecycle files	app/src/main/java/dev/ahmedmohamed/hayai	open
