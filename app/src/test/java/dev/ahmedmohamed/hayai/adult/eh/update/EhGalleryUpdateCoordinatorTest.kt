@@ -40,6 +40,25 @@ class EhGalleryUpdateCoordinatorTest {
         assertFalse(run.shouldRetry)
     }
 
+    @Test
+    fun `not found state is retried weekly without becoming permanently aged`() {
+        val checkedAt = 1_000L
+        val state = EhGalleryUpdateState(checkedAt = checkedAt, notFoundAt = checkedAt)
+
+        assertFalse(state.aged)
+        assertFalse(state.isEligible(checkedAt + NOT_FOUND_RECHECK_INTERVAL_MILLIS - 1))
+        assertTrue(state.isEligible(checkedAt + 1, forceRefresh = true))
+        assertTrue(state.isEligible(checkedAt + NOT_FOUND_RECHECK_INTERVAL_MILLIS))
+    }
+
+    @Test
+    fun `genuinely old galleries remain excluded`() {
+        val state = EhGalleryUpdateState(checkedAt = 1_000L, agedAt = 1_000L)
+
+        assertTrue(state.aged)
+        assertFalse(state.isEligible(Long.MAX_VALUE))
+    }
+
     private fun candidate(id: Long) = EhGalleryUpdateCandidate(
         mangaId = id,
         sourceId = EhSite.EHentai.sourceId,
@@ -56,4 +75,3 @@ class EhGalleryUpdateCoordinatorTest {
         override suspend fun update(candidate: EhGalleryUpdateCandidate) = updateResult(candidate)
     }
 }
-

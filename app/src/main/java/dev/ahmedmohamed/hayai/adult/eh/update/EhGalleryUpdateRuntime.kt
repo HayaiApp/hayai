@@ -36,6 +36,7 @@ class EhGalleryUpdateRuntime(
     private val downloadManager: DownloadManager,
     private val renameJournal: EhDownloadRenameJournal,
     private val downloadTreeMerger: EhDownloadTreeMerger,
+    private val forceRefresh: Boolean = false,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : EhGalleryUpdateOperations {
     override suspend fun candidates(): List<EhGalleryUpdateCandidate> = withContext(Dispatchers.IO) {
@@ -47,7 +48,7 @@ class EhGalleryUpdateRuntime(
                 val id = manga.id ?: return@mapNotNull null
                 val identity = SourceMangaIdentity(manga.source, manga.url)
                 val state = stateStore.state(identity)
-                if (state.aged || now - state.checkedAt < MIN_CHECK_INTERVAL_MILLIS) return@mapNotNull null
+                if (!state.isEligible(now, forceRefresh)) return@mapNotNull null
                 EhGalleryUpdateCandidate(id, manga.source, manga.title, manga.url, state)
             }
             .sortedWith(compareBy({ it.state.checkedAt }, { it.mangaId }))
@@ -101,7 +102,9 @@ class EhGalleryUpdateRuntime(
             when (failure) {
                 is EhFailure.AuthenticationRequired -> EhGalleryUpdateResult(EhGalleryUpdateDisposition.AuthenticationSkipped, candidate.title)
                 is EhFailure.GalleryNotFound -> {
-                    stateStore.record(identity, EhGalleryUpdateState(now, now, now))
+                    // A remote 404 may be caused by a replaced gallery, an expired session, or
+                    // temporary edge state. Keep it out of the daily queue, but recheck weekly.
+                    stateStore.record(identity, EhGalleryUpdateState(checkedAt = now, notFoundAt = now))
                     EhGalleryUpdateResult(EhGalleryUpdateDisposition.NotFound, candidate.title)
                 }
                 is EhFailure.Network, is EhFailure.RateLimited ->
@@ -255,7 +258,6 @@ class EhGalleryUpdateRuntime(
     companion object {
         const val MAX_GALLERIES_PER_RUN = 50
         const val FAILURE_CUTOFF = 5
-        const val MIN_CHECK_INTERVAL_MILLIS = 24L * 60 * 60 * 1_000
         const val GALLERY_AGE_MILLIS = 365L * 24 * 60 * 60 * 1_000
         private val SUPPORTED_SOURCE_IDS = dev.ahmedmohamed.hayai.adult.eh.domain.EhSite.entries.map { it.sourceId }.toSet()
     }

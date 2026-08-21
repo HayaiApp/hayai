@@ -14,6 +14,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
 import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
@@ -55,6 +56,7 @@ class EhGalleryUpdateWorker(
                 downloadManager = Injekt.get<DownloadManager>(),
                 renameJournal = EhDownloadRenameJournal(applicationContext),
                 downloadTreeMerger = EhDownloadTreeMerger(DownloadProvider(applicationContext)),
+                forceRefresh = inputData.getBoolean(INPUT_FORCE_REFRESH, false),
             )
             val run = EhGalleryUpdateCoordinator(runtime).run { candidate, current, total ->
                 notifier.progress(id, candidate, current, total)
@@ -84,6 +86,7 @@ class EhGalleryUpdateWorker(
         const val MANUAL_WORK_NAME = "hayai.eh.gallery-update.manual"
         const val WORK_TAG = "hayai.eh.gallery-update"
         private const val MAX_TRANSIENT_RETRIES = 3
+        private const val INPUT_FORCE_REFRESH = "force_refresh"
 
         fun schedule(context: Context, policy: EhGalleryUpdatePolicy) {
             val persistence = Injekt.get<HayaiEhPersistenceStore>()
@@ -105,6 +108,7 @@ class EhGalleryUpdateWorker(
             val request = OneTimeWorkRequestBuilder<EhGalleryUpdateWorker>()
                 .setConstraints(resolved.constraints())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
+                .setInputData(workDataOf(INPUT_FORCE_REFRESH to true))
                 .addTag(WORK_TAG)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(MANUAL_WORK_NAME, ExistingWorkPolicy.KEEP, request)
