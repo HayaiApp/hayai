@@ -14,7 +14,7 @@
 -keep,allowoptimization class rx.** { public protected *; }
 -keep class org.jsoup.** { public protected *; }
 -keep,allowoptimization class com.google.gson.** { public protected *; }
--keep,allowoptimization class app.cash.quickjs.** { public protected *; }
+-keep,allowoptimization class com.dokar.quickjs.** { public protected *; }
 -keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
 -keep,allowoptimization class eu.davidea.flexibleadapter.** { public protected *; }
 -keep class io.requery.android.database.** { public protected *; }

@@ -13,6 +13,7 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/track/TrackManager.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
