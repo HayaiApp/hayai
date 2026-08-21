@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeListApi
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.util.system.launchIO
+import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.view.snack
 import eu.kanade.tachiyomi.widget.preference.TrackLoginDialog
@@ -110,6 +111,19 @@ class SettingsTrackingController :
                 infoPreference(R.string.tracking_info)
             }
             preferenceCategory {
+                titleRes = R.string.hayai_novel_tracker_services
+                trackPreference(trackManager.novelUpdates) {
+                    showCredentialLogin(trackManager.novelUpdates, "https://www.novelupdates.com/login/")
+                }
+                trackPreference(trackManager.novelList) {
+                    showCredentialLogin(trackManager.novelList, "https://www.novellist.co/login")
+                }
+                trackPreference(trackManager.ranobeDb) {
+                    showCredentialLogin(trackManager.ranobeDb, "https://ranobedb.org/login")
+                }
+                infoPreference(R.string.hayai_novel_tracker_login_help)
+            }
+            preferenceCategory {
                 titleRes = R.string.enhanced_services
                 val sourceManager = Injekt.get<SourceManager>()
                 val enhancedTrackers =
@@ -168,6 +182,21 @@ class SettingsTrackingController :
     private fun updatePreference(service: TrackService) {
         val pref = findPreference(trackPreferences.trackUsername(service).key()) as? TrackerPreference
         pref?.notifyChanged()
+    }
+
+    private fun showCredentialLogin(service: TrackService, loginUrl: String) {
+        val host = activity ?: return
+        host.materialAlertDialog()
+            .setTitle(service.nameRes())
+            .setItems(arrayOf("Open sign-in page", "Paste authenticated session")) { _, action ->
+                if (action == 0) {
+                    host.openInBrowser(loginUrl, service.getTrackerColor(), true)
+                } else {
+                    val dialog = TrackLoginDialog(service, R.string.username)
+                    dialog.targetController = this@SettingsTrackingController
+                    dialog.showDialog(router)
+                }
+            }.show()
     }
 
     override fun trackLoginDialogClosed(service: TrackService) {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import dev.ahmedmohamed.hayai.backup.HayaiBackupService
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
@@ -116,7 +117,13 @@ class BackupRestorer(
                 }
             }
             val novelPluginManager = Injekt.get<NovelPluginManager>()
-            val hayaiReport = HayaiBackupService(db, context, novelPluginManager).restore(backup.hayaiData)
+            val hayaiReport =
+                HayaiBackupService(
+                    db,
+                    context,
+                    novelPluginManager,
+                    Injekt.get<NovelApkRepositoryRegistry>(),
+                ).restore(backup.hayaiData)
             novelPluginManager.reloadLocalState()
             hayaiReport.errors.forEach { error -> errors.add(Date() to "Hayai data: $error") }
             restoreProgress += 1

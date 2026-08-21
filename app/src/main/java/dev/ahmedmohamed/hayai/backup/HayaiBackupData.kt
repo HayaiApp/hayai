@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.backup
 
+import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightBackup
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceDefinition
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
 
@@ -14,9 +16,12 @@ data class HayaiBackupData(
     @ProtoNumber(7) val ehGalleryAliases: List<HayaiBackupEhGalleryAlias> = emptyList(),
     @ProtoNumber(8) val sourceMetadata: List<HayaiBackupSourceMetadata> = emptyList(),
     @ProtoNumber(9) val ehCategoryMappings: List<HayaiBackupEhCategoryMapping> = emptyList(),
+    @ProtoNumber(10) val novelHighlights: List<NovelHighlightBackup> = emptyList(),
+    @ProtoNumber(11) val novelCustomSources: List<NovelCustomSourceDefinition> = emptyList(),
+    @ProtoNumber(12) val novelApkRepositories: List<String> = emptyList(),
 ) {
     companion object {
-        const val CURRENT_VERSION = 3
+        const val CURRENT_VERSION = 4
         const val MINIMUM_SUPPORTED_VERSION = 1
     }
 }

@@ -6,7 +6,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONObject
 
 object HayaiSchema {
-    const val VERSION = 3
+    const val VERSION = 4
 
     fun ensure(db: SupportSQLiteDatabase) {
         db.execSQL(
@@ -118,6 +118,7 @@ object HayaiSchema {
         )
         migrateToVersion2(db)
         migrateToVersion3(db)
+        migrateToVersion4(db)
     }
 
     private fun migrateToVersion2(db: SupportSQLiteDatabase) {
@@ -174,6 +175,54 @@ object HayaiSchema {
             ensureColumn(db, "hayai_eh_sync_runs", "expected_fingerprint", "TEXT")
             db.execSQL(
                 "INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (3, ?)",
+                arrayOf(System.currentTimeMillis()),
+            )
+            if (ownsTransaction) db.setTransactionSuccessful()
+        } finally {
+            if (ownsTransaction) db.endTransaction()
+        }
+    }
+
+    private fun migrateToVersion4(db: SupportSQLiteDatabase) {
+        if (hasMigration(db, 4)) return
+        val ownsTransaction = !db.inTransaction()
+        if (ownsTransaction) db.beginTransaction()
+        try {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS hayai_novel_highlights(
+                    highlight_id TEXT NOT NULL PRIMARY KEY,
+                    manga_id INTEGER NOT NULL,
+                    chapter_id INTEGER NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    manga_url TEXT NOT NULL,
+                    chapter_url TEXT NOT NULL,
+                    color INTEGER NOT NULL,
+                    note TEXT,
+                    anchor_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY(manga_id) REFERENCES mangas(_id) ON DELETE CASCADE,
+                    FOREIGN KEY(chapter_id) REFERENCES chapters(_id) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS hayai_novel_highlights_chapter_idx ON hayai_novel_highlights(chapter_id)")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS hayai_novel_highlights_stable_idx " +
+                    "ON hayai_novel_highlights(source_id, manga_url, chapter_url)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS hayai_novel_import_runs(
+                    plan_id TEXT NOT NULL PRIMARY KEY,
+                    status TEXT NOT NULL CHECK(status = 'complete'),
+                    completed_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (4, ?)",
                 arrayOf(System.currentTimeMillis()),
             )
             if (ownsTransaction) db.setTransactionSuccessful()

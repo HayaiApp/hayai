@@ -159,6 +159,22 @@
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
         <activity
+            android:name="dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
+        <activity
+            android:name="dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
+        <activity
+            android:name="dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
+        <activity
+            android:name="dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Tachiyomi" />
+        <activity
             android:name=".ui.webview.WebViewActivity"
             android:configChanges="uiMode|orientation|screenSize"/>
         <activity

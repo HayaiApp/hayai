@@ -4,13 +4,14 @@ import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.isNovelSource
 
 class NovelMigrationPolicy(
     private val database: DatabaseHelper,
     private val sourceManager: SourceManager,
 ) {
     fun contentKind(manga: Manga): ContentKind =
-        if (sourceManager.getOrStub(manga.source).isNovelSource) ContentKind.Novel else ContentKind.Manga
+        if (sourceManager.getOrStub(manga.source).isNovelSource()) ContentKind.Novel else ContentKind.Manga
 
     fun contentKind(mangaIds: Collection<Long>): ContentKind? {
         if (mangaIds.isEmpty()) return null
@@ -28,7 +29,7 @@ class NovelMigrationPolicy(
         sources: List<T>,
     ): List<T> {
         val kind = contentKind(mangaIds) ?: return sources
-        return sources.filter { source -> kind.accepts(source.isNovelSource) }
+        return sources.filter { source -> kind.accepts(source.isNovelSource()) }
     }
 
     fun <T : CatalogueSource> compatibleSources(
@@ -36,7 +37,7 @@ class NovelMigrationPolicy(
         sources: List<T>,
     ): List<T> {
         val kind = contentKind(manga)
-        return sources.filter { source -> kind.accepts(source.isNovelSource) }
+        return sources.filter { source -> kind.accepts(source.isNovelSource()) }
     }
 }
 

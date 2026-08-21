@@ -7,6 +7,7 @@ import dev.ahmedmohamed.hayai.source.enhanced.HayaiEnhancedHttpSource
 import dev.ahmedmohamed.hayai.source.SourceCapability
 import dev.ahmedmohamed.hayai.source.SourceCapabilityRegistry
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.isNovelSource
 
 enum class SourceBadge(
     val label: String,
@@ -24,7 +25,7 @@ object SourcePresentation {
             source is NovelPluginSource -> add(SourceBadge.JavaScript)
             source.id == LocalNovelSource.ID || EhSite.entries.any { it.sourceId == source.id } -> add(SourceBadge.Bundled)
         }
-        if (source.isNovelSource) add(SourceBadge.Novel)
+        if (source.isNovelSource()) add(SourceBadge.Novel)
         if (SourceCapability.Adult in SourceCapabilityRegistry.descriptor(source).capabilities) add(SourceBadge.Adult)
         if (source is HayaiEnhancedHttpSource) add(SourceBadge.Enhanced)
     }

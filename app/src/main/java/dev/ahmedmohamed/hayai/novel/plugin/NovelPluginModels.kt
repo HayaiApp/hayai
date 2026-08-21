@@ -16,6 +16,8 @@ data class NovelPluginDescriptor(
     val customCSS: String? = null,
     val customJS: String? = null,
     val sha256: String? = null,
+    val signingKey: String? = null,
+    val signature: String? = null,
 ) {
     fun validate(repositoryUrl: String): NovelPluginDescriptor {
         require(ID_PATTERN.matches(id)) { "Plugin ID must contain only letters, numbers, dots, underscores, or hyphens" }
@@ -27,6 +29,9 @@ data class NovelPluginDescriptor(
         if (site.isNotBlank()) requireContentUrl(site)
         if (iconUrl.isNotBlank()) resolvePluginUrl(repositoryUrl, iconUrl)
         sha256?.let { require(SHA256_PATTERN.matches(it)) { "Invalid plugin SHA-256" } }
+        require((signingKey == null) == (signature == null)) { "Plugin signing key and signature must be supplied together" }
+        signingKey?.let { require(decodeBase64(it).size in 32..128) { "Invalid Ed25519 public key" } }
+        signature?.let { require(decodeBase64(it).size == 64) { "Invalid Ed25519 signature" } }
         require((customCSS?.length ?: 0) <= 100_000) { "Plugin CSS is too large" }
         require((customJS?.length ?: 0) <= 100_000) { "Plugin custom JavaScript is too large" }
         return this
@@ -50,6 +55,7 @@ data class NovelPluginDescriptor(
         private val ID_PATTERN = Regex("[A-Za-z0-9._-]{1,128}")
         private val SHA256_PATTERN = Regex("[a-fA-F0-9]{64}")
         private val ISO_LANGUAGE = Regex("[a-z]{2,3}")
+        private fun decodeBase64(value: String): ByteArray = runCatching { java.util.Base64.getDecoder().decode(value) }.getOrElse { throw IllegalArgumentException("Invalid base64 signature metadata", it) }
         private val LANGUAGE_ALIASES =
             mapOf(
                 "english" to "en",
