@@ -51,17 +51,57 @@ internal data class NovelTrackerPatch(
     val finishedAt: Long? = null,
 )
 
-internal sealed class NovelTrackerFailure(message: String, cause: Throwable? = null) : Exception(message, cause) {
-    class InvalidCredentials(message: String = "The tracker credentials or session are invalid") : NovelTrackerFailure(message)
-    class SessionExpired : NovelTrackerFailure("The tracker session expired. Sign in again.")
-    class RateLimited(val retryAfterSeconds: Long?) : NovelTrackerFailure(
-        retryAfterSeconds?.let { "The tracker rate limit was reached. Try again in $it seconds." }
-            ?: "The tracker rate limit was reached. Try again later.",
-    )
-    class ResponseTooLarge(val maximumBytes: Long) : NovelTrackerFailure("The tracker returned more than $maximumBytes bytes")
-    class InvalidResponse(message: String) : NovelTrackerFailure(message)
-    class Remote(val statusCode: Int, message: String) : NovelTrackerFailure(message)
-    class Network(cause: Throwable) : NovelTrackerFailure("The tracker could not be reached", cause)
+internal enum class NovelTrackerCredential {
+    Username,
+    SessionToken,
+    NovelListAccessToken,
+    RanobeDbSessionCookie,
+    NovelUpdatesSessionCookies,
+}
+
+internal enum class NovelTrackerCredentialIssue {
+    Generic,
+    Required,
+    InvalidCharacters,
+    NovelListTokenRequired,
+    NovelListTokenMalformed,
+    NovelListTokenExpired,
+    RanobeDbAuthCookieRequired,
+    NovelUpdatesCookiesExpired,
+    NovelUpdatesCookieHeaderRequired,
+}
+
+internal enum class NovelTrackerResponseIssue {
+    TrackerLinkMissingRemoteId,
+    NovelListAuthenticatedUserInvalid,
+    NovelListInvalidJson,
+    NovelListExpectedObject,
+    NovelListEntryInvalidRemoteId,
+    NovelListUnknownReadingStatus,
+    RanobeDbMissingSeriesId,
+    RanobeDbInvalidJson,
+    RanobeDbExpectedObject,
+    RanobeDbEntryInvalidRemoteId,
+    NovelUpdatesMissingRemoveAction,
+    NovelUpdatesEntryInvalidRemoteId,
+    NovelUpdatesMissingNovelId,
+    NovelUpdatesUnknownReadingListState,
+    NovelUpdatesUnknownReadingListId,
+    NovelUpdatesNotesExpectedObject,
+    NovelUpdatesNotesInvalidJson,
+}
+
+internal sealed class NovelTrackerFailure(cause: Throwable? = null) : Exception(null, cause) {
+    class InvalidCredentials(
+        val issue: NovelTrackerCredentialIssue = NovelTrackerCredentialIssue.Generic,
+        val credential: NovelTrackerCredential? = null,
+    ) : NovelTrackerFailure()
+    class SessionExpired : NovelTrackerFailure()
+    class RateLimited(val retryAfterSeconds: Long?) : NovelTrackerFailure()
+    class ResponseTooLarge(val maximumBytes: Long) : NovelTrackerFailure()
+    class InvalidResponse(val issue: NovelTrackerResponseIssue) : NovelTrackerFailure()
+    class Remote(val statusCode: Int) : NovelTrackerFailure()
+    class Network(cause: Throwable) : NovelTrackerFailure(cause)
 }
 
 internal interface NovelTrackerApi {

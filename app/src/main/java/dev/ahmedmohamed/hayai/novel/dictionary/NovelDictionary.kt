@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import eu.kanade.tachiyomi.R
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -69,7 +70,7 @@ class NovelDictionaryLauncher(private val context: Context) {
                 .putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (intent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(Intent.createChooser(intent, "Look up in dictionary").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                context.startActivity(Intent.createChooser(intent, context.getString(R.string.hayai_dictionary_chooser)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 return
             }
         } else if (tryOpen(settings.provider, word)) {
@@ -77,7 +78,7 @@ class NovelDictionaryLauncher(private val context: Context) {
         }
         val fallback = settings.webFallback.takeIf { it.name.startsWith("WEB_") }
             ?: NovelDictionaryProvider.WEB_WIKTIONARY
-        check(tryOpen(fallback, word)) { "No dictionary application or browser is available" }
+        check(tryOpen(fallback, word)) { context.getString(R.string.hayai_failure_dictionary_unavailable) }
     }
 
     fun applicationSettingsIntent(provider: NovelDictionaryProvider): Intent? = provider.packageName?.let {

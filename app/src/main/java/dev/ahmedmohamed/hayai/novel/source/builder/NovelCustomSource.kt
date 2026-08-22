@@ -32,24 +32,24 @@ data class NovelCustomSourceDefinition(
     val headers: Map<String, String> = emptyMap(),
 ) {
     fun validate(): List<NovelSourceValidationIssue> = buildList {
-        if (!ID.matches(id)) add(issue("id", "Use letters, numbers, dots, underscores, or hyphens."))
-        if (name.isBlank() || name.length > 128) add(issue("name", "Name must contain 1 to 128 characters."))
-        if (!LANG.matches(language)) add(issue("language", "Use a two or three-letter language code."))
+        if (!ID.matches(id)) add(issue("id", NovelSourceValidationCode.InvalidId))
+        if (name.isBlank() || name.length > 128) add(issue("name", NovelSourceValidationCode.InvalidName))
+        if (!LANG.matches(language)) add(issue("language", NovelSourceValidationCode.InvalidLanguage))
         val uri = runCatching { URI(baseUrl) }.getOrNull()
-        if (uri?.scheme !in setOf("https", "http") || uri?.host.isNullOrBlank() || uri?.userInfo != null) add(issue("baseUrl", "Use an absolute HTTP or HTTPS URL without credentials."))
+        if (uri?.scheme !in setOf("https", "http") || uri?.host.isNullOrBlank() || uri?.userInfo != null) add(issue("baseUrl", NovelSourceValidationCode.InvalidBaseUrl))
         listOf("popularPath" to popularPath, "searchPath" to searchPath).forEach { (field, value) ->
-            if (!value.startsWith('/') || value.length > 2_048) add(issue(field, "Use a bounded root-relative path."))
+            if (!value.startsWith('/') || value.length > 2_048) add(issue(field, NovelSourceValidationCode.InvalidPath))
         }
-        if (!searchPath.contains("{query}")) add(issue("searchPath", "Search path must contain {query}."))
+        if (!searchPath.contains("{query}")) add(issue("searchPath", NovelSourceValidationCode.MissingQueryPlaceholder))
         val selectors = mapOf("list.item" to list.item, "list.title" to list.title, "list.link" to list.link, "details.title" to details.title, "chapters.item" to chapters.item, "chapters.title" to chapters.title, "chapters.link" to chapters.link, "content.body" to content.body)
-        selectors.forEach { (field, selector) -> if (!validSelector(selector)) add(issue(field, "Enter a valid non-empty CSS selector.")) }
-        if (content.remove.size > 32 || content.remove.any { !validSelector(it) }) add(issue("content.remove", "Use at most 32 valid CSS selectors."))
+        selectors.forEach { (field, selector) -> if (!validSelector(selector)) add(issue(field, NovelSourceValidationCode.InvalidSelector)) }
+        if (content.remove.size > 32 || content.remove.any { !validSelector(it) }) add(issue("content.remove", NovelSourceValidationCode.InvalidRemovalSelectors))
         if (headers.size > 32 || headers.any { (name, value) -> !validPortableHeader(name, value) }) {
-            add(issue("headers", "Use portable, non-credential request headers without line breaks or transport overrides."))
+            add(issue("headers", NovelSourceValidationCode.InvalidHeaders))
         }
     }
 
-    fun requireValid(): NovelCustomSourceDefinition { val issues = validate(); require(issues.isEmpty()) { issues.joinToString("; ") { "${it.field}: ${it.message}" } }; return this }
+    fun requireValid(): NovelCustomSourceDefinition { val issues = validate(); require(issues.isEmpty()) { issues.joinToString("; ") { "${it.field}:${it.code}" } }; return this }
 
     companion object {
         private val ID = Regex("[A-Za-z0-9._-]{1,128}"); private val LANG = Regex("[a-z]{2,3}")
@@ -57,7 +57,7 @@ data class NovelCustomSourceDefinition(
         private val PORTABLE_HEADERS = setOf(
             "accept", "accept-language", "cache-control", "pragma", "user-agent", "dnt", "sec-gpc",
         )
-        private fun issue(field: String, message: String) = NovelSourceValidationIssue(field, message)
+        private fun issue(field: String, code: NovelSourceValidationCode) = NovelSourceValidationIssue(field, code)
         private fun validSelector(value: String): Boolean = value.isNotBlank() && value.length <= 512 && runCatching { Jsoup.parse("").select(value); true }.getOrDefault(false)
         private fun validPortableHeader(name: String, value: String): Boolean {
             val lowerName = name.lowercase()
@@ -70,7 +70,21 @@ data class NovelCustomSourceDefinition(
     }
 }
 
-data class NovelSourceValidationIssue(val field: String, val message: String)
+enum class NovelSourceValidationCode {
+    InvalidId,
+    InvalidName,
+    InvalidLanguage,
+    InvalidBaseUrl,
+    InvalidPath,
+    MissingQueryPlaceholder,
+    InvalidSelector,
+    InvalidRemovalSelectors,
+    InvalidHeaders,
+    PreviewItemMissing,
+    PreviewTitleMissing,
+    PreviewLinkMissing,
+}
+data class NovelSourceValidationIssue(val field: String, val code: NovelSourceValidationCode)
 data class NovelSourcePreview(val title: String?, val url: String?, val coverUrl: String?, val issues: List<NovelSourceValidationIssue>)
 
 object NovelCustomSourcePreviewer {
@@ -78,11 +92,11 @@ object NovelCustomSourcePreviewer {
         val issues = definition.validate(); if (issues.isNotEmpty()) return NovelSourcePreview(null, null, null, issues)
         require(html.length <= 4_000_000)
         val document = Jsoup.parse(html, pageUrl); val item = document.selectFirst(definition.list.item)
-            ?: return NovelSourcePreview(null, null, null, listOf(NovelSourceValidationIssue("list.item", "No matching item was found.")))
+            ?: return NovelSourcePreview(null, null, null, listOf(NovelSourceValidationIssue("list.item", NovelSourceValidationCode.PreviewItemMissing)))
         val title = item.selectFirst(definition.list.title)?.text()?.trim()
         val link = item.selectFirst(definition.list.link)?.absUrl("href")?.ifBlank { null }
         val cover = definition.list.cover?.let { item.selectFirst(it)?.let { node -> node.absUrl("src").ifBlank { node.absUrl("data-src") }.ifBlank { null } } }
-        val foundIssues = buildList { if (title.isNullOrBlank()) add(NovelSourceValidationIssue("list.title", "The first item has no title.")); if (link == null) add(NovelSourceValidationIssue("list.link", "The first item has no resolvable link.")) }
+        val foundIssues = buildList { if (title.isNullOrBlank()) add(NovelSourceValidationIssue("list.title", NovelSourceValidationCode.PreviewTitleMissing)); if (link == null) add(NovelSourceValidationIssue("list.link", NovelSourceValidationCode.PreviewLinkMissing)) }
         return NovelSourcePreview(title, link, cover, foundIssues)
     }
 }

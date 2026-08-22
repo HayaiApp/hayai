@@ -84,7 +84,7 @@ class SourcePreviewActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(Menu.NONE, MENU_GO_TO, Menu.NONE, R.string.hayai_go_to_preview_page).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-        menu.add(Menu.NONE, MENU_RETRY, Menu.NONE, R.string.hayai_retry).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, MENU_RETRY, Menu.NONE, R.string.retry).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
         return true
     }
 
@@ -128,12 +128,12 @@ class SourcePreviewActivity : AppCompatActivity() {
         val navigation = LinearLayout(this).apply {
             gravity = Gravity.CENTER
             previous = Button(context).apply {
-                text = getString(R.string.hayai_previous_previews)
+                text = getString(R.string.previous)
                 setOnClickListener { load(page - 1) }
             }
             addView(previous)
             next = Button(context).apply {
-                text = getString(R.string.hayai_next_previews)
+                text = getString(R.string.next)
                 setOnClickListener { load(page + 1) }
             }
             addView(next)
@@ -181,7 +181,7 @@ class SourcePreviewActivity : AppCompatActivity() {
             inputType = InputType.TYPE_CLASS_NUMBER
             setText(page.toString())
             selectAll()
-            hint = totalPages?.let { "1-$it" } ?: getString(R.string.hayai_preview_page_number)
+            hint = totalPages?.let { getString(R.string.hayai_page_range, 1, it) } ?: getString(R.string.hayai_preview_page_number)
         }
         AlertDialog.Builder(this)
             .setTitle(R.string.hayai_go_to_preview_page)

@@ -1,6 +1,9 @@
 package dev.ahmedmohamed.hayai.novel.extension
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -101,7 +104,7 @@ data class NovelApkExtensionCatalog(
     val untrusted: List<Extension.Untrusted> = emptyList(),
     val repositories: Set<String> = emptySet(),
     val refreshing: Boolean = false,
-    val error: String? = null,
+    val error: Throwable? = null,
 )
 
 class NovelApkExtensionManager(
@@ -128,7 +131,7 @@ class NovelApkExtensionManager(
     suspend fun refresh() {
         _catalog.value = _catalog.value.copy(refreshing = true, error = null)
         runCatching { j2k.findAvailableExtensions() }.onFailure {
-            _catalog.value = _catalog.value.copy(error = it.message ?: "Extension catalog refresh failed")
+            _catalog.value = _catalog.value.copy(error = NovelFailure(NovelFailure.Code.ExtensionCatalogRefresh, cause = it))
         }
         rebuild(j2k.installedExtensionsFlow.value, j2k.availableExtensionsFlow.value, j2k.untrustedExtensionsFlow.value)
         _catalog.value = _catalog.value.copy(refreshing = false)
@@ -143,12 +146,12 @@ class NovelApkExtensionManager(
     }
 
     suspend fun install(extension: Extension.Available, scope: CoroutineScope): Flow<ExtensionIntallInfo> {
-        require(extension in _catalog.value.available || extension in _catalog.value.updates) { "Extension is not from a configured novel repository" }
+        novelRequire(extension in _catalog.value.available || extension in _catalog.value.updates, NovelFailure.Code.ExtensionNotConfigured)
         return j2k.installExtension(ExtensionManager.ExtensionInfo(extension), scope)
     }
 
     suspend fun update(extension: Extension.Installed, scope: CoroutineScope): Flow<ExtensionIntallInfo> {
-        val available = _catalog.value.updates.firstOrNull { it.pkgName == extension.pkgName } ?: error("No update is available")
+        val available = _catalog.value.updates.firstOrNull { it.pkgName == extension.pkgName } ?: novelFailure(NovelFailure.Code.ExtensionNoUpdate)
         return j2k.installExtension(ExtensionManager.ExtensionInfo(available), scope)
     }
 
@@ -185,9 +188,7 @@ class NovelApkExtensionManager(
 
     private fun validateRepositoryUrl(value: String) {
         val uri = runCatching { java.net.URI(value) }.getOrNull()
-        require(uri?.scheme == "https" && uri.host != null && uri.userInfo == null) {
-            "Novel extension repositories must use HTTPS"
-        }
+        novelRequire(uri?.scheme == "https" && uri.host != null && uri.userInfo == null, NovelFailure.Code.ExtensionRepositoryHttps)
         require(value.length <= 8_192)
     }
 }

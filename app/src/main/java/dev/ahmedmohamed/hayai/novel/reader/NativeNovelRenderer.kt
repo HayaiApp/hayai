@@ -20,6 +20,8 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.text.HtmlCompat
 import androidx.core.widget.NestedScrollView
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+import eu.kanade.tachiyomi.R
 import org.jsoup.Jsoup
 
 internal class NativeNovelRenderer(
@@ -233,14 +235,23 @@ internal class NativeNovelRenderer(
 
     private fun bindError(block: NativeBlock, error: NovelBlockContent.Error) {
         val column = LinearLayout(scroll.context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(24.dp, 24.dp, 24.dp, 24.dp) }
-        column.addView(TextView(scroll.context).apply { text = "${block.title}\n\n${error.message}"; gravity = Gravity.CENTER })
+        column.addView(
+            TextView(scroll.context).apply {
+                text = scroll.context.getString(
+                    R.string.hayai_novel_reader_chapter_error_message,
+                    block.title,
+                    error.message,
+                )
+                gravity = Gravity.CENTER
+            },
+        )
         val retry = Button(scroll.context)
         column.addView(retry)
         block.root.addView(column, centeredParams())
         fun refresh() {
             val remaining = error.retryAtMillis - System.currentTimeMillis()
             retry.isEnabled = remaining <= 0
-            retry.text = if (remaining <= 0) "Retry" else "Retry in ${(remaining + 999) / 1000}s"
+            retry.text = if (remaining <= 0) scroll.context.getString(R.string.retry) else scroll.context.getString(R.string.hayai_novel_reader_retry_in, (remaining + 999) / 1000)
             if (remaining > 0) {
                 block.retryRunnable = Runnable(::refresh).also { block.root.postDelayed(it, minOf(remaining, 1_000L)) }
             }

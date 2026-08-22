@@ -2,6 +2,9 @@ package dev.ahmedmohamed.hayai.novel.quote
 
 import android.content.ContentValues
 import android.database.Cursor
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import com.pushtorefresh.storio.sqlite.queries.DeleteQuery
 import com.pushtorefresh.storio.sqlite.queries.InsertQuery
 import com.pushtorefresh.storio.sqlite.queries.RawQuery
@@ -36,7 +39,7 @@ class NovelQuoteStore(
                     timestamp = timestamp,
                 )
             val inserted = database.lowLevel().insert(INSERT_QUERY, quote.toContentValues())
-            check(inserted >= 0) { "The quote could not be saved." }
+            novelRequire(inserted >= 0, NovelFailure.Code.QuoteSave)
             QuoteAddResult.Created(quote)
         }
     }
@@ -73,7 +76,7 @@ class NovelQuoteStore(
         val existing = get(quoteId) ?: return@synchronized null
         val normalized = NovelQuoteText.normalize(displayedContent)
         findDuplicate(existing.mangaId, chapterName, normalized)?.takeIf { it.id != quoteId }?.let {
-            error("This quote is already saved in that chapter.")
+            novelFailure(NovelFailure.Code.QuoteAlreadySaved)
         }
         val updated =
             existing.copy(
@@ -193,8 +196,8 @@ sealed interface QuoteAddResult {
 internal object NovelQuoteText {
     fun normalize(value: String): String {
         val normalized = value.replace("\r\n", "\n").replace('\r', '\n').trim()
-        require(normalized.isNotEmpty()) { "Select text before saving a quote." }
-        require(normalized.length <= MAX_LENGTH) { "The selected quote is too long." }
+        novelRequire(normalized.isNotEmpty(), NovelFailure.Code.QuoteSelectionEmpty)
+        novelRequire(normalized.length <= MAX_LENGTH, NovelFailure.Code.QuoteSelectionTooLong)
         return normalized
     }
 

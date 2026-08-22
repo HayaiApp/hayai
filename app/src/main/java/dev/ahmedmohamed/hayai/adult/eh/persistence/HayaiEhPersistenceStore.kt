@@ -8,6 +8,7 @@ import com.pushtorefresh.storio.sqlite.queries.UpdateQuery
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteCategoryMapping
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteConflict
+import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteConflictKind
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperation
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperationCodec
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteSlot
@@ -91,9 +92,13 @@ class HayaiEhPersistenceStore(
     fun typedPendingOperations(runId: String): List<EhFavoriteOperation> =
         pendingOperations(runId).map { EhFavoriteOperationCodec.decode(it.kind, it.payloadJson) }
 
-    fun unresolvedConflictMessages(runId: String): List<String> =
+    fun unresolvedConflictKinds(runId: String): List<EhFavoriteConflictKind> =
         query("SELECT payload_json FROM hayai_eh_sync_conflicts WHERE run_id = ? AND resolution IS NULL ORDER BY created_at", runId).use { cursor ->
-            buildList { while (cursor.moveToNext()) add(JSONObject(cursor.getString(0)).getString("message")) }
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(EhFavoriteConflictKind.valueOf(JSONObject(cursor.getString(0)).getString("kind")))
+                }
+            }
         }
 
     fun markAttemptStarted(operationId: String, updatedAt: Long = System.currentTimeMillis()) {
@@ -161,7 +166,7 @@ class HayaiEhPersistenceStore(
                 put("gid", conflict.gallery?.gid)
                 put("token", conflict.gallery?.token)
                 put("conflict_kind", conflict::class.java.simpleName)
-                put("payload_json", JSONObject().put("message", conflict.message).toString())
+                put("payload_json", JSONObject().put("kind", conflict.kind.name).toString())
                 put("created_at", createdAt)
             },
         )

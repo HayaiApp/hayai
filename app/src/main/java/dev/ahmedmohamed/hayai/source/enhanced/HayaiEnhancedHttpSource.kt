@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.source.enhanced
 
+import android.app.Application
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -13,6 +15,8 @@ import eu.kanade.tachiyomi.util.system.runAsObservable
 import okhttp3.Response
 import rx.Observable
 import timber.log.Timber
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @Suppress("DEPRECATION", "OverridingDeprecatedMember")
 open class HayaiEnhancedHttpSource(
@@ -64,9 +68,11 @@ open class HayaiEnhancedHttpSource(
         enhanced.author?.let { details.author = it }
         enhanced.artist?.let { details.artist = it }
         val enhancedDescription = listOfNotNull(
-            enhanced.alternateTitle?.takeIf { it != details.title }?.let { "**Alternative title:** $it" },
-            enhanced.description,
-        ).joinToString("\n").takeIf(String::isNotBlank)
+            enhanced.alternateTitle?.takeIf { it != details.title }?.let {
+                EnhancedDescriptionRow(EnhancedDescriptionLabel.AlternativeTitle, it)
+            },
+            *enhanced.descriptionRows.toTypedArray(),
+        ).formatDescriptionRows()
         details.description = mergeDescription(enhancedDescription, details.description)
         details.genre = mergeGenres(details.genre, enhanced.genres)
         enhanced.thumbnailUrl?.takeIf { details.thumbnail_url.isNullOrBlank() }?.let { details.thumbnail_url = it }
@@ -171,4 +177,36 @@ open class HayaiEnhancedHttpSource(
         private const val MAX_DETAILS_BYTES = 4 * 1024 * 1024
         private const val MAX_CACHED_DETAILS = 128
     }
+}
+
+private fun List<EnhancedDescriptionRow>.formatDescriptionRows(): String? {
+    val context = Injekt.get<Application>()
+    return joinToString("\n") { row ->
+        "**${context.getString(row.label.stringRes())}:** ${row.value}"
+    }.takeIf(String::isNotBlank)
+}
+
+private fun EnhancedDescriptionLabel.stringRes(): Int = when (this) {
+    EnhancedDescriptionLabel.AlternativeTitle -> R.string.hayai_enhanced_label_alternative_title
+    EnhancedDescriptionLabel.AlternativeTitles -> R.string.hayai_enhanced_label_alternative_titles
+    EnhancedDescriptionLabel.ArchiveType -> R.string.hayai_enhanced_label_archive_type
+    EnhancedDescriptionLabel.Artist -> R.string.artist
+    EnhancedDescriptionLabel.Description -> R.string.description
+    EnhancedDescriptionLabel.EnglishTitle -> R.string.hayai_enhanced_label_english_title
+    EnhancedDescriptionLabel.Favorites -> R.string.hayai_enhanced_label_favorites
+    EnhancedDescriptionLabel.File -> R.string.hayai_enhanced_label_file
+    EnhancedDescriptionLabel.FileSize -> R.string.hayai_enhanced_label_file_size
+    EnhancedDescriptionLabel.Id -> R.string.hayai_enhanced_label_id
+    EnhancedDescriptionLabel.JapaneseTitle -> R.string.hayai_enhanced_label_japanese_title
+    EnhancedDescriptionLabel.Length -> R.string.length
+    EnhancedDescriptionLabel.MediaId -> R.string.hayai_enhanced_label_media_id
+    EnhancedDescriptionLabel.Pages -> R.string.hayai_enhanced_label_pages
+    EnhancedDescriptionLabel.Posted -> R.string.hayai_enhanced_label_posted
+    EnhancedDescriptionLabel.Rating -> R.string.hayai_enhanced_label_rating
+    EnhancedDescriptionLabel.RatingCount -> R.string.hayai_enhanced_label_rating_count
+    EnhancedDescriptionLabel.Scanlator -> R.string.hayai_enhanced_label_scanlator
+    EnhancedDescriptionLabel.ShortTitle -> R.string.hayai_enhanced_label_short_title
+    EnhancedDescriptionLabel.Summary -> R.string.hayai_enhanced_label_summary
+    EnhancedDescriptionLabel.Tags -> R.string.tags
+    EnhancedDescriptionLabel.Uploader -> R.string.hayai_enhanced_label_uploader
 }

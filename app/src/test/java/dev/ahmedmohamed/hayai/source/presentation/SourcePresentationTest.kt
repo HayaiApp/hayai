@@ -7,23 +7,22 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SourcePresentationTest {
     @Test
     fun `EH sources are labeled as bundled adult sources`() {
-        assertEquals("Bundled · Adult", SourcePresentation.badgeText(FakeSource(EhSite.EHentai.sourceId)))
+        assertEquals(listOf(SourceBadge.Bundled, SourceBadge.Adult), SourcePresentation.badges(FakeSource(EhSite.EHentai.sourceId)))
     }
 
     @Test
     fun `local novels are labeled as bundled`() {
-        assertEquals("Bundled · Novel", SourcePresentation.badgeText(FakeSource(LocalNovelSource.ID, isNovelSource = true)))
+        assertEquals(listOf(SourceBadge.Bundled, SourceBadge.Novel), SourcePresentation.badges(FakeSource(LocalNovelSource.ID, isNovelSource = true)))
     }
 
     @Test
     fun `ordinary extensions do not receive a misleading badge`() {
-        assertNull(SourcePresentation.badgeText(FakeSource(42L)))
+        assertEquals(emptyList<SourceBadge>(), SourcePresentation.badges(FakeSource(42L)))
     }
 }
 

@@ -101,8 +101,8 @@ class LocalNovelSource(
             }
 
             firstEpubFor(manga.url)?.let { epubFile ->
-                ArchiveReader.open(epubFile).use { archive ->
-                    EpubReader(archive).use { epub ->
+                ArchiveReader.open(epubFile, context.resources).use { archive ->
+                    EpubReader(archive, context.resources).use { epub ->
                         val chapter = SChapter.create().apply { name = epubFile.nameWithoutExtension }
                         epub.fillMetadata(manga, chapter)
                         if (manga.title.isBlank()) manga.title = chapter.name
@@ -129,8 +129,8 @@ class LocalNovelSource(
             val chapterUrl = if (novelEntry.isFile) manga.url else "${manga.url}/${chapterFile.name}"
             if (chapterFile.extension.lowercase() in EPUB_EXTENSIONS) {
                 runCatching {
-                    ArchiveReader.open(chapterFile).use { archive ->
-                        EpubReader(archive).use { epub ->
+                    ArchiveReader.open(chapterFile, context.resources).use { archive ->
+                        EpubReader(archive, context.resources).use { epub ->
                             extractCover(epub, manga, force = false)
                             val epubChapters =
                                 buildEpubChaptersFromToc(
@@ -181,8 +181,8 @@ class LocalNovelSource(
         when {
             chapterFile.isDirectory -> readTextDirectory(chapterFile)
             chapterFile.extension.lowercase() in EPUB_EXTENSIONS -> {
-                ArchiveReader.open(chapterFile).use { archive ->
-                    EpubReader(archive).use { epub ->
+                ArchiveReader.open(chapterFile, context.resources).use { archive ->
+                    EpubReader(archive, context.resources).use { epub ->
                         fragment?.let(epub::getChapterContent) ?: epub.getTextContent()
                     }
                 }
@@ -203,12 +203,12 @@ class LocalNovelSource(
             val chapterFile = catalog.resolveChapter(chapterUrl) ?: return@runCatching null
             when {
                 chapterFile.extension.lowercase() in EPUB_EXTENSIONS -> {
-                    ArchiveReader.open(chapterFile).use { archive ->
-                        EpubReader(archive).use { epub -> epub.getInputStream(assetPath)?.readLimitedBytes()?.let(::ByteArrayInputStream) }
+                    ArchiveReader.open(chapterFile, context.resources).use { archive ->
+                        EpubReader(archive, context.resources).use { epub -> epub.getInputStream(assetPath)?.readLimitedBytes()?.let(::ByteArrayInputStream) }
                     }
                 }
                 chapterFile.extension.lowercase() in ARCHIVE_EXTENSIONS -> {
-                    ArchiveReader.open(chapterFile).use { archive ->
+                    ArchiveReader.open(chapterFile, context.resources).use { archive ->
                         archive.getInputStream(assetPath)?.use { it.readLimitedBytes() }?.let(::ByteArrayInputStream)
                     }
                 }
@@ -221,8 +221,8 @@ class LocalNovelSource(
         val epubFile = firstEpubFor(manga.url) ?: return@withContext null
         val refreshed =
             runCatching {
-                ArchiveReader.open(epubFile).use { archive ->
-                    EpubReader(archive).use { extractCover(it, manga, force = true) }
+                ArchiveReader.open(epubFile, context.resources).use { archive ->
+                    EpubReader(archive, context.resources).use { extractCover(it, manga, force = true) }
                 }
             }.getOrDefault(false)
         if (refreshed) covers.find(manga.url)?.absolutePath else null
@@ -323,14 +323,14 @@ class LocalNovelSource(
 
     private fun readTextDirectory(directory: File): String {
         val textFiles = directory.listFiles().orEmpty().filter { it.isSupportedTextFile() }.sortedBy { it.name.lowercase() }
-        require(textFiles.isNotEmpty()) { "No supported text files found in ${directory.name}" }
+        require(textFiles.isNotEmpty()) { context.getString(R.string.hayai_failure_local_no_text_files, directory.name) }
         return textFiles.joinToString("\n\n") { file ->
             NovelAssetRewriter.rewrite(file.readText(), file.extension, NovelAssetRewriter::relativeScheme)
         }
     }
 
     private fun readTextArchive(file: File): String =
-        ArchiveReader.open(file).use { archive ->
+        ArchiveReader.open(file, context.resources).use { archive ->
             val entries =
                 archive.useEntries { sequence ->
                     sequence
@@ -338,7 +338,7 @@ class LocalNovelSource(
                         .sortedBy { it.name.lowercase() }
                         .toList()
                 }
-            require(entries.isNotEmpty()) { "No supported text files found in ${file.name}" }
+            require(entries.isNotEmpty()) { context.getString(R.string.hayai_failure_local_no_text_files, file.name) }
             entries.joinToString("\n\n") { entry ->
                 val text = archive.getInputStream(entry.name)?.use { it.reader().readText() }.orEmpty()
                 val baseDirectory = entry.name.substringBeforeLast('/', "")
@@ -356,7 +356,7 @@ class LocalNovelSource(
             val read = read(buffer)
             if (read < 0) break
             total += read
-            require(total <= MAX_ASSET_BYTES) { "Novel asset exceeds the size limit" }
+            require(total <= MAX_ASSET_BYTES) { context.getString(R.string.hayai_failure_local_asset_too_large) }
             output.write(buffer, 0, read)
         }
         return output.toByteArray()

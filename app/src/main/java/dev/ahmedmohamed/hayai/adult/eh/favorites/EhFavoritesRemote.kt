@@ -21,6 +21,23 @@ interface EhFavoritesRemote {
     suspend fun removeFavorite(expected: EhFavoriteState)
 }
 
+enum class EhFavoritesFailureReason {
+    InvalidCategories,
+    DuplicateGallery,
+    TooManyFavorites,
+    MissingCategories,
+    PaginationExceeded,
+    RequestFailed,
+    ResponseTooLarge,
+}
+
+class EhFavoritesFailure(
+    val reason: EhFavoritesFailureReason,
+    val detail: Int? = null,
+    diagnostic: String? = null,
+    cause: Throwable? = null,
+) : IllegalStateException(diagnostic ?: reason.name, cause)
+
 class EhFavoritesHttpRemote(
     client: OkHttpClient,
     private val sessions: EhSessionStore,
@@ -40,18 +57,18 @@ class EhFavoritesHttpRemote(
             page.galleries.forEach { gallery ->
                 val category = gallery.favoriteCategory ?: return@forEach
                 val identity = EhGalleryIdentity(gallery.metadata.key.id.value, gallery.metadata.key.token.value)
-                check(favorites.putIfAbsent(identity, EhFavoriteState(identity, gallery.metadata.title, EhFavoriteSlot(category))) == null) {
-                    "E-Hentai returned a duplicate favorite gallery."
+                if (favorites.putIfAbsent(identity, EhFavoriteState(identity, gallery.metadata.title, EhFavoriteSlot(category))) != null) {
+                    throw EhFavoritesFailure(EhFavoritesFailureReason.DuplicateGallery)
                 }
-                require(favorites.size <= MAX_FAVORITES) { "E-Hentai returned too many favorites." }
+                if (favorites.size > MAX_FAVORITES) throw EhFavoritesFailure(EhFavoritesFailureReason.TooManyFavorites)
             }
             next = page.nextCursor?.let { (it as? dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchCursor.Gallery)?.id?.value }
             if (next == null) {
-                val categoryList = requireNotNull(categories) { "E-Hentai returned no favorite categories." }
+                val categoryList = categories ?: throw EhFavoritesFailure(EhFavoritesFailureReason.MissingCategories)
                 return EhRemoteFavoritesSnapshot(categoryList, favorites, EhFavoritesFingerprint.create(categoryList, favorites.values))
             }
         }
-        error("E-Hentai favorites pagination exceeded $MAX_PAGES pages.")
+        throw EhFavoritesFailure(EhFavoritesFailureReason.PaginationExceeded, MAX_PAGES)
     }
 
     override suspend fun state(gallery: EhGalleryIdentity): EhFavoriteState? = snapshot().favorites[gallery]
@@ -97,7 +114,7 @@ class EhFavoritesHttpRemote(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (failure: IOException) {
-        throw IllegalStateException("The E-Hentai favorites request failed.", failure)
+        throw EhFavoritesFailure(EhFavoritesFailureReason.RequestFailed, cause = failure)
     }
 
     private fun popupUrl(gallery: EhGalleryIdentity) = "$baseUrl/gallerypopups.php?gid=${gallery.gid}&t=${gallery.token}&act=addfav"
@@ -111,7 +128,7 @@ class EhFavoritesHttpRemote(
             if (count < 0) break
             output.append(buffer, 0, count)
         }
-        require(output.length <= maxChars) { "E-Hentai favorites response is too large." }
+        if (output.length > maxChars) throw EhFavoritesFailure(EhFavoritesFailureReason.ResponseTooLarge)
         return output.toString()
     }
 

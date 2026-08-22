@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.source
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.Page
@@ -10,10 +12,10 @@ object NovelDocumentLoader {
         source: Source,
         chapter: SChapter,
     ): NovelDocument {
-        require(source.isNovelSource()) { "This source does not provide novel text." }
+        novelRequire(source.isNovelSource(), NovelFailure.Code.SourceNotNovel)
 
         val pages = source.getPageList(chapter)
-        require(pages.isNotEmpty()) { "The novel chapter has no pages." }
+        novelRequire(pages.isNotEmpty(), NovelFailure.Code.SourceChapterEmpty)
         val contents = mutableListOf<String>()
         pages.forEach { page ->
             contents += page.text ?: source.fetchPageText(page).also { page.text = it }

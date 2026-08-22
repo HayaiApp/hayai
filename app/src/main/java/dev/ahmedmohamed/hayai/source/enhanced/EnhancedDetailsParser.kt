@@ -15,10 +15,40 @@ data class EnhancedDetails(
     val alternateTitle: String? = null,
     val author: String? = null,
     val artist: String? = null,
-    val description: String? = null,
+    val descriptionRows: List<EnhancedDescriptionRow> = emptyList(),
     val genres: List<String> = emptyList(),
     val thumbnailUrl: String? = null,
 )
+
+data class EnhancedDescriptionRow(
+    val label: EnhancedDescriptionLabel,
+    val value: String,
+)
+
+enum class EnhancedDescriptionLabel {
+    AlternativeTitle,
+    AlternativeTitles,
+    ArchiveType,
+    Description,
+    EnglishTitle,
+    Favorites,
+    File,
+    FileSize,
+    Id,
+    JapaneseTitle,
+    Length,
+    MediaId,
+    Pages,
+    Posted,
+    Rating,
+    RatingCount,
+    Scanlator,
+    ShortTitle,
+    Summary,
+    Tags,
+    Uploader,
+    Artist,
+}
 
 object EnhancedDetailsParser {
     private val json = Json { ignoreUnknownKeys = true }
@@ -47,7 +77,10 @@ object EnhancedDetailsParser {
         return EnhancedDetails(
             title = crumbs.lastOrNull(),
             artist = artist,
-            description = description(listOf("Artist" to artist, "Tags" to tags.joinToString().takeIf(String::isNotBlank))),
+            descriptionRows = rows(
+                EnhancedDescriptionLabel.Artist to artist,
+                EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
+            ),
             genres = tags,
             thumbnailUrl = document.selectFirst(".gallery .c-tile .lazyload")?.absUrl("data-src")?.takeIf(String::isNotBlank),
         )
@@ -61,10 +94,12 @@ object EnhancedDetailsParser {
         val tags = fields.filterKeys { it !in setOf("title", "length") }.flatMap { (namespace, value) ->
             value.select("a").map { "$namespace: ${it.text().trim()}" }
         }
-        val length = fields["length"]?.text()?.substringBefore(' ')?.toIntOrNull()
         return EnhancedDetails(
             title = fields["title"]?.text()?.trim(),
-            description = description(listOf("Length" to length?.let { "$it pages" }, "Tags" to tags.joinToString().takeIf(String::isNotBlank))),
+            descriptionRows = rows(
+                EnhancedDescriptionLabel.Length to fields["length"]?.text()?.trim(),
+                EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
+            ),
             genres = tags,
         )
     }
@@ -88,15 +123,13 @@ object EnhancedDetailsParser {
         return EnhancedDetails(
             title = wrapper.selectFirst(".title h1")?.text()?.trim(),
             alternateTitle = wrapper.selectFirst(".alt-title")?.text()?.trim()?.takeIf(String::isNotBlank),
-            description = description(
-                listOf(
-                    "Pages" to pages,
-                    "File size" to fileSize,
-                    "Rating" to ratingValue,
-                    "Rating count" to ratingCount,
-                    "Uploader" to fieldText["uploader"],
-                    "Tags" to tags.joinToString().takeIf(String::isNotBlank),
-                ),
+            descriptionRows = rows(
+                EnhancedDescriptionLabel.Pages to pages,
+                EnhancedDescriptionLabel.FileSize to fileSize,
+                EnhancedDescriptionLabel.Rating to ratingValue,
+                EnhancedDescriptionLabel.RatingCount to ratingCount,
+                EnhancedDescriptionLabel.Uploader to fieldText["uploader"],
+                EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
             ),
             genres = tags,
             thumbnailUrl = wrapper.selectFirst(".cover-wrapper v-lazy-image")?.absUrl("src")?.takeIf(String::isNotBlank),
@@ -115,19 +148,17 @@ object EnhancedDetailsParser {
         return EnhancedDetails(
             title = titles?.string("english") ?: titles?.string("pretty"),
             alternateTitle = titles?.string("japanese"),
-            description = description(
-                listOf(
-                    "ID" to root.long("id")?.toString(),
-                    "Media ID" to root.string("media_id"),
-                    "Posted" to root.long("upload_date")?.let { Instant.ofEpochSecond(it).toString() },
-                    "Pages" to root.long("num_pages")?.toString(),
-                    "Favorites" to root.long("num_favorites")?.toString(),
-                    "Scanlator" to root.string("scanlator"),
-                    "English title" to titles?.string("english"),
-                    "Japanese title" to titles?.string("japanese"),
-                    "Short title" to titles?.string("pretty"),
-                    "Tags" to tags.joinToString().takeIf(String::isNotBlank),
-                ),
+            descriptionRows = rows(
+                EnhancedDescriptionLabel.Id to root.long("id")?.toString(),
+                EnhancedDescriptionLabel.MediaId to root.string("media_id"),
+                EnhancedDescriptionLabel.Posted to root.long("upload_date")?.let { Instant.ofEpochSecond(it).toString() },
+                EnhancedDescriptionLabel.Pages to root.long("num_pages")?.toString(),
+                EnhancedDescriptionLabel.Favorites to root.long("num_favorites")?.toString(),
+                EnhancedDescriptionLabel.Scanlator to root.string("scanlator"),
+                EnhancedDescriptionLabel.EnglishTitle to titles?.string("english"),
+                EnhancedDescriptionLabel.JapaneseTitle to titles?.string("japanese"),
+                EnhancedDescriptionLabel.ShortTitle to titles?.string("pretty"),
+                EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
             ),
             genres = tags,
         )
@@ -155,7 +186,10 @@ object EnhancedDetailsParser {
         return EnhancedDetails(
             title = title,
             alternateTitle = altTitles.firstOrNull(),
-            description = description(listOf("Description" to descriptions.firstOrNull(), "Alternative titles" to altTitles.joinToString().takeIf(String::isNotBlank))),
+            descriptionRows = rows(
+                EnhancedDescriptionLabel.Description to descriptions.firstOrNull(),
+                EnhancedDescriptionLabel.AlternativeTitles to altTitles.joinToString().takeIf(String::isNotBlank),
+            ),
             genres = tags,
         )
     }
@@ -165,22 +199,21 @@ object EnhancedDetailsParser {
         val tags = root.string("tags").orEmpty().split(',').map(String::trim).filter(String::isNotBlank)
         return EnhancedDetails(
             title = root.string("title"),
-            description = description(
-                listOf(
-                    "Summary" to root.string("summary"),
-                    "Pages" to root.long("pagecount")?.toString(),
-                    "File" to root.string("filename"),
-                    "Archive type" to root.string("extension")?.uppercase(),
-                    "Tags" to tags.joinToString().takeIf(String::isNotBlank),
-                ),
+            descriptionRows = rows(
+                EnhancedDescriptionLabel.Summary to root.string("summary"),
+                EnhancedDescriptionLabel.Pages to root.long("pagecount")?.toString(),
+                EnhancedDescriptionLabel.File to root.string("filename"),
+                EnhancedDescriptionLabel.ArchiveType to root.string("extension")?.uppercase(),
+                EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
             ),
             genres = tags,
         )
     }
 
-    private fun description(rows: List<Pair<String, String?>>): String? =
-        rows.mapNotNull { (label, value) -> value?.trim()?.takeIf(String::isNotBlank)?.let { "**$label:** $it" } }
-            .takeIf(List<String>::isNotEmpty)?.joinToString("\n")
+    private fun rows(vararg rows: Pair<EnhancedDescriptionLabel, String?>): List<EnhancedDescriptionRow> =
+        rows.mapNotNull { (label, value) ->
+            value?.trim()?.takeIf(String::isNotBlank)?.let { EnhancedDescriptionRow(label, it) }
+        }
 
     private fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
     private fun JsonObject.long(key: String): Long? = string(key)?.toLongOrNull()

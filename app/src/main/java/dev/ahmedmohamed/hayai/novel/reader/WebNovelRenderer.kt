@@ -9,7 +9,9 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+import eu.kanade.tachiyomi.R
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -27,6 +29,7 @@ internal class WebNovelRenderer(
     enableDevTools: Boolean,
     fontStore: NovelFontStore,
 ) : NovelRenderer {
+    private val context = context.applicationContext
     override val mode = NovelRenderingMode.WebView
     private val json = Json { ignoreUnknownKeys = true }
     private var requestedProgress = 0
@@ -46,7 +49,7 @@ internal class WebNovelRenderer(
             object : WebChromeClient() {
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
                     if (showConsoleErrors() && consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                        callbacks.onRendererError("Web reader line ${consoleMessage.lineNumber()}: ${consoleMessage.message()}")
+                        callbacks.onRendererError(context.getString(R.string.hayai_novel_reader_web_error, consoleMessage.lineNumber(), consoleMessage.message()))
                     }
                     return true
                 }
@@ -171,17 +174,19 @@ internal class WebNovelRenderer(
     }
 
     private fun loadingHtml(title: String): String =
-        "<div class=\"hayai-block-state\"><strong>${android.text.TextUtils.htmlEncode(title)}</strong><div>Loading chapter…</div></div>"
+        "<div class=\"hayai-block-state\"><strong>${android.text.TextUtils.htmlEncode(title)}</strong><div>${android.text.TextUtils.htmlEncode(context.getString(R.string.hayai_novel_reader_loading_chapter))}</div></div>"
 
     private fun errorHtml(chapterId: Long, title: String, error: NovelBlockContent.Error): String =
         "<div class=\"hayai-block-state\"><strong>${android.text.TextUtils.htmlEncode(title)}</strong>" +
-            "<div>${android.text.TextUtils.htmlEncode(error.message)}</div><button class=\"hayai-block-retry\" data-retry-id=\"$chapterId\" disabled>Retry</button></div>"
+            "<div>${android.text.TextUtils.htmlEncode(error.message)}</div><button class=\"hayai-block-retry\" data-retry-id=\"$chapterId\" disabled>${android.text.TextUtils.htmlEncode(context.getString(R.string.retry))}</button></div>"
 
     private fun scheduleRetryLabel(chapterId: Long, retryAt: Long) {
+        val retry = json.encodeToString(context.getString(R.string.retry))
+        val retryIn = json.encodeToString(context.getString(R.string.hayai_novel_reader_retry_in, 987654).replace("987654", "__SECONDS__"))
         evaluate(
             "(()=>{const id=${json.encodeToString(chapterId.toString())},until=$retryAt;const tick=()=>{" +
                 "const b=document.querySelector('[data-retry-id=\"'+id+'\"]');if(!b)return;const left=until-Date.now();" +
-                "b.disabled=left>0;b.textContent=left>0?'Retry in '+Math.ceil(left/1000)+'s':'Retry';" +
+                "b.disabled=left>0;b.textContent=left>0?$retryIn.replace('__SECONDS__',Math.ceil(left/1000)):$retry;" +
                 "if(left>0)setTimeout(tick,Math.min(1000,left));else b.onclick=()=>HayaiReader.retryChapter(id);};tick();})()",
         )
     }
@@ -222,7 +227,7 @@ internal class WebNovelRenderer(
 
         @JavascriptInterface
         fun onHighlightReport(applied: Int, orphaned: Int, overlaps: Int) {
-            if (orphaned > 0 || overlaps > 0) webView.post { callbacks.onRendererError("Highlights restored: $applied. Stale: $orphaned. Overlaps skipped: $overlaps") }
+            if (orphaned > 0 || overlaps > 0) webView.post { callbacks.onRendererError(context.getString(R.string.hayai_novel_reader_highlight_restore_report, applied, orphaned, overlaps)) }
         }
     }
 

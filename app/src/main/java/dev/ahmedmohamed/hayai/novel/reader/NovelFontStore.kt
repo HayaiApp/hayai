@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.provider.OpenableColumns
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import eu.kanade.tachiyomi.R
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -34,17 +35,17 @@ internal class NovelFontStore(
 
     fun importFont(uri: Uri): Result<NovelImportedFont> = synchronized(LOCK) {
         runCatching {
-            val displayName = displayName(uri).take(MAX_NAME_LENGTH).ifBlank { "Imported font" }
+            val displayName = displayName(uri).take(MAX_NAME_LENGTH).ifBlank { context.getString(R.string.hayai_novel_reader_imported_font_default) }
             val extension = displayName.substringAfterLast('.', "").lowercase()
-            require(extension in EXTENSIONS) { "Choose a TTF or OTF font." }
-            require(fonts().size < MAX_FONTS) { "You can keep up to $MAX_FONTS imported fonts." }
+            require(extension in EXTENSIONS) { context.getString(R.string.hayai_novel_reader_font_choose_type) }
+            require(fonts().size < MAX_FONTS) { context.getString(R.string.hayai_novel_reader_font_limit, MAX_FONTS) }
             val id = UUID.randomUUID().toString().replace("-", "")
             directory.mkdirs()
-            val item = NovelImportedFont(id, displayName.substringBeforeLast('.').trim().ifBlank { "Imported font" }, extension)
+            val item = NovelImportedFont(id, displayName.substringBeforeLast('.').trim().ifBlank { context.getString(R.string.hayai_novel_reader_imported_font_default) }, extension)
             val target = file(item)
             try {
                 context.contentResolver.openInputStream(uri).use { input ->
-                    requireNotNull(input) { "The selected font could not be opened." }
+                    requireNotNull(input) { context.getString(R.string.hayai_novel_reader_font_open_error) }
                     target.outputStream().use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         var total = 0L
@@ -52,17 +53,17 @@ internal class NovelFontStore(
                             val read = input.read(buffer)
                             if (read < 0) break
                             total += read
-                            require(total <= MAX_FONT_BYTES) { "Fonts must be 20 MB or smaller." }
+                            require(total <= MAX_FONT_BYTES) { context.getString(R.string.hayai_novel_reader_font_size_limit) }
                             output.write(buffer, 0, read)
                         }
-                        require(total >= MIN_FONT_BYTES) { "The selected file is not a valid font." }
+                        require(total >= MIN_FONT_BYTES) { context.getString(R.string.hayai_novel_reader_font_invalid) }
                     }
                 }
                 val signature = target.inputStream().use { input -> ByteArray(4).also { require(input.read(it) == it.size) } }
                 val recognized =
                     signature.contentEquals(byteArrayOf(0x00, 0x01, 0x00, 0x00)) ||
                         signature.toString(Charsets.US_ASCII) in setOf("OTTO", "ttcf", "true")
-                require(recognized) { "The selected file does not contain a supported font." }
+                require(recognized) { context.getString(R.string.hayai_novel_reader_font_unsupported) }
                 Typeface.createFromFile(target)
                 val updated = (fonts() + item).distinctBy(NovelImportedFont::id)
                 preferences.novelImportedFonts.set(json.encodeToString(updated))

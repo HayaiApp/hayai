@@ -29,7 +29,7 @@ class SettingsReaderController : SettingsController() {
             titleRes = R.string.reader
 
             preferenceCategory {
-                title = "Novels"
+                titleRes = R.string.hayai_novels
                 preference {
                     titleRes = R.string.hayai_novel_reader_settings
                     summaryRes = R.string.hayai_novel_reader_settings_summary

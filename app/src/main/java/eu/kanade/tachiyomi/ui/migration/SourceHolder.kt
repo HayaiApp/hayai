@@ -32,7 +32,7 @@ class SourceHolder(
         // Set source name
         val sourceName = source.name.replaceFirstChar { it.titlecase(Locale.getDefault()) } + " (${item.numberOfItems})"
         binding.title.text = sourceName
-        binding.sourceBadge.text = SourcePresentation.badgeText(source)
+        binding.sourceBadge.text = SourcePresentation.badgeText(itemView.context, source)
         binding.sourceBadge.isVisible = binding.sourceBadge.text != null
         binding.lang.text =
             when {
