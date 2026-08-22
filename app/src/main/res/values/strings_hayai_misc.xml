@@ -385,4 +385,6 @@
     <string name="hayai_failure_replacement_backreference">Backreferences are not supported because they can stall large chapters.</string>
     <string name="hayai_failure_replacement_nested_repetition">Nested repetition is not supported because it can stall large chapters.</string>
     <string name="hayai_failure_replacement_invalid_regex">The regular expression is invalid.</string>
+    <string name="hayai_value_configured">Configured</string>
+    <string name="hayai_translation_engine">Translation engine</string>
 </resources>

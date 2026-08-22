@@ -19,8 +19,8 @@ import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
 import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
 import dev.ahmedmohamed.hayai.novel.reader.NovelColorPickerDialog
 import dev.ahmedmohamed.hayai.novel.reader.NovelThemeColors
-import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderActivity
-import dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsActivity
+import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderController
+import dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsController
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.Preference
 import eu.kanade.tachiyomi.ui.setting.SettingsController
@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.ui.setting.switchPreference
 import eu.kanade.tachiyomi.ui.setting.titleRes
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import eu.kanade.tachiyomi.widget.preference.IntListMatPreference
 import eu.kanade.tachiyomi.widget.preference.ListMatPreference
 import uy.kohesive.injekt.Injekt
@@ -263,12 +264,12 @@ class NovelSettingsController : SettingsController() {
             preference {
                 title = context.getString(R.string.hayai_novel_reader_translation_dictionary)
                 summary = context.getString(R.string.hayai_novel_reader_translation_dictionary_summary)
-                onClick { startActivity(Intent(context, NovelLanguageToolsSettingsActivity::class.java)) }
+                onClick { router.pushController(NovelLanguageToolsSettingsController().withFadeTransaction()) }
             }
             preference {
                 title = context.getString(R.string.hayai_novel_reader_source_builder)
                 summary = context.getString(R.string.hayai_novel_reader_source_builder_summary)
-                onClick { startActivity(Intent(context, NovelCustomSourceBuilderActivity::class.java)) }
+                onClick { router.pushController(NovelCustomSourceBuilderController().withFadeTransaction()) }
             }
             preference {
                 title = context.getString(R.string.hayai_novel_reader_remote_extensions)
