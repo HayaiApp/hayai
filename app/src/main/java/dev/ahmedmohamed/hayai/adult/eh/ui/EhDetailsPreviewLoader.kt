@@ -1,26 +1,33 @@
 package dev.ahmedmohamed.hayai.adult.eh.ui
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapRegionDecoder
 import android.graphics.Rect
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
 import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
 import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+import dev.ahmedmohamed.hayai.adult.eh.presentation.EhTextResolver
+import dev.ahmedmohamed.hayai.adult.eh.presentation.localizedMessage
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewProvider
 import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
 import dev.ahmedmohamed.hayai.source.preview.SourcePreviewCrop
 import dev.ahmedmohamed.hayai.source.preview.SourcePreviewPage
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Manga
 import okhttp3.CacheControl
 import java.io.ByteArrayOutputStream
 
 class EhDetailsPreviewLoader(
+    private val context: Context,
     private val gateway: EhHttpGateway,
     private val preferences: HayaiPreferences,
     private val ehPreferences: EhPreferences,
 ) : SourceDetailsPreviewProvider {
+    private val text = EhTextResolver(context)
     override fun owns(manga: Manga): Boolean =
         preferences.hentaiFeaturesEnabled.get() &&
             ehPreferences.enhancedView.get() &&
@@ -28,7 +35,7 @@ class EhDetailsPreviewLoader(
 
     override suspend fun load(manga: Manga, page: Int, cacheControl: CacheControl?): SourcePreviewPage {
         require(page in 1..MAX_LISTING_PAGES)
-        val result = gateway.previews(site(manga), GalleryKey.parse(manga.url), page - 1)
+        val result = localizedRequest { gateway.previews(site(manga), GalleryKey.parse(manga.url), page - 1) }
         return SourcePreviewPage(
             page = page,
             previews = result.previews.map { preview ->
@@ -52,22 +59,22 @@ class EhDetailsPreviewLoader(
         val request = gateway.imageRequest(site(manga), preview.imageUrl).newBuilder().apply {
             cacheControl?.let(::cacheControl)
         }.build()
-        val bytes = gateway.executeImage(request).use { response ->
+        val bytes = localizedRequest { gateway.executeImage(request) }.use { response ->
             val declared = response.body.contentLength()
-            require(declared < 0 || declared <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
+            require(declared < 0 || declared <= MAX_IMAGE_BYTES) { context.getString(R.string.hayai_eh_preview_image_too_large) }
             response.body.byteStream().readBytesBounded(MAX_IMAGE_BYTES)
         }
         val crop = preview.crop ?: return bytes
         val decoder = requireNotNull(BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)) {
-            "Preview sprite could not be decoded"
+            context.getString(R.string.hayai_eh_preview_sprite_decode_failed)
         }
         return try {
             require(crop.x + crop.width <= decoder.width && crop.y + crop.height <= decoder.height) {
-                "Preview crop is outside the sprite"
+                context.getString(R.string.hayai_eh_preview_crop_outside_sprite)
             }
             requireNotNull(
                 decoder.decodeRegion(Rect(crop.x, crop.y, crop.x + crop.width, crop.y + crop.height), null),
-            ) { "Preview sprite region could not be decoded" }.useBytes()
+            ) { context.getString(R.string.hayai_eh_preview_region_decode_failed) }.useBytes()
         } finally {
             @Suppress("DEPRECATION")
             decoder.recycle()
@@ -76,11 +83,17 @@ class EhDetailsPreviewLoader(
 
     private fun site(manga: Manga): EhSite =
         EhSite.entries.firstOrNull { it.sourceId == manga.source }
-            ?: error("The E-Hentai source is unavailable")
+            ?: error(context.getString(R.string.hayai_eh_source_unavailable))
+
+    private suspend fun <T> localizedRequest(block: suspend () -> T): T = try {
+        block()
+    } catch (failure: EhFailure) {
+        throw IllegalStateException(failure.localizedMessage(text), failure)
+    }
 
     private fun Bitmap.useBytes(): ByteArray = try {
         ByteArrayOutputStream().use { output ->
-            check(compress(Bitmap.CompressFormat.JPEG, 92, output)) { "Preview crop could not be encoded" }
+            check(compress(Bitmap.CompressFormat.JPEG, 92, output)) { context.getString(R.string.hayai_eh_preview_crop_encode_failed) }
             output.toByteArray()
         }
     } finally {
@@ -95,7 +108,7 @@ class EhDetailsPreviewLoader(
             val read = read(buffer)
             if (read < 0) break
             total += read
-            require(total <= limit) { "Preview image exceeded the size limit" }
+            require(total <= limit) { context.getString(R.string.hayai_eh_preview_image_too_large) }
             output.write(buffer, 0, read)
         }
         return output.toByteArray()

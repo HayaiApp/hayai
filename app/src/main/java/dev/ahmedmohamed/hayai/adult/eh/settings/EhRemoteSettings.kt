@@ -35,26 +35,25 @@ enum class EhHentaiAtHome(
 }
 
 enum class EhLanguage(
-    val displayName: String,
     val originalCode: Int?,
 ) {
-    Japanese("Japanese", null),
-    English("English", 1),
-    Chinese("Chinese", 10),
-    Dutch("Dutch", 20),
-    French("French", 30),
-    German("German", 40),
-    Hungarian("Hungarian", 50),
-    Italian("Italian", 60),
-    Korean("Korean", 70),
-    Polish("Polish", 80),
-    Portuguese("Portuguese", 90),
-    Russian("Russian", 100),
-    Spanish("Spanish", 110),
-    Thai("Thai", 120),
-    Vietnamese("Vietnamese", 130),
-    NotAvailable("N/A", 254),
-    Other("Other", 255),
+    Japanese(null),
+    English(1),
+    Chinese(10),
+    Dutch(20),
+    French(30),
+    German(40),
+    Hungarian(50),
+    Italian(60),
+    Korean(70),
+    Polish(80),
+    Portuguese(90),
+    Russian(100),
+    Spanish(110),
+    Thai(120),
+    Vietnamese(130),
+    NotAvailable(254),
+    Other(255),
 }
 
 data class EhLanguageSelection(
@@ -99,4 +98,3 @@ data class EhRemoteSettings(
             .joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
     }
 }
-

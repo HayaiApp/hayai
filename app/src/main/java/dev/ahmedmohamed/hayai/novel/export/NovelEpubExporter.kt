@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.export
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import dev.ahmedmohamed.hayai.novel.archive.HtmlAssetRewriter
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -92,14 +94,14 @@ class NovelEpubExporter {
         require(assets.size <= MAX_ASSETS && assets.sumOf { it.bytes.size.toLong() } <= MAX_ASSET_BYTES)
         require(assets.all { it.mediaType.matches(Regex("[a-z0-9.+-]+/[a-z0-9.+-]+", RegexOption.IGNORE_CASE)) })
         assets.groupBy { it.fileName.lowercase(Locale.ROOT) }.values.forEach { sameName ->
-            require(sameName.size == 1) { "Duplicate EPUB asset filename ${sameName.first().fileName}" }
+            novelRequire(sameName.size == 1, NovelFailure.Code.ExportDuplicateAssetName, sameName.first().fileName)
         }
         assets.mapNotNull(NovelEpubAsset::sourceUrl)
             .map { canonicalUrl(it, null).lowercase(Locale.ROOT) }
             .groupingBy { it }
             .eachCount()
             .forEach { (url, count) ->
-                require(count == 1) { "Duplicate EPUB asset source URL $url" }
+                novelRequire(count == 1, NovelFailure.Code.ExportDuplicateAssetUrl, url)
             }
     }
 

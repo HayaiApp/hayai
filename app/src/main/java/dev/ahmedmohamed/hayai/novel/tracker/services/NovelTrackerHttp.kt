@@ -30,7 +30,7 @@ internal class NovelTrackerHttp(
                 429 -> throw NovelTrackerFailure.RateLimited(it.header("Retry-After")?.toLongOrNull())
             }
             if (!it.isSuccessful) {
-                throw NovelTrackerFailure.Remote(it.code, "The tracker returned HTTP ${it.code}")
+                throw NovelTrackerFailure.Remote(it.code)
             }
             val body =
                 try {
@@ -54,11 +54,13 @@ internal class NovelTrackerHttp(
     }
 }
 
-internal fun requireSafeCredential(value: String, label: String): String {
+internal fun requireSafeCredential(value: String, credential: NovelTrackerCredential): String {
     val trimmed = value.trim()
-    if (trimmed.isBlank()) throw NovelTrackerFailure.InvalidCredentials("$label is required")
+    if (trimmed.isBlank()) {
+        throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.Required, credential)
+    }
     if (trimmed.length > 8_192 || trimmed.any { it == '\r' || it == '\n' || it == '\u0000' }) {
-        throw NovelTrackerFailure.InvalidCredentials("$label contains invalid characters")
+        throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.InvalidCharacters, credential)
     }
     return trimmed
 }

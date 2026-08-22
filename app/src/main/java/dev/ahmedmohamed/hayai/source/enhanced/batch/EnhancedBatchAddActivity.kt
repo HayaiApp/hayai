@@ -76,11 +76,11 @@ class EnhancedBatchAddActivity : BaseActivity<ViewBinding>() {
         root.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         start = MaterialButton(this).apply {
-            text = getString(R.string.hayai_enhanced_batch_start)
+            text = getString(R.string.add_to_library)
             setOnClickListener { viewModel.start() }
         }
         cancel = MaterialButton(this).apply {
-            text = getString(R.string.hayai_enhanced_batch_cancel)
+            text = getString(R.string.cancel)
             setOnClickListener { viewModel.cancel() }
         }
         actions.addView(start, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -104,7 +104,7 @@ class EnhancedBatchAddActivity : BaseActivity<ViewBinding>() {
         start.isEnabled = !state.running && state.input.isNotBlank()
         cancel.isEnabled = state.running
         output.text = buildString {
-            state.error?.let { appendLine(it) }
+            state.error?.let { appendLine(it.localizedMessage()) }
             state.progress?.let { progress ->
                 appendLine(getString(R.string.hayai_enhanced_batch_progress, progress.completed, progress.total))
                 progress.currentUrl?.let { appendLine(getString(R.string.hayai_enhanced_batch_loading, it)) }
@@ -129,8 +129,24 @@ class EnhancedBatchAddActivity : BaseActivity<ViewBinding>() {
         is EnhancedBatchItemResult.Added -> getString(R.string.hayai_enhanced_batch_added, title, target.sourceName)
         is EnhancedBatchItemResult.AlreadyInLibrary -> getString(R.string.hayai_enhanced_batch_present, title)
         is EnhancedBatchItemResult.Duplicate -> getString(R.string.hayai_enhanced_batch_duplicate, submittedUrl)
-        is EnhancedBatchItemResult.Failed -> getString(R.string.hayai_enhanced_batch_failed, submittedUrl, reason.message)
+        is EnhancedBatchItemResult.Failed -> getString(R.string.hayai_enhanced_batch_failed, submittedUrl, reason.localizedMessage())
     }
+
+    private fun EnhancedBatchFailure.localizedMessage(): String = when (this) {
+        is EnhancedBatchFailure.UnsupportedSource -> getString(R.string.hayai_enhanced_failure_unsupported_source)
+        is EnhancedBatchFailure.AmbiguousSource -> getString(R.string.hayai_enhanced_failure_ambiguous_source, sourceNames.joinToString())
+        is EnhancedBatchFailure.Network -> getString(R.string.hayai_enhanced_failure_network)
+        is EnhancedBatchFailure.InvalidGallery -> getString(R.string.hayai_enhanced_failure_invalid_gallery)
+        is EnhancedBatchFailure.Persistence -> getString(R.string.hayai_enhanced_failure_persistence)
+    }
+
+    private fun EnhancedBatchUiError.localizedMessage(): String = getString(
+        when (this) {
+            EnhancedBatchUiError.InvalidInput -> R.string.hayai_enhanced_batch_invalid_input
+            EnhancedBatchUiError.Cancelled -> R.string.cancelled
+            EnhancedBatchUiError.Failed -> R.string.hayai_enhanced_batch_run_failed
+        },
+    )
 
     private fun matchWidth() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 

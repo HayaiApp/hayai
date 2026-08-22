@@ -79,7 +79,7 @@ data class EhSyncRequest(
 sealed interface EhFavoriteConflict {
     val id: String
     val gallery: EhGalleryIdentity?
-    val message: String
+    val kind: EhFavoriteConflictKind
 
     data class BothChanged(
         override val id: String,
@@ -88,7 +88,7 @@ sealed interface EhFavoriteConflict {
         val local: EhFavoriteState?,
         val remote: EhFavoriteState?,
     ) : EhFavoriteConflict {
-        override val message = "The local and remote favorite changed differently."
+        override val kind = EhFavoriteConflictKind.BothChanged
     }
 
     data class MultipleMappedCategories(
@@ -96,7 +96,7 @@ sealed interface EhFavoriteConflict {
         override val gallery: EhGalleryIdentity,
         val slots: Set<EhFavoriteSlot>,
     ) : EhFavoriteConflict {
-        override val message = "The gallery belongs to more than one mapped E-Hentai category."
+        override val kind = EhFavoriteConflictKind.MultipleMappedCategories
     }
 
     data class DuplicateAliases(
@@ -104,7 +104,7 @@ sealed interface EhFavoriteConflict {
         override val gallery: EhGalleryIdentity,
         val mangaIds: Set<Long>,
     ) : EhFavoriteConflict {
-        override val message = "Multiple favorite library rows represent the same E-Hentai gallery."
+        override val kind = EhFavoriteConflictKind.DuplicateAliases
     }
 
     data class RemoteChanged(
@@ -113,8 +113,15 @@ sealed interface EhFavoriteConflict {
         val expected: EhFavoriteState?,
         val actual: EhFavoriteState?,
     ) : EhFavoriteConflict {
-        override val message = "The remote favorite changed after this sync was planned."
+        override val kind = EhFavoriteConflictKind.RemoteChanged
     }
+}
+
+enum class EhFavoriteConflictKind {
+    BothChanged,
+    MultipleMappedCategories,
+    DuplicateAliases,
+    RemoteChanged,
 }
 
 sealed interface EhFavoriteOperation {

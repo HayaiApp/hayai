@@ -35,6 +35,7 @@ import com.google.android.material.button.MaterialButton
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
 import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionaryLauncher
 import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettingsStore
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightAnchor
 import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlight
 import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightStore
@@ -45,6 +46,7 @@ import dev.ahmedmohamed.hayai.novel.settings.NovelCustomizationStore
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationCache
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationService
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationWarning
 import dev.ahmedmohamed.hayai.novel.tracker.J2kNovelChapterTrackSync
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -81,6 +83,7 @@ class NovelReaderActivity :
     private val session by lazy {
         val database = Injekt.get<DatabaseHelper>()
         NovelReaderSession(
+            this,
             database,
             Injekt.get<SourceManager>(),
             NovelDownloadStore(File(filesDir, "hayai/novel-downloads")),
@@ -144,9 +147,9 @@ class NovelReaderActivity :
                     onSuccess = { font ->
                         preferences.novelFontFamily.set(fontStore.token(font))
                         loaded?.let(::showChapter)
-                        toast("Imported ${font.name}")
+                        toast(getString(R.string.hayai_novel_reader_imported_font_success, font.name))
                     },
-                    onFailure = { toast(it.message ?: "The font could not be imported.") },
+                    onFailure = { toast(novelFailureMessage(it, R.string.hayai_novel_reader_imported_font_error)) },
                 )
             }
         }
@@ -177,7 +180,7 @@ class NovelReaderActivity :
         val mangaId = intent.getLongExtra(EXTRA_MANGA_ID, -1L)
         val chapterId = intent.getLongExtra(EXTRA_CHAPTER_ID, -1L)
         if (mangaId < 0 || chapterId < 0) {
-            showError("The novel chapter could not be opened.")
+            showError(getString(R.string.hayai_novel_reader_open_error))
             return
         }
         loadJob?.cancel()
@@ -188,7 +191,7 @@ class NovelReaderActivity :
         loadJob =
             lifecycleScope.launch {
                 val result = withContext(Dispatchers.IO) { runCatching { session.initialize(mangaId, chapterId, recordHistory = !j2kPreferences.incognitoMode().get()) } }
-                result.fold(::showChapter) { showError(it.message ?: "The novel chapter could not be loaded.") }
+                result.fold(::showChapter) { showError(novelFailureMessage(it, R.string.hayai_novel_reader_load_error)) }
             }
     }
 
@@ -369,8 +372,8 @@ class NovelReaderActivity :
     private fun displayedChapterTitle(chapter: LoadedNovelChapter): String =
         when (preferences.novelChapterTitleDisplay.get()) {
             0 -> chapter.chapter.name
-            1 -> "Chapter ${chapter.position + 1}"
-            else -> "Chapter ${chapter.position + 1}: ${chapter.chapter.name}"
+            1 -> getString(R.string.hayai_novel_reader_chapter_number_only, chapter.position + 1)
+            else -> getString(R.string.hayai_novel_reader_chapter_number_name, chapter.position + 1, chapter.chapter.name)
         }
 
     private fun chapterSubtitle(
@@ -378,14 +381,13 @@ class NovelReaderActivity :
         displayedTitle: String = displayedChapterTitle(chapter),
     ): String =
         buildString {
-            append(displayedTitle, "  •  ", chapter.position + 1, "/", chapter.total)
-            if (chapter.isDownloaded) append("  •  Offline")
+            append(displayedTitle, getString(R.string.hayai_novel_reader_status_separator), getString(R.string.hayai_novel_reader_chapter_count, chapter.position + 1, chapter.total))
+            if (chapter.isDownloaded) append(getString(R.string.hayai_novel_reader_status_separator), getString(R.string.hayai_novel_reader_offline))
             append(
-                "  •  ",
-                NumberFormat.getIntegerInstance().format(chapter.statistics.wordCount),
-                " words  •  ",
-                chapter.statistics.estimatedMinutes(),
-                " min",
+                getString(R.string.hayai_novel_reader_status_separator),
+                getString(R.string.hayai_novel_reader_word_count, NumberFormat.getIntegerInstance().format(chapter.statistics.wordCount)),
+                getString(R.string.hayai_novel_reader_status_separator),
+                getString(R.string.hayai_novel_reader_reading_minutes, chapter.statistics.estimatedMinutes()),
             )
         }
 
@@ -437,7 +439,7 @@ class NovelReaderActivity :
         }
         val now = System.currentTimeMillis()
         if (adjacentId != null && (chapterFailureCooldowns[adjacentId] ?: 0L) > now) {
-            toast("Retry this chapter in ${((chapterFailureCooldowns.getValue(adjacentId) - now + 999) / 1000)}s")
+            toast(getString(R.string.hayai_novel_reader_retry_chapter_in, (chapterFailureCooldowns.getValue(adjacentId) - now + 999) / 1000))
             return
         }
         val chapterToSave = loaded?.chapter
@@ -478,14 +480,14 @@ class NovelReaderActivity :
                         chapter?.let(::showChapter) ?: run {
                             navigationDirection = 0
                             navigationFocus = true
-                            toast(if (next) "No next chapter" else "No previous chapter")
+                            toast(if (next) R.string.hayai_novel_reader_no_next_chapter else R.string.hayai_novel_reader_no_previous_chapter)
                         }
                     },
                     onFailure = { error ->
                         val direction = navigationDirection
                         navigationDirection = 0
                         navigationFocus = true
-                        val message = error.message ?: "The chapter could not be loaded."
+                        val message = novelFailureMessage(error, R.string.hayai_novel_reader_load_error)
                         if (preferences.novelInfiniteScroll.get() && adjacentId != null && renderer != null) {
                             val retryAt = System.currentTimeMillis() + CHAPTER_RETRY_COOLDOWN_MS
                             chapterFailureCooldowns[adjacentId] = retryAt
@@ -544,8 +546,8 @@ class NovelReaderActivity :
         programmaticProgress = true
         progressSlider.value = value.toFloat()
         verticalProgressSlider.progress = value
-        progressText.text = "$value%"
-        alternateStatusView.text = "100%"
+        progressText.text = getString(R.string.hayai_novel_reader_percent_value, value)
+        alternateStatusView.text = getString(R.string.hayai_novel_reader_percent_value, 100)
         programmaticProgress = false
     }
 
@@ -605,16 +607,9 @@ class NovelReaderActivity :
         val number = NumberFormat.getIntegerInstance()
         AlertDialog
             .Builder(this)
-            .setTitle("Chapter statistics")
-            .setMessage(
-                buildString {
-                    append("Words: ", number.format(statistics.wordCount))
-                    append("\nEstimated reading time: ", statistics.estimatedMinutes(), " min")
-                    append("\nEstimated words read: ", number.format(statistics.wordsRead(currentProgress)))
-                    append("\nEstimated time remaining: ", statistics.remainingMinutes(currentProgress), " min")
-                    append("\nProgress: ", currentProgress.coerceIn(0, 100), "%")
-                },
-            ).setPositiveButton(android.R.string.ok, null)
+            .setTitle(R.string.hayai_novel_reader_chapter_statistics)
+            .setMessage(getString(R.string.hayai_novel_reader_statistics_message, number.format(statistics.wordCount), statistics.estimatedMinutes(), number.format(statistics.wordsRead(currentProgress)), statistics.remainingMinutes(currentProgress), getString(R.string.hayai_novel_reader_percent_value, currentProgress.coerceIn(0, 100))))
+            .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 
@@ -627,9 +622,9 @@ class NovelReaderActivity :
     }
 
     private fun showCreateQuote(chapter: LoadedNovelChapter, initialText: String) {
-        val content = EditText(this).apply { setText(initialText); minLines = 4; gravity = Gravity.TOP; hint = "Quote" }
-        val chapterName = EditText(this).apply { setText(chapter.chapter.name); setSingleLine(); hint = "Chapter" }
-        val language = EditText(this).apply { setSingleLine(); hint = "Language, optional" }
+        val content = EditText(this).apply { setText(initialText); minLines = 4; gravity = Gravity.TOP; setHint(R.string.hayai_novel_reader_quote) }
+        val chapterName = EditText(this).apply { setText(chapter.chapter.name); setSingleLine(); setHint(R.string.hayai_novel_reader_chapter) }
+        val language = EditText(this).apply { setSingleLine(); setHint(R.string.hayai_novel_reader_language_optional) }
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20.dp, 8.dp, 20.dp, 8.dp)
@@ -637,7 +632,7 @@ class NovelReaderActivity :
             addView(language)
             addView(content)
         }
-        val dialog = AlertDialog.Builder(this).setTitle("Save quote").setView(form).setPositiveButton("Save", null).setNegativeButton(android.R.string.cancel, null).create()
+        val dialog = AlertDialog.Builder(this).setTitle(R.string.hayai_novel_reader_save_quote).setView(form).setPositiveButton(R.string.save, null).setNegativeButton(android.R.string.cancel, null).create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 lifecycleScope.launch {
@@ -653,8 +648,8 @@ class NovelReaderActivity :
                         }
                     }
                     result.fold(
-                        onSuccess = { added -> toast(if (added is QuoteAddResult.Created) "Quote saved" else "This quote is already saved"); dialog.dismiss() },
-                        onFailure = { content.error = it.message ?: "The quote could not be saved" },
+                        onSuccess = { added -> toast(if (added is QuoteAddResult.Created) R.string.hayai_novel_reader_quote_saved else R.string.hayai_novel_reader_quote_duplicate); dialog.dismiss() },
+                        onFailure = { content.error = novelFailureMessage(it, R.string.hayai_novel_reader_quote_save_error) },
                     )
                 }
             }
@@ -673,7 +668,7 @@ class NovelReaderActivity :
                 capture.occurrence,
             )
             if (anchor == null) {
-                toast("Select text to highlight")
+                toast(R.string.hayai_novel_reader_select_highlight)
                 return@captureSelection
             }
             lifecycleScope.launch {
@@ -694,9 +689,9 @@ class NovelReaderActivity :
                 result.fold(
                     onSuccess = {
                         restorePersistentHighlights(chapter)
-                        toast("Highlight saved")
+                        toast(R.string.hayai_novel_reader_highlight_saved)
                     },
-                    onFailure = { toast(it.message ?: "Highlight could not be saved") },
+                    onFailure = { toast(novelFailureMessage(it, R.string.hayai_novel_reader_highlight_save_error)) },
                 )
             }
         }
@@ -729,14 +724,14 @@ class NovelReaderActivity :
                 highlightStore.forStableChapter(chapter.manga.source, chapter.manga.url, chapter.chapter.url)
             }
             if (highlights.isEmpty()) {
-                toast("No highlights in this chapter")
+                toast(R.string.hayai_novel_reader_no_highlights)
                 return@launch
             }
             val labels = highlights.map {
-                (it.note?.let { note -> "$note · " }.orEmpty()) + it.anchor.exact.take(100)
+                it.note?.let { note -> getString(R.string.hayai_novel_reader_highlight_list_item, note, it.anchor.exact.take(100)) } ?: it.anchor.exact.take(100)
             }.toTypedArray()
             AlertDialog.Builder(this@NovelReaderActivity)
-                .setTitle("Highlights")
+                .setTitle(R.string.hayai_novel_reader_highlights)
                 .setItems(labels) { _, index -> showHighlight(chapter, highlights[index]) }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
@@ -745,10 +740,10 @@ class NovelReaderActivity :
 
     private fun showHighlight(chapter: LoadedNovelChapter, selected: NovelHighlight) {
         AlertDialog.Builder(this)
-            .setTitle("Highlight")
+            .setTitle(R.string.hayai_novel_reader_highlight)
             .setMessage(selected.anchor.exact)
-            .setPositiveButton("Edit") { _, _ -> editHighlight(chapter, selected.id, selected.note, selected.color) }
-            .setNeutralButton("Delete") { _, _ ->
+            .setPositiveButton(R.string.edit) { _, _ -> editHighlight(chapter, selected.id, selected.note, selected.color) }
+            .setNeutralButton(R.string.delete) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) { highlightStore.delete(selected.id) }
                     restorePersistentHighlights(chapter)
@@ -760,17 +755,17 @@ class NovelReaderActivity :
 
     private fun editHighlight(chapter: LoadedNovelChapter, id: String, note: String?, color: Int) {
         val input = EditText(this).apply {
-            hint = "Optional note"
+            setHint(R.string.hayai_novel_reader_optional_note)
             setText(note)
         }
         val colors = intArrayOf(0xFFFFEB3B.toInt(), 0xFF80DEEA.toInt(), 0xFFA5D6A7.toInt(), 0xFFF8BBD0.toInt(), 0xFFFFCC80.toInt())
         var selectedColor = colors.indexOf(color).takeIf { it >= 0 } ?: 0
         AlertDialog.Builder(this)
-            .setTitle("Edit highlight")
+            .setTitle(R.string.hayai_novel_reader_edit_highlight)
             .setView(input)
-            .setSingleChoiceItems(arrayOf("Yellow", "Cyan", "Green", "Pink", "Orange"), selectedColor) { _, which -> selectedColor = which }
+            .setSingleChoiceItems(arrayOf(getString(R.string.hayai_novel_reader_yellow), getString(R.string.hayai_novel_reader_cyan), getString(R.string.hayai_novel_reader_green), getString(R.string.hayai_novel_reader_pink), getString(R.string.hayai_novel_reader_orange)), selectedColor) { _, which -> selectedColor = which }
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
                         highlightStore.update(id, colors[selectedColor], input.text.toString())
@@ -785,7 +780,7 @@ class NovelReaderActivity :
         val chapter = loaded ?: return
         captureSelection { capture ->
             if (capture.selectedText.isBlank()) {
-                toast("Select text to translate")
+                toast(R.string.hayai_novel_reader_select_translate)
                 return@captureSelection
             }
             lifecycleScope.launch {
@@ -799,17 +794,20 @@ class NovelReaderActivity :
                 result.fold(
                     onSuccess = { translated ->
                         AlertDialog.Builder(this@NovelReaderActivity)
-                            .setTitle(if (translated.complete) "Translation to ${settings.targetLanguage}" else "Partial translation")
-                            .setMessage(listOfNotNull(translated.warning, translated.text).joinToString("\n\n"))
-                            .setPositiveButton("Copy") { _, _ ->
+                            .setTitle(if (translated.complete) getString(R.string.hayai_novel_reader_translation_to, settings.targetLanguage) else getString(R.string.hayai_novel_reader_partial_translation))
+                            .setMessage(
+                                listOfNotNull(translated.warning?.let(::translationWarningText), translated.text)
+                                    .joinToString("\n\n"),
+                            )
+                            .setPositiveButton(R.string.copy_value) { _, _ ->
                                 (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(
-                                    ClipData.newPlainText("Translation", translated.text),
+                                    ClipData.newPlainText(getString(R.string.hayai_novel_reader_translation_clipboard), translated.text),
                                 )
                             }
                             .setNegativeButton(android.R.string.ok, null)
                             .show()
                     },
-                    onFailure = { toast(it.message ?: "Translation failed") },
+                    onFailure = { toast(novelFailureMessage(it, R.string.hayai_novel_reader_translation_failed)) },
                 )
             }
         }
@@ -818,7 +816,7 @@ class NovelReaderActivity :
     private fun dictionarySelection() {
         captureSelection { capture ->
             runCatching { dictionary.open(capture.selectedText, dictionarySettings.get()) }
-                .onFailure { toast(it.message ?: "Dictionary lookup failed") }
+                .onFailure { toast(novelFailureMessage(it, R.string.hayai_novel_reader_dictionary_failed)) }
         }
     }
 
@@ -826,7 +824,7 @@ class NovelReaderActivity :
         val chapter = loaded ?: return
         renderer?.documentText { text ->
             if (text.isBlank()) {
-                toast("Chapter has no translatable text")
+                toast(R.string.hayai_novel_reader_no_translatable_text)
                 return@documentText
             }
             lifecycleScope.launch {
@@ -845,10 +843,10 @@ class NovelReaderActivity :
                 result.fold(
                     onSuccess = { translated ->
                         renderer?.showTranslation(translated.text)
-                        translated.warning?.let { warning -> toast(warning) }
+                        translated.warning?.let { warning -> toast(translationWarningText(warning)) }
                         extractTtsParagraphs()
                     },
-                    onFailure = { toast(it.message ?: "Chapter translation failed") },
+                    onFailure = { toast(novelFailureMessage(it, R.string.hayai_novel_reader_chapter_translation_failed)) },
                 )
             }
         }
@@ -856,18 +854,26 @@ class NovelReaderActivity :
 
     private fun captureSelection(action: (NovelSelection) -> Unit) = renderer?.selection { it?.let(action) }
 
+    private fun translationWarningText(warning: NovelTranslationWarning): String =
+        getString(
+            R.string.hayai_translation_partial,
+            warning.completedParts,
+            warning.totalParts,
+            novelFailureMessage(warning.error, R.string.hayai_novel_reader_translation_failed),
+        )
+
     private fun showSavedQuotes() {
         val mangaId = loaded?.manga?.id ?: return
         lifecycleScope.launch {
             val quotes = withContext(Dispatchers.IO) { quoteStore.forManga(mangaId) }
             if (quotes.isEmpty()) {
-                toast("No saved quotes for this novel")
+                toast(R.string.hayai_novel_reader_no_quotes)
                 return@launch
             }
-            val labels = quotes.map { quote -> "${quote.chapterName}  •  ${quote.displayedContent.replace('\n', ' ').take(80)}" }.toTypedArray()
+            val labels = quotes.map { quote -> getString(R.string.hayai_novel_reader_quote_list_item, quote.chapterName, quote.displayedContent.replace('\n', ' ').take(80)) }.toTypedArray()
             AlertDialog
                 .Builder(this@NovelReaderActivity)
-                .setTitle("Saved quotes")
+                .setTitle(R.string.hayai_novel_reader_saved_quotes)
                 .setItems(labels) { _, index -> showQuote(quotes[index]) }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
@@ -878,10 +884,10 @@ class NovelReaderActivity :
         AlertDialog.Builder(this)
             .setTitle(quote.chapterName)
             .setMessage(quote.displayedContent)
-            .setItems(arrayOf("Copy", "Copy with attribution", "Edit", "Move earlier", "Move later", "Delete")) { _, action ->
+            .setItems(arrayOf(getString(R.string.copy_value), getString(R.string.hayai_novel_reader_copy_attribution), getString(R.string.edit), getString(R.string.hayai_novel_reader_move_earlier), getString(R.string.hayai_novel_reader_move_later), getString(R.string.delete))) { _, action ->
                 when (action) {
                     0 -> copyQuote(quote.displayedContent)
-                    1 -> copyQuote("\u201c${quote.displayedContent}\u201d\n\u2014 ${quote.novelName}, ${quote.chapterName}")
+                    1 -> copyQuote(getString(R.string.hayai_novel_reader_quote_attribution, quote.displayedContent, quote.novelName, quote.chapterName))
                     2 -> editQuote(quote)
                     3 -> moveQuote(quote, -1)
                     4 -> moveQuote(quote, 1)
@@ -893,14 +899,14 @@ class NovelReaderActivity :
     }
 
     private fun copyQuote(text: String) {
-        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Novel quote", text))
-        toast("Quote copied")
+        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(getString(R.string.hayai_novel_reader_quote_clipboard), text))
+        toast(R.string.hayai_novel_reader_quote_copied)
     }
 
     private fun editQuote(quote: NovelQuote) {
         val content = EditText(this).apply { setText(quote.displayedContent); minLines = 4; gravity = Gravity.TOP }
-        val chapter = EditText(this).apply { setText(quote.chapterName); hint = "Chapter"; setSingleLine() }
-        val language = EditText(this).apply { setText(quote.language.orEmpty()); hint = "Language, optional"; setSingleLine() }
+        val chapter = EditText(this).apply { setText(quote.chapterName); setHint(R.string.hayai_novel_reader_chapter); setSingleLine() }
+        val language = EditText(this).apply { setText(quote.language.orEmpty()); setHint(R.string.hayai_novel_reader_language_optional); setSingleLine() }
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20.dp, 8.dp, 20.dp, 8.dp)
@@ -908,14 +914,14 @@ class NovelReaderActivity :
             addView(language)
             addView(content)
         }
-        val dialog = AlertDialog.Builder(this).setTitle("Edit quote").setView(form).setPositiveButton("Save", null).setNegativeButton(android.R.string.cancel, null).create()
+        val dialog = AlertDialog.Builder(this).setTitle(R.string.hayai_novel_reader_edit_quote).setView(form).setPositiveButton(R.string.save, null).setNegativeButton(android.R.string.cancel, null).create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 lifecycleScope.launch {
                     val result = withContext(Dispatchers.IO) { runCatching { quoteStore.update(quote.id, content.text.toString(), chapter.text.toString(), language.text.toString()) } }
                     result.fold(
-                        onSuccess = { if (it == null) toast("The quote no longer exists") else { toast("Quote updated"); dialog.dismiss() } },
-                        onFailure = { content.error = it.message ?: "The quote could not be updated" },
+                        onSuccess = { if (it == null) toast(R.string.hayai_novel_reader_quote_missing) else { toast(R.string.hayai_novel_reader_quote_updated); dialog.dismiss() } },
+                        onFailure = { content.error = novelFailureMessage(it, R.string.hayai_novel_reader_quote_update_error) },
                     )
                 }
             }
@@ -926,19 +932,19 @@ class NovelReaderActivity :
     private fun moveQuote(quote: NovelQuote, direction: Int) {
         lifecycleScope.launch {
             val moved = withContext(Dispatchers.IO) { quoteStore.move(quote.mangaId, quote.id, direction) }
-            toast(if (moved) "Quote reordered" else "Quote is already at the edge")
+            toast(if (moved) R.string.hayai_novel_reader_quote_reordered else R.string.hayai_novel_reader_quote_at_edge)
         }
     }
 
     private fun confirmDeleteQuote(quote: NovelQuote) {
         AlertDialog
             .Builder(this)
-            .setTitle("Delete quote?")
-            .setMessage("This cannot be undone.")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle(R.string.hayai_novel_reader_delete_quote)
+            .setMessage(R.string.hayai_novel_reader_cannot_undo)
+            .setPositiveButton(R.string.delete) { _, _ ->
                 lifecycleScope.launch {
                     val deleted = withContext(Dispatchers.IO) { quoteStore.delete(quote.id) }
-                    toast(if (deleted) "Quote deleted" else "The quote no longer exists")
+                    toast(if (deleted) R.string.hayai_novel_reader_quote_deleted else R.string.hayai_novel_reader_quote_missing)
                 }
             }.setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -963,7 +969,7 @@ class NovelReaderActivity :
                                     session.saveOffline(chapter)
                                 }
                             val refreshed = session.reload()
-                            check(refreshed.isDownloaded != removing) { "The offline copy could not be verified." }
+                            check(refreshed.isDownloaded != removing) { getString(R.string.hayai_novel_reader_offline_verify_error) }
                             download to refreshed
                         }
                     }
@@ -971,14 +977,14 @@ class NovelReaderActivity :
                     onSuccess = { (download, refreshed) ->
                         showChapter(refreshed)
                         when {
-                            removing -> toast("Offline copy removed")
+                            removing -> toast(R.string.hayai_novel_reader_offline_removed)
                             download == null -> Unit
                             download.unavailableAssetCount > 0 ->
-                                toast("Chapter saved; ${download.unavailableAssetCount} source assets were unavailable")
-                            else -> toast("Chapter saved for offline reading")
+                                toast(getString(R.string.hayai_novel_reader_offline_partial, download.unavailableAssetCount))
+                            else -> toast(R.string.hayai_novel_reader_offline_saved)
                         }
                     },
-                    onFailure = { toast(it.message ?: "The offline copy could not be changed") },
+                    onFailure = { toast(novelFailureMessage(it, R.string.hayai_novel_reader_offline_error)) },
                 )
             }
     }
@@ -1038,21 +1044,21 @@ class NovelReaderActivity :
                 NovelStatusItem.Time -> DateFormat.getTimeFormat(this).format(java.util.Date()).takeIf { preferences.novelStatusBarShowTime.get() }
                 NovelStatusItem.Chapter -> chapter?.let {
                     listOfNotNull(
-                        "${it.position + 1}/${it.total}".takeIf { preferences.novelStatusBarShowChapterNumber.get() },
+                        getString(R.string.hayai_novel_reader_chapter_count, it.position + 1, it.total).takeIf { preferences.novelStatusBarShowChapterNumber.get() },
                         displayedChapterTitle(it).takeIf { preferences.novelStatusBarShowChapterTitle.get() },
                     ).joinToString(" ").takeIf(String::isNotBlank)
                 }
-                NovelStatusItem.Progress -> "$currentProgress%".takeIf { preferences.novelStatusBarShowProgress.get() }
+                NovelStatusItem.Progress -> getString(R.string.hayai_novel_reader_percent_value, currentProgress).takeIf { preferences.novelStatusBarShowProgress.get() }
                 NovelStatusItem.Battery -> {
                     val battery = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
                     buildString {
-                        if (battery in 0..100 && preferences.novelStatusBarShowBattery.get()) append("$battery%")
-                        if (batteryManager.isCharging && preferences.novelStatusBarShowCharging.get()) append(" ⚡")
+                        if (battery in 0..100 && preferences.novelStatusBarShowBattery.get()) append(getString(R.string.hayai_novel_reader_battery_value, battery))
+                        if (batteryManager.isCharging && preferences.novelStatusBarShowCharging.get()) append(getString(R.string.hayai_novel_reader_charging_symbol))
                     }.takeIf(String::isNotBlank)
                 }
             }
         }
-        statusView.text = parts.joinToString("  •  ")
+        statusView.text = parts.joinToString(getString(R.string.hayai_novel_reader_status_separator))
     }
 
     private fun configureWindow() {
@@ -1097,7 +1103,7 @@ class NovelReaderActivity :
         progressSlider.valueFrom = 0f
         progressSlider.valueTo = 100f
         progressSlider.stepSize = 1f
-        progressSlider.setLabelFormatter { "${it.toInt()}%" }
+        progressSlider.setLabelFormatter { getString(R.string.hayai_novel_reader_percent_value, it.toInt()) }
         verticalProgressSlider = NovelVerticalProgressView(this).apply { max = 100 }
         findViewById<ViewGroup>(R.id.reader_layout).addView(verticalProgressSlider)
         progressText = findViewById(R.id.left_page_text)
@@ -1119,7 +1125,7 @@ class NovelReaderActivity :
         progressSlider.addOnChangeListener { _, value, fromUser ->
             if (fromUser && !programmaticProgress) {
                 currentProgress = value.toInt()
-                progressText.text = "$currentProgress%"
+                progressText.text = getString(R.string.hayai_novel_reader_percent_value, currentProgress)
             }
         }
         progressSlider.addOnSliderTouchListener(
@@ -1137,7 +1143,7 @@ class NovelReaderActivity :
                 override fun onProgressChanged(seekBar: SeekBar?, value: Int, fromUser: Boolean) {
                     if (fromUser && !programmaticProgress) {
                         currentProgress = value
-                        progressText.text = "$value%"
+                        progressText.text = getString(R.string.hayai_novel_reader_percent_value, value)
                         renderer?.seek(value)
                     }
                 }
@@ -1209,13 +1215,13 @@ class NovelReaderActivity :
         nextButton.isVisible = NovelBottomAction.NextChapter in enabled
         binding.chaptersButton.apply {
             setIconResource(R.drawable.ic_format_list_numbered_24dp)
-            contentDescription = "Chapters"
+            contentDescription = getString(R.string.chapters)
             tooltipText = contentDescription
             isVisible = true
         }
         binding.webviewButton.apply {
             setIconResource(if (ttsActive) R.drawable.ic_skip_previous_24 else R.drawable.ic_open_in_webview_24dp)
-            contentDescription = if (ttsActive) "Previous paragraph" else "Open in WebView"
+            contentDescription = getString(if (ttsActive) R.string.hayai_novel_reader_previous_paragraph else R.string.open_in_webview)
             tooltipText = contentDescription
             isVisible = true
             setOnClickListener {
@@ -1231,13 +1237,13 @@ class NovelReaderActivity :
                 binding.shiftPageButton,
             )
         if (ttsActive) {
-            bindReaderSheetButton(slots[0], R.drawable.ic_pause_24dp.takeIf { ttsController.isPlaying } ?: R.drawable.ic_play_arrow_24dp, if (ttsController.isPlaying) "Pause" else "Resume") {
+            bindReaderSheetButton(slots[0], R.drawable.ic_pause_24dp.takeIf { ttsController.isPlaying } ?: R.drawable.ic_play_arrow_24dp, getString(if (ttsController.isPlaying) R.string.pause else R.string.resume)) {
                 if (ttsController.isPlaying) ttsController.pause() else ttsController.play()
             }
             ttsButton = slots[0]
-            bindReaderSheetButton(slots[1], R.drawable.ic_skip_next_24, "Next paragraph", ttsController::nextParagraph)
-            bindReaderSheetButton(slots[2], R.drawable.ic_close_circle_24dp, "Stop reading aloud", ttsController::stop)
-            bindReaderSheetButton(slots[3], R.drawable.ic_text_fields_24dp, "Read from viewport") {
+            bindReaderSheetButton(slots[1], R.drawable.ic_skip_next_24, getString(R.string.hayai_novel_reader_next_paragraph), ttsController::nextParagraph)
+            bindReaderSheetButton(slots[2], R.drawable.ic_close_circle_24dp, getString(R.string.hayai_novel_reader_stop_tts), ttsController::stop)
+            bindReaderSheetButton(slots[3], R.drawable.ic_text_fields_24dp, getString(R.string.hayai_novel_reader_read_viewport)) {
                 dispatch(NovelReaderAction.StartTtsAtViewport)
             }
             slots[4].isVisible = false
@@ -1255,7 +1261,7 @@ class NovelReaderActivity :
         }
         binding.displayOptions.apply {
             setIconResource(R.drawable.ic_tune_24dp)
-            contentDescription = "Reader settings"
+            contentDescription = getString(R.string.reader_settings)
             tooltipText = contentDescription
             isVisible = NovelBottomAction.Settings in enabled || ttsActive
             setOnClickListener { dispatch(NovelReaderAction.ShowSettings) }
@@ -1264,25 +1270,25 @@ class NovelReaderActivity :
 
     private fun bindNovelSheetAction(button: MaterialButton, action: NovelBottomAction) {
         when (action) {
-            NovelBottomAction.ScrollToTop -> bindReaderSheetButton(button, R.drawable.ic_arrow_upward_24dp, "Scroll to top") { dispatch(NovelReaderAction.Seek(0)) }
-            NovelBottomAction.Translate -> bindReaderSheetButton(button, R.drawable.ic_translate_24dp, "Translate selection") { dispatch(NovelReaderAction.TranslateSelection) }
+            NovelBottomAction.ScrollToTop -> bindReaderSheetButton(button, R.drawable.ic_arrow_upward_24dp, getString(R.string.hayai_novel_reader_scroll_top)) { dispatch(NovelReaderAction.Seek(0)) }
+            NovelBottomAction.Translate -> bindReaderSheetButton(button, R.drawable.ic_translate_24dp, getString(R.string.hayai_novel_reader_select_translate)) { dispatch(NovelReaderAction.TranslateSelection) }
             NovelBottomAction.AutoScroll -> {
                 autoScrollButton = button
-                bindReaderSheetButton(button, if (autoScroll) R.drawable.ic_pause_24dp else R.drawable.ic_swap_vert_24dp, if (autoScroll) "Stop auto-scroll" else "Auto-scroll") {
+                bindReaderSheetButton(button, if (autoScroll) R.drawable.ic_pause_24dp else R.drawable.ic_swap_vert_24dp, getString(if (autoScroll) R.string.hayai_novel_reader_stop_auto_scroll else R.string.hayai_novel_reader_auto_scroll)) {
                     dispatch(NovelReaderAction.ToggleAutoScroll)
                 }
             }
             NovelBottomAction.Tts -> {
                 ttsButton = button
-                bindReaderSheetButton(button, R.drawable.ic_record_voice_over_24dp, "Read aloud") { extractTtsParagraphs(autoStart = true) }
+                bindReaderSheetButton(button, R.drawable.ic_record_voice_over_24dp, getString(R.string.hayai_novel_reader_read_aloud)) { extractTtsParagraphs(autoStart = true) }
                 button.setOnLongClickListener { ttsController.stop(); true }
             }
-            NovelBottomAction.TtsViewport -> bindReaderSheetButton(button, R.drawable.ic_text_fields_24dp, "Read from viewport") { dispatch(NovelReaderAction.StartTtsAtViewport) }
-            NovelBottomAction.TtsPreviousParagraph -> bindReaderSheetButton(button, R.drawable.ic_skip_previous_24, "Previous paragraph", ttsController::previousParagraph)
-            NovelBottomAction.TtsNextParagraph -> bindReaderSheetButton(button, R.drawable.ic_skip_next_24, "Next paragraph", ttsController::nextParagraph)
-            NovelBottomAction.Orientation -> bindReaderSheetButton(button, R.drawable.ic_screen_rotation_24dp, "Change orientation") { dispatch(NovelReaderAction.ToggleOrientation) }
-            NovelBottomAction.Edit -> bindReaderSheetButton(button, R.drawable.ic_edit_24dp, "Edit chapter") { dispatch(NovelReaderAction.ToggleEditMode) }
-            NovelBottomAction.Quotes -> bindReaderSheetButton(button, R.drawable.ic_format_list_numbered_24dp, "Quotes") { dispatch(NovelReaderAction.ShowQuotes) }
+            NovelBottomAction.TtsViewport -> bindReaderSheetButton(button, R.drawable.ic_text_fields_24dp, getString(R.string.hayai_novel_reader_read_viewport)) { dispatch(NovelReaderAction.StartTtsAtViewport) }
+            NovelBottomAction.TtsPreviousParagraph -> bindReaderSheetButton(button, R.drawable.ic_skip_previous_24, getString(R.string.hayai_novel_reader_previous_paragraph), ttsController::previousParagraph)
+            NovelBottomAction.TtsNextParagraph -> bindReaderSheetButton(button, R.drawable.ic_skip_next_24, getString(R.string.hayai_novel_reader_next_paragraph), ttsController::nextParagraph)
+            NovelBottomAction.Orientation -> bindReaderSheetButton(button, R.drawable.ic_screen_rotation_24dp, getString(R.string.hayai_novel_reader_change_orientation)) { dispatch(NovelReaderAction.ToggleOrientation) }
+            NovelBottomAction.Edit -> bindReaderSheetButton(button, R.drawable.ic_edit_24dp, getString(R.string.hayai_novel_reader_edit_chapter)) { dispatch(NovelReaderAction.ToggleEditMode) }
+            NovelBottomAction.Quotes -> bindReaderSheetButton(button, R.drawable.ic_format_list_numbered_24dp, getString(R.string.hayai_novel_reader_quotes)) { dispatch(NovelReaderAction.ShowQuotes) }
             NovelBottomAction.PreviousChapter,
             NovelBottomAction.NextChapter,
             NovelBottomAction.Settings,
@@ -1323,8 +1329,8 @@ class NovelReaderActivity :
                 loading.visibility = View.VISIBLE
                 val result = withContext(Dispatchers.IO) { runCatching { session.moveTo(chapterId) } }
                 result.fold(
-                    onSuccess = { loaded -> loaded?.let(::showChapter) ?: showError("The chapter is unavailable.") },
-                    onFailure = { showError(it.message ?: "The chapter could not be loaded.") },
+                    onSuccess = { loaded -> loaded?.let(::showChapter) ?: showError(getString(R.string.hayai_novel_reader_chapter_unavailable)) },
+                    onFailure = { showError(novelFailureMessage(it, R.string.hayai_novel_reader_load_error)) },
                 )
             }
     }
@@ -1398,9 +1404,9 @@ class NovelReaderActivity :
         val fonts = fontStore.fonts()
         if (fonts.isEmpty()) {
             AlertDialog.Builder(this)
-                .setTitle("Imported fonts")
-                .setMessage("No fonts have been imported yet.")
-                .setPositiveButton("Import") { _, _ -> dispatch(NovelReaderAction.ImportFont) }
+                .setTitle(R.string.hayai_novel_reader_imported_fonts)
+                .setMessage(R.string.hayai_novel_reader_no_imported_fonts)
+                .setPositiveButton(R.string.hayai_novel_reader_import) { _, _ -> dispatch(NovelReaderAction.ImportFont) }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
             return
@@ -1408,12 +1414,12 @@ class NovelReaderActivity :
         val selected = preferences.novelFontFamily.get()
         val labels = fonts.map { "${if (fontStore.token(it) == selected) "✓  " else ""}${it.name}" }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle("Imported fonts")
+            .setTitle(R.string.hayai_novel_reader_imported_fonts)
             .setItems(labels) { _, index ->
                 val font = fonts[index]
                 AlertDialog.Builder(this)
                     .setTitle(font.name)
-                    .setItems(arrayOf("Use font", "Delete")) { _, action ->
+                    .setItems(arrayOf(getString(R.string.hayai_novel_reader_use_font), getString(R.string.delete))) { _, action ->
                         if (action == 0) {
                             preferences.novelFontFamily.set(fontStore.token(font))
                             loaded?.let(::showChapter)
@@ -1421,11 +1427,11 @@ class NovelReaderActivity :
                             if (selected == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
                             if (fontStore.delete(font.id)) {
                                 loaded?.let(::showChapter)
-                                toast("Font deleted")
+                                toast(R.string.hayai_novel_reader_font_deleted)
                             }
                         }
                     }.show()
-            }.setPositiveButton("Import") { _, _ -> dispatch(NovelReaderAction.ImportFont) }
+            }.setPositiveButton(R.string.hayai_novel_reader_import) { _, _ -> dispatch(NovelReaderAction.ImportFont) }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
@@ -1441,7 +1447,7 @@ class NovelReaderActivity :
     private fun setEditMode(enabled: Boolean) {
         editMode = enabled
         renderer?.setEditMode(enabled)
-        toast(if (enabled) "Editing enabled. Changes stay in this reading session." else "Editing finished")
+        toast(if (enabled) R.string.hayai_novel_reader_editing_enabled else R.string.hayai_novel_reader_editing_finished)
     }
 
     private fun cycleOrientation() {
@@ -1455,23 +1461,23 @@ class NovelReaderActivity :
         chapter.bookmark = !chapter.bookmark
         lifecycleScope.launch(Dispatchers.IO) { Injekt.get<DatabaseHelper>().insertChapter(chapter).executeAsBlocking() }
         updateBookmarkMenu()
-        toast(if (chapter.bookmark) "Chapter bookmarked" else "Bookmark removed")
+        toast(if (chapter.bookmark) R.string.hayai_novel_reader_chapter_bookmarked else R.string.hayai_novel_reader_bookmark_removed)
     }
 
     private fun bindToolbarMenu() {
         bookmarkMenuItem =
             toolbar.menu
-                .add(Menu.NONE, MENU_BOOKMARK, Menu.NONE, "Bookmark")
+                .add(Menu.NONE, MENU_BOOKMARK, Menu.NONE, getString(R.string.hayai_novel_reader_bookmark))
                 .setIcon(R.drawable.ic_bookmark_border_24dp)
                 .setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        toolbar.menu.add(Menu.NONE, MENU_RELOAD, Menu.NONE, "Reload chapter")
-        toolbar.menu.add(Menu.NONE, MENU_OFFLINE, Menu.NONE, "Save or remove offline copy")
-        toolbar.menu.add(Menu.NONE, MENU_STATISTICS, Menu.NONE, "Chapter statistics")
-        toolbar.menu.add(Menu.NONE, MENU_HIGHLIGHTS, Menu.NONE, "Highlights")
-        toolbar.menu.add(Menu.NONE, MENU_OPEN_WEBVIEW, Menu.NONE, "Open in WebView")
-        toolbar.menu.add(Menu.NONE, MENU_OPEN_BROWSER, Menu.NONE, "Open in browser")
-        toolbar.menu.add(Menu.NONE, MENU_SHARE, Menu.NONE, "Share")
-        toolbar.menu.add(Menu.NONE, MENU_SETTINGS, Menu.NONE, "Reader settings")
+        toolbar.menu.add(Menu.NONE, MENU_RELOAD, Menu.NONE, getString(R.string.hayai_novel_reader_reload_chapter))
+        toolbar.menu.add(Menu.NONE, MENU_OFFLINE, Menu.NONE, getString(R.string.hayai_novel_reader_toggle_offline))
+        toolbar.menu.add(Menu.NONE, MENU_STATISTICS, Menu.NONE, getString(R.string.hayai_novel_reader_chapter_statistics))
+        toolbar.menu.add(Menu.NONE, MENU_HIGHLIGHTS, Menu.NONE, getString(R.string.hayai_novel_reader_highlights))
+        toolbar.menu.add(Menu.NONE, MENU_OPEN_WEBVIEW, Menu.NONE, getString(R.string.open_in_webview))
+        toolbar.menu.add(Menu.NONE, MENU_OPEN_BROWSER, Menu.NONE, getString(R.string.open_in_browser))
+        toolbar.menu.add(Menu.NONE, MENU_SHARE, Menu.NONE, getString(R.string.share))
+        toolbar.menu.add(Menu.NONE, MENU_SETTINGS, Menu.NONE, getString(R.string.reader_settings))
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_BOOKMARK -> dispatch(NovelReaderAction.ToggleBookmark)
@@ -1492,7 +1498,7 @@ class NovelReaderActivity :
     private fun updateBookmarkMenu() {
         bookmarkMenuItem?.apply {
             val bookmarked = loaded?.chapter?.bookmark == true
-            title = if (bookmarked) "Remove bookmark" else "Bookmark"
+            title = getString(if (bookmarked) R.string.hayai_novel_reader_remove_bookmark else R.string.hayai_novel_reader_bookmark)
             setIcon(if (bookmarked) R.drawable.ic_bookmark_24dp else R.drawable.ic_bookmark_border_24dp)
         }
     }
@@ -1507,7 +1513,7 @@ class NovelReaderActivity :
             lifecycleScope.launch {
                 loading.visibility = View.VISIBLE
                 val result = withContext(Dispatchers.IO) { runCatching { session.reload() } }
-                result.fold(::showChapter) { showError(it.message ?: "The chapter could not be reloaded.") }
+                result.fold(::showChapter) { showError(novelFailureMessage(it, R.string.hayai_novel_reader_reload_error)) }
             }
     }
 
@@ -1515,14 +1521,14 @@ class NovelReaderActivity :
         runCatching { (session.source as? HttpSource)?.getMangaUrl(session.manga) }.getOrNull()
 
     private fun openSourcePage(inApp: Boolean) {
-        val url = sourcePageUrl() ?: return toast("This source does not expose a web page.")
+        val url = sourcePageUrl() ?: return toast(R.string.hayai_novel_reader_source_no_page)
         val intent =
             if (inApp) {
                 WebViewActivity.newIntent(this, url, session.source.id, loaded?.manga?.title)
             } else {
                 Intent(Intent.ACTION_VIEW, Uri.parse(url))
             }
-        runCatching { startActivity(intent) }.onFailure { toast("No application can open this source page.") }
+        runCatching { startActivity(intent) }.onFailure { toast(R.string.hayai_novel_reader_no_page_app) }
     }
 
     private fun shareSourcePage() {
@@ -1535,7 +1541,7 @@ class NovelReaderActivity :
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, text)
                 },
-                "Share chapter",
+                getString(R.string.hayai_novel_reader_share_chapter),
             ),
         )
     }
@@ -1625,7 +1631,7 @@ class NovelReaderActivity :
         val next = session.adjacent(true)?.id == chapterId
         val previous = session.adjacent(false)?.id == chapterId
         if (!next && !previous) {
-            toast("This chapter is no longer adjacent")
+            toast(R.string.hayai_novel_reader_not_adjacent)
             return
         }
         chapterFailureCooldowns.remove(chapterId)
@@ -1653,7 +1659,7 @@ class NovelReaderActivity :
     }
 
     override fun onContentEdited(content: String) {
-        if (content.isBlank()) toast("The edited chapter is empty")
+        if (content.isBlank()) toast(R.string.hayai_novel_reader_edit_empty)
     }
 
     override fun onRendererError(message: String) = toast(message)

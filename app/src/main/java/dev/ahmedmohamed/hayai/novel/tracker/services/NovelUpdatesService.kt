@@ -50,7 +50,9 @@ internal class NovelUpdatesApi(
         val document = Jsoup.parse(response.body, response.finalUrl)
         val redirectedToLogin = response.finalUrl.contains("wp-login", ignoreCase = true)
         val loginFormPresent = document.select("form#loginform, input#user_login, input[name=log]").isNotEmpty()
-        if (redirectedToLogin || loginFormPresent) throw NovelTrackerFailure.InvalidCredentials("NovelUpdates session cookies are expired")
+        if (redirectedToLogin || loginFormPresent) {
+            throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.NovelUpdatesCookiesExpired)
+        }
     }
 
     override suspend fun search(query: String): List<NovelTrackerSearchItem> {
@@ -132,7 +134,7 @@ internal class NovelUpdatesApi(
                     url.contains("act=del", ignoreCase = true) ||
                         url.contains("act=remove", ignoreCase = true) ||
                         url.contains("act=delete", ignoreCase = true)
-                } ?: throw NovelTrackerFailure.InvalidResponse("NovelUpdates did not expose a reading-list remove action")
+                } ?: throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelUpdatesMissingRemoveAction)
         http.execute(Request.Builder().url(resolveUrl(removeUrl)).headers().get().build())
     }
 
@@ -140,7 +142,7 @@ internal class NovelUpdatesApi(
         record.remoteKey.toLongOrNull()?.takeIf { it > 0 }?.let { return it }
         val pageUrl = record.url.substringBefore('#')
         if (!record.remoteKey.startsWith("slug:") || pageUrl.isBlank()) {
-            throw NovelTrackerFailure.InvalidResponse("NovelUpdates entry has an invalid remote identifier")
+            throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelUpdatesEntryInvalidRemoteId)
         }
         val response = http.execute(Request.Builder().url(resolveUrl(pageUrl)).headers().get().build())
         val document = Jsoup.parse(response.body, response.finalUrl)
@@ -151,7 +153,7 @@ internal class NovelUpdatesApi(
             Regex("[?&]seriesid=(\\d+)").find(link)?.groupValues?.get(1)?.toLongOrNull()?.let { return it }
         }
         document.selectFirst("input#mypostid")?.attr("value")?.toLongOrNull()?.let { return it }
-        throw NovelTrackerFailure.InvalidResponse("NovelUpdates did not expose the novel identifier")
+        throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelUpdatesMissingNovelId)
     }
 
     private suspend fun readingListStatus(id: Long): NovelReadingStatus? {
@@ -161,14 +163,14 @@ internal class NovelUpdatesApi(
         val listId =
             statusIcon.selectFirst("span.sttitle a[href*=list=]")?.attr("href")
                 ?.let { Regex("[?&]list=(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() }
-                ?: throw NovelTrackerFailure.InvalidResponse("NovelUpdates returned an unknown reading-list state")
+                ?: throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelUpdatesUnknownReadingListState)
         return when (listId) {
             0 -> NovelReadingStatus.Reading
             1 -> NovelReadingStatus.Completed
             2 -> NovelReadingStatus.PlanToRead
             3 -> NovelReadingStatus.OnHold
             4, 5 -> NovelReadingStatus.Dropped
-            else -> throw NovelTrackerFailure.InvalidResponse("NovelUpdates returned an unknown reading-list identifier")
+            else -> throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelUpdatesUnknownReadingListId)
         }
     }
 
@@ -203,11 +205,11 @@ internal class NovelUpdatesApi(
         val root =
             try {
                 json.parseToJsonElement(cleaned) as? JsonObject
-                    ?: throw NovelTrackerFailure.InvalidResponse("NovelUpdates notes did not return an object")
+                    ?: throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelUpdatesNotesExpectedObject)
             } catch (error: NovelTrackerFailure) {
                 throw error
             } catch (_: Exception) {
-                throw NovelTrackerFailure.InvalidResponse("NovelUpdates notes returned invalid JSON")
+                throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelUpdatesNotesInvalidJson)
             }
         val notes = root["notes"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val tags = root["tags"]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -238,8 +240,10 @@ internal class NovelUpdatesApi(
     private fun Request.Builder.headers(secret: String = sessionCookie()): Request.Builder = headers(authHeaders(secret))
 
     private fun authHeaders(secret: String): Headers {
-        val cookie = requireSafeCredential(secret, "NovelUpdates session cookies")
-        if (!cookie.contains('=')) throw NovelTrackerFailure.InvalidCredentials("NovelUpdates requires the Cookie header from an authenticated session")
+        val cookie = requireSafeCredential(secret, NovelTrackerCredential.NovelUpdatesSessionCookies)
+        if (!cookie.contains('=')) {
+            throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.NovelUpdatesCookieHeaderRequired)
+        }
         return Headers.Builder()
             .add("Cookie", cookie)
             .add("User-Agent", USER_AGENT)

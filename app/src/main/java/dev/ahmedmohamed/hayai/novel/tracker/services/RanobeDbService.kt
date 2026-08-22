@@ -50,16 +50,16 @@ internal class RanobeDbApi(
     override suspend fun validateSession(username: String, secret: String) {
         val cookie = normalizedCookie(secret)
         if (!cookie.substringAfter("auth_session=", "").substringBefore(';').trim().any()) {
-            throw NovelTrackerFailure.InvalidCredentials("RanobeDB requires the auth_session cookie")
+            throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.RanobeDbAuthCookieRequired)
         }
         val response = http.execute(Request.Builder().url("$baseUrl/api/v0/user/me").get().headers(secret = secret).build())
-        parseObject(response.body, "RanobeDB authenticated user")
+        parseObject(response.body)
     }
 
     override suspend fun search(query: String): List<NovelTrackerSearchItem> {
         val url = "$baseUrl/api/v0/books".toHttpUrl().newBuilder().addQueryParameter("q", query).build()
         val response = http.execute(Request.Builder().url(url).get().headers(includeAuthentication = false).build())
-        val root = parseObject(response.body, "RanobeDB search")
+        val root = parseObject(response.body)
         val books = root["books"] as? JsonArray ?: root["results"] as? JsonArray ?: JsonArray(emptyList())
         return books.take(MAX_RESULTS).mapNotNull { element ->
             val item = element as? JsonObject ?: return@mapNotNull null
@@ -91,7 +91,7 @@ internal class RanobeDbApi(
     override suspend fun refresh(record: NovelTrackerRecord): NovelTrackerPatch {
         val bookId = requirePositiveId(record.remoteKey)
         val response = http.execute(Request.Builder().url("$baseUrl/api/v0/book/$bookId").get().headers().build())
-        val item = parseObject(response.body, "RanobeDB book")
+        val item = parseObject(response.body)
         val series = item["series"] as? JsonObject
         val totalBooks = (series?.get("books") as? JsonArray)?.size
         return NovelTrackerPatch(
@@ -104,9 +104,9 @@ internal class RanobeDbApi(
     override suspend fun remove(record: NovelTrackerRecord) {
         val bookId = requirePositiveId(record.remoteKey)
         val response = http.execute(Request.Builder().url("$baseUrl/api/v0/book/$bookId").get().headers().build())
-        val item = parseObject(response.body, "RanobeDB book")
+        val item = parseObject(response.body)
         val seriesId = (item["series"] as? JsonObject)?.long("id")?.takeIf { it > 0 }
-            ?: throw NovelTrackerFailure.InvalidResponse("RanobeDB did not return a series identifier")
+            ?: throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.RanobeDbMissingSeriesId)
         val payload = RanobeDbSuperForm.encodeSeries(record.status, record.score, ACTION_DELETE)
         submit("$baseUrl/api/i/user/series/$seriesId", payload)
     }
@@ -141,23 +141,23 @@ internal class RanobeDbApi(
             .apply { if (includeAuthentication) header("Cookie", normalizedCookie(secret ?: sessionCookie())) }
 
     private fun normalizedCookie(value: String): String {
-        val safe = requireSafeCredential(value, "RanobeDB session cookie")
+        val safe = requireSafeCredential(value, NovelTrackerCredential.RanobeDbSessionCookie)
         return if (safe.contains("auth_session=")) safe else "auth_session=$safe"
     }
 
-    private fun parseObject(body: String, label: String): JsonObject =
+    private fun parseObject(body: String): JsonObject =
         try {
             json.parseToJsonElement(body) as? JsonObject
-                ?: throw NovelTrackerFailure.InvalidResponse("$label did not return an object")
+                ?: throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.RanobeDbExpectedObject)
         } catch (error: NovelTrackerFailure) {
             throw error
         } catch (_: Exception) {
-            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON")
+            throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.RanobeDbInvalidJson)
         }
 
     private fun requirePositiveId(value: String): Long =
         value.toLongOrNull()?.takeIf { it > 0 }
-            ?: throw NovelTrackerFailure.InvalidResponse("RanobeDB entry has an invalid remote identifier")
+            ?: throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.RanobeDbEntryInvalidRemoteId)
 
     private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)
     private fun JsonObject.long(key: String): Long? = this[key]?.jsonPrimitive?.longOrNull

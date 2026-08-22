@@ -2,7 +2,6 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main_layout"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:orientation="horizontal"
     android:layout_height="wrap_content"
@@ -28,33 +27,30 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Discord"
+            android:contentDescription="@string/discord"
             android:padding="16dp"
             android:src="@drawable/ic_discord_24dp"
-            app:tint="?attr/colorAccent"
-            tools:ignore="HardcodedText" />
+            app:tint="?attr/colorAccent" />
 
         <ImageButton
             android:id="@+id/btn_x"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="X"
+            android:contentDescription="@string/hayai_accessibility_x"
             android:padding="16dp"
             android:src="@drawable/ic_x_24dp"
-            app:tint="?attr/colorAccent"
-            tools:ignore="HardcodedText" />
+            app:tint="?attr/colorAccent" />
 
         <ImageButton
             android:id="@+id/btn_facebook"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Facebook"
+            android:contentDescription="@string/hayai_accessibility_facebook"
             android:padding="16dp"
             android:src="@drawable/ic_facebook_24dp"
-            app:tint="?attr/colorAccent"
-            tools:ignore="HardcodedText" />
+            app:tint="?attr/colorAccent" />
     </LinearLayout>
 
     <LinearLayout
@@ -66,34 +62,31 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Reddit"
+            android:contentDescription="@string/hayai_accessibility_reddit"
             android:padding="16dp"
             android:src="@drawable/ic_reddit_24dp"
-            app:tint="?attr/colorAccent"
-            tools:ignore="HardcodedText" />
+            app:tint="?attr/colorAccent" />
 
         <ImageButton
             android:id="@+id/btn_github"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="GitHub"
+            android:contentDescription="@string/hayai_accessibility_github"
             android:padding="16dp"
             android:src="@drawable/ic_github_24dp"
-            app:tint="?attr/colorAccent"
-            tools:ignore="HardcodedText" />
+            app:tint="?attr/colorAccent" />
 
         <ImageButton
             android:id="@+id/btn_mihon"
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Mihon"
+            android:contentDescription="@string/hayai_accessibility_mihon"
             android:padding="16dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_mihon"
-            app:tint="?attr/colorAccent"
-            tools:ignore="HardcodedText" />
+            app:tint="?attr/colorAccent" />
 
     </LinearLayout>
 </LinearLayout>

@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.adult.eh.source
 
+import android.content.Context
+import android.text.format.Formatter
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhBrowseGallery
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryMetadata
@@ -13,7 +15,10 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadata
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadataTag
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadataTitle
+import dev.ahmedmohamed.hayai.adult.eh.presentation.EhTextResolver
+import dev.ahmedmohamed.hayai.adult.eh.presentation.localizedMessage
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.newCachelessCallWithProgress
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -30,6 +35,7 @@ import kotlinx.serialization.json.put
 import timber.log.Timber
 
 class EhentaiSource(
+    private val context: Context,
     private val site: EhSite,
     private val gateway: EhHttpGateway,
     private val metadataStore: HayaiEhPersistenceStore,
@@ -41,18 +47,19 @@ class EhentaiSource(
     override val baseUrl: String = site.baseUrl
     override val supportsLatest: Boolean = true
 
-    private val cursors = EhCursorStore()
+    private val cursors = EhCursorStore(context)
+    private val text = EhTextResolver(context)
     private val retryPageUrls = ConcurrentHashMap<String, String>()
 
     override suspend fun getPopularManga(page: Int): MangasPage {
-        require(page == 1) { "E-Hentai popular only has one page" }
-        return gateway.popular(site).toMangasPage()
+        require(page == 1) { context.getString(R.string.hayai_eh_popular_single_page) }
+        return request { gateway.popular(site).toMangasPage() }
     }
 
     override suspend fun getLatestUpdates(page: Int): MangasPage {
         val fingerprint = "latest"
         val cursor = cursors.cursor(fingerprint, page) as? EhSearchCursor.Gallery
-        val result = gateway.latest(site, cursor)
+        val result = request { gateway.latest(site, cursor) }
         cursors.record(fingerprint, page, result.nextCursor)
         return result.toMangasPage()
     }
@@ -64,28 +71,28 @@ class EhentaiSource(
     ): MangasPage {
         directGallery(query)?.let { key ->
             if (page > 1) return MangasPage(emptyList(), false)
-            val details = gateway.details(site, key)
+            val details = request { gateway.details(site, key) }
             return MangasPage(listOf(details.metadata.toSManga()), false)
         }
-        val spec = filters.toEhSpec(query)
+        val spec = filters.toEhSpec(query, context)
         val fingerprint = spec.toString()
-        val result = gateway.browse(site, spec, cursors.cursor(fingerprint, page))
+        val result = request { gateway.browse(site, spec, cursors.cursor(fingerprint, page)) }
         cursors.record(fingerprint, page, result.nextCursor)
         return result.toMangasPage()
     }
 
     override suspend fun getMangaDetails(manga: SManga): SManga {
-        val metadata = gateway.details(site, GalleryKey.parse(manga.url)).metadata
+        val metadata = request { gateway.details(site, GalleryKey.parse(manga.url)).metadata }
         persistMetadata(metadata)
         return metadata.toSManga().apply { initialized = true }
     }
 
     override suspend fun getChapterList(manga: SManga): List<SChapter> {
-        val chain = gateway.revisionChain(site, GalleryKey.parse(manga.url))
+        val chain = request { gateway.revisionChain(site, GalleryKey.parse(manga.url)) }
         return chain.mapIndexed { index, revision ->
             SChapter.create().apply {
                 url = revision.key.normalizedPath
-                name = "v${index + 1} · ${revision.title}"
+                name = context.getString(R.string.hayai_eh_revision_name, index + 1, revision.title)
                 chapter_number = (index + 1).toFloat()
                 date_upload = revision.postedAtMillis ?: 0L
             }
@@ -93,35 +100,41 @@ class EhentaiSource(
     }
 
     override suspend fun getPageList(chapter: SChapter): List<Page> =
-        gateway.pages(site, GalleryKey.parse(chapter.url)).mapIndexed { index, galleryPage ->
+        request { gateway.pages(site, GalleryKey.parse(chapter.url)) }.mapIndexed { index, galleryPage ->
             Page(index, galleryPage.pageUrl)
         }
 
     override suspend fun getImageUrl(page: Page): String {
-        val resolved = gateway.resolveImage(site, retryPageUrls.remove(page.url) ?: page.url)
+        val resolved = request { gateway.resolveImage(site, retryPageUrls.remove(page.url) ?: page.url) }
         resolved.retryPageUrl?.let { retryPageUrls[page.url] = it }
         return resolved.imageUrl
     }
 
     override suspend fun getImage(page: Page): Response {
-        val firstRequest = gateway.imageRequest(site, requireNotNull(page.imageUrl) { "Image URL was not resolved" })
+        val firstRequest = gateway.imageRequest(site, requireNotNull(page.imageUrl) { context.getString(R.string.hayai_eh_image_url_unresolved) })
         return try {
             client.newCachelessCallWithProgress(firstRequest, page).awaitSuccess()
         } catch (firstFailure: Throwable) {
             if (firstFailure is CancellationException) throw firstFailure
             val retryPage = retryPageUrls.remove(page.url) ?: throw firstFailure
-            val refreshed = gateway.resolveImage(site, retryPage)
+            val refreshed = request { gateway.resolveImage(site, retryPage) }
             refreshed.retryPageUrl?.let { retryPageUrls[page.url] = it }
             page.imageUrl = refreshed.imageUrl
             client.newCachelessCallWithProgress(gateway.imageRequest(site, refreshed.imageUrl), page).awaitSuccess()
         }
     }
 
-    override fun getFilterList(): FilterList = ehFilterList(preferences)
+    override fun getFilterList(): FilterList = ehFilterList(context, preferences)
 
     override fun getMangaUrl(manga: SManga): String = GalleryKey.parse(manga.url).absoluteUrl(site)
 
     override fun getChapterUrl(chapter: SChapter): String = GalleryKey.parse(chapter.url).absoluteUrl(site)
+
+    private suspend fun <T> request(block: suspend () -> T): T = try {
+        block()
+    } catch (failure: EhFailure) {
+        throw IllegalStateException(failure.localizedMessage(text), failure)
+    }
 
     private fun directGallery(query: String): GalleryKey? {
         if (!query.contains("/g/")) return null
@@ -154,20 +167,29 @@ class EhentaiSource(
     }
 
     private fun buildDescription(metadata: EhGalleryMetadata): String = buildList {
-        metadata.title.takeIf { it != metadata.alternateTitle }?.let { add("**Original title:** $it") }
-        metadata.uploader?.let { add("**Uploader:** $it") }
-        metadata.category?.let { add("**Category:** $it") }
-        metadata.language?.let { add("**Language:** $it${if (metadata.translated == true) " (translated)" else ""}") }
-        metadata.pageCount?.let { add("**Pages:** $it") }
-        metadata.sizeBytes?.let { add("**Size:** ${formatBytes(it)}") }
-        metadata.averageRating?.let { rating ->
-            add("**Rating:** ${"%.2f".format(rating)}${metadata.ratingCount?.let { " ($it votes)" }.orEmpty()}")
+        metadata.title.takeIf { it != metadata.alternateTitle }?.let { add(context.getString(R.string.hayai_eh_description_original_title, it)) }
+        metadata.uploader?.let { add(context.getString(R.string.hayai_eh_description_uploader, it)) }
+        metadata.category?.let { add(context.getString(R.string.hayai_eh_description_category, it)) }
+        metadata.language?.let {
+            add(
+                context.getString(
+                    R.string.hayai_eh_description_language,
+                    it,
+                    if (metadata.translated == true) context.getString(R.string.hayai_eh_description_translated) else "",
+                ),
+            )
         }
-        metadata.favoriteCount?.let { add("**Favorites:** $it") }
-        metadata.visible?.let { add("**Visibility:** $it") }
+        metadata.pageCount?.let { add(context.getString(R.string.hayai_eh_description_pages, it)) }
+        metadata.sizeBytes?.let { add(context.getString(R.string.hayai_eh_description_size, Formatter.formatShortFileSize(context, it))) }
+        metadata.averageRating?.let { rating ->
+            val votes = metadata.ratingCount?.let { context.resources.getQuantityString(R.plurals.hayai_eh_description_votes, it, it) }.orEmpty()
+            add(context.getString(R.string.hayai_eh_description_rating, "%.2f".format(rating), votes))
+        }
+        metadata.favoriteCount?.let { add(context.getString(R.string.hayai_eh_description_favorites, it)) }
+        metadata.visible?.let { add(context.getString(R.string.hayai_eh_description_visibility, it)) }
         if (metadata.tags.isNotEmpty()) {
-            add("\n**Tags**\n" + metadata.tags.groupBy { it.namespace }.entries.joinToString("\n") { (namespace, tags) ->
-                "- $namespace: ${tags.joinToString { it.name }}"
+            add("\n${context.getString(R.string.hayai_eh_description_tags)}\n" + metadata.tags.groupBy { it.namespace }.entries.joinToString("\n") { (namespace, tags) ->
+                context.getString(R.string.hayai_eh_description_tag_group, namespace, tags.joinToString { it.name })
             })
         }
     }.joinToString("\n")
@@ -207,20 +229,10 @@ class EhentaiSource(
         }.onFailure { Timber.w(it, "Unable to persist E-Hentai metadata for source %d", id) }
     }
 
-    private fun formatBytes(bytes: Long): String {
-        if (bytes < 1024) return "$bytes B"
-        val units = arrayOf("KB", "MB", "GB", "TB")
-        var value = bytes.toDouble()
-        var unit = -1
-        while (value >= 1024 && unit < units.lastIndex) {
-            value /= 1024
-            unit++
-        }
-        return "%.1f %s".format(value, units[unit])
-    }
 }
 
 private class EhCursorStore(
+    private val context: Context,
     private val maxSearches: Int = 32,
 ) {
     private val pages = object : LinkedHashMap<String, MutableMap<Int, EhSearchCursor?>>(16, 0.75f, true) {
@@ -229,13 +241,13 @@ private class EhCursorStore(
 
     @Synchronized
     fun cursor(fingerprint: String, page: Int): EhSearchCursor? {
-        require(page >= 1) { "Page number must be positive" }
+        require(page >= 1) { context.getString(R.string.hayai_eh_page_number_positive) }
         if (page == 1) {
             pages[fingerprint] = mutableMapOf(1 to null)
             return null
         }
-        return requireNotNull(pages[fingerprint]) { "E-Hentai pagination state expired. Refresh the search." }[page]
-            ?: throw EhFailure.MalformedDocument("E-Hentai pagination cannot advance past the final page")
+        return requireNotNull(pages[fingerprint]) { context.getString(R.string.hayai_eh_pagination_expired) }[page]
+            ?: throw EhFailure.MalformedDocument(context.getString(R.string.hayai_eh_pagination_finished))
     }
 
     @Synchronized

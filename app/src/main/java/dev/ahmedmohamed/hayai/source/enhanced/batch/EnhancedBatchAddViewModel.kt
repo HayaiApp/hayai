@@ -21,8 +21,10 @@ data class EnhancedBatchAddUiState(
     val running: Boolean = false,
     val progress: EnhancedBatchProgress? = null,
     val report: EnhancedBatchReport? = null,
-    val error: String? = null,
+    val error: EnhancedBatchUiError? = null,
 )
+
+enum class EnhancedBatchUiError { InvalidInput, Cancelled, Failed }
 
 class EnhancedBatchAddViewModel(
     sourceManager: SourceManager = Injekt.get(),
@@ -39,7 +41,7 @@ class EnhancedBatchAddViewModel(
             running = result is ResultState.Running,
             progress = progress.takeIf { result is ResultState.Running || result is ResultState.Finished },
             report = (result as? ResultState.Finished)?.report,
-            error = (result as? ResultState.Error)?.message,
+            error = (result as? ResultState.Error)?.reason,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, EnhancedBatchAddUiState())
 
@@ -50,7 +52,7 @@ class EnhancedBatchAddViewModel(
     fun start() {
         if (runJob != null) return
         val plan = runCatching { EnhancedBatchInputParser.parse(mutableInput.value) }.getOrElse {
-            mutableResult.value = ResultState.Error(it.message ?: "Invalid batch input")
+            mutableResult.value = ResultState.Error(EnhancedBatchUiError.InvalidInput)
             return
         }
         mutableResult.value = ResultState.Running
@@ -59,10 +61,10 @@ class EnhancedBatchAddViewModel(
                 val report = service.run(plan)
                 mutableResult.value = ResultState.Finished(report)
             } catch (cancelled: CancellationException) {
-                mutableResult.value = ResultState.Error("Batch add cancelled after the current atomic operation")
+                mutableResult.value = ResultState.Error(EnhancedBatchUiError.Cancelled)
                 throw cancelled
             } catch (error: Exception) {
-                mutableResult.value = ResultState.Error(error.message ?: "Batch add failed")
+                mutableResult.value = ResultState.Error(EnhancedBatchUiError.Failed)
             } finally {
                 runJob = null
             }
@@ -81,6 +83,6 @@ class EnhancedBatchAddViewModel(
         data object Idle : ResultState
         data object Running : ResultState
         data class Finished(val report: EnhancedBatchReport) : ResultState
-        data class Error(val message: String) : ResultState
+        data class Error(val reason: EnhancedBatchUiError) : ResultState
     }
 }

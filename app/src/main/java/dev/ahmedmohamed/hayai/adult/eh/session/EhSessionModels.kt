@@ -8,6 +8,18 @@ data class EhCredentials(
     val igneous: String,
 )
 
+enum class EhSessionFailureReason {
+    InvalidCookies,
+    CredentialsUnavailable,
+    StoredCredentialsInvalid,
+    CredentialsRejected,
+}
+
+class EhSessionFailureException(
+    val reason: EhSessionFailureReason,
+    diagnostic: String? = null,
+) : IllegalArgumentException(diagnostic ?: reason.name)
+
 sealed interface EhSessionState {
     data object LoggedOut : EhSessionState
 
@@ -22,7 +34,7 @@ sealed interface EhSessionState {
 
     data class InvalidCredentials(
         val credentials: EhCredentials?,
-        val reason: String,
+        val reason: EhSessionFailureReason,
     ) : EhSessionState
 }
 
@@ -32,7 +44,7 @@ sealed interface EhSessionMutationResult {
     ) : EhSessionMutationResult
 
     data class Failure(
-        val reason: String,
+        val reason: EhSessionFailureReason,
     ) : EhSessionMutationResult
 }
 
@@ -49,13 +61,13 @@ data class EhLoginCookies(
     fun toCredentials(manualIgneous: String? = null): Result<EhCredentials> =
         runCatching {
             EhCredentials(
-                memberId = EhCookieValue.memberId(requireNotNull(memberId) { "The member ID cookie is missing." }),
-                passHash = EhCookieValue.secret("pass hash", requireNotNull(passHash) { "The pass hash cookie is missing." }),
+                memberId = EhCookieValue.memberId(memberId ?: throw EhSessionFailureException(EhSessionFailureReason.InvalidCookies, "member ID cookie missing")),
+                passHash = EhCookieValue.secret("pass hash", passHash ?: throw EhSessionFailureException(EhSessionFailureReason.InvalidCookies, "pass hash cookie missing")),
                 igneous =
                     EhCookieValue.secret(
                         "igneous",
                         manualIgneous?.takeIf { it.isNotBlank() }
-                            ?: requireNotNull(igneous) { "The igneous cookie is missing." },
+                            ?: igneous ?: throw EhSessionFailureException(EhSessionFailureReason.InvalidCookies, "igneous cookie missing"),
                     ),
             )
         }
@@ -73,7 +85,9 @@ object EhLoginCookieParser {
                     if (name !in LOGIN_COOKIE_NAMES) return@forEach
                     val value = part.substring(separator + 1).trim()
                     val old = values.putIfAbsent(name, value)
-                    require(old == null || old == value) { "Conflicting $name cookies were returned." }
+                    if (old != null && old != value) {
+                        throw EhSessionFailureException(EhSessionFailureReason.InvalidCookies, "conflicting $name cookies")
+                    }
                 }
             }
             EhLoginCookies(
@@ -93,7 +107,9 @@ object EhLoginCookieParser {
 internal object EhCookieValue {
     fun memberId(value: String): String {
         val normalized = value.trim()
-        require(normalized.length in 1..32 && normalized.all(Char::isDigit)) { "The member ID cookie is invalid." }
+        if (normalized.length !in 1..32 || !normalized.all(Char::isDigit)) {
+            throw EhSessionFailureException(EhSessionFailureReason.InvalidCookies, "invalid member ID cookie")
+        }
         return normalized
     }
 
@@ -102,9 +118,9 @@ internal object EhCookieValue {
         value: String,
     ): String {
         val normalized = value.trim()
-        require(normalized.isNotEmpty()) { "The $label cookie is empty." }
-        require(normalized.length <= 512) { "The $label cookie is too long." }
-        require(normalized.all(::isCookieOctet)) { "The $label cookie contains unsafe characters." }
+        if (normalized.isEmpty()) throw EhSessionFailureException(EhSessionFailureReason.InvalidCookies, "$label cookie empty")
+        if (normalized.length > 512) throw EhSessionFailureException(EhSessionFailureReason.InvalidCookies, "$label cookie too long")
+        if (!normalized.all(::isCookieOctet)) throw EhSessionFailureException(EhSessionFailureReason.InvalidCookies, "$label cookie unsafe")
         return normalized
     }
 

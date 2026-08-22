@@ -8,7 +8,7 @@ object EhFavoritesHtmlParser {
         val names = Jsoup.parse(html).select(".fp:not(.fps)").mapNotNull { element ->
             element.children().getOrNull(2)?.text()?.trim()?.takeIf(String::isNotBlank)
         }
-        require(names.size == 10) { "E-Hentai returned ${names.size} favorite categories instead of 10." }
+        if (names.size != 10) throw EhFavoritesFailure(EhFavoritesFailureReason.InvalidCategories, names.size)
         return names.mapIndexed { index, name -> EhRemoteCategory(EhFavoriteSlot(index), name) }
     }
 

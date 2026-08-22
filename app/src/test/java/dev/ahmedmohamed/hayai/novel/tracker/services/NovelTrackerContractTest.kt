@@ -15,7 +15,11 @@ class NovelTrackerContractTest {
 
     @Test
     fun `credentials reject header injection and oversized secrets`() {
-        assertThrows(NovelTrackerFailure.InvalidCredentials::class.java) { requireSafeCredential("value\r\nInjected: yes", "Token") }
-        assertThrows(NovelTrackerFailure.InvalidCredentials::class.java) { requireSafeCredential("x".repeat(8_193), "Token") }
+        assertThrows(NovelTrackerFailure.InvalidCredentials::class.java) {
+            requireSafeCredential("value\r\nInjected: yes", NovelTrackerCredential.SessionToken)
+        }
+        assertThrows(NovelTrackerFailure.InvalidCredentials::class.java) {
+            requireSafeCredential("x".repeat(8_193), NovelTrackerCredential.SessionToken)
+        }
     }
 }

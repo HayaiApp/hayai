@@ -9,6 +9,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.extension.model.Extension
 import kotlinx.coroutines.CancellationException
@@ -27,7 +29,7 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title = "Novel extensions"
+        title = getString(R.string.hayai_novel_extensions_title)
         setContentView(
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -36,18 +38,18 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
                 addView(status)
                 addView(
                     Button(context).apply {
-                        text = "Refresh"
+                        text = getString(R.string.refresh)
                         setOnClickListener { launchAction { manager.refresh() } }
                     },
                 )
                 addView(
                     Button(context).apply {
-                        text = "Add repository"
+                        text = getString(R.string.hayai_add_repository)
                         setOnClickListener { addRepository() }
                     },
                 )
                 cancelInstall = Button(context).apply {
-                    text = "Cancel installation"
+                    text = getString(R.string.hayai_cancel_installation)
                     isEnabled = false
                     setOnClickListener { installJob?.cancel(CancellationException("Canceled by user")) }
                 }
@@ -65,24 +67,33 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
         launchAction { manager.refresh() }
     }
     private fun render(state: NovelApkExtensionCatalog) {
-        status.text = state.error ?: if (state.refreshing) "Refreshing…" else "${state.installed.size} installed, ${state.updates.size} updates"
+        status.text =
+            state.error?.let { novelFailureMessage(it, R.string.hayai_unknown_installer_error) } ?: if (state.refreshing) {
+                getString(R.string.hayai_refreshing)
+            } else {
+                getString(R.string.hayai_novel_extension_catalog_status, state.installed.size, state.updates.size)
+            }
         content.removeAllViews()
-        state.updates.forEach { extension -> row("Update", extension.name) { install(extension) } }
-        state.installed.forEach { extension -> row("Remove", extension.name) { confirmRemove(extension) } }
-        state.available.forEach { extension -> row("Install", extension.name) { install(extension) } }
+        state.updates.forEach { extension -> row(R.string.update, extension.name) { install(extension) } }
+        state.installed.forEach { extension -> row(R.string.remove, extension.name) { confirmRemove(extension) } }
+        state.available.forEach { extension -> row(R.string.install, extension.name) { install(extension) } }
         state.untrusted.forEach { extension ->
-            row("Trust signature", "${extension.name}\n${extension.signatureHash}") {
+            row(R.string.hayai_trust_signature, "${extension.name}\n${extension.signatureHash}") {
                 AlertDialog.Builder(this)
-                    .setTitle("Trust extension signature?")
+                    .setTitle(R.string.hayai_trust_extension_signature_title)
                     .setMessage(extension.signatureHash)
                     .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton("Trust") { _, _ -> manager.trust(extension) }
+                    .setPositiveButton(R.string.trust) { _, _ -> manager.trust(extension) }
                     .show()
             }
         }
-        state.repositories.forEach { repository -> row("Remove repository", repository) { lifecycleScope.launch { manager.removeRepository(repository) } } }
+        state.repositories.forEach { repository ->
+            row(R.string.hayai_remove_repository, repository) {
+                lifecycleScope.launch { manager.removeRepository(repository) }
+            }
+        }
     }
-    private fun row(action: String, label: String, click: () -> Unit) {
+    private fun row(action: Int, label: String, click: () -> Unit) {
         content.addView(
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -91,7 +102,7 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
                 )
                 addView(Button(context).apply {
-                    text = action
+                    setText(action)
                     setOnClickListener { click() }
                 })
             },
@@ -106,32 +117,37 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
                 manager.install(extension, this).collect { info ->
                     terminal = info.first.isCompleted()
                     status.text = when (info.first) {
-                        InstallStep.Error -> "${extension.name}: installation failed. The package was not activated."
-                        InstallStep.Installed, InstallStep.Done -> "${extension.name}: installation complete."
-                        else -> "${extension.name}: ${info.first}"
+                        InstallStep.Error -> getString(R.string.hayai_extension_install_failed, extension.name)
+                        InstallStep.Installed, InstallStep.Done -> getString(R.string.hayai_extension_install_complete, extension.name)
+                        else -> getString(R.string.hayai_extension_install_status, extension.name, installStepText(info.first))
                     }
                 }
-                if (!terminal) status.text = "${extension.name}: installation stopped before completion."
+                if (!terminal) status.text = getString(R.string.hayai_extension_install_stopped, extension.name)
             } catch (_: CancellationException) {
-                status.text = "${extension.name}: installation canceled."
+                status.text = getString(R.string.hayai_extension_install_canceled, extension.name)
             } catch (error: Throwable) {
-                status.text = "${extension.name}: installation failed. ${error.message ?: "Unknown installer error"}"
+                status.text =
+                    getString(
+                        R.string.hayai_extension_install_error,
+                        extension.name,
+                        novelFailureMessage(error, R.string.hayai_unknown_installer_error),
+                    )
             } finally {
                 cancelInstall.isEnabled = false
             }
         }
     }
     private fun addRepository() {
-        val input = EditText(this).apply { hint = "https://example.org/index.min.json" }
+        val input = EditText(this).apply { setHint(R.string.hayai_novel_extension_repository_url_hint) }
         AlertDialog.Builder(this)
-            .setTitle("Add novel extension repository")
-            .setMessage("Only add repositories whose publisher and signing policy you trust.")
+            .setTitle(R.string.hayai_add_novel_extension_repository)
+            .setMessage(R.string.hayai_novel_extension_repository_warning)
             .setView(input)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton("Add") { _, _ ->
+            .setPositiveButton(R.string.add) { _, _ ->
                 lifecycleScope.launch {
                     runCatching { manager.addRepository(input.text.toString().trim()) }
-                        .onFailure { status.text = it.message }
+                        .onFailure { status.text = novelFailureMessage(it, R.string.hayai_unknown_installer_error) }
                 }
             }
             .show()
@@ -139,16 +155,28 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
 
     private fun confirmRemove(extension: Extension.Installed) {
         AlertDialog.Builder(this)
-            .setTitle("Remove ${extension.name}?")
-            .setMessage("The source becomes unavailable until reinstalled. Library data is kept.")
+            .setTitle(getString(R.string.hayai_remove_named_item, extension.name))
+            .setMessage(R.string.hayai_remove_extension_message)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton("Remove") { _, _ -> manager.remove(extension) }
+            .setPositiveButton(R.string.remove) { _, _ -> manager.remove(extension) }
             .show()
     }
 
     private fun launchAction(block: suspend () -> Unit) {
         lifecycleScope.launch {
-            runCatching { block() }.onFailure { status.text = it.message }
+            runCatching { block() }.onFailure { status.text = novelFailureMessage(it, R.string.hayai_unknown_installer_error) }
         }
     }
+
+    private fun installStepText(step: InstallStep): String =
+        getString(
+            when (step) {
+                InstallStep.Pending -> R.string.pending
+                InstallStep.Downloading -> R.string.downloading
+                InstallStep.Loading -> R.string.hayai_extension_install_loading
+                InstallStep.Installing -> R.string.installing
+                InstallStep.Installed, InstallStep.Done -> R.string.installed
+                InstallStep.Error -> R.string.hayai_extension_install_failed_step
+            },
+        )
 }

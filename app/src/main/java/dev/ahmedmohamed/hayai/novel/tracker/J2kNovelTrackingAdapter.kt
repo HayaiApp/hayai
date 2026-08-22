@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.tracker
 
 import android.content.Context
 import dev.ahmedmohamed.hayai.novel.tracker.services.HayaiNovelTrackService
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.TrackManager
@@ -49,7 +50,7 @@ class J2kNovelTrackingGateway(
         val service = requireService(state.serviceId)
         val existing = database.getTracks(mangaId).executeAsBlocking().firstOrNull {
             it.sync_id == service.id && it.media_id == state.remoteId
-        } ?: error("Tracking record not found")
+        } ?: error(context.getString(R.string.hayai_tracker_record_not_found))
         existing.last_chapter_read = maxOf(existing.last_chapter_read, state.chapterRead)
         existing.status = state.status
         existing.score = state.score
@@ -65,14 +66,14 @@ class J2kNovelTrackingGateway(
         val manga = requireNotNull(database.getManga(mangaId).executeAsBlocking())
         val track = database.getTracks(mangaId).executeAsBlocking().firstOrNull { it.sync_id == service.id }
         if (track != null && service.canRemoveFromService()) {
-            check(service.removeFromService(track)) { "Tracker refused removal" }
+            check(service.removeFromService(track)) { context.getString(R.string.hayai_tracker_removal_refused) }
         }
         database.deleteTrackForManga(manga, service).executeAsBlocking()
     }
 
     private fun requireService(id: Long): TrackService =
-        requireNotNull(manager.getService(id.toInt())) { "Tracker is unavailable" }
-            .also { require(it.isLogged) { "Tracker is not logged in" } }
+        requireNotNull(manager.getService(id.toInt())) { context.getString(R.string.hayai_tracker_unavailable) }
+            .also { require(it.isLogged) { context.getString(R.string.hayai_tracker_not_logged_in) } }
 
     private fun Track.toNovelState() =
         NovelTrackState(

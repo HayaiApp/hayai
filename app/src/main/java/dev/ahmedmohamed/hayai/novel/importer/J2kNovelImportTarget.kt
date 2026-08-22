@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.importer
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailure
 import com.pushtorefresh.storio.sqlite.queries.RawQuery
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -54,7 +56,7 @@ class J2kNovelImportTarget(
         override suspend fun upsertNovel(sourceId: Long, novel: ExternalNovel): Long {
             val existing = database.getManga(novel.url, sourceId).executeAsBlocking()
             if (existing != null && existing.title.isNotBlank() && !existing.title.equals(novel.title, true)) {
-                error("Identity conflict for ${novel.url}. Existing title '${existing.title}' does not match '${novel.title}'.")
+                novelFailure(NovelFailure.Code.ImportNovelIdentityConflict, novel.url, existing.title, novel.title)
             }
             val manga = existing ?: Manga.create(novel.url, novel.title, sourceId)
             manga.url = novel.url
@@ -74,7 +76,7 @@ class J2kNovelImportTarget(
         override suspend fun upsertChapter(mangaId: Long, chapter: ExternalNovelChapter) {
             val manga = mangas[mangaId] ?: requireNotNull(database.getManga(mangaId).executeAsBlocking())
             val existing = database.getChapters(manga).executeAsBlocking().firstOrNull { it.url == chapter.url }
-            if (existing != null && existing.name.isNotBlank() && !existing.name.equals(chapter.title, true)) error("Chapter identity conflict for ${chapter.url}")
+            if (existing != null && existing.name.isNotBlank() && !existing.name.equals(chapter.title, true)) novelFailure(NovelFailure.Code.ImportChapterIdentityConflict, chapter.url)
             val target = existing ?: Chapter.create().apply { manga_id = mangaId; url = chapter.url }
             target.name = chapter.title
             target.chapter_number = chapter.number ?: target.chapter_number

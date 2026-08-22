@@ -44,9 +44,9 @@ class EhSessionStore(
         manualIgneous: String? = null,
     ): EhSessionMutationResult {
         val parsed = EhLoginCookieParser.parse(*cookieHeaders.toList().toTypedArray())
-        val credentials = parsed.getOrElse { return EhSessionMutationResult.Failure(it.message ?: "Invalid login cookies.") }
+        val credentials = parsed.getOrElse { return EhSessionMutationResult.Failure(it.sessionReason()) }
             .toCredentials(manualIgneous)
-            .getOrElse { return EhSessionMutationResult.Failure(it.message ?: "Invalid login cookies.") }
+            .getOrElse { return EhSessionMutationResult.Failure(it.sessionReason()) }
 
         memberId.set(credentials.memberId)
         passHash.set(credentials.passHash)
@@ -61,7 +61,7 @@ class EhSessionStore(
 
     @Synchronized
     fun markVerified(): EhSessionMutationResult {
-        val credentials = readCredentials().getOrElse { return EhSessionMutationResult.Failure(it.message ?: "No credentials are available.") }
+        val credentials = readCredentials().getOrElse { return EhSessionMutationResult.Failure(EhSessionFailureReason.CredentialsUnavailable) }
         val timestamp = clock()
         verificationFingerprint.set(fingerprint(credentials))
         verificationStatus.set(STATUS_VERIFIED)
@@ -72,15 +72,14 @@ class EhSessionStore(
     }
 
     @Synchronized
-    fun markInvalid(reason: String): EhSessionState.InvalidCredentials {
-        val safeReason = reason.trim().take(500).ifEmpty { "The server rejected the credentials." }
+    fun markInvalid(reason: EhSessionFailureReason = EhSessionFailureReason.CredentialsRejected): EhSessionState.InvalidCredentials {
         val credentials = readCredentials().getOrNull()
         verificationStatus.set(STATUS_INVALID)
         verificationFingerprint.delete()
         verifiedAt.delete()
-        invalidReason.set(safeReason)
+        invalidReason.set(reason.name)
         enableExhentai.set(false)
-        return EhSessionState.InvalidCredentials(credentials, safeReason).also { mutableState.value = it }
+        return EhSessionState.InvalidCredentials(credentials, reason).also { mutableState.value = it }
     }
 
     @Synchronized
@@ -156,7 +155,7 @@ class EhSessionStore(
         if (!hasAnyCredential) return EhSessionState.LoggedOut
         val credentials =
             readCredentials().getOrElse {
-                return EhSessionState.InvalidCredentials(null, it.message ?: "Stored credentials are invalid.")
+                return EhSessionState.InvalidCredentials(null, EhSessionFailureReason.StoredCredentialsInvalid)
             }
         return when (verificationStatus.get()) {
             STATUS_VERIFIED ->
@@ -165,7 +164,11 @@ class EhSessionStore(
                 } else {
                     EhSessionState.CredentialsAvailable(credentials)
                 }
-            STATUS_INVALID -> EhSessionState.InvalidCredentials(credentials, invalidReason.get().ifBlank { "The server rejected the credentials." })
+            STATUS_INVALID -> EhSessionState.InvalidCredentials(
+                credentials,
+                enumValues<EhSessionFailureReason>().firstOrNull { it.name == invalidReason.get() }
+                    ?: EhSessionFailureReason.CredentialsRejected,
+            )
             else -> EhSessionState.CredentialsAvailable(credentials)
         }
     }
@@ -191,6 +194,9 @@ class EhSessionStore(
         mutableState.value = state
         return EhSessionMutationResult.Success(state)
     }
+
+    private fun Throwable.sessionReason(): EhSessionFailureReason =
+        (this as? EhSessionFailureException)?.reason ?: EhSessionFailureReason.InvalidCookies
 
     companion object {
         val KEY_ENABLE_EXHENTAI = Preference.privateKey("enable_exhentai")

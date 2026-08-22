@@ -45,18 +45,19 @@ internal class NovelListApi(
 
     override suspend fun validateSession(username: String, secret: String) {
         val parts = secret.split('.')
-        if (parts.size != 3) throw NovelTrackerFailure.InvalidCredentials("NovelList requires the access token from your NovelList session")
+        if (parts.size != 3) throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.NovelListTokenRequired)
         val payload =
             try {
-                val decoded = parts[1].decodeBase64()?.utf8() ?: throw NovelTrackerFailure.InvalidCredentials("NovelList access token is malformed")
-                json.parseToJsonElement(decoded).asObject("NovelList access token")
+                val decoded = parts[1].decodeBase64()?.utf8()
+                    ?: throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.NovelListTokenMalformed)
+                json.parseToJsonElement(decoded).asObject()
             } catch (error: NovelTrackerFailure) {
                 throw error
             } catch (error: Exception) {
-                throw NovelTrackerFailure.InvalidCredentials("NovelList access token is malformed")
+                throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.NovelListTokenMalformed)
             }
         payload["exp"]?.jsonPrimitive?.longOrNull?.let { expiry ->
-            if (expiry <= nowEpochSeconds()) throw NovelTrackerFailure.InvalidCredentials("NovelList access token has expired")
+            if (expiry <= nowEpochSeconds()) throw NovelTrackerFailure.InvalidCredentials(NovelTrackerCredentialIssue.NovelListTokenExpired)
         }
         val request =
             Request.Builder()
@@ -64,8 +65,8 @@ internal class NovelListApi(
                 .get()
                 .authenticatedHeaders(secret)
                 .build()
-        if (parse(http.execute(request).body, "NovelList authenticated user") !is JsonObject) {
-            throw NovelTrackerFailure.InvalidResponse("NovelList authenticated user returned an invalid response")
+        if (parse(http.execute(request).body) !is JsonObject) {
+            throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelListAuthenticatedUserInvalid)
         }
     }
 
@@ -85,7 +86,7 @@ internal class NovelListApi(
                 .post(body)
                 .publicHeaders()
                 .build()
-        val root = parse(http.execute(request).body, "NovelList search")
+        val root = parse(http.execute(request).body)
         val entries =
             when (root) {
                 is JsonArray -> root
@@ -121,7 +122,7 @@ internal class NovelListApi(
 
     override suspend fun refresh(record: NovelTrackerRecord): NovelTrackerPatch {
         val request = Request.Builder().url(recordUrl(record.remoteKey)).get().authenticatedHeaders().build()
-        val item = parse(http.execute(request).body, "NovelList reading-list entry").asObject("NovelList reading-list entry")
+        val item = parse(http.execute(request).body).asObject()
         return NovelTrackerPatch(
             status = item.string("status")?.let(::statusFromApi),
             chapterRead = item.float("chapter_count")?.coerceAtLeast(0f),
@@ -147,7 +148,7 @@ internal class NovelListApi(
     }
 
     private fun recordUrl(remoteKey: String): String {
-        if (!isUuid(remoteKey)) throw NovelTrackerFailure.InvalidResponse("NovelList entry has an invalid remote identifier")
+        if (!isUuid(remoteKey)) throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelListEntryInvalidRemoteId)
         return "$apiBaseUrl/api/users/current/reading-list/$remoteKey"
     }
 
@@ -158,17 +159,17 @@ internal class NovelListApi(
             .header("Referer", "$websiteBaseUrl/")
 
     private fun Request.Builder.authenticatedHeaders(secret: String = token()): Request.Builder =
-        publicHeaders().header("Authorization", "Bearer ${requireSafeCredential(secret, "NovelList access token")}")
+        publicHeaders().header("Authorization", "Bearer ${requireSafeCredential(secret, NovelTrackerCredential.NovelListAccessToken)}")
 
-    private fun parse(body: String, label: String): JsonElement =
+    private fun parse(body: String): JsonElement =
         try {
             json.parseToJsonElement(body)
         } catch (_: Exception) {
-            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON")
+            throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelListInvalidJson)
         }
 
-    private fun JsonElement.asObject(label: String): JsonObject =
-        this as? JsonObject ?: throw NovelTrackerFailure.InvalidResponse("$label did not return an object")
+    private fun JsonElement.asObject(): JsonObject =
+        this as? JsonObject ?: throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelListExpectedObject)
 
     private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)
     private fun JsonObject.int(key: String): Int? = this[key]?.jsonPrimitive?.intOrNull
@@ -188,7 +189,7 @@ internal class NovelListApi(
             "COMPLETED" -> NovelReadingStatus.Completed
             "DROPPED" -> NovelReadingStatus.Dropped
             "PLANNED" -> NovelReadingStatus.PlanToRead
-            else -> throw NovelTrackerFailure.InvalidResponse("NovelList returned an unknown reading status")
+            else -> throw NovelTrackerFailure.InvalidResponse(NovelTrackerResponseIssue.NovelListUnknownReadingStatus)
         }
 
     private companion object {

@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.plugin.runtime
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import com.dokar.quickjs.QuickJs
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withTimeout
@@ -12,7 +14,7 @@ internal class NovelPluginRuntime(
     private val library = NovelPluginLibrary(pluginId, siteUrl)
 
     suspend fun open(code: String): NovelPluginInstance {
-        require(code.length in 1..MAX_CODE_CHARS) { "Plugin code is empty or too large" }
+        novelRequire(code.length in 1..MAX_CODE_CHARS, NovelFailure.Code.PluginCodeSize)
         val runtime = QuickJs.create(dispatcher)
         try {
             withTimeout(EVALUATION_TIMEOUT_MS) { library.setup(runtime) }

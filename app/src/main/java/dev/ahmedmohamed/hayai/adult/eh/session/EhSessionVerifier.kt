@@ -13,16 +13,12 @@ import java.util.Locale
 sealed interface EhVerificationResult {
     data object Verified : EhVerificationResult
 
-    data class Cloudflare(
-        val message: String,
-    ) : EhVerificationResult
+    data object Cloudflare : EhVerificationResult
 
-    data class InvalidCredentials(
-        val message: String,
-    ) : EhVerificationResult
+    data object InvalidCredentials : EhVerificationResult
 
     data class NetworkFailure(
-        val message: String,
+        val diagnostic: String? = null,
     ) : EhVerificationResult
 }
 
@@ -49,7 +45,7 @@ class EhSessionVerifier(
                         body = response.body.charStream().use { it.readBounded(MAX_BODY_CHARS) },
                     )
                 }
-            }.getOrElse { EhVerificationResult.NetworkFailure(it.message ?: "The ExHentai verification request failed.") }
+            }.getOrElse { EhVerificationResult.NetworkFailure(it.message) }
         }
 
     companion object {
@@ -68,7 +64,7 @@ class EhSessionVerifier(
                 "cf-ray" in normalizedHeaders ||
                     "/cdn-cgi/" in normalizedBody ||
                     "cloudflare" in normalizedBody && "attention required" in normalizedBody
-            if (cloudflare) return EhVerificationResult.Cloudflare("Cloudflare interrupted the login check. Complete the challenge and recheck.")
+            if (cloudflare) return EhVerificationResult.Cloudflare
 
             val host = runCatching { URI(finalUrl).host.orEmpty() }.getOrDefault("")
             val loginPage =
@@ -76,7 +72,7 @@ class EhSessionVerifier(
                     "act=login" in normalizedBody ||
                     "sad panda" in normalizedBody
             if (statusCode !in 200..299 || !host.equals("exhentai.org", ignoreCase = true) || loginPage) {
-                return EhVerificationResult.InvalidCredentials("ExHentai rejected the credentials or the account has no ExHentai access.")
+                return EhVerificationResult.InvalidCredentials
             }
             return EhVerificationResult.Verified
         }

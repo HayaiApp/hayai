@@ -13,6 +13,8 @@ import android.widget.ScrollView
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerActivity
 import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
 import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
@@ -50,237 +52,237 @@ class NovelSettingsController : SettingsController() {
         titleRes = R.string.hayai_novel_reader_settings
 
         preferenceCategory {
-            title = "Typography"
+            title = context.getString(R.string.hayai_novel_reader_typography)
             sliderPreference {
                 bindTo(novel.novelFontSize)
-                title = "Font size"
+                title = context.getString(R.string.hayai_novel_reader_font_size)
                 entryValues = (8..72).toList()
-                valueFormatter = { "$it sp" }
+                valueFormatter = { context.getString(R.string.hayai_novel_reader_sp_value, it) }
             }
             listPreference(activity) {
                 bindTo(novel.novelFontFamily)
-                title = "Font family"
-                entries = listOf("System sans", "System serif", "Monospace")
+                title = context.getString(R.string.hayai_novel_reader_font_family)
+                entries = listOf(R.string.hayai_novel_reader_system_sans, R.string.hayai_novel_reader_system_serif, R.string.hayai_novel_reader_monospace).map(context::getString)
                 entryValues = listOf("sans-serif", "serif", "monospace")
             }
             preference {
-                title = "Imported fonts"
-                summary = "Import, choose, or delete local TTF and OTF files"
+                title = context.getString(R.string.hayai_novel_reader_imported_fonts)
+                summary = context.getString(R.string.hayai_novel_reader_imported_fonts_summary)
                 onClick { showImportedFonts() }
             }
-            floatChoice("Line height", novel.novelLineHeight, listOf(1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f)) { "${it}×" }
+            floatChoice(context.getString(R.string.hayai_novel_reader_line_height), novel.novelLineHeight, listOf(1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f)) { context.getString(R.string.hayai_novel_reader_multiplier_value, it) }
             listPreference(activity) {
                 bindTo(novel.novelTextAlign)
-                title = "Text alignment"
-                entries = listOf("Left", "Justified", "Center", "Right")
+                title = context.getString(R.string.hayai_novel_reader_text_alignment)
+                entries = listOf(R.string.left, R.string.hayai_novel_reader_justified, R.string.center, R.string.right).map(context::getString)
                 entryValues = listOf("left", "justify", "center", "right")
             }
-            switchPreference { bindTo(novel.novelTextSelectable); title = "Selectable text" }
-            switchPreference { bindTo(novel.novelForceTextLowercase); title = "Force lowercase" }
-            switchPreference { bindTo(novel.novelUseOriginalFonts); title = "Use source fonts" }
-            colorPreference("Custom text color", novel.novelFontColor)
-            colorPreference("Custom background color", novel.novelBackgroundColor)
+            switchPreference { bindTo(novel.novelTextSelectable); title = context.getString(R.string.hayai_novel_reader_selectable_text) }
+            switchPreference { bindTo(novel.novelForceTextLowercase); title = context.getString(R.string.hayai_novel_reader_force_lowercase) }
+            switchPreference { bindTo(novel.novelUseOriginalFonts); title = context.getString(R.string.hayai_novel_reader_use_source_fonts) }
+            colorPreference(context.getString(R.string.hayai_novel_reader_custom_text_color), novel.novelFontColor)
+            colorPreference(context.getString(R.string.hayai_novel_reader_custom_background_color), novel.novelBackgroundColor)
         }
 
         preferenceCategory {
-            title = "Page layout"
-            sliderPreference { bindTo(novel.novelMarginLeft); title = "Left margin"; entryValues = (0..64 step 2).toList(); valueFormatter = { "$it dp" } }
-            sliderPreference { bindTo(novel.novelMarginRight); title = "Right margin"; entryValues = (0..64 step 2).toList(); valueFormatter = { "$it dp" } }
-            sliderPreference { bindTo(novel.novelMarginTop); title = "Top margin"; entryValues = (0..100 step 5).toList(); valueFormatter = { "$it dp" } }
-            sliderPreference { bindTo(novel.novelMarginBottom); title = "Bottom margin"; entryValues = (0..100 step 5).toList(); valueFormatter = { "$it dp" } }
-            floatChoice("Paragraph indent", novel.novelParagraphIndent, listOf(0f, 0.5f, 1f, 1.5f, 2f, 3f)) { "${it} em" }
-            floatChoice("Paragraph spacing", novel.novelParagraphSpacing, listOf(0f, 0.25f, 0.5f, 0.75f, 1f, 1.5f)) { "${it} em" }
+            title = context.getString(R.string.page_layout)
+            sliderPreference { bindTo(novel.novelMarginLeft); title = context.getString(R.string.hayai_novel_reader_left_margin); entryValues = (0..64 step 2).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
+            sliderPreference { bindTo(novel.novelMarginRight); title = context.getString(R.string.hayai_novel_reader_right_margin); entryValues = (0..64 step 2).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
+            sliderPreference { bindTo(novel.novelMarginTop); title = context.getString(R.string.hayai_novel_reader_top_margin); entryValues = (0..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
+            sliderPreference { bindTo(novel.novelMarginBottom); title = context.getString(R.string.hayai_novel_reader_bottom_margin); entryValues = (0..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
+            floatChoice(context.getString(R.string.hayai_novel_reader_paragraph_indent), novel.novelParagraphIndent, listOf(0f, 0.5f, 1f, 1.5f, 2f, 3f)) { context.getString(R.string.hayai_novel_reader_em_value, it) }
+            floatChoice(context.getString(R.string.hayai_novel_reader_paragraph_spacing), novel.novelParagraphSpacing, listOf(0f, 0.25f, 0.5f, 0.75f, 1f, 1.5f)) { context.getString(R.string.hayai_novel_reader_em_value, it) }
             listPreference(activity) {
                 bindTo(novel.novelTheme)
-                title = "Novel theme"
-                entries = listOf("Follow app", "Light", "Dark", "Sepia", "Black", "Grey", "Custom")
+                title = context.getString(R.string.hayai_novel_reader_theme)
+                entries = listOf(R.string.hayai_novel_reader_follow_app, R.string.hayai_novel_reader_light, R.string.dark, R.string.hayai_novel_reader_sepia, R.string.black, R.string.hayai_novel_reader_grey, R.string.hayai_novel_reader_custom).map(context::getString)
                 entryValues = listOf("app", "light", "dark", "sepia", "black", "grey", "custom")
             }
             listPreference(activity) {
                 bindTo(novel.novelRenderingMode)
-                title = "Rendering mode"
-                entries = listOf("Native text", "WebView")
+                title = context.getString(R.string.hayai_novel_reader_rendering_mode)
+                entries = listOf(R.string.hayai_novel_reader_native_text, R.string.hayai_novel_reader_webview).map(context::getString)
                 entryValues = listOf("default", "webview")
             }
         }
 
         preferenceCategory {
-            title = "Reading behavior"
+            title = context.getString(R.string.hayai_novel_reader_reading_behavior)
             switchPreference {
                 bindTo(novel.novelInfiniteScroll)
-                title = "Infinite scroll"
-                summary = "Append and prepend adjacent chapters continuously while preserving chapter progress"
+                title = context.getString(R.string.hayai_novel_reader_infinite_scroll)
+                summary = context.getString(R.string.hayai_novel_reader_infinite_scroll_summary)
             }
             intListPreference(activity) {
                 bindTo(novel.novelKeepChaptersLoaded)
-                title = "Keep adjacent chapters loaded"
-                entries = listOf("Current only", "Previous", "Next", "Previous and next")
+                title = context.getString(R.string.hayai_novel_reader_keep_adjacent_loaded)
+                entries = listOf(R.string.hayai_novel_reader_current_only, R.string.previous, R.string.next, R.string.hayai_novel_reader_previous_and_next).map(context::getString)
                 entryValues = listOf(0, 1, 2, 3)
             }
-            sliderPreference { bindTo(novel.novelAutoLoadNextChapterAt); title = "Load next chapter at"; entryValues = (50..100 step 5).toList(); valueFormatter = { "$it%" } }
-            sliderPreference { bindTo(novel.novelMarkAsReadThreshold); title = "Mark as read at"; entryValues = (50..100 step 5).toList(); valueFormatter = { "$it%" } }
-            switchPreference { bindTo(novel.novelMarkShortChapterAsRead); title = "Mark short chapters as read" }
-            switchPreference { bindTo(novel.novelHideChapterTitle); title = "Hide chapter title" }
+            sliderPreference { bindTo(novel.novelAutoLoadNextChapterAt); title = context.getString(R.string.hayai_novel_reader_load_next_at); entryValues = (50..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
+            sliderPreference { bindTo(novel.novelMarkAsReadThreshold); title = context.getString(R.string.hayai_novel_reader_mark_as_read_at); entryValues = (50..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
+            switchPreference { bindTo(novel.novelMarkShortChapterAsRead); title = context.getString(R.string.hayai_novel_reader_mark_short_as_read) }
+            switchPreference { bindTo(novel.novelHideChapterTitle); title = context.getString(R.string.hayai_novel_reader_hide_chapter_title) }
             intListPreference(activity) {
                 bindTo(novel.novelChapterTitleDisplay)
-                title = "Chapter title format"
-                entries = listOf("Name", "Number", "Number and name")
+                title = context.getString(R.string.hayai_novel_reader_chapter_title_format)
+                entries = listOf(R.string.name, R.string.hayai_novel_reader_number, R.string.hayai_novel_reader_number_and_name).map(context::getString)
                 entryValues = listOf(0, 1, 2)
             }
-            switchPreference { bindTo(novel.novelAutoSplitText); title = "Split long text blocks automatically" }
-            sliderPreference { bindTo(novel.novelAutoSplitWordCount); title = "Split after word count"; entryValues = (20..200 step 10).toList() }
-            switchPreference { bindTo(novel.novelKeepScreenOn); title = "Keep screen on" }
+            switchPreference { bindTo(novel.novelAutoSplitText); title = context.getString(R.string.hayai_novel_reader_split_blocks_auto) }
+            sliderPreference { bindTo(novel.novelAutoSplitWordCount); title = context.getString(R.string.hayai_novel_reader_split_after_word_count); entryValues = (20..200 step 10).toList() }
+            switchPreference { bindTo(novel.novelKeepScreenOn); title = context.getString(R.string.keep_screen_on) }
         }
 
         preferenceCategory {
-            title = "Navigation and progress"
-            switchPreference { bindTo(novel.novelShowProgressSlider); title = "Show progress control" }
-            switchPreference { bindTo(novel.novelVerticalScrollbar); title = "Use vertical progress control" }
+            title = context.getString(R.string.hayai_novel_reader_navigation_progress)
+            switchPreference { bindTo(novel.novelShowProgressSlider); title = context.getString(R.string.hayai_novel_reader_show_progress_control) }
+            switchPreference { bindTo(novel.novelVerticalScrollbar); title = context.getString(R.string.hayai_novel_reader_use_vertical_progress) }
             listPreference(activity) {
                 bindTo(novel.novelVerticalScrollbarPosition)
-                title = "Vertical progress position"
-                entries = listOf("Left", "Right")
+                title = context.getString(R.string.hayai_novel_reader_vertical_progress_position)
+                entries = listOf(R.string.left, R.string.right).map(context::getString)
                 entryValues = listOf("left", "right")
             }
             listPreference(activity) {
                 bindTo(novel.novelVerticalProgressSliderSize)
-                title = "Vertical progress height"
-                entries = listOf("Half screen", "Full screen")
+                title = context.getString(R.string.hayai_novel_reader_vertical_progress_height)
+                entries = listOf(R.string.hayai_novel_reader_half_screen, R.string.hayai_novel_reader_full_screen).map(context::getString)
                 entryValues = listOf("half", "full")
             }
-            switchPreference { bindTo(novel.novelSwipeNavigation); title = "Swipe chapter navigation" }
-            switchPreference { bindTo(novel.novelVolumeKeysScroll); title = "Volume keys scroll" }
-            switchPreference { bindTo(novel.novelTapToScroll); title = "Tap to scroll" }
+            switchPreference { bindTo(novel.novelSwipeNavigation); title = context.getString(R.string.hayai_novel_reader_swipe_chapter_navigation) }
+            switchPreference { bindTo(novel.novelVolumeKeysScroll); title = context.getString(R.string.hayai_novel_reader_volume_keys_scroll) }
+            switchPreference { bindTo(novel.novelTapToScroll); title = context.getString(R.string.hayai_novel_reader_tap_to_scroll) }
             intListPreference(activity) {
                 bindTo(novel.novelNavigationMode)
-                title = "Novel tap zones"
-                entries = listOf("Default", "L", "Kindlish", "Edge", "Left / right", "Disabled", "Center only")
+                title = context.getString(R.string.hayai_novel_reader_novel_tap_zones)
+                entries = listOf(R.string.default_value, R.string.hayai_novel_reader_tap_zone_l, R.string.hayai_novel_reader_tap_zone_kindlish, R.string.edge_nav, R.string.hayai_novel_reader_left_right, R.string.disabled, R.string.hayai_novel_reader_center_only).map(context::getString)
                 entryValues = listOf(0, 1, 2, 3, 4, 5, 6)
             }
             listPreference(activity) {
                 bindTo(novel.novelNavigationInverted)
-                title = "Invert tap zones"
-                entries = listOf("None", "Horizontal", "Vertical", "Both")
+                title = context.getString(R.string.invert_tapping)
+                entries = listOf(R.string.none, R.string.hayai_novel_reader_horizontal, R.string.vertical_viewer, R.string.hayai_novel_reader_both).map(context::getString)
                 entryValues = listOf("NONE", "HORIZONTAL", "VERTICAL", "BOTH")
             }
-            switchPreference { bindTo(novel.novelFullscreen); title = "Fullscreen reader" }
+            switchPreference { bindTo(novel.novelFullscreen); title = context.getString(R.string.hayai_novel_reader_fullscreen_reader) }
             sliderPreference {
                 bindTo(novel.novelAutoScrollSpeed)
-                title = "Auto-scroll speed"
+                title = context.getString(R.string.hayai_novel_reader_auto_scroll_speed)
                 entryValues = (2..20).toList()
-                valueFormatter = { "${it / 2f}×" }
+                valueFormatter = { context.getString(R.string.hayai_novel_reader_multiplier_value, it / 2f) }
             }
         }
 
         preferenceCategory {
-            title = "Status bar"
-            switchPreference { bindTo(novel.novelStatusBarEnabled); title = "Novel status bar" }
-            switchPreference { bindTo(novel.novelStatusBarShowTime); title = "Show time" }
-            switchPreference { bindTo(novel.novelStatusBarShowBattery); title = "Show battery" }
-            switchPreference { bindTo(novel.novelStatusBarShowCharging); title = "Show charging state" }
-            switchPreference { bindTo(novel.novelStatusBarShowChapterNumber); title = "Show chapter number" }
-            switchPreference { bindTo(novel.novelStatusBarShowChapterTitle); title = "Show chapter title" }
-            switchPreference { bindTo(novel.novelStatusBarShowProgress); title = "Show progress" }
+            title = context.getString(R.string.hayai_novel_reader_status_bar)
+            switchPreference { bindTo(novel.novelStatusBarEnabled); title = context.getString(R.string.hayai_novel_reader_novel_status_bar) }
+            switchPreference { bindTo(novel.novelStatusBarShowTime); title = context.getString(R.string.hayai_novel_reader_show_time) }
+            switchPreference { bindTo(novel.novelStatusBarShowBattery); title = context.getString(R.string.hayai_novel_reader_show_battery) }
+            switchPreference { bindTo(novel.novelStatusBarShowCharging); title = context.getString(R.string.hayai_novel_reader_show_charging) }
+            switchPreference { bindTo(novel.novelStatusBarShowChapterNumber); title = context.getString(R.string.hayai_novel_reader_show_chapter_number) }
+            switchPreference { bindTo(novel.novelStatusBarShowChapterTitle); title = context.getString(R.string.hayai_novel_reader_show_chapter_title) }
+            switchPreference { bindTo(novel.novelStatusBarShowProgress); title = context.getString(R.string.hayai_novel_reader_show_progress) }
             listPreference(activity) {
                 bindTo(novel.novelStatusBarPosition)
-                title = "Position"
-                entries = listOf("Top", "Bottom")
+                title = context.getString(R.string.hayai_novel_reader_position)
+                entries = listOf(R.string.top, R.string.bottom).map(context::getString)
                 entryValues = listOf("top", "bottom")
             }
             listPreference(activity) {
                 bindTo(novel.novelStatusBarSize)
-                title = "Size"
-                entries = listOf("Small", "Medium", "Large")
+                title = context.getString(R.string.hayai_novel_reader_size)
+                entries = listOf(R.string.hayai_novel_reader_small, R.string.hayai_novel_reader_medium, R.string.hayai_novel_reader_large).map(context::getString)
                 entryValues = listOf("small", "medium", "large")
             }
         }
 
         preferenceCategory {
-            title = "Text to speech"
-            floatChoice("Speech speed", novel.novelTtsSpeed, (5..60 step 5).map { it / 10f }) { "${it}×" }
-            floatChoice("Speech pitch", novel.novelTtsPitch, (5..60 step 5).map { it / 10f }) { "${it}×" }
-            editTextPreference(activity) { bindTo(novel.novelTtsVoice); title = "Preferred voice ID"; summary = "Blank uses the system default" }
-            switchPreference { bindTo(novel.novelTtsAutoNextChapter); title = "Continue into next chapter" }
-            switchPreference { bindTo(novel.novelTtsEnableHighlight); title = "Highlight spoken text" }
-            switchPreference { bindTo(novel.novelTtsKeepHighlightInView); title = "Keep highlight in view" }
+            title = context.getString(R.string.hayai_novel_reader_text_to_speech)
+            floatChoice(context.getString(R.string.hayai_novel_reader_speech_speed), novel.novelTtsSpeed, (5..60 step 5).map { it / 10f }) { context.getString(R.string.hayai_novel_reader_multiplier_value, it) }
+            floatChoice(context.getString(R.string.hayai_novel_reader_speech_pitch), novel.novelTtsPitch, (5..60 step 5).map { it / 10f }) { context.getString(R.string.hayai_novel_reader_multiplier_value, it) }
+            editTextPreference(activity) { bindTo(novel.novelTtsVoice); title = context.getString(R.string.hayai_novel_reader_preferred_voice_id); summary = context.getString(R.string.hayai_novel_reader_voice_default_summary) }
+            switchPreference { bindTo(novel.novelTtsAutoNextChapter); title = context.getString(R.string.hayai_novel_reader_continue_into_next) }
+            switchPreference { bindTo(novel.novelTtsEnableHighlight); title = context.getString(R.string.hayai_novel_reader_highlight_spoken_text) }
+            switchPreference { bindTo(novel.novelTtsKeepHighlightInView); title = context.getString(R.string.hayai_novel_reader_keep_highlight_view) }
             listPreference(activity) {
                 bindTo(novel.novelTtsHighlightStyle)
-                title = "Highlight style"
-                entries = listOf("Background", "Underline", "Outline")
+                title = context.getString(R.string.hayai_novel_reader_highlight_style)
+                entries = listOf(R.string.hayai_novel_reader_background, R.string.hayai_novel_reader_underline, R.string.hayai_novel_reader_outline).map(context::getString)
                 entryValues = listOf("background", "underline", "outline")
             }
-            colorPreference("Highlight color", novel.novelTtsHighlightColor)
-            colorPreference("Highlight text color", novel.novelTtsHighlightTextColor)
-            switchPreference { bindTo(novel.novelTtsBackgroundPlayback); title = "Background playback" }
-            switchPreference { bindTo(novel.novelTtsControlsVisible); title = "Keep TTS controls visible" }
-            switchPreference { bindTo(novel.novelTtsAutoStartOnPanelOpen); title = "Start TTS when its panel opens" }
+            colorPreference(context.getString(R.string.hayai_novel_reader_highlight_color), novel.novelTtsHighlightColor)
+            colorPreference(context.getString(R.string.hayai_novel_reader_highlight_text_color), novel.novelTtsHighlightTextColor)
+            switchPreference { bindTo(novel.novelTtsBackgroundPlayback); title = context.getString(R.string.hayai_novel_reader_background_playback) }
+            switchPreference { bindTo(novel.novelTtsControlsVisible); title = context.getString(R.string.hayai_novel_reader_keep_tts_controls) }
+            switchPreference { bindTo(novel.novelTtsAutoStartOnPanelOpen); title = context.getString(R.string.hayai_novel_reader_start_tts_panel_long) }
         }
 
         preferenceCategory {
-            title = "Source content and customization"
-            switchPreference { bindTo(novel.novelEnableEpubStyles); title = "Use EPUB styles" }
-            switchPreference { bindTo(novel.novelEnableEpubJs); title = "Allow EPUB JavaScript"; summary = "Only enable for trusted books" }
-            switchPreference { bindTo(novel.novelSourceCssPriority); title = "Prefer source CSS" }
-            switchPreference { bindTo(novel.novelBlockMedia); title = "Block embedded media" }
-            switchPreference { bindTo(novel.novelShowRawHtml); title = "Show raw HTML" }
-            switchPreference { bindTo(novel.novelWebViewDevTools); title = "WebView developer tools"; summary = "Only affects the WebView renderer" }
-            switchPreference { bindTo(novel.novelConsoleErrorToast); title = "Show WebView console errors" }
-            editTextPreference(activity) { bindTo(novel.novelCustomCss); title = "Custom CSS"; summary = "Applied to every novel after sanitization" }
-            editTextPreference(activity) { bindTo(novel.novelCustomJs); title = "Custom JavaScript"; summary = "Runs only inside the isolated novel reader" }
+            title = context.getString(R.string.hayai_novel_reader_source_content_customization)
+            switchPreference { bindTo(novel.novelEnableEpubStyles); title = context.getString(R.string.hayai_novel_reader_use_epub_styles) }
+            switchPreference { bindTo(novel.novelEnableEpubJs); title = context.getString(R.string.hayai_novel_reader_allow_epub_js); summary = context.getString(R.string.hayai_novel_reader_trusted_books_only) }
+            switchPreference { bindTo(novel.novelSourceCssPriority); title = context.getString(R.string.hayai_novel_reader_prefer_source_css) }
+            switchPreference { bindTo(novel.novelBlockMedia); title = context.getString(R.string.hayai_novel_reader_block_media) }
+            switchPreference { bindTo(novel.novelShowRawHtml); title = context.getString(R.string.hayai_novel_reader_show_raw_html) }
+            switchPreference { bindTo(novel.novelWebViewDevTools); title = context.getString(R.string.hayai_novel_reader_webview_tools); summary = context.getString(R.string.hayai_novel_reader_webview_tools_summary) }
+            switchPreference { bindTo(novel.novelConsoleErrorToast); title = context.getString(R.string.hayai_novel_reader_webview_errors) }
+            editTextPreference(activity) { bindTo(novel.novelCustomCss); title = context.getString(R.string.hayai_novel_reader_custom_css); summary = context.getString(R.string.hayai_novel_reader_custom_css_summary) }
+            editTextPreference(activity) { bindTo(novel.novelCustomJs); title = context.getString(R.string.hayai_novel_reader_custom_js); summary = context.getString(R.string.hayai_novel_reader_custom_js_summary) }
             preference {
-                title = "CSS snippets"
-                summary = "Create, edit, enable, disable, and delete reusable styles"
+                title = context.getString(R.string.hayai_novel_reader_css_snippets)
+                summary = context.getString(R.string.hayai_novel_reader_css_snippets_summary)
                 onClick { showSnippetList(SnippetKind.Css) }
             }
             preference {
-                title = "JavaScript snippets"
-                summary = "Reusable scripts; only add code you trust"
+                title = context.getString(R.string.hayai_novel_reader_js_snippets)
+                summary = context.getString(R.string.hayai_novel_reader_js_snippets_summary)
                 onClick { showSnippetList(SnippetKind.JavaScript) }
             }
             preference {
-                title = "Text replacements"
-                summary = "Clean source text with ordered literal or regular-expression rules"
+                title = context.getString(R.string.hayai_novel_reader_text_replacements)
+                summary = context.getString(R.string.hayai_novel_reader_text_replacements_summary)
                 onClick { showReplacementList() }
             }
             preference {
-                title = "Reader presets"
-                summary = "Save the current typography and layout, then restore it later"
+                title = context.getString(R.string.hayai_novel_reader_presets)
+                summary = context.getString(R.string.hayai_novel_reader_presets_summary)
                 onClick { showPresetList() }
             }
         }
 
         preferenceCategory {
-            title = "Language, sources, and data"
+            title = context.getString(R.string.hayai_novel_reader_language_sources_data)
             preference {
-                title = "Translation and dictionary"
-                summary = "Choose translation providers, languages, credentials, and dictionary fallback."
+                title = context.getString(R.string.hayai_novel_reader_translation_dictionary)
+                summary = context.getString(R.string.hayai_novel_reader_translation_dictionary_summary)
                 onClick { startActivity(Intent(context, NovelLanguageToolsSettingsActivity::class.java)) }
             }
             preference {
-                title = "Visual novel source builder"
-                summary = "Create, validate, preview, install, edit, export, and remove CSS-selector novel sources."
+                title = context.getString(R.string.hayai_novel_reader_source_builder)
+                summary = context.getString(R.string.hayai_novel_reader_source_builder_summary)
                 onClick { startActivity(Intent(context, NovelCustomSourceBuilderActivity::class.java)) }
             }
             preference {
-                title = "Remote novel extensions"
-                summary = "Manage trusted repositories and install, update, remove, or trust novel APK extensions through J2K."
+                title = context.getString(R.string.hayai_novel_reader_remote_extensions)
+                summary = context.getString(R.string.hayai_novel_reader_remote_extensions_summary)
                 onClick { startActivity(Intent(context, NovelApkExtensionManagerActivity::class.java)) }
             }
             preference {
-                title = "Import Tsundoku or LNReader"
-                summary = "Inspect an external backup, review warnings and missing sources, then import it transactionally."
+                title = context.getString(R.string.hayai_novel_reader_import_external)
+                summary = context.getString(R.string.hayai_novel_reader_import_external_summary)
                 onClick { startActivity(Intent(context, NovelDataToolsActivity::class.java)) }
             }
         }
 
         preferenceCategory {
-            title = "Screen brightness"
-            switchPreference { bindTo(novel.novelCustomBrightness); title = "Override brightness for novels" }
+            title = context.getString(R.string.hayai_novel_reader_screen_brightness)
+            switchPreference { bindTo(novel.novelCustomBrightness); title = context.getString(R.string.hayai_novel_reader_override_brightness) }
             sliderPreference {
                 bindTo(novel.novelCustomBrightnessValue)
-                title = "Brightness adjustment"
+                title = context.getString(R.string.hayai_novel_reader_brightness_adjustment)
                 entryValues = (-100..100 step 5).toList()
-                valueFormatter = { if (it > 0) "+$it%" else "$it%" }
+                valueFormatter = { context.getString(if (it > 0) R.string.hayai_novel_reader_signed_percent_value else R.string.hayai_novel_reader_percent_value, it) }
             }
         }
     }
@@ -293,8 +295,8 @@ class NovelSettingsController : SettingsController() {
         viewScope.launch {
             val result = withContext(Dispatchers.IO) { store.importFont(uri) }
             result.fold(
-                onSuccess = { font -> novel.novelFontFamily.set(store.token(font)); context.toast("Imported ${font.name}") },
-                onFailure = { context.toast(it.message ?: "The font could not be imported") },
+                onSuccess = { font -> novel.novelFontFamily.set(store.token(font)); context.toast(context.getString(R.string.hayai_novel_reader_imported_font_success, font.name)) },
+                onFailure = { context.toast(it.message ?: context.getString(R.string.hayai_novel_reader_imported_font_error)) },
             )
         }
     }
@@ -306,20 +308,20 @@ class NovelSettingsController : SettingsController() {
         val labels = fonts.map { "${if (store.token(it) == novel.novelFontFamily.get()) "✓  " else ""}${it.name}" }.toTypedArray()
         val dialog =
             context.materialAlertDialog()
-                .setTitle("Imported fonts")
+                .setTitle(R.string.hayai_novel_reader_imported_fonts)
                 .setItems(labels) { _, index ->
                     val font = fonts[index]
                     context.materialAlertDialog()
                         .setTitle(font.name)
-                        .setItems(arrayOf("Use font", "Delete")) { _, action ->
+                        .setItems(arrayOf(context.getString(R.string.hayai_novel_reader_use_font), context.getString(R.string.delete))) { _, action ->
                             if (action == 0) {
                                 novel.novelFontFamily.set(store.token(font))
                             } else {
                                 if (novel.novelFontFamily.get() == store.token(font)) novel.novelFontFamily.set("sans-serif")
-                                if (store.delete(font.id)) context.toast("Font deleted")
+                                if (store.delete(font.id)) context.toast(R.string.hayai_novel_reader_font_deleted)
                             }
                         }.show()
-                }.setPositiveButton("Import", null)
+                }.setPositiveButton(R.string.hayai_novel_reader_import, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         dialog.setOnShowListener {
@@ -388,7 +390,7 @@ class NovelSettingsController : SettingsController() {
                     inputType = InputType.TYPE_CLASS_TEXT
                     setSingleLine(true)
                     setText(if (valuePreference.get() == 0) "" else String.format("#%08X", valuePreference.get()))
-                    hint = "#AARRGGBB, blank for automatic"
+                    hint = context.getString(R.string.hayai_novel_reader_color_hint)
                 }
                 val dialog = context.materialAlertDialog()
                     .setTitle(titleText)
@@ -401,7 +403,7 @@ class NovelSettingsController : SettingsController() {
                         val text = input.text?.toString()?.trim().orEmpty()
                         val parsed = if (text.isBlank()) 0 else runCatching { Color.parseColor(text) }.getOrNull()
                         if (parsed == null) {
-                            input.error = "Use #RRGGBB or #AARRGGBB"
+                            input.error = context.getString(R.string.hayai_novel_reader_color_error)
                         } else {
                             valuePreference.set(parsed)
                             summary = colorSummary(parsed)
@@ -414,16 +416,16 @@ class NovelSettingsController : SettingsController() {
         }
     }
 
-    private fun colorSummary(color: Int): String = if (color == 0) "Automatic" else String.format("#%08X", color)
+    private fun colorSummary(color: Int): String = if (color == 0) activity?.getString(R.string.automatic).orEmpty() else String.format("#%08X", color)
 
     private fun showSnippetList(kind: SnippetKind) {
         val items = if (kind == SnippetKind.Css) customization.cssSnippets() else customization.jsSnippets()
         val labels = items.map { "${if (it.enabled) "✓" else "○"}  ${it.title}" }.toTypedArray()
         val dialog =
             activity!!.materialAlertDialog()
-                .setTitle(if (kind == SnippetKind.Css) "CSS snippets" else "JavaScript snippets")
+                .setTitle(if (kind == SnippetKind.Css) R.string.hayai_novel_reader_css_snippets else R.string.hayai_novel_reader_js_snippets)
                 .setItems(labels) { _, index -> showSnippetActions(kind, items[index]) }
-                .setPositiveButton("Add", null)
+                .setPositiveButton(R.string.add, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         dialog.setOnShowListener {
@@ -438,7 +440,7 @@ class NovelSettingsController : SettingsController() {
     ) {
         activity!!.materialAlertDialog()
             .setTitle(snippet.title)
-            .setItems(arrayOf(if (snippet.enabled) "Disable" else "Enable", "Edit", "Move up", "Move down", "Delete")) { _, action ->
+            .setItems(arrayOf(activity!!.getString(if (snippet.enabled) R.string.hayai_novel_reader_disable else R.string.enable), activity!!.getString(R.string.edit), activity!!.getString(R.string.hayai_novel_reader_move_up_short), activity!!.getString(R.string.hayai_novel_reader_move_down_short), activity!!.getString(R.string.delete))) { _, action ->
                 when (action) {
                     0 -> saveSnippet(kind, snippet.copy(enabled = !snippet.enabled))
                     1 -> editSnippet(kind, snippet)
@@ -456,18 +458,18 @@ class NovelSettingsController : SettingsController() {
         kind: SnippetKind,
         existing: NovelCodeSnippet?,
     ) {
-        val titleInput = textInput("Name", existing?.title.orEmpty(), singleLine = true)
-        val codeInput = textInput(if (kind == SnippetKind.Css) "CSS" else "JavaScript", existing?.code.orEmpty())
-        val enabled = CheckBox(activity).apply { text = "Enabled"; isChecked = existing?.enabled ?: true }
+        val titleInput = textInput(activity!!.getString(R.string.name), existing?.title.orEmpty(), singleLine = true)
+        val codeInput = textInput(activity!!.getString(if (kind == SnippetKind.Css) R.string.hayai_novel_reader_css else R.string.hayai_novel_reader_javascript), existing?.code.orEmpty())
+        val enabled = CheckBox(activity).apply { setText(R.string.enabled); isChecked = existing?.enabled ?: true }
         val runOnAppend = CheckBox(activity).apply {
-            text = "Run after appending a chapter"
+            setText(R.string.hayai_novel_reader_run_after_append)
             isChecked = existing?.runOnAppend ?: false
             visibility = if (kind == SnippetKind.JavaScript) View.VISIBLE else View.GONE
         }
         val content = form(titleInput, codeInput, enabled, runOnAppend)
         val dialog =
             activity!!.materialAlertDialog()
-                .setTitle(if (existing == null) "Add snippet" else "Edit snippet")
+                .setTitle(if (existing == null) R.string.hayai_novel_reader_add_snippet else R.string.hayai_novel_reader_edit_snippet)
                 .setView(content)
                 .setPositiveButton(android.R.string.ok, null)
                 .setNegativeButton(android.R.string.cancel, null)
@@ -477,8 +479,8 @@ class NovelSettingsController : SettingsController() {
                 val title = titleInput.text?.toString()?.trim().orEmpty()
                 val code = codeInput.text?.toString().orEmpty()
                 when {
-                    title.isBlank() -> titleInput.error = "Name is required"
-                    code.isBlank() -> codeInput.error = "Code is required"
+                    title.isBlank() -> titleInput.error = activity!!.getString(R.string.hayai_novel_reader_name_required)
+                    code.isBlank() -> codeInput.error = activity!!.getString(R.string.hayai_novel_reader_code_required)
                     else -> {
                         saveSnippet(
                             kind,
@@ -534,9 +536,9 @@ class NovelSettingsController : SettingsController() {
         val labels = items.map { "${if (it.enabled) "✓" else "○"}  ${it.title}" }.toTypedArray()
         val dialog =
             activity!!.materialAlertDialog()
-                .setTitle("Text replacements")
+                .setTitle(R.string.hayai_novel_reader_text_replacements)
                 .setItems(labels) { _, index -> showReplacementActions(items[index]) }
-                .setPositiveButton("Add", null)
+                .setPositiveButton(R.string.add, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         dialog.setOnShowListener {
@@ -548,7 +550,7 @@ class NovelSettingsController : SettingsController() {
     private fun showReplacementActions(rule: NovelRegexReplacement) {
         activity!!.materialAlertDialog()
             .setTitle(rule.title)
-            .setItems(arrayOf(if (rule.enabled) "Disable" else "Enable", "Edit", "Test", "Move up", "Move down", "Delete")) { _, action ->
+            .setItems(arrayOf(activity!!.getString(if (rule.enabled) R.string.hayai_novel_reader_disable else R.string.enable), activity!!.getString(R.string.edit), activity!!.getString(R.string.hayai_novel_reader_test), activity!!.getString(R.string.hayai_novel_reader_move_up_short), activity!!.getString(R.string.hayai_novel_reader_move_down_short), activity!!.getString(R.string.delete))) { _, action ->
                 when (action) {
                     0 -> saveReplacement(rule.copy(enabled = !rule.enabled))
                     1 -> editReplacement(rule)
@@ -563,16 +565,16 @@ class NovelSettingsController : SettingsController() {
     }
 
     private fun editReplacement(existing: NovelRegexReplacement?) {
-        val titleInput = textInput("Name", existing?.title.orEmpty(), singleLine = true)
-        val patternInput = textInput("Pattern", existing?.pattern.orEmpty())
-        val replacementInput = textInput("Replacement", existing?.replacement.orEmpty())
-        val enabled = CheckBox(activity).apply { text = "Enabled"; isChecked = existing?.enabled ?: true }
-        val regex = CheckBox(activity).apply { text = "Regular expression"; isChecked = existing?.isRegex ?: true }
-        val wholeWord = CheckBox(activity).apply { text = "Match whole words"; isChecked = existing?.matchWholeWord ?: false }
-        val caseSensitive = CheckBox(activity).apply { text = "Case sensitive"; isChecked = existing?.caseSensitive ?: false }
+        val titleInput = textInput(activity!!.getString(R.string.name), existing?.title.orEmpty(), singleLine = true)
+        val patternInput = textInput(activity!!.getString(R.string.hayai_novel_reader_pattern), existing?.pattern.orEmpty())
+        val replacementInput = textInput(activity!!.getString(R.string.hayai_novel_reader_replacement), existing?.replacement.orEmpty())
+        val enabled = CheckBox(activity).apply { setText(R.string.enabled); isChecked = existing?.enabled ?: true }
+        val regex = CheckBox(activity).apply { setText(R.string.hayai_novel_reader_regular_expression); isChecked = existing?.isRegex ?: true }
+        val wholeWord = CheckBox(activity).apply { setText(R.string.hayai_novel_reader_match_whole_words); isChecked = existing?.matchWholeWord ?: false }
+        val caseSensitive = CheckBox(activity).apply { setText(R.string.hayai_novel_reader_case_sensitive); isChecked = existing?.caseSensitive ?: false }
         val dialog =
             activity!!.materialAlertDialog()
-                .setTitle(if (existing == null) "Add replacement" else "Edit replacement")
+                .setTitle(if (existing == null) R.string.hayai_novel_reader_add_replacement else R.string.hayai_novel_reader_edit_replacement)
                 .setView(form(titleInput, patternInput, replacementInput, enabled, regex, wholeWord, caseSensitive))
                 .setPositiveButton(android.R.string.ok, null)
                 .setNegativeButton(android.R.string.cancel, null)
@@ -582,10 +584,13 @@ class NovelSettingsController : SettingsController() {
                 val title = titleInput.text?.toString()?.trim().orEmpty()
                 val pattern = patternInput.text?.toString().orEmpty()
                 when {
-                    title.isBlank() -> titleInput.error = "Name is required"
-                    pattern.isBlank() -> patternInput.error = "Pattern is required"
+                    title.isBlank() -> titleInput.error = activity!!.getString(R.string.hayai_novel_reader_name_required)
+                    pattern.isBlank() -> patternInput.error = activity!!.getString(R.string.hayai_novel_reader_pattern_required)
                     regex.isChecked && NovelRegexSafety.rejectionReason(pattern) != null ->
-                        patternInput.error = NovelRegexSafety.rejectionReason(pattern)
+                        patternInput.error = activity!!.novelFailureMessage(
+                            NovelFailure(requireNotNull(NovelRegexSafety.rejectionReason(pattern))),
+                            R.string.hayai_novel_reader_rule_apply_error,
+                        )
                     else -> {
                         saveReplacement(
                             NovelRegexReplacement(
@@ -626,21 +631,21 @@ class NovelSettingsController : SettingsController() {
     }
 
     private fun testReplacement(rule: NovelRegexReplacement) {
-        val input = textInput("Sample text", "")
+        val input = textInput(activity!!.getString(R.string.hayai_novel_reader_sample_text), "")
         val dialog =
             activity!!.materialAlertDialog()
-                .setTitle("Test ${rule.title}")
+                .setTitle(activity!!.getString(R.string.hayai_novel_reader_test_named, rule.title))
                 .setView(input)
-                .setPositiveButton("Test", null)
+                .setPositiveButton(R.string.hayai_novel_reader_test, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         dialog.setOnShowListener {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 NovelReplacementEngine.apply(input.text?.toString().orEmpty(), rule.copy(enabled = true)).fold(
                     onSuccess = { result ->
-                        activity!!.materialAlertDialog().setTitle("Result").setMessage(result).setPositiveButton(android.R.string.ok, null).show()
+                        activity!!.materialAlertDialog().setTitle(R.string.hayai_novel_reader_result).setMessage(result).setPositiveButton(android.R.string.ok, null).show()
                     },
-                    onFailure = { input.error = it.message ?: "The rule could not be applied" },
+                    onFailure = { input.error = activity!!.novelFailureMessage(it, R.string.hayai_novel_reader_rule_apply_error) },
                 )
             }
         }
@@ -651,9 +656,9 @@ class NovelSettingsController : SettingsController() {
         val items = customization.presets()
         val dialog =
             activity!!.materialAlertDialog()
-                .setTitle("Reader presets")
+                .setTitle(R.string.hayai_novel_reader_presets)
                 .setItems(items.map(NovelReaderPreset::name).toTypedArray()) { _, index -> showPresetActions(items[index]) }
-                .setPositiveButton("Save current", null)
+                .setPositiveButton(R.string.hayai_novel_reader_save_current, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         dialog.setOnShowListener {
@@ -663,10 +668,10 @@ class NovelSettingsController : SettingsController() {
     }
 
     private fun nameCurrentPreset() {
-        val input = textInput("Preset name", "", singleLine = true)
+        val input = textInput(activity!!.getString(R.string.hayai_novel_reader_preset_name), "", singleLine = true)
         val dialog =
             activity!!.materialAlertDialog()
-                .setTitle("Save current reader style")
+                .setTitle(R.string.hayai_novel_reader_save_current_style)
                 .setView(input)
                 .setPositiveButton(android.R.string.ok, null)
                 .setNegativeButton(android.R.string.cancel, null)
@@ -675,7 +680,7 @@ class NovelSettingsController : SettingsController() {
             dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val name = input.text?.toString()?.trim().orEmpty()
                 if (name.isBlank()) {
-                    input.error = "Name is required"
+                    input.error = activity!!.getString(R.string.hayai_novel_reader_name_required)
                 } else {
                     customization.savePresets(customization.presets() + customization.createPreset(name))
                     dialog.dismiss()
@@ -688,7 +693,7 @@ class NovelSettingsController : SettingsController() {
     private fun showPresetActions(preset: NovelReaderPreset) {
         activity!!.materialAlertDialog()
             .setTitle(preset.name)
-            .setItems(arrayOf("Apply", "Replace with current", "Delete")) { _, action ->
+            .setItems(arrayOf(activity!!.getString(R.string.apply), activity!!.getString(R.string.hayai_novel_reader_replace_current), activity!!.getString(R.string.delete))) { _, action ->
                 when (action) {
                     0 -> customization.apply(preset)
                     1 -> {
@@ -707,9 +712,9 @@ class NovelSettingsController : SettingsController() {
         delete: () -> Unit,
     ) {
         activity!!.materialAlertDialog()
-            .setTitle("Delete $name?")
-            .setMessage("This cannot be undone.")
-            .setPositiveButton("Delete") { _, _ -> delete() }
+            .setTitle(activity!!.getString(R.string.hayai_novel_reader_delete_named, name))
+            .setMessage(R.string.hayai_novel_reader_cannot_undo)
+            .setPositiveButton(R.string.delete) { _, _ -> delete() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }

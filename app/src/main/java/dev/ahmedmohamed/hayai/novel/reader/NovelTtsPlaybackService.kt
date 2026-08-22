@@ -67,7 +67,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         initialized = status == TextToSpeech.SUCCESS
-        if (!initialized) return reportError("Text-to-speech is unavailable on this device.")
+        if (!initialized) return reportError(getString(R.string.hayai_novel_reader_tts_unavailable))
         engine.language = Locale.getDefault()
         engine.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
@@ -76,8 +76,8 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
                 }
 
                 override fun onDone(utteranceId: String?) { if (utteranceId == activeUtterance) advance() }
-                @Deprecated("Deprecated by Android") override fun onError(utteranceId: String?) { if (utteranceId == activeUtterance) reportError("Text-to-speech could not read this passage.") }
-                override fun onError(utteranceId: String?, errorCode: Int) { if (utteranceId == activeUtterance) reportError("Text-to-speech error $errorCode.") }
+                @Deprecated("Deprecated by Android") override fun onError(utteranceId: String?) { if (utteranceId == activeUtterance) reportError(getString(R.string.hayai_novel_reader_tts_passage_error)) }
+                override fun onError(utteranceId: String?, errorCode: Int) { if (utteranceId == activeUtterance) reportError(getString(R.string.hayai_novel_reader_tts_error_code, errorCode)) }
             },
         )
         applyConfiguration()
@@ -115,7 +115,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
 
     fun play() {
         if (!initialized) { playWhenReady = true; return }
-        if (chunks.isEmpty()) return reportError("No readable text was found in this chapter.")
+        if (chunks.isEmpty()) return reportError(getString(R.string.hayai_novel_reader_tts_no_text))
         paused = false
         playing = true
         if (allowBackground) {
@@ -209,22 +209,22 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     private fun notification() =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_play_arrow_24dp)
-            .setContentTitle(novelTitle.ifBlank { "Hayai novel reader" })
+            .setContentTitle(novelTitle.ifBlank { getString(R.string.hayai_novel_reader_tts_title_fallback) })
             .setContentText(
                 buildString {
-                    append(if (isPlaying) "Reading" else "Paused")
-                    if (chapterTitle.isNotBlank()) append(" · ", chapterTitle)
-                    append(" · paragraph ", chunks.getOrNull(chunkIndex)?.paragraphIndex?.plus(1) ?: 1)
+                    val state = getString(if (isPlaying) R.string.reading else R.string.pause)
+                    val paragraph = chunks.getOrNull(chunkIndex)?.paragraphIndex?.plus(1) ?: 1
+                    append(if (chapterTitle.isBlank()) getString(R.string.hayai_novel_reader_tts_status, state, paragraph) else getString(R.string.hayai_novel_reader_tts_status_chapter, state, chapterTitle, paragraph))
                 },
             )
-            .setSubText("${chunkIndex + 1}/${chunks.size.coerceAtLeast(1)}")
+            .setSubText(getString(R.string.hayai_novel_reader_tts_subtext, chunkIndex + 1, chunks.size.coerceAtLeast(1)))
             .setContentIntent(contentIntent())
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
-            .addAction(R.drawable.ic_skip_previous_24, "Previous", serviceAction(ACTION_PREVIOUS, 1))
-            .addAction(if (isPlaying) R.drawable.ic_pause_24dp else R.drawable.ic_play_arrow_24dp, if (isPlaying) "Pause" else "Play", serviceAction(ACTION_TOGGLE, 2))
-            .addAction(R.drawable.ic_skip_next_24, "Next", serviceAction(ACTION_NEXT, 3))
-            .addAction(R.drawable.ic_close_24dp, "Stop", serviceAction(ACTION_STOP, 4))
+            .addAction(R.drawable.ic_skip_previous_24, getString(R.string.previous), serviceAction(ACTION_PREVIOUS, 1))
+            .addAction(if (isPlaying) R.drawable.ic_pause_24dp else R.drawable.ic_play_arrow_24dp, getString(if (isPlaying) R.string.pause else R.string.hayai_novel_reader_tts_play), serviceAction(ACTION_TOGGLE, 2))
+            .addAction(R.drawable.ic_skip_next_24, getString(R.string.next), serviceAction(ACTION_NEXT, 3))
+            .addAction(R.drawable.ic_close_24dp, getString(R.string.stop), serviceAction(ACTION_STOP, 4))
             .build()
 
     private fun serviceAction(action: String, requestCode: Int): PendingIntent =
@@ -243,7 +243,9 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Novel read aloud", NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CHANNEL_ID, getString(R.string.hayai_novel_reader_tts_channel), NotificationManager.IMPORTANCE_LOW).apply {
+                    description = getString(R.string.hayai_novel_reader_tts_channel_description)
+                },
             )
         }
     }

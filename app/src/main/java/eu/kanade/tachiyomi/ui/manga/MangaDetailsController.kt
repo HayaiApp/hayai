@@ -1506,7 +1506,7 @@ class MangaDetailsController :
                         text = error?.message ?: context.getString(R.string.hayai_page_previews_failed)
                     })
                     container.addView(MaterialButton(container.context).apply {
-                        text = context.getString(R.string.hayai_retry)
+                        text = context.getString(R.string.retry)
                         setOnClickListener {
                             container.tag = null
                             loadSourceDetailsPreview(container, featureRoot, manga, page)

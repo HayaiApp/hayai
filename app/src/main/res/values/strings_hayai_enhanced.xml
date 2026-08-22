@@ -3,8 +3,6 @@
     <string name="hayai_enhanced_batch_title">Batch add galleries</string>
     <string name="hayai_enhanced_batch_instructions">Paste one supported gallery URL per line. Duplicate galleries are skipped. Each successful gallery is committed to the library atomically.</string>
     <string name="hayai_enhanced_batch_hint">https://nhentai.net/g/123/</string>
-    <string name="hayai_enhanced_batch_start">Add to library</string>
-    <string name="hayai_enhanced_batch_cancel">Cancel</string>
     <string name="hayai_enhanced_batch_progress">%1$d of %2$d processed</string>
     <string name="hayai_enhanced_batch_loading">Loading %1$s</string>
     <string name="hayai_enhanced_batch_added">Added %1$s from %2$s</string>
@@ -14,4 +12,17 @@
     <string name="hayai_enhanced_batch_summary">Added %1$d. Already present %2$d. Duplicates %3$d. Failed %4$d.</string>
     <string name="hayai_enhanced_batch_settings_title">Batch add supported galleries</string>
     <string name="hayai_enhanced_batch_settings_summary">Import multiple 8Muses, HBrowse, NHentai, or Pururin gallery links into the J2K library.</string>
+    <string name="hayai_enhanced_failure_unsupported_source">No enabled enhanced source accepts this URL.</string>
+    <string name="hayai_enhanced_failure_ambiguous_source">More than one enabled source accepts this URL: %1$s</string>
+    <string name="hayai_enhanced_failure_network">The gallery could not be downloaded. Check your connection and try again.</string>
+    <string name="hayai_enhanced_failure_invalid_gallery">The source returned an invalid gallery.</string>
+    <string name="hayai_enhanced_failure_persistence">The gallery could not be saved atomically. No partial library entry was kept.</string>
+    <string name="hayai_enhanced_preview_too_large">The preview image exceeded Hayai’s safety limit.</string>
+    <string name="hayai_enhanced_preview_source_unavailable">The enhanced source is no longer installed or enabled.</string>
+    <string name="hayai_enhanced_preview_unsupported">%1$s does not provide page previews.</string>
+    <string name="hayai_enhanced_preview_load_failed">Page previews could not be loaded from this source.</string>
+    <string name="hayai_enhanced_preview_image_failed">The preview image could not be downloaded.</string>
+    <string name="hayai_enhanced_batch_invalid_input">The batch input is invalid. Enter one supported HTTP or HTTPS gallery URL per line, up to 500 URLs.</string>
+    <string name="hayai_enhanced_batch_cancelled">Batch add was cancelled after the current atomic operation.</string>
+    <string name="hayai_enhanced_batch_run_failed">Batch add could not be completed.</string>
 </resources>

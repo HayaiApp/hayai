@@ -38,7 +38,7 @@ class SourceHolder(
         val showLanguage = source.includeLangInName(adapter.enabledLanguages, adapter.extensionManager)
         val sourceName = if (showLanguage && (underPinnedSection || underLastUsedSection)) source.toString() else source.name
         binding.title.text = sourceName
-        binding.sourceBadge.text = SourcePresentation.badgeText(source)
+        binding.sourceBadge.text = SourcePresentation.badgeText(itemView.context, source)
         binding.sourceBadge.isVisible = binding.sourceBadge.text != null
 
         binding.sourcePin.apply {

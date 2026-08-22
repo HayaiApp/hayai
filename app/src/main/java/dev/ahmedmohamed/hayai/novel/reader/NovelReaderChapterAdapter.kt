@@ -6,6 +6,7 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.databinding.ReaderChapterItemBinding
+import eu.kanade.tachiyomi.R
 
 /** Binds J2K's reader chapter rows without introducing a second chapter model. */
 internal class NovelReaderChapterAdapter(
@@ -40,9 +41,9 @@ internal class NovelReaderChapterAdapter(
             binding.chapterTitle.text = chapter.name
             binding.chapterSubtitle.text =
                 when {
-                    chapter.read -> "Read"
-                    chapter.last_page_read > 0 -> "${chapter.last_page_read.coerceIn(0, 100)}% read"
-                    else -> "Unread"
+                    chapter.read -> binding.root.context.getString(R.string.read)
+                    chapter.last_page_read > 0 -> binding.root.context.getString(R.string.hayai_novel_reader_percent_read, chapter.last_page_read.coerceIn(0, 100))
+                    else -> binding.root.context.getString(R.string.unread)
                 }
             binding.root.isActivated = chapterId == selectedChapterId
             binding.root.alpha = if (chapter.read) 0.65f else 1f

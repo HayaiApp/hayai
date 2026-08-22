@@ -11,12 +11,15 @@ import android.webkit.CookieManager
 import android.webkit.WebView
 import android.widget.EditText
 import androidx.lifecycle.lifecycleScope
+import dev.ahmedmohamed.hayai.adult.eh.presentation.EhTextResolver
+import dev.ahmedmohamed.hayai.adult.eh.presentation.localizedMessage
 import dev.ahmedmohamed.hayai.adult.eh.session.AndroidEhCookieStore
 import dev.ahmedmohamed.hayai.adult.eh.session.EhLoginCookieParser
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionMutationResult
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionVerifier
 import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.webview.BaseWebViewActivity
 import eu.kanade.tachiyomi.util.system.WebViewClientCompat
@@ -29,6 +32,7 @@ import uy.kohesive.injekt.injectLazy
 class EhLoginActivity : BaseWebViewActivity() {
     private val sessionStore by injectLazy<EhSessionStore>()
     private val network by injectLazy<NetworkHelper>()
+    private val text by injectLazy<EhTextResolver>()
     private val webCookies by lazy(::AndroidEhCookieStore)
     private val verifier by lazy { EhSessionVerifier(network.client) }
 
@@ -39,9 +43,9 @@ class EhLoginActivity : BaseWebViewActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title = "E-Hentai login"
+        title = getString(R.string.hayai_eh_login_title)
         if (!WebViewUtil.supportsWebView(this)) {
-            finishWith(EhLoginOutcome.InvalidCredentials, "A current Android System WebView is required.")
+            finishWith(EhLoginOutcome.InvalidCredentials, getString(R.string.hayai_eh_webview_required))
             return
         }
 
@@ -50,7 +54,8 @@ class EhLoginActivity : BaseWebViewActivity() {
             setAcceptThirdPartyCookies(binding.webview, true)
         }
         binding.webview.setUserAgent(network.defaultUserAgent)
-        binding.toolbar.subtitle = "Sign in, then Hayai will verify ExHentai access."
+        binding.toolbar.subtitle = getString(R.string.hayai_eh_login_instruction)
+        binding.toolbar.navigationContentDescription = getString(R.string.hayai_eh_navigate_up)
         binding.toolbar.setNavigationOnClickListener { finishWith(lastOutcome) }
         binding.swipeRefresh.isEnabled = true
 
@@ -61,7 +66,7 @@ class EhLoginActivity : BaseWebViewActivity() {
                     url: String?,
                     favicon: Bitmap?,
                 ) {
-                    binding.toolbar.subtitle = "Loading secure login page…"
+                    binding.toolbar.subtitle = getString(R.string.hayai_eh_login_loading)
                 }
 
                 override fun onPageFinished(
@@ -80,7 +85,7 @@ class EhLoginActivity : BaseWebViewActivity() {
                     isMainFrame: Boolean,
                 ) {
                     if (isMainFrame) {
-                        binding.toolbar.subtitle = description ?: "The login page could not be loaded."
+                        binding.toolbar.subtitle = description ?: getString(R.string.hayai_eh_login_page_failed)
                     }
                 }
             }
@@ -94,11 +99,11 @@ class EhLoginActivity : BaseWebViewActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(Menu.NONE, ACTION_RECHECK, 0, "Recheck").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(Menu.NONE, ACTION_ALTERNATE, 1, "Alternate login").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(Menu.NONE, ACTION_IGNEOUS, 2, "Set igneous cookie").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(Menu.NONE, ACTION_SIMPLIFY, 3, "Simplify login page").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(Menu.NONE, ACTION_CANCEL, 4, "Cancel").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, ACTION_RECHECK, 0, R.string.hayai_eh_recheck).setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, ACTION_ALTERNATE, 1, R.string.hayai_eh_alternate_login).setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, ACTION_IGNEOUS, 2, R.string.hayai_eh_set_igneous).setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, ACTION_SIMPLIFY, 3, R.string.hayai_eh_simplify_login).setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+        menu.add(Menu.NONE, ACTION_CANCEL, 4, R.string.cancel).setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
         return true
     }
 
@@ -152,13 +157,13 @@ class EhLoginActivity : BaseWebViewActivity() {
         view.evaluateJavascript(CLOUDFLARE_CHECK_JS) { rawResult ->
             if (rawResult == "true") {
                 lastOutcome = EhLoginOutcome.Cloudflare
-                binding.toolbar.subtitle = "Cloudflare challenge detected. Complete it, then tap Recheck."
+                binding.toolbar.subtitle = getString(R.string.hayai_eh_cloudflare_detected)
                 return@evaluateJavascript
             }
             when {
                 host.equals("forums.e-hentai.org", ignoreCase = true) -> continueFromForum(url)
                 host.equals("exhentai.org", ignoreCase = true) -> stageAndVerify()
-                else -> binding.toolbar.subtitle = "Complete the E-Hentai forum login."
+                else -> binding.toolbar.subtitle = getString(R.string.hayai_eh_complete_forum_login)
             }
         }
     }
@@ -167,10 +172,10 @@ class EhLoginActivity : BaseWebViewActivity() {
         val cookies = webCookies.get(url)
         val parsed = EhLoginCookieParser.parse(cookies).getOrNull()
         if (parsed != null && !parsed.memberId.isNullOrBlank() && !parsed.passHash.isNullOrBlank()) {
-            binding.toolbar.subtitle = "Forum login accepted. Checking ExHentai access…"
+            binding.toolbar.subtitle = getString(R.string.hayai_eh_forum_login_accepted)
             binding.webview.loadUrl(EXH_URL)
         } else {
-            binding.toolbar.subtitle = "Enter valid forum credentials to continue."
+            binding.toolbar.subtitle = getString(R.string.hayai_eh_enter_valid_credentials)
         }
     }
 
@@ -188,12 +193,12 @@ class EhLoginActivity : BaseWebViewActivity() {
             )
         if (result is EhSessionMutationResult.Failure) {
             lastOutcome = EhLoginOutcome.InvalidCredentials
-            binding.toolbar.subtitle = result.reason + " Use Set igneous cookie if the site did not provide it."
+            binding.toolbar.subtitle = getString(R.string.hayai_eh_set_igneous_suffix, result.reason.localizedMessage(text))
             return
         }
 
         verificationInFlight = true
-        binding.toolbar.subtitle = "Verifying credentials with ExHentai…"
+        binding.toolbar.subtitle = getString(R.string.hayai_eh_verifying_credentials)
         lifecycleScope.launch {
             when (val verification = verifier.verify(sessionStore)) {
                 EhVerificationResult.Verified -> {
@@ -201,21 +206,21 @@ class EhLoginActivity : BaseWebViewActivity() {
                         is EhSessionMutationResult.Success -> finishWith(EhLoginOutcome.Success)
                         is EhSessionMutationResult.Failure -> {
                             lastOutcome = EhLoginOutcome.InvalidCredentials
-                            binding.toolbar.subtitle = committed.reason
+                            binding.toolbar.subtitle = committed.reason.localizedMessage(text)
                         }
                     }
                 }
-                is EhVerificationResult.Cloudflare -> {
+                EhVerificationResult.Cloudflare -> {
                     lastOutcome = EhLoginOutcome.Cloudflare
-                    binding.toolbar.subtitle = verification.message
+                    binding.toolbar.subtitle = getString(R.string.hayai_eh_login_cloudflare_failure)
                 }
-                is EhVerificationResult.InvalidCredentials -> {
-                    sessionStore.markInvalid(verification.message)
+                EhVerificationResult.InvalidCredentials -> {
+                    sessionStore.markInvalid()
                     lastOutcome = EhLoginOutcome.InvalidCredentials
-                    binding.toolbar.subtitle = verification.message
+                    binding.toolbar.subtitle = dev.ahmedmohamed.hayai.adult.eh.session.EhSessionFailureReason.CredentialsRejected.localizedMessage(text)
                 }
                 is EhVerificationResult.NetworkFailure -> {
-                    binding.toolbar.subtitle = verification.message + " Tap Recheck to try again."
+                    binding.toolbar.subtitle = getString(R.string.hayai_eh_recheck_suffix, getString(R.string.hayai_eh_login_network_failure))
                 }
             }
             verificationInFlight = false
@@ -227,14 +232,14 @@ class EhLoginActivity : BaseWebViewActivity() {
             EditText(this).apply {
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                 setSingleLine(true)
-                hint = "igneous"
+                hint = getString(R.string.hayai_eh_igneous_hint)
                 setText(manualIgneous)
             }
         materialAlertDialog()
-            .setTitle("Custom igneous cookie")
-            .setMessage("Use this only when ExHentai does not provide the cookie automatically.")
+            .setTitle(R.string.hayai_eh_custom_igneous)
+            .setMessage(R.string.hayai_eh_custom_igneous_message)
             .setView(input)
-            .setPositiveButton("Save and recheck") { _, _ ->
+            .setPositiveButton(R.string.hayai_eh_save_and_recheck) { _, _ ->
                 manualIgneous = input.text?.toString()?.trim()?.takeIf(String::isNotEmpty)
                 binding.webview.loadUrl(EXH_URL)
             }.setNegativeButton(android.R.string.cancel, null)

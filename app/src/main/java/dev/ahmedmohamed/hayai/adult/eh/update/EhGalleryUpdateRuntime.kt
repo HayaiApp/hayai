@@ -1,6 +1,9 @@
 package dev.ahmedmohamed.hayai.adult.eh.update
 
+import android.content.Context
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
+import dev.ahmedmohamed.hayai.adult.eh.presentation.EhTextResolver
+import dev.ahmedmohamed.hayai.adult.eh.presentation.localizedMessage
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhRevision
 import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
 import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
@@ -9,6 +12,7 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
 import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
 import dev.ahmedmohamed.hayai.adult.eh.source.EhentaiSource
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.History
@@ -28,6 +32,7 @@ interface EhGalleryUpdateOperations {
 }
 
 class EhGalleryUpdateRuntime(
+    private val context: Context,
     private val database: DatabaseHelper,
     private val sourceManager: SourceManager,
     private val gateway: EhHttpGateway,
@@ -39,6 +44,7 @@ class EhGalleryUpdateRuntime(
     private val forceRefresh: Boolean = false,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : EhGalleryUpdateOperations {
+    private val text = EhTextResolver(context)
     override suspend fun candidates(): List<EhGalleryUpdateCandidate> = withContext(Dispatchers.IO) {
         val now = clock()
         database.getFavoriteMangas().executeAsBlocking()
@@ -60,7 +66,11 @@ class EhGalleryUpdateRuntime(
         val manga = withContext(Dispatchers.IO) { database.getManga(candidate.mangaId).executeAsBlocking() }
             ?: return EhGalleryUpdateResult(EhGalleryUpdateDisposition.Unchanged, candidate.title)
         val source = sourceManager.get(candidate.sourceId) as? EhentaiSource
-            ?: return EhGalleryUpdateResult(EhGalleryUpdateDisposition.PermanentFailure, candidate.title, failure = "E-Hentai source is unavailable")
+            ?: return EhGalleryUpdateResult(
+                EhGalleryUpdateDisposition.PermanentFailure,
+                candidate.title,
+                failure = context.getString(R.string.hayai_eh_source_unavailable),
+            )
         val identity = SourceMangaIdentity(candidate.sourceId, candidate.mangaUrl)
         val now = clock()
 
@@ -108,8 +118,13 @@ class EhGalleryUpdateRuntime(
                     EhGalleryUpdateResult(EhGalleryUpdateDisposition.NotFound, candidate.title)
                 }
                 is EhFailure.Network, is EhFailure.RateLimited ->
-                    EhGalleryUpdateResult(EhGalleryUpdateDisposition.TransientFailure, candidate.title, failure = failure.message)
-                else -> EhGalleryUpdateResult(EhGalleryUpdateDisposition.PermanentFailure, candidate.title, failure = failure.message)
+                    EhGalleryUpdateResult(EhGalleryUpdateDisposition.TransientFailure, candidate.title, failure = failure.localizedMessage(text))
+                is EhFailure -> EhGalleryUpdateResult(EhGalleryUpdateDisposition.PermanentFailure, candidate.title, failure = failure.localizedMessage(text))
+                else -> EhGalleryUpdateResult(
+                    EhGalleryUpdateDisposition.PermanentFailure,
+                    candidate.title,
+                    failure = context.getString(R.string.hayai_eh_update_gallery_failed),
+                )
             }
         }
     }
@@ -171,7 +186,7 @@ class EhGalleryUpdateRuntime(
             }
             chapter.manga_id = manga.id
             val before = existing?.copyForRename()
-            chapter.name = "v${index + 1} · ${mutation.remote.title}"
+            chapter.name = context.getString(R.string.hayai_eh_revision_name, index + 1, mutation.remote.title)
             chapter.chapter_number = index + 1f
             chapter.source_order = merge.mutations.lastIndex - index
             chapter.date_upload = mutation.remote.postedAt

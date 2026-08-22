@@ -6,6 +6,8 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
 import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
 import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
 import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
+import dev.ahmedmohamed.hayai.adult.eh.presentation.EhTextResolver
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Category
 import eu.kanade.tachiyomi.data.database.models.Manga
@@ -13,6 +15,7 @@ import eu.kanade.tachiyomi.data.database.models.MangaCategory
 import eu.kanade.tachiyomi.source.model.SManga
 
 class J2kEhFavoritesLocal(
+    private val text: EhTextResolver,
     private val database: DatabaseHelper,
     private val persistence: HayaiEhPersistenceStore,
     private val gateway: EhHttpGateway,
@@ -22,11 +25,11 @@ class J2kEhFavoritesLocal(
 
     fun remapCategory(slot: EhFavoriteSlot, categoryId: Int) {
         val category = database.getCategories().executeAsBlocking().singleOrNull { it.id == categoryId }
-            ?: error("The selected J2K category no longer exists.")
+            ?: error(text.get(R.string.hayai_eh_selected_category_missing))
         val current = persistence.categoryMappings().singleOrNull { it.slot == slot }
-            ?: error("Run a favorites preview once before editing category mappings.")
+            ?: error(text.get(R.string.hayai_eh_preview_before_mapping))
         check(persistence.categoryMappings().none { it.slot != slot && it.categoryId == categoryId }) {
-            "That J2K category is already mapped to another E-Hentai slot."
+            text.get(R.string.hayai_eh_category_already_mapped)
         }
         persistence.upsertCategoryMapping(current.copy(categoryId = requireNotNull(category.id)))
     }
@@ -39,7 +42,7 @@ class J2kEhFavoritesLocal(
             val mapping = existingMappings[remoteCategory.slot]
             if (mapping != null) {
                 val category = categories.find { it.id == mapping.categoryId }
-                    ?: error("Mapped E-Hentai category ${remoteCategory.slot.value} was deleted. Repair the mapping before syncing.")
+                    ?: error(text.get(R.string.hayai_eh_mapped_category_deleted, remoteCategory.slot.value))
                 if (category.name != remoteCategory.name) {
                     category.name = remoteCategory.name
                     database.insertCategory(category).executeAsBlocking()
@@ -98,14 +101,14 @@ class J2kEhFavoritesLocal(
         when (operation) {
             is EhFavoriteOperation.SetLocal -> setLocal(operation, aliases)
             is EhFavoriteOperation.RemoveLocal -> removeLocal(operation, aliases)
-            else -> error("Remote operation passed to the J2K favorites gateway")
+            else -> error(text.get(R.string.hayai_eh_invalid_local_operation))
         }
     }
 
     private suspend fun setLocal(operation: EhFavoriteOperation.SetLocal, aliases: EhGalleryAliasIndex) {
         val mappings = persistence.categoryMappings()
         val target = mappings.singleOrNull { it.slot == operation.desired.category }
-            ?: error("No J2K category is mapped to E-Hentai slot ${operation.desired.category.value}.")
+            ?: error(text.get(R.string.hayai_eh_slot_not_mapped, operation.desired.category.value))
         val existing = findEquivalent(aliases.equivalents(operation.gallery))
         val prepared = if (existing == null) prepareManga(operation.desired) else null
         persistence.applyLocalOperation(operation.operationId, mutation = {
@@ -152,7 +155,7 @@ class J2kEhFavoritesLocal(
     private fun EhGalleryMetadata.toManga(sourceId: Long): Manga = Manga.create(key.normalizedPath, title, sourceId).apply {
         artist = tags.filter { it.namespace == "artist" }.joinToString { it.name }.takeIf(String::isNotBlank)
         author = tags.filter { it.namespace == "group" }.joinToString { it.name }.takeIf(String::isNotBlank)
-        description = uploader?.let { "Uploader: $it" }
+        description = uploader?.let { text.get(R.string.hayai_eh_favorite_uploader, it) }
         genre = tags.joinToString { "${it.namespace}: ${it.name}" }.takeIf(String::isNotBlank)
         thumbnail_url = this@toManga.thumbnailUrl
         status = SManga.UNKNOWN
@@ -163,7 +166,7 @@ class J2kEhFavoritesLocal(
 
     private fun uniqueCategoryName(remoteName: String, used: Set<String>): String {
         if (remoteName.lowercase() !in used) return remoteName
-        val base = "$remoteName (E-Hentai)"
+        val base = text.get(R.string.hayai_eh_category_collision, remoteName)
         if (base.lowercase() !in used) return base
         return generateSequence(2) { it + 1 }.map { "$base $it" }.first { it.lowercase() !in used }
     }

@@ -12,11 +12,13 @@ import androidx.appcompat.app.AppCompatActivity
 import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionaryProvider
 import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettings
 import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettingsStore
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+import eu.kanade.tachiyomi.R
 
 class NovelLanguageToolsSettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title = "Novel language tools"
+        title = getString(R.string.hayai_novel_language_tools)
         val store = NovelTranslationSettingsStore(this)
         val current = store.get()
         val dictionaryStore = NovelDictionarySettingsStore(this)
@@ -25,21 +27,21 @@ class NovelLanguageToolsSettingsActivity : AppCompatActivity() {
             adapter = ArrayAdapter(
                 this@NovelLanguageToolsSettingsActivity,
                 android.R.layout.simple_spinner_dropdown_item,
-                NovelTranslationEngineId.entries.map { it.name.replace('_', ' ') },
+                NovelTranslationEngineId.entries.map(::translationEngineText),
             )
             setSelection(current.engine.ordinal)
         }
-        val source = field("Source language", current.sourceLanguage)
-        val target = field("Target language", current.targetLanguage)
-        val endpoint = field("Provider endpoint", current.endpoint, InputType.TYPE_TEXT_VARIATION_URI)
-        val key = field("API key", current.apiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD)
-        val model = field("Model", current.model)
+        val source = field(getString(R.string.hayai_source_language), current.sourceLanguage)
+        val target = field(getString(R.string.hayai_target_language), current.targetLanguage)
+        val endpoint = field(getString(R.string.hayai_provider_endpoint), current.endpoint, InputType.TYPE_TEXT_VARIATION_URI)
+        val key = field(getString(R.string.hayai_api_key), current.apiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        val model = field(getString(R.string.hayai_model), current.model)
         val message = TextView(this)
         val dictionary = Spinner(this).apply {
             adapter = ArrayAdapter(
                 this@NovelLanguageToolsSettingsActivity,
                 android.R.layout.simple_spinner_dropdown_item,
-                NovelDictionaryProvider.entries.map { it.name.replace('_', ' ') },
+                NovelDictionaryProvider.entries.map(::dictionaryProviderText),
             )
             setSelection(dictionaryCurrent.provider.ordinal)
         }
@@ -48,7 +50,7 @@ class NovelLanguageToolsSettingsActivity : AppCompatActivity() {
             adapter = ArrayAdapter(
                 this@NovelLanguageToolsSettingsActivity,
                 android.R.layout.simple_spinner_dropdown_item,
-                fallbackOptions.map { it.name.replace('_', ' ') },
+                fallbackOptions.map(::dictionaryProviderText),
             )
             setSelection(fallbackOptions.indexOf(dictionaryCurrent.webFallback).coerceAtLeast(0))
         }
@@ -57,13 +59,13 @@ class NovelLanguageToolsSettingsActivity : AppCompatActivity() {
             setPadding(24, 24, 24, 24)
             addView(engine)
             listOf(source, target, endpoint, key, model).forEach(::addView)
-            addView(TextView(context).apply { text = "Dictionary provider" })
+            addView(TextView(context).apply { text = getString(R.string.hayai_dictionary_provider) })
             addView(dictionary)
-            addView(TextView(context).apply { text = "Web fallback" })
+            addView(TextView(context).apply { text = getString(R.string.hayai_web_fallback) })
             addView(fallback)
             addView(message)
             addView(Button(context).apply {
-                text = "Save"
+                setText(R.string.save)
                 setOnClickListener {
                     runCatching {
                         store.set(
@@ -83,8 +85,8 @@ class NovelLanguageToolsSettingsActivity : AppCompatActivity() {
                             ),
                         )
                     }.fold(
-                        onSuccess = { message.text = "Settings saved" },
-                        onFailure = { message.text = it.message },
+                        onSuccess = { message.text = getString(R.string.hayai_settings_saved) },
+                        onFailure = { message.text = languageSettingsError(it) },
                     )
                 }
             })
@@ -96,4 +98,29 @@ class NovelLanguageToolsSettingsActivity : AppCompatActivity() {
         setText(value)
         inputType = InputType.TYPE_CLASS_TEXT or variation
     }
+
+    private fun translationEngineText(engine: NovelTranslationEngineId): String =
+        getString(
+            when (engine) {
+                NovelTranslationEngineId.GOOGLE_WEB -> R.string.hayai_translation_google_web
+                NovelTranslationEngineId.LIBRE_TRANSLATE -> R.string.hayai_translation_libretranslate
+                NovelTranslationEngineId.OPENAI_COMPATIBLE -> R.string.hayai_translation_openai_compatible
+                NovelTranslationEngineId.DEEPL -> R.string.hayai_translation_deepl
+            },
+        )
+
+    private fun dictionaryProviderText(provider: NovelDictionaryProvider): String =
+        getString(
+            when (provider) {
+                NovelDictionaryProvider.SYSTEM -> R.string.hayai_dictionary_system
+                NovelDictionaryProvider.AARD2 -> R.string.hayai_dictionary_aard2
+                NovelDictionaryProvider.COLOR_DICT -> R.string.hayai_dictionary_colordict
+                NovelDictionaryProvider.LIVIO -> R.string.hayai_dictionary_livio
+                NovelDictionaryProvider.WEB_GOOGLE -> R.string.hayai_dictionary_google_web
+                NovelDictionaryProvider.WEB_WIKTIONARY -> R.string.hayai_dictionary_wiktionary
+            },
+        )
+
+    private fun languageSettingsError(error: Throwable): String =
+        novelFailureMessage(error, R.string.hayai_language_settings_invalid)
 }

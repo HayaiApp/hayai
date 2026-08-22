@@ -1,8 +1,12 @@
 package dev.ahmedmohamed.hayai.novel.download
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import dev.ahmedmohamed.hayai.novel.reader.NovelReaderSession
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -11,7 +15,7 @@ import kotlinx.coroutines.CancellationException
 import java.io.File
 
 class NovelOfflineManager(
-    context: Context,
+    private val context: Context,
     private val database: DatabaseHelper,
     private val sourceManager: SourceManager,
     private val network: NetworkHelper,
@@ -39,16 +43,16 @@ class NovelOfflineManager(
         var unavailableAssets = 0
         selected.forEachIndexed { index, chapter ->
             try {
-                val session = NovelReaderSession(database, sourceManager, store, network)
+                val session = NovelReaderSession(context, database, sourceManager, store, network)
                 val loaded = session.initialize(requireNotNull(manga.id), requireNotNull(chapter.id), recordHistory = false)
                 val result = session.saveOffline(loaded)
-                check(store.contains(manga.source, chapter.url)) { "The saved chapter could not be verified." }
+                novelRequire(store.contains(manga.source, chapter.url), NovelFailure.Code.OfflineSavedVerify)
                 saved++
                 unavailableAssets += result.unavailableAssetCount
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                failures += NovelOfflineFailure(chapter.id, chapter.name, error.message ?: "Download failed")
+                failures += NovelOfflineFailure(chapter.id, chapter.name, context.novelFailureMessage(error, R.string.hayai_failure_offline_download))
             }
             onProgress(index + 1, selected.size)
         }
@@ -65,11 +69,11 @@ class NovelOfflineManager(
         selected.forEach { chapter ->
             try {
                 if (!store.contains(manga.source, chapter.url)) return@forEach
-                check(store.remove(manga.source, chapter.url)) { "The offline chapter could not be removed." }
-                check(!store.contains(manga.source, chapter.url)) { "The removed chapter is still present." }
+                novelRequire(store.remove(manga.source, chapter.url), NovelFailure.Code.OfflineRemove)
+                novelRequire(!store.contains(manga.source, chapter.url), NovelFailure.Code.OfflineRemovedStillPresent)
                 removed++
             } catch (error: Exception) {
-                failures += NovelOfflineFailure(chapter.id, chapter.name, error.message ?: "Removal failed")
+                failures += NovelOfflineFailure(chapter.id, chapter.name, context.novelFailureMessage(error, R.string.hayai_failure_offline_removal))
             }
         }
         return NovelOfflineBatchResult(removed, 0, failures)

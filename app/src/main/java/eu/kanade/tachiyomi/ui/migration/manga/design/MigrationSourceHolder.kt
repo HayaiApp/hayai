@@ -24,7 +24,7 @@ class MigrationSourceHolder(
         sourceEnabled: Boolean,
     ) {
         binding.title.text = source.nameBasedOnEnabledLanguages(adapter.enabledLanguages, adapter.extensionManager)
-        binding.sourceBadge.text = SourcePresentation.badgeText(source)
+        binding.sourceBadge.text = SourcePresentation.badgeText(itemView.context, source)
         binding.sourceBadge.isVisible = binding.sourceBadge.text != null
         // Update circle letter image.
         itemView.post {
