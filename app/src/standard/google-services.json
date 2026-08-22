@@ -1,66 +1,83 @@
 {
   "project_info": {
-    "project_number": "822770527911",
-    "firebase_url": "https://tachiyomi-j2k.firebaseio.com",
-    "project_id": "tachiyomi-j2k",
-    "storage_bucket": "tachiyomi-j2k.appspot.com"
+    "project_number": "237497878717",
+    "project_id": "hayai-6c4fa",
+    "storage_bucket": "hayai-6c4fa.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:822770527911:android:2ef352cdb1e9dc695a7582",
+        "mobilesdk_app_id": "1:237497878717:android:4dba7fe406262ff7218fd4",
         "android_client_info": {
-          "package_name": "eu.kanade.tachiyomi.debugJ2K"
+          "package_name": "dev.ahmedmohamed.hayai"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "822770527911-8lg3lf7n39n4n4pk6ul40qdffu30rkkb.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC5GO4HyxCq8go16eq6R5GswzytOM1cIbs"
+          "current_key": "AIzaSyDm7G3jnSpyp5MsfY6VvVQi8lElMQi0zIs"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "822770527911-8lg3lf7n39n4n4pk6ul40qdffu30rkkb.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:822770527911:android:6a6b549297ff51a85a7582",
+        "mobilesdk_app_id": "1:237497878717:android:9f623ba234ffcf9d218fd4",
         "android_client_info": {
-          "package_name": "eu.kanade.tachiyomi.j2k"
+          "package_name": "dev.ahmedmohamed.hayai.beta"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "822770527911-8lg3lf7n39n4n4pk6ul40qdffu30rkkb.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC5GO4HyxCq8go16eq6R5GswzytOM1cIbs"
+          "current_key": "AIzaSyDm7G3jnSpyp5MsfY6VvVQi8lElMQi0zIs"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "822770527911-8lg3lf7n39n4n4pk6ul40qdffu30rkkb.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:237497878717:android:4dba7fe406262ff7218fd4",
+        "android_client_info": {
+          "package_name": "dev.ahmedmohamed.hayai.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDm7G3jnSpyp5MsfY6VvVQi8lElMQi0zIs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:237497878717:android:4dba7fe406262ff7218fd4",
+        "android_client_info": {
+          "package_name": "dev.ahmedmohamed.hayai.nightly"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDm7G3jnSpyp5MsfY6VvVQi8lElMQi0zIs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
         }
       }
     }
