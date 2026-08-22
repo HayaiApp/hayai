@@ -22,3 +22,6 @@
 *.woff binary
 *.pyc binary
 *.swp binary
+
+# Email patches contain diff markers and a mail footer that look like whitespace errors.
+/patches/*.patch whitespace=-blank-at-eol,-blank-at-eof
