@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.integration
 
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
+import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.isNovelSource
@@ -47,4 +48,19 @@ enum class ContentKind {
     ;
 
     fun accepts(isNovelSource: Boolean): Boolean = (this == Novel) == isNovelSource
+
+    fun accepts(source: CatalogueSource): Boolean = accepts(source.isNovelSource())
+
+    fun accepts(extension: Extension): Boolean =
+        when (extension) {
+            is Extension.Installed -> {
+                val declaredKinds = extension.sources.map { it.isNovelSource() }.toSet()
+                if (declaredKinds.isEmpty()) accepts(extension.isNovel) else (this == Novel) in declaredKinds
+            }
+            else -> accepts(extension.isNovel)
+        }
+
+    companion object {
+        fun fromPosition(position: Int): ContentKind = entries.getOrElse(position) { Manga }
+    }
 }

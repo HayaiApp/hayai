@@ -41,6 +41,7 @@ internal object ExtensionLoader {
 
     const val LIB_VERSION_MIN = 1.3
     const val LIB_VERSION_MAX = 1.6
+    private const val NOVEL_EXTENSION_PACKAGE_PREFIX = "eu.kanade.tachiyomi.novelextension"
 
     @Suppress("DEPRECATION")
     private val PACKAGE_FLAGS =
@@ -372,6 +373,7 @@ internal object ExtensionLoader {
                     versionCode,
                     libVersion,
                     signatures.last(),
+                    isNovel = manifest.isNovel || pkgName.startsWith(NOVEL_EXTENSION_PACKAGE_PREFIX),
                 )
             Timber.w("Extension $pkgName isn't trusted")
             return LoadResult.Untrusted(extension)
@@ -456,6 +458,7 @@ internal object ExtensionLoader {
                 libVersion = libVersion,
                 lang = lang,
                 isNsfw = isNsfw,
+                isNovel = manifest.isNovel,
                 sources = sources,
                 pkgFactory = metadata.getString(manifest.factoryKey),
                 icon = appInfo.loadIcon(pkgManager),
