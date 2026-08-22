@@ -66,9 +66,11 @@ function Assert-TestAvd {
     if ($actual -ne $AvdName) { throw "Connected emulator is '$actual', expected dedicated AVD '$AvdName'." }
 }
 function Dump-Window([string] $Name) {
-    Invoke-Adb @("shell", "uiautomator", "dump", "/sdcard/hayai-window.xml") | Out-Null
+    $remote = "/data/local/tmp/hayai-window.xml"
+    Invoke-Adb @("shell", "rm", "-f", $remote) | Out-Null
+    Invoke-Adb @("shell", "uiautomator", "dump", $remote) | Out-Null
     $path = Join-Path $script:evidence "$Name.xml"
-    Invoke-Adb @("pull", "/sdcard/hayai-window.xml", $path) | Out-Null
+    Invoke-Adb @("pull", $remote, $path) | Out-Null
     return [xml](Get-Content -Raw -LiteralPath $path)
 }
 function Find-Node([xml] $Window, [string] $Pattern) {
@@ -86,7 +88,12 @@ function Tap-Node([string] $Pattern, [string] $EvidenceName) {
 }
 function Assert-Node([string] $Pattern, [string] $EvidenceName) { [void](Find-Node (Dump-Window $EvidenceName) $Pattern) }
 function Dismiss-CompatibilityWarning {
-    $window = Dump-Window "00-compatibility-warning"
+    try {
+        $window = Dump-Window "00-compatibility-warning"
+    } catch {
+        Write-Warning "Compatibility-dialog inspection was unavailable; continuing with app readiness checks. $($_.Exception.Message)"
+        return
+    }
     $warning = $window.SelectNodes("//node") | Where-Object { $_.text -eq "Android App Compatibility" } | Select-Object -First 1
     if ($warning) {
         Tap-Node "Don't Show Again|OK" "00-compatibility-warning"
