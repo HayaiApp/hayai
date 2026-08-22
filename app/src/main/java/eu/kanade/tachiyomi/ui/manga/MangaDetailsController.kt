@@ -8,6 +8,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Icon
 import android.net.Uri
@@ -24,6 +25,7 @@ import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.annotation.ColorInt
 import androidx.annotation.FloatRange
@@ -58,7 +60,10 @@ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
 import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
-import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
+import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
+import dev.ahmedmohamed.hayai.source.preview.SourcePreviewActivity
+import dev.ahmedmohamed.hayai.source.preview.SourcePreviewBitmapDecoder
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.SelectableAdapter
@@ -228,12 +233,14 @@ class MangaDetailsController :
     private var isPushing = true
     private val novelIntegration: NovelJ2kIntegration by injectLazy()
     private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
+    private val hayaiPreferences by lazy { HayaiPreferences(Injekt.get()) }
     private val novelOfflineManager by lazy {
         NovelOfflineManager(activity!!, Injekt.get(), Injekt.get(), Injekt.get<NetworkHelper>())
     }
     private var novelPresentationJob: Job? = null
     private var sourceDetailsFeaturesJob: Job? = null
-    private var sourceDetailsPreviewPage: SourceRenderedPreviewPage? = null
+    private val sourceDetailsPreviewBitmaps = mutableListOf<Bitmap>()
+    private val sourceDetailsImageJobs = mutableListOf<Job>()
 
     // Prevents the favorite button's drag-to-open popup from firing underneath
     // the categories sheet when a long press opens it mid-gesture
@@ -476,8 +483,7 @@ class MangaDetailsController :
     override fun onDestroyView(view: View) {
         novelPresentationJob?.cancel()
         sourceDetailsFeaturesJob?.cancel()
-        sourceDetailsPreviewPage?.close()
-        sourceDetailsPreviewPage = null
+        releaseSourcePreviewImages()
         novelPresentationJob = null
         snack?.dismiss()
         adapter = null
@@ -1435,13 +1441,13 @@ class MangaDetailsController :
     }
 
     override fun bindSourceDetailsFeatures(container: LinearLayout) {
+        container.orientation = LinearLayout.VERTICAL
         val manga = presenter.manga
         val featureRoot = container.parent?.parent as? View ?: return
         if (!sourceDetailsPreviewRegistry.owns(manga)) {
             sourceDetailsFeaturesJob?.cancel()
             container.removeAllViews()
-            sourceDetailsPreviewPage?.close()
-            sourceDetailsPreviewPage = null
+            releaseSourcePreviewImages()
             container.tag = null
             featureRoot.visibility = View.GONE
             return
@@ -1459,72 +1465,101 @@ class MangaDetailsController :
         if (container.tag == identity) return
         container.tag = identity
         container.removeAllViews()
-        sourceDetailsPreviewPage?.close()
-        sourceDetailsPreviewPage = null
-        featureRoot.visibility = View.GONE
+        releaseSourcePreviewImages()
+        featureRoot.visibility = View.VISIBLE
+        container.addView(ProgressBar(container.context).apply { isIndeterminate = true })
         sourceDetailsFeaturesJob?.cancel()
         sourceDetailsFeaturesJob = viewScope.launchIO {
             val result = runCatching { sourceDetailsPreviewRegistry.load(manga, page) }
             withUIContext {
                 val loaded = result.getOrNull()
                 if (container.tag != identity) {
-                    loaded?.close()
                     return@withUIContext
                 }
                 container.removeAllViews()
-                sourceDetailsPreviewPage?.close()
-                sourceDetailsPreviewPage = loaded
                 val density = container.resources.displayMetrics.density
-                loaded?.previews.orEmpty().forEach { rendered ->
-                    val image =
-                        ImageView(container.context).apply {
-                            scaleType = ImageView.ScaleType.CENTER_CROP
-                            contentDescription = "Gallery page ${rendered.index}"
-                            setImageBitmap(rendered.bitmap)
-                            rendered.pageUrl?.let { pageUrl -> setOnClickListener { openSourcePreview(pageUrl) } }
+                if (loaded != null) {
+                    val rows = hayaiPreferences.pagePreviewRows.get().coerceIn(0, 10)
+                    if (rows == 0) {
+                        featureRoot.visibility = View.GONE
+                        return@withUIContext
+                    }
+                    val visible = loaded.previews.take(rows * INLINE_COLUMNS)
+                    visible.chunked(INLINE_COLUMNS).forEach { rowItems ->
+                        container.addView(
+                            LinearLayout(container.context).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                rowItems.forEach { preview -> addView(createPreviewCell(this, manga, preview, density)) }
+                            },
+                        )
+                    }
+                    container.addView(
+                        MaterialButton(container.context).apply {
+                            text = context.getString(R.string.hayai_more_previews)
+                            setOnClickListener { startActivity(SourcePreviewActivity.newIntent(context, requireNotNull(manga.id))) }
+                        },
+                    )
+                    featureRoot.visibility = if (visible.isNotEmpty()) View.VISIBLE else View.GONE
+                } else {
+                    val error = result.exceptionOrNull()
+                    container.addView(TextView(container.context).apply {
+                        text = error?.message ?: context.getString(R.string.hayai_page_previews_failed)
+                    })
+                    container.addView(MaterialButton(container.context).apply {
+                        text = context.getString(R.string.hayai_retry)
+                        setOnClickListener {
+                            container.tag = null
+                            loadSourceDetailsPreview(container, featureRoot, manga, page)
                         }
-                    container.addView(
-                        image,
-                        LinearLayout.LayoutParams((96 * density).toInt(), (136 * density).toInt()).apply {
-                            marginEnd = (8 * density).toInt()
-                        },
-                    )
+                    })
+                    featureRoot.visibility = View.VISIBLE
                 }
-                if (loaded != null && (loaded.page > 1 || loaded.hasNextPage)) {
-                    container.addView(
-                        LinearLayout(container.context).apply {
-                            orientation = LinearLayout.VERTICAL
-                            if (loaded.page > 1) {
-                                addView(MaterialButton(context).apply {
-                                    text = "Previous previews"
-                                    setOnClickListener { loadSourceDetailsPreview(container, featureRoot, manga, loaded.page - 1) }
-                                })
-                            }
-                            if (loaded.hasNextPage) {
-                                addView(MaterialButton(context).apply {
-                                    text = "Next previews"
-                                    setOnClickListener { loadSourceDetailsPreview(container, featureRoot, manga, loaded.page + 1) }
-                                })
-                            }
-                        },
-                    )
-                }
-                featureRoot.visibility =
-                    if (loaded != null && (loaded.previews.isNotEmpty() || loaded.page > 1)) View.VISIBLE else View.GONE
             }
         }
     }
 
-    private fun openSourcePreview(pageUrl: String) {
-        val activity = activity ?: return
-        startActivity(
-            WebViewActivity.newIntent(
-                activity.applicationContext,
-                pageUrl,
-                presenter.manga.source,
-                presenter.manga.title,
-            ),
-        )
+    private fun createPreviewCell(
+        parent: LinearLayout,
+        manga: Manga,
+        preview: SourcePagePreview,
+        density: Float,
+    ): View {
+        val cell = LinearLayout(parent.context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            contentDescription = context.getString(R.string.hayai_gallery_page, preview.index)
+            setOnClickListener {
+                val chapter = presenter.chapters.minByOrNull { it.source_order }
+                if (chapter != null) startActivity(ReaderLauncher.newIntent(context, manga, chapter, preview.index - 1))
+            }
+        }
+        val image = ImageView(parent.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        cell.addView(image, LinearLayout.LayoutParams((112 * density).toInt(), (168 * density).toInt()))
+        cell.addView(TextView(parent.context).apply { text = preview.index.toString() })
+        sourceDetailsImageJobs += viewScope.launchIO {
+            val bitmap = runCatching {
+                SourcePreviewBitmapDecoder.decode(sourceDetailsPreviewRegistry.loadImage(manga, preview))
+            }.getOrNull()
+            withUIContext {
+                if (containerTagMatches(manga) && bitmap != null) {
+                    sourceDetailsPreviewBitmaps += bitmap
+                    image.setImageBitmap(bitmap)
+                } else {
+                    bitmap?.recycle()
+                }
+            }
+        }
+        return cell
+    }
+
+    private fun containerTagMatches(manga: Manga): Boolean =
+        view != null && manga.id == presenter.manga.id
+
+    private fun releaseSourcePreviewImages() {
+        sourceDetailsImageJobs.forEach(Job::cancel)
+        sourceDetailsImageJobs.clear()
+        sourceDetailsPreviewBitmaps.forEach { if (!it.isRecycled) it.recycle() }
+        sourceDetailsPreviewBitmaps.clear()
     }
 
     fun openChapterInWebView(item: ChapterItem) {
@@ -2317,6 +2352,7 @@ class MangaDetailsController :
 
         private const val MENU_COPY_COVER = 1
         private const val MENU_PASTE_COVER = 2
+        private const val INLINE_COLUMNS = 3
 
         private enum class RangeMode {
             Download,

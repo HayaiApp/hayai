@@ -9,12 +9,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import okhttp3.CacheControl
 import java.io.Closeable
 
 sealed interface SourcePreviewState {
     data object Hidden : SourcePreviewState
     data class Loading(val identity: String, val page: Int) : SourcePreviewState
-    data class Ready(val identity: String, val previews: SourceRenderedPreviewPage) : SourcePreviewState
+    data class Ready(val identity: String, val previews: SourcePreviewPage) : SourcePreviewState
     data class Failed(val identity: String, val page: Int, val message: String) : SourcePreviewState
 }
 
@@ -28,11 +29,7 @@ class SourceDetailsPreviewSession(
     private var loadJob: Job? = null
     private var identity: String? = null
 
-    init {
-        scope.coroutineContext[Job]?.invokeOnCompletion { close() }
-    }
-
-    fun bind(manga: Manga, page: Int = 1) {
+    fun bind(manga: Manga, page: Int = 1, forceRefresh: Boolean = false) {
         require(page > 0)
         if (!previews.owns(manga)) {
             unbind()
@@ -40,21 +37,20 @@ class SourceDetailsPreviewSession(
         }
         val nextIdentity = "${manga.source}:${manga.url}:$page"
         synchronized(lock) {
-            if (identity == nextIdentity && loadJob?.isActive == true) return
-            if (identity == nextIdentity && mutableState.value is SourcePreviewState.Ready) return
+            if (!forceRefresh && identity == nextIdentity && loadJob?.isActive == true) return
+            if (!forceRefresh && identity == nextIdentity && mutableState.value is SourcePreviewState.Ready) return
             releaseCurrentLocked()
             identity = nextIdentity
             mutableState.value = SourcePreviewState.Loading(nextIdentity, page)
             loadJob = scope.launch(Dispatchers.IO) {
                 try {
-                    val loaded = previews.load(manga, page)
+                    val loaded = previews.load(manga, page, CacheControl.FORCE_NETWORK.takeIf { forceRefresh })
                     synchronized(lock) {
                         if (identity == nextIdentity) {
-                            (mutableState.value as? SourcePreviewState.Ready)?.previews?.close()
                             mutableState.value = SourcePreviewState.Ready(nextIdentity, loaded)
                             loadJob = null
                         } else {
-                            loaded.close()
+                            Unit
                         }
                     }
                 } catch (cancelled: CancellationException) {
@@ -88,6 +84,5 @@ class SourceDetailsPreviewSession(
     private fun releaseCurrentLocked() {
         loadJob?.cancel()
         loadJob = null
-        (mutableState.value as? SourcePreviewState.Ready)?.previews?.close()
     }
 }

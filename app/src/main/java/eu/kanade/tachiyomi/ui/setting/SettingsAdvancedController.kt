@@ -19,6 +19,7 @@ import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity
+import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.cache.ChapterCache
@@ -83,6 +84,8 @@ class SettingsAdvancedController : SettingsController() {
     private val coverCache: CoverCache by injectLazy()
 
     private val downloadManager: DownloadManager by injectLazy()
+
+    private val sourcePreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
 
     val trustExtension: TrustExtension by injectLazy()
 
@@ -230,6 +233,17 @@ class SettingsAdvancedController : SettingsController() {
                     summary = context.getString(R.string.used_, chapterCache.readableSize)
 
                     onClick { clearChapterCache() }
+                }
+
+                preference {
+                    key = "hayai_clear_page_preview_cache"
+                    titleRes = R.string.hayai_clear_preview_cache
+                    summary = sourcePreviewRegistry.readableCacheSize
+                    onClick {
+                        val deleted = sourcePreviewRegistry.clearCache()
+                        summary = sourcePreviewRegistry.readableCacheSize
+                        context.toast(context.getString(R.string.hayai_preview_cache_cleared, deleted))
+                    }
                 }
 
                 preference {

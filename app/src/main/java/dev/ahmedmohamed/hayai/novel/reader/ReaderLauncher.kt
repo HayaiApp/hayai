@@ -11,6 +11,8 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 object ReaderLauncher {
+    const val EXTRA_INITIAL_PAGE = "dev.ahmedmohamed.hayai.reader.INITIAL_PAGE"
+
     fun isNovel(
         manga: Manga,
         sourceManager: SourceManager = Injekt.get(),
@@ -27,4 +29,23 @@ object ReaderLauncher {
         } else {
             ReaderActivity.newIntent(context, manga, chapter)
         }
+
+    fun newIntent(
+        context: Context,
+        manga: Manga,
+        chapter: Chapter,
+        initialPage: Int,
+        sourceManager: SourceManager = Injekt.get(),
+    ): Intent {
+        val page = requireInitialPage(initialPage)
+        check(!isNovel(manga, sourceManager)) { "Novel chapters do not use image-page indices" }
+        return ReaderActivity.newIntent(context, manga, chapter).putExtra(EXTRA_INITIAL_PAGE, page)
+    }
+
+    fun initialPage(intent: Intent): Int? =
+        intent.takeIf { it.hasExtra(EXTRA_INITIAL_PAGE) }
+            ?.getIntExtra(EXTRA_INITIAL_PAGE, 0)
+            ?.coerceAtLeast(0)
+
+    fun requireInitialPage(value: Int): Int = value.also { require(it >= 0) }
 }

@@ -209,6 +209,13 @@ data class EhPagePreview(
     }
 }
 
+data class EhPreviewPage(
+    val page: Int,
+    val previews: List<EhPagePreview>,
+    val hasNextPage: Boolean,
+    val totalPages: Int?,
+)
+
 data class EhPreviewCrop(
     val x: Int,
     val y: Int,
