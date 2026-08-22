@@ -2251,65 +2251,67 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSource.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSource.kt	val foundIssues = buildList { if (title.isNullOrBlank()) add(NovelSourceValidationIssue("list.title", NovelSourceValidationCode.PreviewTitleMissing)); if (link == null) add(NovelSourceValidationIssue("list.link", NovelSourceValidationCode.PreviewLinkMissing)) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSource.kt	val link = item.selectFirst(definition.list.link)?.absUrl("href")?.ifBlank { null }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSource.kt	val selectors = mapOf("list.item" to list.item, "list.title" to list.title, "list.link" to list.link, "details.title" to details.title, "chapters.item" to chapters.item, "chapters.title" to chapters.title, "chapters.link" to chapters.link, "content.body" to content.body)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	.joinToString("\n", transform = ::validationIssueText)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	.url(definition.baseUrl.trimEnd('/') + definition.popularPath.replace("{page}", "1"))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"baseUrl" -> R.string.hayai_custom_source_field_base_url
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"baseUrl" to value.baseUrl,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"baseUrl",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.item" -> R.string.hayai_custom_source_field_chapter_item
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.item" to value.chapters.item,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.item",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.link" -> R.string.hayai_custom_source_field_chapter_link
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.link" to value.chapters.link,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.link",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.title" -> R.string.hayai_custom_source_field_chapter_title
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.title" to value.chapters.title,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.title",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"content.body" -> R.string.hayai_custom_source_field_content_body
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"content.body" to value.content.body,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"content.body",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"content.remove" -> getString(R.string.hayai_custom_source_field_content_remove)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"details.title" -> R.string.hayai_custom_source_field_details_title
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"details.title" to value.details.title,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"details.title",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"headers" -> getString(R.string.hayai_custom_source_field_headers)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"id" -> R.string.hayai_custom_source_field_id
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"id" to value.id,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"id",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"language" -> R.string.hayai_custom_source_field_language
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"language" to value.language,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"language",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.item" -> R.string.hayai_custom_source_field_list_item
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.item" to value.list.item,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.item",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.link" -> R.string.hayai_custom_source_field_list_link
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.link" to value.list.link,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.link",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.title" -> R.string.hayai_custom_source_field_list_title
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.title" to value.list.title,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.title",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"name" -> R.string.hayai_custom_source_field_name
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"name" to value.name,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"name",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"popularPath" -> R.string.hayai_custom_source_field_popular_path
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"popularPath" to value.popularPath,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"popularPath",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"searchPath" -> R.string.hayai_custom_source_field_search_path
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"searchPath" to value.searchPath,
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"searchPath",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	baseUrl = value("baseUrl"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	chapters = NovelChapterSelectors(value("chapters.item"), value("chapters.title"), value("chapters.link"), advanced?.chapters?.date),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	const val EXTRA_DEFINITION = "hayai.custom_source_definition"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	content = NovelContentSelectors(value("content.body"), advanced?.content?.remove.orEmpty()),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	details = NovelDetailsSelectors(value("details.title"), advanced?.details?.author, advanced?.details?.description, advanced?.details?.cover, advanced?.details?.genres, advanced?.details?.status),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	else -> error("Unknown custom source field: $key")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	id = value("id"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	language = value("language"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	list = NovelListSelectors(value("list.item"), value("list.title"), value("list.link"), advanced?.list?.cover, advanced?.list?.next),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	name = value("name"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	popularPath = value("popularPath"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	searchPath = value("searchPath"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	status.text = issues.joinToString("\n", transform = ::validationIssueText)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	.url(definition.baseUrl.trimEnd('/') + definition.popularPath.replace("{page}", "1"))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"baseUrl" -> R.string.hayai_custom_source_field_base_url
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"baseUrl" to definition.baseUrl,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"baseUrl",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.item" -> R.string.hayai_custom_source_field_chapter_item
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.item" to definition.chapters.item,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.item",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.link" -> R.string.hayai_custom_source_field_chapter_link
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.link" to definition.chapters.link,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.link",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.title" -> R.string.hayai_custom_source_field_chapter_title
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.title" to definition.chapters.title,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.title",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"content.body" -> R.string.hayai_custom_source_field_content_body
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"content.body" to definition.content.body,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"content.body",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"content.remove" -> requireNotNull(resources).getString(R.string.hayai_custom_source_field_content_remove)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"details.title" -> R.string.hayai_custom_source_field_details_title
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"details.title" to definition.details.title,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"details.title",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"headers" -> requireNotNull(resources).getString(R.string.hayai_custom_source_field_headers)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"id" -> R.string.hayai_custom_source_field_id
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"id" to definition.id,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"id",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"language" -> R.string.hayai_custom_source_field_language
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"language" to definition.language,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"language",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.item" -> R.string.hayai_custom_source_field_list_item
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.item" to definition.list.item,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.item",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.link" -> R.string.hayai_custom_source_field_list_link
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.link" to definition.list.link,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.link",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.title" -> R.string.hayai_custom_source_field_list_title
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.title" to definition.list.title,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.title",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"name" -> R.string.hayai_custom_source_field_name
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"name" to definition.name,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"name",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"popularPath" -> R.string.hayai_custom_source_field_popular_path
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"popularPath" to definition.popularPath,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"popularPath",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"searchPath" -> R.string.hayai_custom_source_field_search_path
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"searchPath" to definition.searchPath,
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"searchPath",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	baseUrl = value("baseUrl"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	chapters = NovelChapterSelectors(value("chapters.item"), value("chapters.title"), value("chapters.link"), advanced?.chapters?.date),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	const val DEFINITION = "hayai.custom_source_definition"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	content = NovelContentSelectors(value("content.body"), advanced?.content?.remove.orEmpty()),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	details = NovelDetailsSelectors(value("details.title"), advanced?.details?.author, advanced?.details?.description, advanced?.details?.cover, advanced?.details?.genres, advanced?.details?.status),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	else -> error("Unknown custom source field: $key")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	id = value("id"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	language = value("language"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	list = NovelListSelectors(value("list.item"), value("list.title"), value("list.link"), advanced?.list?.cover, advanced?.list?.next),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	name = value("name"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	popularPath = value("popularPath"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	private val values = FIELD_KEYS.associateWithTo(linkedMapOf()) { "" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	private var advancedDefinition = ""
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	searchPath = value("searchPath"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	statusPreference.summary = issues.joinToString("\n", transform = ::validationIssueText)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	statusPreference.summary = result.issues.joinToString("\n", transform = ::validationIssueText)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceStore.kt	manager.restorePlugin(compiled.descriptor, definition.baseUrl.trimEnd('/') + "/", compiled.code, emptyMap())
 app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceStore.kt	private val preferences = context.getSharedPreferences("hayai_novel_custom_sources", Context.MODE_PRIVATE)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceStore.kt	require(id.matches(Regex("[A-Za-z0-9._-]{1,128}")))
@@ -2608,7 +2610,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt	val title = item.string("title") ?: item.string("romaji") ?: item.string("title_orig") ?: return@mapNotNull null
 app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt	val totalBooks = (series?.get("books") as? JsonArray)?.size
 app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt	val url = "$baseUrl/api/v0/books".toHttpUrl().newBuilder().addQueryParameter("q", query).build()
-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsActivity.kt	val fallbackOptions = NovelDictionaryProvider.entries.filter { it.name.startsWith("WEB_") }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsController.kt	val values = NovelDictionaryProvider.entries.filter { it.name.startsWith("WEB_") }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	.addQueryParameter("client", "gtx").addQueryParameter("sl", settings.sourceLanguage).addQueryParameter("tl", settings.targetLanguage)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	.addQueryParameter("dt", "t").addQueryParameter("q", text).build()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	companion object { private val LANGUAGE = Regex("auto|[a-z]{2,3}(?:-[A-Z]{2})?") }
@@ -2889,10 +2891,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	require(output.length + read <= limit) { "Enhanced source details exceeded the size limit" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	return joinToString("\n") { row ->
 app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt	holder.input.setText("", false)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt	const val MANGA_ID = "manga_id"
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	EnhancedDescriptionLabel.Tags -> error("Tags are represented by SourceMetadataDocument.tags")
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	get() = namespace?.let { "$it:$name" } ?: name
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FAMILY = "hayaiFamily"
-app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt	const val MANGA_ID = "manga_id"
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FIELDS = "fields"
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Category to extra.string("category"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Favorites to extra.string("favoriteCount"),
