@@ -23,6 +23,8 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
 import com.bluelinelabs.conductor.ControllerChangeType
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.tabs.TabLayout
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
@@ -40,6 +42,7 @@ import eu.kanade.tachiyomi.ui.main.BottomSheetController
 import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.main.RootSearchInterface
+import eu.kanade.tachiyomi.ui.main.TabbedInterface
 import eu.kanade.tachiyomi.ui.setting.SettingsBrowseController
 import eu.kanade.tachiyomi.ui.setting.SettingsSourcesController
 import eu.kanade.tachiyomi.ui.source.browse.BrowseSourceController
@@ -86,6 +89,7 @@ class BrowseController :
     SourceAdapter.SourceListener,
     RootSearchInterface,
     FloatingSearchInterface,
+    TabbedInterface,
     BottomSheetController {
     /**
      * Application preferences.
@@ -125,6 +129,34 @@ class BrowseController :
     override fun getSearchTitle(): String? = searchTitle(view?.context?.getString(R.string.sources)?.lowercase(Locale.ROOT))
 
     val presenter = SourcePresenter(this)
+
+    private fun setupContentTabs(animate: Boolean) {
+        val tabs = activityBinding?.mainTabs ?: return
+        tabs.removeAllTabs()
+        tabs.clearOnTabSelectedListeners()
+        ContentKind.entries.forEach { kind ->
+            tabs.addTab(
+                tabs.newTab().setText(if (kind == ContentKind.Manga) R.string.manga else R.string.hayai_novels),
+                presenter.contentKind == kind,
+            )
+        }
+        tabs.addOnTabSelectedListener(
+            object : TabLayout.OnTabSelectedListener {
+                override fun onTabSelected(tab: TabLayout.Tab?) {
+                    presenter.selectContentKind(ContentKind.fromPosition(tab?.position ?: 0))
+                }
+
+                override fun onTabUnselected(tab: TabLayout.Tab?) = Unit
+
+                override fun onTabReselected(tab: TabLayout.Tab?) {
+                    binding.sourceRecycler.smoothScrollToPosition(0)
+                }
+            },
+        )
+        (activity as? MainActivity)?.showTabBar(true, animate)
+        activityBinding?.appBar?.useTabsInPreLayout = true
+        binding.sourceRecycler.requestApplyInsets()
+    }
 
     override fun createBinding(inflater: LayoutInflater) = BrowseControllerBinding.inflate(inflater)
 
@@ -184,6 +216,7 @@ class BrowseController :
 
         requestFilePermissionsSafe(301, preferences)
         binding.bottomSheet.root.onCreate(this)
+        setupContentTabs(false)
 
         preferences
             .extensionInstaller()
@@ -304,14 +337,14 @@ class BrowseController :
     }
 
     private fun updateSheetMenu() {
+        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition < 2
         binding.bottomSheet.sheetToolbar.title =
-            if (binding.bottomSheet.tabs.selectedTabPosition != 0) {
+            if (!onExtensionTab) {
                 binding.bottomSheet.root.currentSourceTitle
                     ?: view?.context?.getString(R.string.source_migration)
             } else {
                 view?.context?.getString(R.string.extensions)
             }
-        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition == 0
         if (binding.bottomSheet.sheetToolbar.menu
                 .findItem(if (onExtensionTab) R.id.action_search else R.id.action_migration_guide) !=
             null
@@ -326,7 +359,7 @@ class BrowseController :
         binding.bottomSheet.sheetToolbar.menu
             .clear()
         binding.bottomSheet.sheetToolbar.inflateMenu(
-            if (binding.bottomSheet.tabs.selectedTabPosition == 0) {
+            if (onExtensionTab) {
                 R.menu.extension_main
             } else {
                 R.menu.migration_main
@@ -394,7 +427,8 @@ class BrowseController :
                     router.pushController(SettingsBrowseController().withFadeTransaction())
                 }
                 R.id.action_ext_repos -> {
-                    router.pushController(RepoController().withFadeTransaction())
+                    val kind = ContentKind.fromPosition(binding.bottomSheet.tabs.selectedTabPosition)
+                    router.pushController(RepoController(kind).withFadeTransaction())
                 }
             }
             return@setOnMenuItemClickListener true
@@ -488,6 +522,9 @@ class BrowseController :
         binding.bottomSheet.root.sheetBehavior
             ?.peekHeight = 56.spToPx + padding
         binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            bottomMargin = -pad.toInt()
+        }
+        binding.bottomSheet.root.novelExtensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
             bottomMargin = -pad.toInt()
         }
         binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
@@ -607,7 +644,9 @@ class BrowseController :
                 val searchView = searchItem.actionView as SearchView
                 searchView.clearFocus()
             }
+            (activity as? MainActivity)?.showTabBar(false)
         } else {
+            setupContentTabs(true)
             binding.bottomSheet.root.presenter
                 .refreshMigrations()
             updateTitleAndMenu()
@@ -768,7 +807,7 @@ class BrowseController :
     }
 
     private fun performGlobalSearch(query: String) {
-        router.pushController(GlobalSearchController(query).withFadeTransaction())
+        router.pushController(GlobalSearchController(query, contentKind = presenter.contentKind).withFadeTransaction())
     }
 
     /**

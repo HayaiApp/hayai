@@ -5,6 +5,8 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -24,6 +26,7 @@ import uy.kohesive.injekt.injectLazy
 
 class SettingsBrowseController : SettingsController() {
     val sourceManager: SourceManager by injectLazy()
+    private val novelRepositories: NovelApkRepositoryRegistry by injectLazy()
     var updatedExtNotifPref: SwitchPreferenceCompat? = null
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) =
@@ -58,11 +61,20 @@ class SettingsBrowseController : SettingsController() {
                 preference {
                     key = "pref_edit_extension_repos"
 
-                    val repoCount = preferences.extensionRepos().get().count()
+                    val repoCount = (preferences.extensionRepos().get() - novelRepositories.novelOnlyRepositoriesNow()).count()
                     titleRes = R.string.extension_repos
                     if (repoCount > 0) summary = context.resources.getQuantityString(R.plurals.num_repos, repoCount, repoCount)
 
-                    onClick { router.pushController(RepoController().withFadeTransaction()) }
+                    onClick { router.pushController(RepoController(ContentKind.Manga).withFadeTransaction()) }
+                }
+                preference {
+                    key = "pref_edit_novel_extension_repos"
+
+                    val repoCount = novelRepositories.repositoriesNow().count()
+                    titleRes = R.string.hayai_novel_extension_repos
+                    if (repoCount > 0) summary = context.resources.getQuantityString(R.plurals.num_repos, repoCount, repoCount)
+
+                    onClick { router.pushController(RepoController(ContentKind.Novel).withFadeTransaction()) }
                 }
                 if (ExtensionManager.canAutoInstallUpdates()) {
                     val intPref =
