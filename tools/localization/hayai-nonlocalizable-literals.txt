@@ -483,6 +483,21 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistence
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt	val exists = query("SELECT 1 FROM $table WHERE $where LIMIT 1", *whereArgs).use(Cursor::moveToFirst)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt	where = "slot = ?",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt	where = "source_id = ? AND manga_url = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"chinese" to "zh",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"dutch" to "nl",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"english" to "en",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"french" to "fr",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"german" to "de",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"hungarian" to "hu",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"italian" to "it",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"japanese" to "ja",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"korean" to "ko",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"polish" to "pl",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"portuguese" to "pt",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"russian" to "ru",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"spanish" to "es",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"thai" to "th",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"vietnamese" to "vi",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhCookieStore.kt	const val EH_ORIGIN = "https://e-hentai.org"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhCookieStore.kt	const val EXH_ORIGIN = "https://exhentai.org"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhCookieStore.kt	const val FORUMS_ORIGIN = "https://forums.e-hentai.org"
@@ -620,11 +635,16 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("ImageSet", context.getString(R.string.hayai_eh_category_image_set))
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("NonH", context.getString(R.string.hayai_eh_category_non_h))
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	arrayOf(context.getString(R.string.hayai_eh_filter_any), "2", "3", "4", "5"),
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	val namespace = value.substringBefore(':', "").takeIf(String::isNotBlank)
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	val terms = Regex("(?:\\\"[^\\\"]+\\\"|\\S+)").findAll(input.trim()).map { match ->
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	value.startsWith("-") -> EhTagMode.Exclude.also { value = value.drop(1) }
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	value.startsWith("~") -> EhTagMode.Any.also { value = value.drop(1) }
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	var value = match.value.trim().removeSurrounding("\"")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	.map { tag -> prefix?.let { "$it$tag" } ?: tag }
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	const val ASSET_PATH = "hayai/eh_tags.txt"
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	"$prefix$namespace$value"
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	EhTagMode.Any -> "~"
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	EhTagMode.Exclude -> "-"
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	EhTagMode.Include -> ""
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	normalize(selections).map(::parseSelection).joinToString(" ") { term ->
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	return "$prefix${term.namespace?.let { "$it:" }.orEmpty()}${term.value}"
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	val namespace = term.namespace?.let { "$it:" }.orEmpty()
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	val value = if (term.value.any(Char::isWhitespace)) "\"${term.value}\"" else term.value
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt	.add("profile_action", "create")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt	.add("profile_name", name)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt	.add("profile_set", slot.value.toString())
@@ -2747,9 +2767,11 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.k
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	alternateTitle = wrapper.selectFirst(".alt-title")?.text()?.trim()?.takeIf(String::isNotBlank),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	descriptionMap?.string("en")?.let(::add)
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.ArchiveType to root.string("extension")?.uppercase(),
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.BaseUrl to runCatching { java.net.URI(location).let { "${it.scheme}://${it.authority}" } }.getOrNull(),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.EnglishTitle to titles?.string("english"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.Favorites to root.long("num_favorites")?.toString(),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.File to root.string("filename"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.Id to (root.string("arcid") ?: root.string("id")),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.Id to root.long("id")?.toString(),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.JapaneseTitle to titles?.string("japanese"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.Length to fields["length"]?.text()?.trim(),
@@ -2760,10 +2782,17 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.k
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.Scanlator to root.string("scanlator"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.ShortTitle to titles?.string("pretty"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.Summary to root.string("summary"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.ThumbnailUrl to document.selectFirst(".gallery .c-tile .lazyload")?.absUrl("data-src"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.ThumbnailUrl to wrapper.selectFirst(".cover-wrapper v-lazy-image")?.absUrl("src"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	EnhancedDescriptionLabel.Uploader to fieldText["uploader"],
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	if (language != "en") (value as? JsonPrimitive)?.contentOrNull?.let(::add)
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	it.child(0).text().trim().lowercase().removeSuffix(":") == "ratings"
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	java.net.URI(location).let { uri -> uri.rawPath + uri.rawQuery?.let { "?$it" }.orEmpty() }
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	names.string("en") ?: names.values.firstNotNullOfOrNull { (it as? JsonPrimitive)?.contentOrNull }
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	private const val LANRARAGI_OTHER_NAMESPACE = "other"
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	private val LANRARAGI_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	private val LANRARAGI_DATE_NAMESPACES = setOf("date_added", "timestamp")
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	return "$namespace:$name"
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	row.child(1).select("a").map { "$namespace: ${it.text().trim()}" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	thumbnailUrl = document.selectFirst(".gallery .c-tile .lazyload")?.absUrl("data-src")?.takeIf(String::isNotBlank),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	thumbnailUrl = wrapper.selectFirst(".cover-wrapper v-lazy-image")?.absUrl("src")?.takeIf(String::isNotBlank),
@@ -2780,17 +2809,19 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.k
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val fields = wrapper.select(".table-gallery-info > tbody > tr").filter { it.childrenSize() > 1 }
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val fieldText = fields.associate { it.child(0).text().trim().lowercase().removeSuffix(":") to it.child(1).text().trim() }
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val fileSize = fieldText["pages"].orEmpty().substringAfter('(', "").removeSuffix(")").trim().takeIf(String::isNotBlank)
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val galleryIndex = pathSegments.indexOf("gallery")
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val name = tag.string("name") ?: return@mapNotNull null
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val names = (element as? JsonObject)?.objectOrNull("attributes")?.objectOrNull("name") ?: return@mapNotNull null
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val namespace = row.child(0).text().trim().lowercase().removeSuffix(":")
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val pages = fieldText["pages"].orEmpty().substringBefore('(').trim().takeIf(String::isNotBlank)
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val ratingCount = ratings?.selectFirst("[itemprop=ratingCount]")?.attr("content")?.takeIf(String::isNotBlank)
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val ratingValue = ratings?.selectFirst("[itemprop=ratingValue]")?.attr("content")?.takeIf(String::isNotBlank)
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val sourcePath = pathAndQuery(document.location()).removePrefix("/thumbnails")
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val tags = attributes.arrayOrEmpty("tags").mapNotNull { element ->
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val tags = document.select(".album-tags a").map { it.text().trim() }.filter(String::isNotBlank).distinct()
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val tags = fields.filterKeys { it !in setOf("title", "length") }.flatMap { (namespace, value) ->
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val tags = root.arrayOrEmpty("tags").mapNotNull { element ->
-app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val tags = root.string("tags").orEmpty().split(',').map(String::trim).filter(String::isNotBlank)
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val tags = root.string("tags").orEmpty().split(',').mapNotNull(::lanraragiTag)
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val titleObject = attributes.objectOrNull("title")
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val titles = root.objectOrNull("title")
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt	val type = tag.string("type") ?: return@mapNotNull null
@@ -2857,6 +2888,45 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	else -> "$first\n\n$second"
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	require(output.length + read <= limit) { "Enhanced source details exceeded the size limit" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	return joinToString("\n") { row ->
+app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt	holder.input.setText("", false)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataActivity.kt	private const val EXTRA_MANGA_ID = "manga_id"
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	EnhancedDescriptionLabel.Tags -> error("Tags are represented by SourceMetadataDocument.tags")
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	get() = namespace?.let { "$it:$name" } ?: name
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FAMILY = "hayaiFamily"
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FIELDS = "fields"
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Category to extra.string("category"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Favorites to extra.string("favoriteCount"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.FileSize to extra.string("sizeBytes"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Language to extra.string("language"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Pages to extra.string("pageCount"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Parent to extra.string("parent"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Posted to extra.string("postedAt"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Rating to extra.string("averageRating"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.RatingCount to extra.string("ratingCount"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.ThumbnailUrl to extra.string("thumbnail"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Token to extra.string("token"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Translated to extra.boolean("translated")?.toString(),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Visibility to extra.string("visible"),
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"artistcg", "artist cg", "artist-cg" -> Color.rgb(251, 192, 45)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"artistcg", "artist cg", "artist-cg" -> R.string.hayai_source_type_artist_cg
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"asianporn", "asian porn" -> Color.rgb(149, 117, 205)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"asianporn", "asian porn" -> R.string.hayai_source_type_asian_porn
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"cosplay" -> Color.rgb(156, 39, 176)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"cosplay" -> R.string.hayai_source_type_cosplay
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"doujinshi" -> Color.rgb(244, 67, 54)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"doujinshi" -> R.string.hayai_source_type_doujinshi
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"gamecg", "game cg", "game-cg" -> Color.rgb(76, 175, 80)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"gamecg", "game cg", "game-cg" -> R.string.hayai_source_type_game_cg
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"imageset", "image set" -> Color.rgb(63, 81, 181)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"imageset", "image set" -> R.string.hayai_source_type_image_set
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"manga" -> Color.rgb(255, 152, 0)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"manga" -> R.string.hayai_source_type_manga
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"misc" -> R.string.hayai_source_type_misc
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"non-h", "non-hentai" -> Color.rgb(33, 150, 243)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"non-h", "non-hentai" -> R.string.hayai_source_type_non_h
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"western" -> Color.rgb(139, 195, 74)
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"western" -> R.string.hayai_source_type_western
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	setOnClickListener { onSearch("uploader:\"$value\"") }
 app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt	badges(source).takeIf { it.isNotEmpty() }?.joinToString(" · ") { context.getString(it.labelRes) }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	?: error("No unique page-preview provider is registered for source ${manga.source}")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	fun cacheIdentity(sourceId: Long): String = "$sourceId:$imageUrl:${crop ?: "full"}"

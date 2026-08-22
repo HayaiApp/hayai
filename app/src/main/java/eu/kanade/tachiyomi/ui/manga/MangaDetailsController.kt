@@ -63,6 +63,9 @@ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
 import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
 import dev.ahmedmohamed.hayai.source.preview.SourcePreviewActivity
 import dev.ahmedmohamed.hayai.source.preview.SourcePreviewBitmapDecoder
+import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataActivity
+import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
+import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataUi
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.davidea.flexibleadapter.FlexibleAdapter
@@ -232,12 +235,14 @@ class MangaDetailsController :
     private var isPushing = true
     private val novelIntegration: NovelJ2kIntegration by injectLazy()
     private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
+    private val sourceMetadataRegistry: SourceMetadataProviderRegistry by injectLazy()
     private val hayaiPreferences by lazy { HayaiPreferences(Injekt.get()) }
     private val novelOfflineManager by lazy {
         NovelOfflineManager(activity!!, Injekt.get(), Injekt.get(), Injekt.get<NetworkHelper>())
     }
     private var novelPresentationJob: Job? = null
     private var sourceDetailsFeaturesJob: Job? = null
+    private var sourceMetadataJob: Job? = null
     private val sourceDetailsPreviewBitmaps = mutableListOf<Bitmap>()
     private val sourceDetailsImageJobs = mutableListOf<Job>()
 
@@ -482,6 +487,7 @@ class MangaDetailsController :
     override fun onDestroyView(view: View) {
         novelPresentationJob?.cancel()
         sourceDetailsFeaturesJob?.cancel()
+        sourceMetadataJob?.cancel()
         releaseSourcePreviewImages()
         novelPresentationJob = null
         snack?.dismiss()
@@ -1442,16 +1448,70 @@ class MangaDetailsController :
     override fun bindSourceDetailsFeatures(container: LinearLayout) {
         container.orientation = LinearLayout.VERTICAL
         val manga = presenter.manga
-        val featureRoot = container.parent?.parent as? View ?: return
-        if (!sourceDetailsPreviewRegistry.owns(manga)) {
+        val featureRoot = generateSequence(container.parent as? View) { it.parent as? View }
+            .firstOrNull { it.id == R.id.hayai_source_details_features }
+            ?: return
+        val previewSection = featureRoot.findViewById<View>(R.id.hayai_source_previews) ?: return
+        val metadataSection = featureRoot.findViewById<View>(R.id.hayai_source_metadata) ?: return
+        val metadataContainer = featureRoot.findViewById<LinearLayout>(R.id.hayai_source_metadata_content) ?: return
+        val ownsPreviews = sourceDetailsPreviewRegistry.owns(manga)
+        val ownsMetadata = sourceMetadataRegistry.owns(manga)
+        if (!ownsPreviews && !ownsMetadata) {
             sourceDetailsFeaturesJob?.cancel()
+            sourceMetadataJob?.cancel()
             container.removeAllViews()
+            metadataContainer.removeAllViews()
             releaseSourcePreviewImages()
             container.tag = null
+            metadataContainer.tag = null
             featureRoot.visibility = View.GONE
             return
         }
-        loadSourceDetailsPreview(container, featureRoot, manga, page = 1)
+        featureRoot.visibility = View.VISIBLE
+        if (ownsMetadata) {
+            loadSourceMetadata(metadataContainer, metadataSection, manga)
+        } else {
+            metadataSection.visibility = View.GONE
+        }
+        if (ownsPreviews) {
+            loadSourceDetailsPreview(container, previewSection, manga, page = 1)
+        } else {
+            previewSection.visibility = View.GONE
+        }
+    }
+
+    private fun loadSourceMetadata(
+        container: LinearLayout,
+        section: View,
+        manga: Manga,
+    ) {
+        val identity = "${manga.source}:${manga.url}"
+        if (container.tag == identity) return
+        container.tag = identity
+        container.removeAllViews()
+        section.visibility = View.VISIBLE
+        container.addView(ProgressBar(container.context).apply { isIndeterminate = true })
+        sourceMetadataJob?.cancel()
+        sourceMetadataJob = viewScope.launchIO {
+            val result = runCatching { sourceMetadataRegistry.load(manga) }
+            withUIContext {
+                if (container.tag != identity) return@withUIContext
+                result.onSuccess { document ->
+                    SourceMetadataUi.renderSummary(
+                        container = container,
+                        document = document,
+                        onMoreInfo = {
+                            manga.id?.let { startActivity(SourceMetadataActivity.newIntent(container.context, it)) }
+                        },
+                        onSearch = ::sourceSearch,
+                    )
+                    section.visibility = View.VISIBLE
+                }.onFailure {
+                    container.removeAllViews()
+                    section.visibility = View.GONE
+                }
+            }
+        }
     }
 
     private fun loadSourceDetailsPreview(
@@ -1533,7 +1593,12 @@ class MangaDetailsController :
             }
         }
         val image = ImageView(parent.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
-        cell.addView(image, LinearLayout.LayoutParams((112 * density).toInt(), (168 * density).toInt()))
+        cell.addView(
+            image,
+            LinearLayout.LayoutParams((120 * density).toInt(), (200 * density).toInt()).apply {
+                marginEnd = (8 * density).toInt()
+            },
+        )
         cell.addView(TextView(parent.context).apply { text = preview.index.toString() })
         sourceDetailsImageJobs += viewScope.launchIO {
             val bitmap = runCatching {

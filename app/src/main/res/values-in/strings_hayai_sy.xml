@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">Pratinjau halaman</string>
     <string name="hayai_more_previews">Pratinjau lebih banyak</string>
     <string name="hayai_clear_preview_cache">Hapus data yang tersimpan untuk pratinjau halaman</string>
+    <string name="hayai_source_metadata_base_url">URL dasar</string>
+    <string name="hayai_source_metadata_path">Jalur</string>
+    <string name="hayai_source_metadata_thumbnail_url">Cuplikan url</string>
+    <string name="hayai_source_metadata_token">Token</string>
+    <string name="hayai_source_metadata_url">Url</string>
+    <string name="hayai_source_metadata_is_exhentai">Galeri Exhentai</string>
+    <string name="hayai_source_metadata_parent">Induk</string>
+    <string name="hayai_source_metadata_translated">Diterjemahkan</string>
+    <string name="hayai_source_type_doujinshi">Doujinshi</string>
+    <string name="hayai_source_type_artist_cg">Artist CG</string>
+    <string name="hayai_source_type_game_cg">Permainan CG</string>
+    <string name="hayai_source_type_western">Barat</string>
+    <string name="hayai_source_type_non_h">Non-H</string>
+    <string name="hayai_source_type_image_set">Image Set</string>
+    <string name="hayai_source_type_cosplay">Permainan kostum</string>
+    <string name="hayai_source_type_asian_porn">Porno Asia</string>
+    <string name="hayai_source_type_misc">Campuran</string>
 </resources>

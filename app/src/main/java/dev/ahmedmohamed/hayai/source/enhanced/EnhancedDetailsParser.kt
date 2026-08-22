@@ -9,6 +9,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.jsoup.Jsoup
 import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 data class EnhancedDetails(
     val title: String? = null,
@@ -48,6 +50,11 @@ enum class EnhancedDescriptionLabel {
     Tags,
     Uploader,
     Artist,
+    BaseUrl,
+    Path,
+    ThumbnailUrl,
+    Token,
+    Url,
 }
 
 object EnhancedDetailsParser {
@@ -61,7 +68,7 @@ object EnhancedDetailsParser {
         when (family) {
             SourceFamily.NHentai -> parseNhentai(body)
             SourceFamily.MangaDex -> parseMangaDex(body)
-            SourceFamily.Lanraragi -> parseLanraragi(body)
+            SourceFamily.Lanraragi -> parseLanraragi(body, location)
             SourceFamily.EightMuses -> parseEightMuses(body, location)
             SourceFamily.HBrowse -> parseHBrowse(body, location)
             SourceFamily.Pururin -> parsePururin(body, location)
@@ -79,6 +86,8 @@ object EnhancedDetailsParser {
             artist = artist,
             descriptionRows = rows(
                 EnhancedDescriptionLabel.Artist to artist,
+                EnhancedDescriptionLabel.Path to document.location().let(::pathAndQuery),
+                EnhancedDescriptionLabel.ThumbnailUrl to document.selectFirst(".gallery .c-tile .lazyload")?.absUrl("data-src"),
                 EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
             ),
             genres = tags,
@@ -88,6 +97,7 @@ object EnhancedDetailsParser {
 
     private fun parseHBrowse(body: String, location: String): EnhancedDetails {
         val document = Jsoup.parse(body, location)
+        val sourcePath = pathAndQuery(document.location()).removePrefix("/thumbnails")
         val fields = document.select("#main .listTable tr").filter { it.childrenSize() > 1 }.associate {
             it.child(0).text().trim().lowercase() to it.child(1)
         }
@@ -97,6 +107,8 @@ object EnhancedDetailsParser {
         return EnhancedDetails(
             title = fields["title"]?.text()?.trim(),
             descriptionRows = rows(
+                EnhancedDescriptionLabel.Id to sourcePath.trim('/').substringBefore('/'),
+                EnhancedDescriptionLabel.Url to sourcePath,
                 EnhancedDescriptionLabel.Length to fields["length"]?.text()?.trim(),
                 EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
             ),
@@ -120,15 +132,19 @@ object EnhancedDetailsParser {
         }?.child(1)
         val ratingCount = ratings?.selectFirst("[itemprop=ratingCount]")?.attr("content")?.takeIf(String::isNotBlank)
         val ratingValue = ratings?.selectFirst("[itemprop=ratingValue]")?.attr("content")?.takeIf(String::isNotBlank)
+        val pathSegments = runCatching { java.net.URI(location).path.split('/').filter(String::isNotBlank) }.getOrDefault(emptyList())
+        val galleryIndex = pathSegments.indexOf("gallery")
         return EnhancedDetails(
             title = wrapper.selectFirst(".title h1")?.text()?.trim(),
             alternateTitle = wrapper.selectFirst(".alt-title")?.text()?.trim()?.takeIf(String::isNotBlank),
             descriptionRows = rows(
+                EnhancedDescriptionLabel.Id to pathSegments.getOrNull(galleryIndex + 1),
                 EnhancedDescriptionLabel.Pages to pages,
                 EnhancedDescriptionLabel.FileSize to fileSize,
                 EnhancedDescriptionLabel.Rating to ratingValue,
                 EnhancedDescriptionLabel.RatingCount to ratingCount,
                 EnhancedDescriptionLabel.Uploader to fieldText["uploader"],
+                EnhancedDescriptionLabel.ThumbnailUrl to wrapper.selectFirst(".cover-wrapper v-lazy-image")?.absUrl("src"),
                 EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
             ),
             genres = tags,
@@ -194,16 +210,18 @@ object EnhancedDetailsParser {
         )
     }
 
-    private fun parseLanraragi(body: String): EnhancedDetails {
+    private fun parseLanraragi(body: String, location: String): EnhancedDetails {
         val root = json.parseToJsonElement(body).jsonObject
-        val tags = root.string("tags").orEmpty().split(',').map(String::trim).filter(String::isNotBlank)
+        val tags = root.string("tags").orEmpty().split(',').mapNotNull(::lanraragiTag)
         return EnhancedDetails(
             title = root.string("title"),
             descriptionRows = rows(
+                EnhancedDescriptionLabel.Id to (root.string("arcid") ?: root.string("id")),
                 EnhancedDescriptionLabel.Summary to root.string("summary"),
                 EnhancedDescriptionLabel.Pages to root.long("pagecount")?.toString(),
                 EnhancedDescriptionLabel.File to root.string("filename"),
                 EnhancedDescriptionLabel.ArchiveType to root.string("extension")?.uppercase(),
+                EnhancedDescriptionLabel.BaseUrl to runCatching { java.net.URI(location).let { "${it.scheme}://${it.authority}" } }.getOrNull(),
                 EnhancedDescriptionLabel.Tags to tags.joinToString().takeIf(String::isNotBlank),
             ),
             genres = tags,
@@ -219,4 +237,25 @@ object EnhancedDetailsParser {
     private fun JsonObject.long(key: String): Long? = string(key)?.toLongOrNull()
     private fun JsonObject.objectOrNull(key: String): JsonObject? = get(key) as? JsonObject
     private fun JsonObject.arrayOrEmpty(key: String): JsonArray = get(key) as? JsonArray ?: JsonArray(emptyList())
+
+    private fun pathAndQuery(location: String): String = runCatching {
+        java.net.URI(location).let { uri -> uri.rawPath + uri.rawQuery?.let { "?$it" }.orEmpty() }
+    }.getOrDefault(location)
+
+    private fun lanraragiTag(raw: String): String? {
+        val value = raw.trim().takeIf(String::isNotBlank) ?: return null
+        val separator = value.indexOf(':')
+        val namespace = if (separator > 0) value.substring(0, separator).trim() else LANRARAGI_OTHER_NAMESPACE
+        var name = if (separator > 0) value.substring(separator + 1).trim() else value
+        if (namespace in LANRARAGI_DATE_NAMESPACES) {
+            name = name.toLongOrNull()?.let { epochSeconds ->
+                LANRARAGI_DATE_FORMAT.withZone(ZoneOffset.UTC).format(Instant.ofEpochSecond(epochSeconds))
+            } ?: name
+        }
+        return "$namespace:$name"
+    }
+
+    private const val LANRARAGI_OTHER_NAMESPACE = "other"
+    private val LANRARAGI_DATE_NAMESPACES = setOf("date_added", "timestamp")
+    private val LANRARAGI_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 }

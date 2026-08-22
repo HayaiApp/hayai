@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">الصفحة السابقة</string>
     <string name="hayai_more_previews">مزيد من المعاينات</string>
     <string name="hayai_clear_preview_cache">مسح ذاكرة التخزين المؤقت لمعاينة الصفحة</string>
+    <string name="hayai_source_metadata_base_url">عنوان URL الأساسي</string>
+    <string name="hayai_source_metadata_path">مسار</string>
+    <string name="hayai_source_metadata_thumbnail_url">رابط الصورة المصغرة</string>
+    <string name="hayai_source_metadata_token">الرمز المميز</string>
+    <string name="hayai_source_metadata_url">الرابط</string>
+    <string name="hayai_source_metadata_is_exhentai">is Exhentai gallery</string>
+    <string name="hayai_source_metadata_parent">الوالد</string>
+    <string name="hayai_source_metadata_translated">مُتَرْجَم</string>
+    <string name="hayai_source_type_doujinshi">دوجينشي</string>
+    <string name="hayai_source_type_artist_cg">فنان رسومات حاسوبية</string>
+    <string name="hayai_source_type_game_cg">لعبة</string>
+    <string name="hayai_source_type_western">غرب</string>
+    <string name="hayai_source_type_non_h">Non-H</string>
+    <string name="hayai_source_type_image_set">مجموعة الصور</string>
+    <string name="hayai_source_type_cosplay">كوسبلاي</string>
+    <string name="hayai_source_type_asian_porn">إباحيات آسياوية</string>
+    <string name="hayai_source_type_misc">موسيقى</string>
 </resources>

@@ -9,4 +9,13 @@
     <string name="hayai_eh_language_filtering">Filtro delle lingue</string>
     <string name="hayai_eh_custom_igneous">Cookie igneo personalizzato</string>
     <string name="hayai_api_key">Chiave API</string>
+    <string name="hayai_source_metadata_token">Token</string>
+    <string name="hayai_source_metadata_url">Url</string>
+    <string name="hayai_source_metadata_translated">Tradotto</string>
+    <string name="hayai_source_type_doujinshi">Doujinshi</string>
+    <string name="hayai_source_type_artist_cg">Artista CG</string>
+    <string name="hayai_source_type_western">Occidentale</string>
+    <string name="hayai_source_type_cosplay">Cosplay</string>
+    <string name="hayai_source_type_asian_porn">Pornografia Asiatica</string>
+    <string name="hayai_source_type_misc">Miscellaneo</string>
 </resources>

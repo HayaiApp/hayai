@@ -19,6 +19,7 @@ class EnhancedDetailsParserTest {
         assertEquals("Artist", details.artist)
         assertEquals(listOf("color", "series"), details.genres)
         assertEquals("https://8muses.com/cover.jpg", details.thumbnailUrl)
+        assertEquals("/album", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Path }.value)
     }
 
     @Test
@@ -29,10 +30,12 @@ class EnhancedDetailsParserTest {
             <tr><td>Artist</td><td><a>Alice</a></td></tr></table></div>
         """.trimIndent()
 
-        val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.HBrowse, html, "https://hbrowse.com/1"))
+        val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.HBrowse, html, "https://hbrowse.com/thumbnails/1/c00001/"))
 
         assertEquals("Gallery", details.title)
         assertEquals("20 pages", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Length }.value)
+        assertEquals("1", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Id }.value)
+        assertEquals("/1/c00001/", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Url }.value)
         assertEquals(listOf("artist: Alice"), details.genres)
     }
 
@@ -78,12 +81,14 @@ class EnhancedDetailsParserTest {
 
     @Test
     fun `parses LANraragi API details and tolerates missing fields`() {
-        val body = """{"title":"Archive","summary":"Summary","pagecount":9,"tags":"artist:Alice, language:English"}"""
+        val body = """{"arcid":"abc","title":"Archive","summary":"Summary","pagecount":9,"tags":"artist:Alice, language:English, date_added:0, untagged"}"""
 
         val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.Lanraragi, body, "http://server/api/archives/id/metadata"))
 
         assertEquals("Archive", details.title)
-        assertEquals(listOf("artist:Alice", "language:English"), details.genres)
+        assertEquals(listOf("artist:Alice", "language:English", "date_added:1970-01-01 00:00", "other:untagged"), details.genres)
         assertEquals("9", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Pages }.value)
+        assertEquals("abc", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Id }.value)
+        assertEquals("http://server", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.BaseUrl }.value)
     }
 }
