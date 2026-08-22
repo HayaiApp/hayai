@@ -62,7 +62,10 @@ jobs:
           echo "COMMIT_SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
       - name: Build and test
-        run: ./gradlew assembleStandardNightly testStandardNightlyUnitTest -x formatKotlin
+        # This project only creates a unit-test component for DevDebug. Exercise
+        # the shared production code through that existing test variant while
+        # assembling the signed StandardNightly artifacts.
+        run: ./gradlew assembleStandardNightly testDevDebugUnitTest -x formatKotlin
 
       - name: Detect Android build tools
         shell: bash
