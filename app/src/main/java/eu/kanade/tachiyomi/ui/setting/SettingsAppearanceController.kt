@@ -24,7 +24,6 @@ import kotlin.math.max
 import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
 
 class SettingsAppearanceController : SettingsController() {
-    private val hayaiPreferences by lazy { HayaiPreferences(uy.kohesive.injekt.Injekt.get()) }
     var lastThemeXLight: Int? = null
     var lastThemeXDark: Int? = null
     var themePreference: ThemePreference? = null
@@ -140,7 +139,7 @@ class SettingsAppearanceController : SettingsController() {
                     defaultValue = true
                 }
                 intListPreference(activity) {
-                    bindTo(hayaiPreferences.pagePreviewRows)
+                    key = HayaiPreferences.KEY_PAGE_PREVIEW_ROWS
                     titleRes = R.string.hayai_preview_rows
                     summaryRes = R.string.hayai_preview_rows_summary
                     entries = (0..10).map(Int::toString)
