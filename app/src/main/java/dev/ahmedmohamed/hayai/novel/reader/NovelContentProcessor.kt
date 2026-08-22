@@ -3,7 +3,7 @@ package dev.ahmedmohamed.hayai.novel.reader
 import dev.ahmedmohamed.hayai.novel.source.NovelContentType
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import dev.ahmedmohamed.hayai.novel.settings.NovelRegexReplacement
-import dev.ahmedmohamed.hayai.novel.settings.NovelRegexSafety
+import dev.ahmedmohamed.hayai.novel.settings.NovelReplacementEngine
 import kotlinx.serialization.json.Json
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
@@ -65,18 +65,7 @@ internal class NovelContentProcessor(
         val rules = runCatching { json.decodeFromString<List<NovelRegexReplacement>>(rulesJson) }.getOrDefault(emptyList()).take(100)
         var html = document.body().html()
         rules.filter { it.enabled && it.pattern.isNotBlank() }.forEach { rule ->
-            runCatching {
-                val options = if (rule.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
-                val pattern =
-                    if (rule.isRegex) {
-                        if (NovelRegexSafety.rejectionReason(rule.pattern) != null) return@runCatching
-                        rule.pattern
-                    } else {
-                        val escaped = Regex.escape(rule.pattern)
-                        if (rule.matchWholeWord) "(?<![\\p{L}\\p{N}_])(?:$escaped)(?![\\p{L}\\p{N}_])" else escaped
-                    }
-                html = Regex(pattern, options).replace(html, rule.replacement)
-            }
+            NovelReplacementEngine.apply(html, rule).onSuccess { html = it }
         }
         document.body().html(html)
     }

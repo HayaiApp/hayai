@@ -29,7 +29,15 @@ class NovelCustomizationStore(
 
     fun enabledCss(): String = cssSnippets().filter(NovelCodeSnippet::enabled).joinToString("\n", transform = NovelCodeSnippet::code)
 
-    fun enabledJs(): String = jsSnippets().filter(NovelCodeSnippet::enabled).joinToString("\n", transform = NovelCodeSnippet::code)
+    fun enabledJs(runOnAppend: Boolean = false): String =
+        jsSnippets()
+            .filter { it.enabled && (!runOnAppend || it.runOnAppend) }
+            .map { NovelSnippetExecution(it.title, it.code) }
+            .takeIf { it.isNotEmpty() }
+            ?.let { snippets ->
+                "(function(){const snippets=${json.encodeToString(snippets)};for(const snippet of snippets){" +
+                    "try{(new Function(snippet.code))();}catch(error){console.error('Hayai snippet \\\"'+snippet.title+'\\\" failed',error);}}})();"
+            }.orEmpty()
 
     fun createPreset(name: String): NovelReaderPreset =
         NovelReaderPreset(
@@ -127,7 +135,11 @@ data class NovelCodeSnippet(
     val title: String,
     val code: String,
     val enabled: Boolean = true,
+    val runOnAppend: Boolean = false,
 )
+
+@Serializable
+private data class NovelSnippetExecution(val title: String, val code: String)
 
 @Serializable
 data class NovelRegexReplacement(
@@ -171,4 +183,20 @@ object NovelRegexSafety {
             runCatching { Regex(pattern) }.isFailure -> "Invalid regular expression"
             else -> null
         }
+}
+
+object NovelReplacementEngine {
+    fun apply(text: String, rule: NovelRegexReplacement): Result<String> = runCatching {
+        if (!rule.enabled || rule.pattern.isBlank()) return@runCatching text
+        if (rule.isRegex) NovelRegexSafety.rejectionReason(rule.pattern)?.let(::error)
+        val source =
+            if (rule.isRegex) {
+                rule.pattern
+            } else {
+                Regex.escape(rule.pattern).let { escaped ->
+                    if (rule.matchWholeWord) "(?<![\\p{L}\\p{N}_])(?:$escaped)(?![\\p{L}\\p{N}_])" else escaped
+                }
+            }
+        Regex(source, if (rule.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)).replace(text, rule.replacement)
+    }
 }

@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="hayai_novel_reader_settings_title">Novel reader settings</string>
+    <string name="hayai_novel_reader_quotes">Quotes</string>
+    <string name="hayai_novel_reader_tts">Read aloud</string>
+    <string name="hayai_novel_reader_edit">Edit chapter</string>
+    <string name="hayai_novel_tab_reader">Reading</string>
+    <string name="hayai_novel_tab_text">Appearance</string>
+    <string name="hayai_novel_tab_layout">Controls</string>
+    <string name="hayai_novel_tab_tts">TTS</string>
+    <string name="hayai_novel_tab_more">Advanced</string>
     <string name="hayai_export_novel_epub">Export novel as EPUB</string>
 </resources>
