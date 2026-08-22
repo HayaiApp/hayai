@@ -31,7 +31,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
 | Dedicated reader, central routing, and J2K history | `NovelReaderActivity` and `ReaderLauncher` | port |
 | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
-| Remote novel extension catalogs and installation | J2K extension manager plus tagged Hayai repository ownership and management UI | implemented unverified |
+| Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership and separate management entry points | implemented unverified; compile and emulator install flows pending |
 | LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
 | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
 | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
@@ -56,6 +56,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
 |---|---|---|
 | Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
 | Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, and isolated nightly publishing | implemented unverified; hosted nightly run pending |
+| Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | implemented unverified; compile and emulator navigation pending |
 
 ## Completion rules
 
