@@ -164,14 +164,6 @@
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
         <activity
-            android:name="dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Tachiyomi" />
-        <activity
-            android:name="dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Tachiyomi" />
-        <activity
             android:name="dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerActivity"
             android:exported="false"
             android:theme="@style/Theme.Tachiyomi" />
