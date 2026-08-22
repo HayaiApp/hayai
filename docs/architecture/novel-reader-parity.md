@@ -17,7 +17,7 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 | Behavior | Tsundoku source | Hayai implementation |
 |---|---|---|
 | Reader preferences and stable keys | `ReaderPreferences.kt` | `HayaiPreferences.kt` |
-| Reading, Appearance, Controls, TTS, and Advanced tabs | `NovelPage.kt` | Tsundoku icon tabs with J2K spinner, switch, slider, and toolbar-settings controls in `NovelReaderSettingsSheet.kt`; searchable counterparts in `NovelSettingsController.kt` |
+| Reading, Appearance, Controls, TTS, and Advanced tabs | `NovelPage.kt` | Tsundoku's option grouping hosted by J2K's `TabbedBottomSheetDialog`, with J2K filter/text buttons, subtitle labels, sliders, material dialogs, and draggable-card rows in `NovelReaderSettingsSheet.kt`; searchable counterparts in `NovelSettingsController.kt` |
 | Tap-zone mode IDs | `NovelConfig.kt` and `viewer/navigation/*` | `NovelTapZones` |
 | Continuous chapter loading | `NovelTextViewViewer.kt` and `NovelWebViewViewer.kt` | `NovelChapterQueue`, both renderers, and visible-block callbacks |
 | Web styling and append snippets | `NovelWebViewStyler.kt` | `NovelHtmlDocumentBuilder`, `WebNovelRenderer`, and `NovelCustomizationStore` |
@@ -47,6 +47,8 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 - Deleting the selected font restores `sans-serif`.
 
 ## Verification state
+
+The reader settings sheet deliberately contains no second UI vocabulary. Progress mode uses J2K's filter button layout, actions use J2K's text button layout, numeric values use J2K subtitle styling so values such as 100 percent cannot collide with or split the title, and configurable action/status order uses J2K's draggable download-header card with `ItemTouchHelper`. Hayai owns only the preference mapping and callbacks.
 
 The coherent reader batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` run in `artifacts/emulator-verification/20260822-043650` verified legacy migration, the exact J2K reader shell, the absence of manga page-number labels, active TTS transport controls, all five reader settings tabs, offline save, process restart recovery, the logged-out E-Hentai settings state, and Browse.
 

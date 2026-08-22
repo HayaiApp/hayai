@@ -1,23 +1,26 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
 import android.app.Activity
-import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.HorizontalScrollView
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.view.children
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -25,9 +28,13 @@ import com.google.android.material.slider.Slider
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.Preference
+import eu.kanade.tachiyomi.databinding.DownloadHeaderBinding
+import eu.kanade.tachiyomi.util.lang.withSubtitle
 import eu.kanade.tachiyomi.util.system.getResourceColor
+import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.widget.MaterialSpinnerView
 import eu.kanade.tachiyomi.widget.TabbedBottomSheetDialog
+import java.text.NumberFormat
 
 internal class NovelReaderSettingsSheet(
     activity: Activity,
@@ -190,14 +197,18 @@ internal class NovelReaderSettingsSheet(
                 else -> 3
             }
         page.addView(TextView(context).apply { setText(R.string.hayai_novel_reader_progress_mode); setPadding(0, 12.dp, 0, 4.dp) })
-        val chips = ChipGroup(context).apply { isSingleSelection = true; isSelectionRequired = true; isSingleLine = true }
+        val buttons = MaterialButtonToggleGroup(context).apply {
+            isSingleSelection = true
+            isSelectionRequired = true
+        }
         values.forEachIndexed { selection, label ->
-            chips.addView(
-                Chip(context).apply {
+            buttons.addView(
+                (LayoutInflater.from(context).inflate(R.layout.filter_button, buttons, false) as MaterialButton).apply {
+                    id = View.generateViewId()
                     setText(label)
-                    isCheckable = true
                     isChecked = selection == current
-                    setOnClickListener {
+                    addOnCheckedChangeListener { _, checked ->
+                        if (!checked) return@addOnCheckedChangeListener
                         val enabled = selection != 0
                         val vertical = selection >= 2
                         if (preferences.novelShowProgressSlider.get() != enabled) preferences.novelShowProgressSlider.set(enabled)
@@ -208,7 +219,7 @@ internal class NovelReaderSettingsSheet(
                 },
             )
         }
-        page.addView(HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(chips) })
+        page.addView(HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(buttons) })
     }
 
     private fun morePage(page: LinearLayout) {
@@ -297,7 +308,7 @@ internal class NovelReaderSettingsSheet(
 
     private fun LinearLayout.slider(@StringRes labelRes: Int, preference: Preference<Int>, min: Int, max: Int, @StringRes valueFormatRes: Int, changed: () -> Unit = {}) {
         val valueText = sliderHeader(labelRes)
-        fun update(value: Int) { valueText.text = context.getString(valueFormatRes, value) }
+        fun update(value: Int) { valueText.updateSliderHeader(context.getString(valueFormatRes, value)) }
         update(preference.get().coerceIn(min, max))
         addView(Slider(context).apply {
             valueFrom = min.toFloat()
@@ -317,7 +328,11 @@ internal class NovelReaderSettingsSheet(
 
     private fun LinearLayout.sliderFloat(@StringRes labelRes: Int, preference: Preference<Float>, min: Int, max: Int, scale: Float, changed: () -> Unit = {}) {
         val valueText = sliderHeader(labelRes)
-        fun update(value: Float) { valueText.text = context.getString(R.string.hayai_novel_reader_multiplier_value, "%.1f".format(value)) }
+        val valueFormatter = NumberFormat.getNumberInstance().apply {
+            minimumFractionDigits = 1
+            maximumFractionDigits = 1
+        }
+        fun update(value: Float) { valueText.updateSliderHeader(context.getString(R.string.hayai_novel_reader_multiplier_value, valueFormatter.format(value))) }
         val initial = preference.get().coerceIn(min / scale, max / scale)
         update(initial)
         addView(Slider(context).apply {
@@ -337,12 +352,10 @@ internal class NovelReaderSettingsSheet(
 
     private fun LinearLayout.button(@StringRes labelRes: Int, action: () -> Unit) {
         addView(
-            MaterialButton(context, null, android.R.attr.borderlessButtonStyle).apply {
+            (LayoutInflater.from(context).inflate(R.layout.material_text_button, this, false) as MaterialButton).apply {
                 setText(labelRes)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 minHeight = 48.dp
-                isAllCaps = false
-                setPadding(0, 0, 0, 0)
                 setOnClickListener { action() }
             },
             matchWrap(),
@@ -416,27 +429,22 @@ internal class NovelReaderSettingsSheet(
     }
 
     private fun LinearLayout.sliderHeader(@StringRes labelRes: Int): TextView {
-        val value = TextView(context).apply {
-            textSize = 14f
-            gravity = Gravity.END
-            setTextColor(context.getResourceColor(android.R.attr.textColorSecondary))
+        val header = TextView(context).apply {
+            textSize = 15f
+            setPadding(0, 12.dp, 0, 0)
+            tag = labelRes
         }
-        addView(
-            LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 12.dp, 0, 0)
-                addView(TextView(context).apply { setText(labelRes); textSize = 15f }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(value, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            },
-            matchWrap(),
-        )
-        return value
+        addView(header, matchWrap())
+        return header
+    }
+
+    private fun TextView.updateSliderHeader(value: String) {
+        text = context.getString(tag as Int).withSubtitle(context, value)
     }
 
     private fun editString(title: String, preference: Preference<String>, changed: () -> Unit) {
         val input = android.widget.EditText(context).apply { setText(preference.get()); setSingleLine() }
-        AlertDialog.Builder(context).setTitle(title).setView(input).setPositiveButton(android.R.string.ok) { _, _ ->
+        context.materialAlertDialog().setTitle(title).setView(input).setPositiveButton(android.R.string.ok) { _, _ ->
             input.text.toString().trim().takeIf(String::isNotBlank)?.let { preference.set(it); changed() }
         }.setNegativeButton(android.R.string.cancel, null).show()
     }
@@ -450,7 +458,7 @@ internal class NovelReaderSettingsSheet(
                     context.getString(R.string.hayai_novel_reader_voice_label, voice.locale.displayName, voice.name)
                 }
                 val values = listOf("") + voices.map { it.name }
-                AlertDialog.Builder(context).setTitle(R.string.hayai_novel_reader_installed_voice).setSingleChoiceItems(labels.toTypedArray(), values.indexOf(preferences.novelTtsVoice.get()).coerceAtLeast(0)) { dialog, index ->
+                context.materialAlertDialog().setTitle(R.string.hayai_novel_reader_installed_voice).setSingleChoiceItems(labels.toTypedArray(), values.indexOf(preferences.novelTtsVoice.get()).coerceAtLeast(0)) { dialog, index ->
                     preferences.novelTtsVoice.set(values[index]); dialog.dismiss()
                 }.setOnDismissListener { engine?.shutdown() }.show()
             } else {
@@ -460,127 +468,132 @@ internal class NovelReaderSettingsSheet(
     }
 
     private fun bottomActionEditor(container: LinearLayout) {
-        fun render() {
-            val marker = "hayai-bottom-actions"
-            container.findViewWithTag<View>(marker)?.let(container::removeView)
-            val group = LinearLayout(context).apply { tag = marker; orientation = LinearLayout.VERTICAL }
-            val items = NovelBottomActions.deserialize(preferences.novelBottomBarItems.get()).toMutableList()
-            items.forEachIndexed { index, state ->
-                group.addView(
-                    orderedRow(
-                        title = state.action.displayName(),
-                        enabled = state.enabled,
-                        canMoveUp = index > 0,
-                        canMoveDown = index < items.lastIndex,
-                        onEnabledChanged = { checked ->
-                        items[index] = state.copy(enabled = checked)
-                        preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
-                        onChromeChanged()
-                        },
-                        onMoveUp = {
-                            items.add(index - 1, items.removeAt(index))
-                            preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
-                            onChromeChanged()
-                            render()
-                        },
-                        onMoveDown = {
-                            items.add(index + 1, items.removeAt(index))
-                            preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
-                            onChromeChanged()
-                            render()
-                        },
-                    ),
-                )
-            }
-            container.addView(group)
-        }
-        render()
+        val items = NovelBottomActions.deserialize(preferences.novelBottomBarItems.get()).toMutableList()
+        container.addView(
+            reorderEditor(
+                titles = items.mapTo(mutableListOf()) { it.action.displayName() },
+                enabled = items.mapTo(mutableListOf()) { it.enabled },
+                onEnabledChanged = { index, checked ->
+                    items[index] = items[index].copy(enabled = checked)
+                    preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
+                    onChromeChanged()
+                },
+                onMove = { from, to ->
+                    items.add(to, items.removeAt(from))
+                    preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
+                    onChromeChanged()
+                },
+            ),
+            matchWrap(),
+        )
     }
 
     private fun statusEditor(container: LinearLayout) {
-        fun render() {
-            val marker = "hayai-status-actions"
-            container.findViewWithTag<View>(marker)?.let(container::removeView)
-            val group = LinearLayout(context).apply { tag = marker; orientation = LinearLayout.VERTICAL }
-            val items = NovelStatusItems.deserialize(preferences.novelStatusBarOrder.get()).toMutableList()
-            items.forEachIndexed { index, item ->
-                group.addView(
-                    orderedRow(
-                        title = item.displayName(),
-                        enabled = null,
-                        canMoveUp = index > 0,
-                        canMoveDown = index < items.lastIndex,
-                        onEnabledChanged = {},
-                        onMoveUp = {
-                            items.add(index - 1, items.removeAt(index))
-                            preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items))
-                            onChromeChanged()
-                            render()
-                        },
-                        onMoveDown = {
-                            items.add(index + 1, items.removeAt(index))
-                            preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items))
-                            onChromeChanged()
-                            render()
-                        },
-                    ),
-                )
-            }
-            container.addView(group)
-        }
-        render()
+        val items = NovelStatusItems.deserialize(preferences.novelStatusBarOrder.get()).toMutableList()
+        container.addView(
+            reorderEditor(
+                titles = items.mapTo(mutableListOf()) { it.displayName() },
+                enabled = null,
+                onEnabledChanged = { _, _ -> Unit },
+                onMove = { from, to ->
+                    items.add(to, items.removeAt(from))
+                    preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items))
+                    onChromeChanged()
+                },
+            ),
+            matchWrap(),
+        )
     }
 
-    private fun orderedRow(
-        title: String,
-        enabled: Boolean?,
-        canMoveUp: Boolean,
-        canMoveDown: Boolean,
-        onEnabledChanged: (Boolean) -> Unit,
-        onMoveUp: () -> Unit,
-        onMoveDown: () -> Unit,
-    ): View =
-        LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = 48.dp
-            if (enabled == null) {
-                addView(
-                    TextView(context).apply {
-                        text = title
-                        textSize = 15f
-                        setTextColor(context.getResourceColor(R.attr.colorOnBackground))
-                    },
-                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-                )
-            } else {
-                addView(
-                    MaterialSwitch(context).apply {
-                        text = title
-                        textSize = 15f
-                        isChecked = enabled
-                        setTextColor(context.getResourceColor(R.attr.colorOnBackground))
-                        setOnCheckedChangeListener { _, checked -> onEnabledChanged(checked) }
-                    },
-                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-                )
-            }
-            addView(orderButton(R.drawable.ic_arrow_upward_24dp, context.getString(R.string.hayai_novel_reader_move_up, title), canMoveUp, onMoveUp))
-            addView(orderButton(R.drawable.ic_arrow_downward_24dp, context.getString(R.string.hayai_novel_reader_move_down, title), canMoveDown, onMoveDown))
+    private fun reorderEditor(
+        titles: MutableList<String>,
+        enabled: MutableList<Boolean>?,
+        onEnabledChanged: (Int, Boolean) -> Unit,
+        onMove: (Int, Int) -> Unit,
+    ): RecyclerView {
+        val adapter = NovelOrderAdapter(titles, enabled, onEnabledChanged, onMove)
+        val recycler = RecyclerView(context).apply {
+            layoutManager = LinearLayoutManager(context)
+            this.adapter = adapter
+            isNestedScrollingEnabled = false
+        }
+        val touchHelper =
+            ItemTouchHelper(
+                object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
+                    override fun onMove(view: RecyclerView, source: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean =
+                        adapter.move(source.bindingAdapterPosition, target.bindingAdapterPosition)
+
+                    override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
+                },
+            )
+        adapter.startDrag = touchHelper::startDrag
+        touchHelper.attachToRecyclerView(recycler)
+        return recycler
+    }
+
+    private inner class NovelOrderAdapter(
+        private val titles: MutableList<String>,
+        private val enabled: MutableList<Boolean>?,
+        private val onEnabledChanged: (Int, Boolean) -> Unit,
+        private val onMove: (Int, Int) -> Unit,
+    ) : RecyclerView.Adapter<NovelOrderAdapter.Holder>() {
+        var startDrag: (RecyclerView.ViewHolder) -> Unit = {}
+
+        override fun getItemCount(): Int = titles.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder =
+            Holder(DownloadHeaderBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+
+        override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(position)
+
+        fun move(from: Int, to: Int): Boolean {
+            if (from !in titles.indices || to !in titles.indices || from == to) return false
+            titles.add(to, titles.removeAt(from))
+            enabled?.add(to, enabled.removeAt(from))
+            notifyItemMoved(from, to)
+            onMove(from, to)
+            return true
         }
 
-    private fun orderButton(icon: Int, label: String, enabled: Boolean, action: () -> Unit): ImageButton =
-        ImageButton(context).apply {
-            layoutParams = LinearLayout.LayoutParams(40.dp, 40.dp)
-            setImageResource(icon)
-            imageTintList = ColorStateList.valueOf(context.getResourceColor(R.attr.colorOnBackground))
-            setBackgroundResource(R.drawable.square_ripple)
-            contentDescription = label
-            isEnabled = enabled
-            alpha = if (enabled) 1f else 0.38f
-            setPadding(8.dp, 8.dp, 8.dp, 8.dp)
-            setOnClickListener { action() }
+        inner class Holder(
+            private val row: DownloadHeaderBinding,
+        ) : RecyclerView.ViewHolder(row.root) {
+            private val switch = MaterialSwitch(row.root.context).apply {
+                text = null
+                contentDescription = null
+            }
+
+            init {
+                (row.root.getChildAt(0) as LinearLayout).addView(
+                    switch,
+                    1,
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                )
+                row.reorder.contentDescription = row.root.context.getString(R.string.drag_handle)
+                row.reorder.setOnTouchListener { _, event ->
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                        startDrag(this)
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+
+            fun bind(position: Int) {
+                row.title.text = titles[position]
+                switch.isVisible = enabled != null
+                switch.setOnCheckedChangeListener(null)
+                switch.isChecked = enabled?.get(position) == true
+                switch.contentDescription = titles[position]
+                switch.setOnCheckedChangeListener { _, checked ->
+                    val current = bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION } ?: return@setOnCheckedChangeListener
+                    enabled?.set(current, checked)
+                    onEnabledChanged(current, checked)
+                }
+            }
         }
+    }
 
     private fun NovelBottomAction.displayName(): String =
         when (this) {
