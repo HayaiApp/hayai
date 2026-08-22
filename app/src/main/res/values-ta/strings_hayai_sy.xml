@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">பக்க முன்னோட்டங்கள்</string>
     <string name="hayai_more_previews">மேலும் முன்னோட்டங்கள்</string>
     <string name="hayai_clear_preview_cache">தெளிவான பக்க முன்னோட்டம் தற்காலிக சேமிப்பு</string>
+    <string name="hayai_source_metadata_base_url">அடிப்படை முகவரி</string>
+    <string name="hayai_source_metadata_path">பாதை</string>
+    <string name="hayai_source_metadata_thumbnail_url">சிறு முகவரி</string>
+    <string name="hayai_source_metadata_token">கிள்ளாக்கு</string>
+    <string name="hayai_source_metadata_url">முகவரி</string>
+    <string name="hayai_source_metadata_is_exhentai">கண்காட்சி கேலரி</string>
+    <string name="hayai_source_metadata_parent">பெற்றோர்</string>
+    <string name="hayai_source_metadata_translated">மொழிபெயர்க்கப்பட்டுள்ளது</string>
+    <string name="hayai_source_type_doujinshi">டசின்சி</string>
+    <string name="hayai_source_type_artist_cg">கலைஞர் சி.சி</string>
+    <string name="hayai_source_type_game_cg">விளையாட்டு சி.சி</string>
+    <string name="hayai_source_type_western">மேற்கு</string>
+    <string name="hayai_source_type_non_h">அல்லாத எச்</string>
+    <string name="hayai_source_type_image_set">பட தொகுப்பு</string>
+    <string name="hayai_source_type_cosplay">காச்ப்ளே</string>
+    <string name="hayai_source_type_asian_porn">ஆசிய ஆபாச</string>
+    <string name="hayai_source_type_misc">இதர</string>
 </resources>

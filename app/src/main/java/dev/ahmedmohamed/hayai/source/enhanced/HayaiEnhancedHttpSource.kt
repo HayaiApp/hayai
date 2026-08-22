@@ -127,6 +127,8 @@ open class HayaiEnhancedHttpSource(
     override fun fetchPageList(chapter: SChapter): Observable<List<Page>> = originalSource.fetchPageList(chapter)
     override fun fetchImageUrl(page: Page): Observable<String> = originalSource.fetchImageUrl(page)
 
+    suspend fun getEnhancedMetadata(manga: SManga): EnhancedDetails? = fetchEnhancedDetails(manga)
+
     private suspend fun fetchEnhancedDetails(manga: SManga): EnhancedDetails? {
         synchronized(detailsCache) { detailsCache[manga.url] }?.let { return it }
         val parsed = runCatching {
@@ -135,7 +137,13 @@ open class HayaiEnhancedHttpSource(
                 val declared = response.body.contentLength()
                 if (declared > MAX_DETAILS_BYTES) return@use null
                 val body = response.body.charStream().readTextBounded(MAX_DETAILS_BYTES)
-                EnhancedDetailsParser.parse(definition.family, body, request.url.toString())
+                EnhancedDetailsParser.parse(definition.family, body, request.url.toString())?.let { parsed ->
+                    if (parsed.thumbnailUrl.isNullOrBlank() && !manga.thumbnail_url.isNullOrBlank()) {
+                        parsed.copy(thumbnailUrl = manga.thumbnail_url)
+                    } else {
+                        parsed
+                    }
+                }
             }
         }.onFailure { Timber.w(it, "Enhanced details failed for source %d", id) }.getOrNull()
         if (parsed != null) synchronized(detailsCache) { detailsCache[manga.url] = parsed }
@@ -191,6 +199,7 @@ private fun EnhancedDescriptionLabel.stringRes(): Int = when (this) {
     EnhancedDescriptionLabel.AlternativeTitles -> R.string.hayai_enhanced_label_alternative_titles
     EnhancedDescriptionLabel.ArchiveType -> R.string.hayai_enhanced_label_archive_type
     EnhancedDescriptionLabel.Artist -> R.string.artist
+    EnhancedDescriptionLabel.BaseUrl -> R.string.hayai_source_metadata_base_url
     EnhancedDescriptionLabel.Description -> R.string.description
     EnhancedDescriptionLabel.EnglishTitle -> R.string.hayai_enhanced_label_english_title
     EnhancedDescriptionLabel.Favorites -> R.string.hayai_enhanced_label_favorites
@@ -201,6 +210,7 @@ private fun EnhancedDescriptionLabel.stringRes(): Int = when (this) {
     EnhancedDescriptionLabel.Length -> R.string.length
     EnhancedDescriptionLabel.MediaId -> R.string.hayai_enhanced_label_media_id
     EnhancedDescriptionLabel.Pages -> R.string.hayai_enhanced_label_pages
+    EnhancedDescriptionLabel.Path -> R.string.hayai_source_metadata_path
     EnhancedDescriptionLabel.Posted -> R.string.hayai_enhanced_label_posted
     EnhancedDescriptionLabel.Rating -> R.string.hayai_enhanced_label_rating
     EnhancedDescriptionLabel.RatingCount -> R.string.hayai_enhanced_label_rating_count
@@ -208,5 +218,8 @@ private fun EnhancedDescriptionLabel.stringRes(): Int = when (this) {
     EnhancedDescriptionLabel.ShortTitle -> R.string.hayai_enhanced_label_short_title
     EnhancedDescriptionLabel.Summary -> R.string.hayai_enhanced_label_summary
     EnhancedDescriptionLabel.Tags -> R.string.tags
+    EnhancedDescriptionLabel.ThumbnailUrl -> R.string.hayai_source_metadata_thumbnail_url
+    EnhancedDescriptionLabel.Token -> R.string.hayai_source_metadata_token
     EnhancedDescriptionLabel.Uploader -> R.string.hayai_enhanced_label_uploader
+    EnhancedDescriptionLabel.Url -> R.string.hayai_source_metadata_url
 }

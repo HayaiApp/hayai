@@ -4,13 +4,13 @@ import android.content.Context
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhJumpTarget
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchSpec
-import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagMode
-import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagTerm
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhToplist
+import dev.ahmedmohamed.hayai.adult.eh.network.EhTagQueryCodec
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
+import dev.ahmedmohamed.hayai.source.filter.SourceTagCompletionFilter
 
 internal class EhToplistFilter(context: Context) : Filter.Select<String>(
     context.getString(R.string.hayai_eh_filter_toplist),
@@ -30,7 +30,23 @@ internal class EhCategoriesFilter(context: Context, excluded: Set<EhCategory>) :
         context.getString(R.string.hayai_eh_filter_categories_exclude),
         EhCategory.entries.map { EhCategoryFilter(context, it, it in excluded) },
     )
-internal class EhTagFilter(context: Context) : Filter.Text(context.getString(R.string.hayai_eh_filter_tags))
+internal class EhTagFilter(context: Context) :
+    Filter.Text(context.getString(R.string.hayai_eh_filter_tags)),
+    SourceTagCompletionFilter {
+    private val catalog = EhTagCatalog(context)
+
+    override val hint: String = context.getString(R.string.hayai_eh_filter_tags_hint, EhTagSelectionCodec.MAXIMUM_TAGS)
+    override val maximumSelections: Int = EhTagSelectionCodec.MAXIMUM_TAGS
+    override val validPrefixes: Set<Char> = setOf('-', '~')
+
+    override fun selections(): List<String> = runCatching { EhTagSelectionCodec.decode(state) }.getOrDefault(emptyList())
+
+    override fun setSelections(values: List<String>) {
+        state = EhTagSelectionCodec.encode(values)
+    }
+
+    override fun suggestions(input: String, limit: Int): List<String> = catalog.suggest(input, limit)
+}
 internal class EhExpungedFilter(context: Context) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_expunged))
 internal class EhTorrentFilter(context: Context) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_torrent))
 internal class EhRatingFilter(context: Context) : Filter.Select<String>(
@@ -77,7 +93,8 @@ internal fun FilterList.toEhSpec(query: String, context: Context): EhSearchSpec 
     }
     return EhSearchSpec(
         query = query,
-        tags = parseTags(one(EhTagFilter::class.java)?.state.orEmpty(), context),
+        tags = runCatching { EhTagQueryCodec.parse(one(EhTagFilter::class.java)?.state.orEmpty()) }
+            .getOrElse { throw IllegalArgumentException(context.getString(R.string.hayai_eh_filter_invalid_tag), it) },
         watched = one(EhWatchedFilter::class.java)?.state == true,
         excludedCategories = one(EhCategoriesFilter::class.java)?.state.orEmpty().filter { it.state }.mapTo(linkedSetOf()) { it.category },
         browseExpunged = one(EhExpungedFilter::class.java)?.state == true,
@@ -91,23 +108,6 @@ internal fun FilterList.toEhSpec(query: String, context: Context): EhSearchSpec 
         reverse = one(EhReverseFilter::class.java)?.state == true,
         jumpTarget = jump,
     )
-}
-
-private fun parseTags(input: String, context: Context): List<EhTagTerm> {
-    val terms = Regex("(?:\\\"[^\\\"]+\\\"|\\S+)").findAll(input.trim()).map { match ->
-        var value = match.value.trim().removeSurrounding("\"")
-        val mode = when {
-            value.startsWith("-") -> EhTagMode.Exclude.also { value = value.drop(1) }
-            value.startsWith("~") -> EhTagMode.Any.also { value = value.drop(1) }
-            else -> EhTagMode.Include
-        }
-        val namespace = value.substringBefore(':', "").takeIf(String::isNotBlank)
-        val name = if (namespace == null) value else value.substringAfter(':')
-        require(name.isNotBlank()) { context.getString(R.string.hayai_eh_filter_empty_tag) }
-        EhTagTerm(namespace, name, mode)
-    }.toList()
-    require(terms.size <= 8) { context.getString(R.string.hayai_eh_filter_too_many_tags) }
-    return terms
 }
 
 private fun String?.toPageCount(context: Context, message: Int): Int? {

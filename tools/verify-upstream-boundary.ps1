@@ -62,6 +62,10 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Optional typed rich-result and tag-filter presentation only.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceItem.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceListHolder.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourcePresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt"
