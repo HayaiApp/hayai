@@ -387,4 +387,5 @@
     <string name="hayai_failure_replacement_invalid_regex">The regular expression is invalid.</string>
     <string name="hayai_value_configured">Configured</string>
     <string name="hayai_translation_engine">Translation engine</string>
+    <string name="hayai_available">Available</string>
 </resources>
