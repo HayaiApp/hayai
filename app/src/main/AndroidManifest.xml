@@ -147,10 +147,6 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
         <activity
-            android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Tachiyomi" />
-        <activity
             android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhLoginActivity"
             android:configChanges="uiMode|orientation|screenSize"
             android:exported="false"

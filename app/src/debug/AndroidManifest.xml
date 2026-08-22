@@ -8,9 +8,5 @@
             android:name="dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity"
             android:exported="true"
             tools:replace="android:exported" />
-        <activity
-            android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity"
-            android:exported="true"
-            tools:replace="android:exported" />
     </application>
 </manifest>
