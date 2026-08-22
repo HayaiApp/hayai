@@ -66,12 +66,22 @@ Do not stop at scaffolding when the requested slice can be completed. Do not cla
 Do not run broad checks after each edit. Finish a coherent batch, then run:
 
 ```powershell
+.\tools\verify-localization.ps1 -WriteCoverage
 .\tools\verify-upstream-boundary.ps1
 .\gradlew.bat :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin
 git diff --check
 ```
 
 The project pre-build formatter scans the full J2K tree and reports existing upstream exceptions. Run the explicit formatter only when formatting is the task. Do not “fix” unrelated J2K style warnings.
+
+## Keep interface text localizable
+
+- Put every Hayai-owned label, message, hint, and accessibility description in an Android string resource with a `hayai_` key.
+- Keep source data, URLs, selectors, protocol values, and server messages unchanged. Localize only the interface text around those values.
+- Add reviewed translations when a locale is available. Never copy English into locale files to inflate coverage.
+- Run `tools/verify-localization.ps1 -WriteCoverage` after changing interface text or translations.
+- Commit `docs/development/localization-coverage.md` when its generated content changes.
+- Follow `docs/development/localization.md` when rebasing the J2K hardcoded-text baseline.
 
 For a migration release, also test a copy of a real or sanitized legacy v36+ database on an emulator. Unit tests and compilation do not prove an on-device SQLite import.
 

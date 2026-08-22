@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">Gunakan gambar asli</string>
+    <string name="hayai_eh_tag_filtering_threshold">Batasan Pemfilteran Tag</string>
+    <string name="hayai_eh_tag_watching_threshold">Batasan Pengawasan Tag</string>
+    <string name="hayai_eh_watched_tags_web_title">Tag yang Telah Ditonton di ExHentai</string>
+    <string name="hayai_eh_category_non_h">Non-H</string>
+    <string name="hayai_eh_category_image_set">Image Set</string>
+    <string name="hayai_eh_category_asian_porn">Porno Asia</string>
+    <string name="hayai_eh_language_filtering">Penyaringan bahasa</string>
+    <string name="hayai_eh_custom_igneous">Cookie igneous kustom</string>
+    <string name="hayai_custom_source_field_base_url">URL dasar</string>
+    <string name="hayai_api_key">Kunci API</string>
+    <string name="hayai_page_previews">Pratinjau halaman</string>
+    <string name="hayai_more_previews">Pratinjau lebih banyak</string>
+    <string name="hayai_clear_preview_cache">Hapus data yang tersimpan untuk pratinjau halaman</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">استخدام الصور الأصلية</string>
+    <string name="hayai_eh_tag_filtering_threshold">حد تصفية الفئات</string>
+    <string name="hayai_eh_tag_watching_threshold">حد مشاهدة الفئات</string>
+    <string name="hayai_eh_watched_tags_web_title">فئاتExHentai التي شاهدتها</string>
+    <string name="hayai_eh_category_non_h">Non-H</string>
+    <string name="hayai_eh_category_image_set">مجموعة الصور</string>
+    <string name="hayai_eh_category_asian_porn">إباحيات آسياوية</string>
+    <string name="hayai_eh_language_filtering">تصفية اللغة</string>
+    <string name="hayai_eh_custom_igneous">كعكة ضخمة</string>
+    <string name="hayai_custom_source_field_base_url">عنوان URL الأساسي</string>
+    <string name="hayai_api_key">مفتاح API</string>
+    <string name="hayai_page_previews">الصفحة السابقة</string>
+    <string name="hayai_more_previews">مزيد من المعاينات</string>
+    <string name="hayai_clear_preview_cache">مسح ذاكرة التخزين المؤقت لمعاينة الصفحة</string>
+</resources>

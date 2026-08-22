@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">Utilizza le immagini originali</string>
+    <string name="hayai_eh_tag_filtering_threshold">Soglia di filtro dei tag</string>
+    <string name="hayai_eh_tag_watching_threshold">Soglia di tag osservati</string>
+    <string name="hayai_eh_watched_tags_web_title">Tag salvati di ExHentai</string>
+    <string name="hayai_eh_category_asian_porn">Pornografia Asiatica</string>
+    <string name="hayai_eh_language_filtering">Filtro delle lingue</string>
+    <string name="hayai_eh_custom_igneous">Cookie igneo personalizzato</string>
+    <string name="hayai_api_key">Chiave API</string>
+</resources>

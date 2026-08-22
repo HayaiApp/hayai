@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">Gamitin ang orihinal na imahe</string>
+    <string name="hayai_eh_tag_filtering_threshold">Pag-filter ng threshold sa Tag</string>
+    <string name="hayai_eh_tag_watching_threshold">Threshold sa Tag Watching</string>
+    <string name="hayai_eh_watched_tags_web_title">Mga Watched Tag ng ExHentai</string>
+    <string name="hayai_eh_category_non_h">Hindi-H</string>
+    <string name="hayai_eh_category_image_set">Set ng Imahe</string>
+    <string name="hayai_eh_category_asian_porn">Asyano Porno</string>
+    <string name="hayai_eh_language_filtering">Pag-filter ng Wika</string>
+    <string name="hayai_eh_custom_igneous">Custom na igneous cookie</string>
+    <string name="hayai_custom_source_field_base_url">Base url</string>
+    <string name="hayai_api_key">API key</string>
+    <string name="hayai_page_previews">Preview ng mga pahina</string>
+    <string name="hayai_more_previews">Maraming preview</string>
+    <string name="hayai_clear_preview_cache">Linisin ang cache ng pag preview</string>
+</resources>

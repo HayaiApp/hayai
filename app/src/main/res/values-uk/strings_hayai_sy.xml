@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">Використовувати оригінальні зображення</string>
+    <string name="hayai_eh_tag_filtering_threshold">Поріг фільтрації тегів</string>
+    <string name="hayai_eh_tag_watching_threshold">Поріг Перегляду тегів</string>
+    <string name="hayai_eh_watched_tags_web_title">ExHentai: Переглянуті теги</string>
+    <string name="hayai_eh_language_filtering">Фільтрація мов</string>
+    <string name="hayai_eh_custom_igneous">Користувацькі кукі</string>
+    <string name="hayai_clear_preview_cache">Очистити кеш сторінок</string>
+</resources>
