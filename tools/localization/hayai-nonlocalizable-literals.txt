@@ -2889,10 +2889,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	require(output.length + read <= limit) { "Enhanced source details exceeded the size limit" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	return joinToString("\n") { row ->
 app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt	holder.input.setText("", false)
-app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataActivity.kt	private const val EXTRA_MANGA_ID = "manga_id"
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	EnhancedDescriptionLabel.Tags -> error("Tags are represented by SourceMetadataDocument.tags")
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	get() = namespace?.let { "$it:$name" } ?: name
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FAMILY = "hayaiFamily"
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt	const val MANGA_ID = "manga_id"
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FIELDS = "fields"
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Category to extra.string("category"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Favorites to extra.string("favoriteCount"),
@@ -2933,11 +2933,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	require(imageUrl.startsWith("https://") || imageUrl.startsWith("http://"))
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt	error.message ?: "Page previews could not be loaded",
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt	val nextIdentity = "${manga.source}:${manga.url}:$page"
-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt	private const val EXTRA_MANGA_ID = "manga_id"
-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt	private const val STATE_PAGE = "page"
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecoder.kt	"Preview image dimensions are invalid"
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecoder.kt	) { "Preview image could not be decoded" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	.joinToString("") { "%02x".format(it) }
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
@@ -2945,7 +2944,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	pr
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val listings = File(root, "listings").apply { mkdirs() }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val root = File(context.cacheDir, "hayai_source_previews").apply { mkdirs() }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val files = root.walkTopDown().filter(File::isFile).filterNot { it.extension == "tmp" }.toList()
-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val temporary = File(directory, "$key.tmp")
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val temporary = File.createTempFile("$key.", ".tmp", directory)
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val MANGA_ID = "manga_id"
 app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt	private const val SOURCE_ID_KEY = "hayai_source_id"
 app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt	Timber.e(error, "Unable to create settings for source %d", configurable.id)
 app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	"8muses",
