@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.source.globalsearch
 
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
@@ -7,8 +9,10 @@ import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.CatalogueSource
+import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
@@ -42,6 +46,7 @@ open class GlobalSearchPresenter(
     private val initialQuery: String? = "",
     private val initialExtensionFilter: String? = null,
     private val sourcesToUse: List<CatalogueSource>? = null,
+    private val contentKind: ContentKind? = null,
     val sourceManager: SourceManager = Injekt.get(),
     val db: DatabaseHelper = Injekt.get(),
     private val preferences: PreferencesHelper = Injekt.get(),
@@ -97,7 +102,8 @@ open class GlobalSearchPresenter(
         val list =
             sourceManager
                 .getDiscoverableCatalogueSources()
-                .filter { it.lang in languages }
+                .filter { it.lang in languages || it.id == LocalSource.ID || it.id == LocalNovelSource.ID }
+                .filter { contentKind?.accepts(it.isNovelSource()) != false }
                 .filterNot { it.id.toString() in hiddenCatalogues }
                 .sortedBy { "(${it.lang}) ${it.name}" }
 
@@ -123,6 +129,7 @@ open class GlobalSearchPresenter(
                 .flatMap { it.sources }
                 .filter { it.lang in languages }
                 .filterIsInstance<CatalogueSource>()
+                .filter { contentKind?.accepts(it.isNovelSource()) != false }
 
         if (filterSources.isEmpty()) {
             return enabledSources

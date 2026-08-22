@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.extension
 
 import android.content.pm.PackageInstaller
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.ExtensionInstallerJob
 import eu.kanade.tachiyomi.extension.ExtensionManager
@@ -27,7 +28,7 @@ typealias ExtensionIntallInfo = Pair<InstallStep, PackageInstaller.SessionInfo?>
  * Presenter of [ExtensionBottomSheet].
  */
 class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() {
-    private var extensions = emptyList<ExtensionItem>()
+    private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
 
     private var currentDownloads = hashMapOf<String, ExtensionIntallInfo>()
 
@@ -39,15 +40,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
             val extensionJob =
                 async {
                     extensionManager.findAvailableExtensions()
-                    extensions =
-                        toItems(
-                            Triple(
-                                extensionManager.installedExtensionsFlow.value,
-                                extensionManager.untrustedExtensionsFlow.value,
-                                extensionManager.availableExtensionsFlow.value,
-                            ),
-                        )
-                    withContext(Dispatchers.Main) { view?.setExtensions(extensions, false) }
+                    rebuildExtensions(updateController = false)
                 }
             val migrationJob = async { firstTimeMigration() }
             listOf(migrationJob, extensionJob).awaitAll()
@@ -60,19 +53,11 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
                             firstLoad = true
                             currentDownloads.clear()
                         }
-                        extensions =
-                            toItems(
-                                Triple(
-                                    extensionManager.installedExtensionsFlow.value,
-                                    extensionManager.untrustedExtensionsFlow.value,
-                                    extensionManager.availableExtensionsFlow.value,
-                                ),
-                            )
-                        withContext(NonCancellable + Dispatchers.Main) { view?.setExtensions(extensions) }
+                        rebuildExtensions()
                         return@collect
                     }
                     val extension =
-                        extensions.find { item ->
+                        extensions.values.flatten().find { item ->
                             it.first == item.extension.pkgName
                         } ?: return@collect
                     when (it.second.first) {
@@ -93,20 +78,31 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
 
     fun refreshExtensions() {
         presenterScope.launch {
-            extensions =
-                toItems(
-                    Triple(
-                        extensionManager.installedExtensionsFlow.value,
-                        extensionManager.untrustedExtensionsFlow.value,
-                        extensionManager.availableExtensionsFlow.value,
-                    ),
-                )
-            withContext(Dispatchers.Main) { view?.setExtensions(extensions, false) }
+            rebuildExtensions(updateController = false)
+        }
+    }
+
+    private suspend fun rebuildExtensions(updateController: Boolean = true) {
+        val tuple =
+            Triple(
+                extensionManager.installedExtensionsFlow.value,
+                extensionManager.untrustedExtensionsFlow.value,
+                extensionManager.availableExtensionsFlow.value,
+            )
+        val rebuilt = ContentKind.entries.associateWith { kind -> toItems(tuple, kind) }
+        extensions = rebuilt
+        withContext(NonCancellable + Dispatchers.Main) {
+            ContentKind.entries.forEachIndexed { index, kind ->
+                view?.setExtensions(kind, rebuilt.getValue(kind), updateController && index == 0)
+            }
         }
     }
 
     @Synchronized
-    private fun toItems(tuple: ExtensionTuple): List<ExtensionItem> {
+    private fun toItems(
+        tuple: ExtensionTuple,
+        contentKind: ContentKind,
+    ): List<ExtensionItem> {
         val context = view?.context ?: return emptyList()
         val activeLangs = preferences.enabledLanguages().get()
         val showNsfwSources = preferences.showNsfwSources().get()
@@ -124,11 +120,11 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
             firstLoad = false
         }
 
-        val updatesSorted = installed.filter { it.hasUpdate && (showNsfwSources || !it.isNsfw) }.sortedBy { it.name }
+        val updatesSorted = installed.filter { contentKind.accepts(it) && it.hasUpdate && (showNsfwSources || !it.isNsfw) }.sortedBy { it.name }
         val sortOrder = InstalledExtensionsOrder.fromPreference(preferences)
         val installedSorted =
             installed
-                .filter { !it.hasUpdate && (showNsfwSources || !it.isNsfw) }
+                .filter { contentKind.accepts(it) && !it.hasUpdate && (showNsfwSources || !it.isNsfw) }
                 .sortedWith(
                     compareBy(
                         { !it.isObsolete },
@@ -147,11 +143,12 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
                         { it.name },
                     ),
                 )
-        val untrustedSorted = untrusted.sortedBy { it.name }
+        val untrustedSorted = untrusted.filter(contentKind::accepts).sortedBy { it.name }
         val availableSorted =
             available
                 // Filter out already installed extensions and disabled languages
                 .filter { avail ->
+                    contentKind.accepts(avail) &&
                     installed.none { it.pkgName == avail.pkgName } &&
                         untrusted.none { it.pkgName == avail.pkgName } &&
                         (avail.lang in activeLangs) &&
@@ -206,7 +203,6 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
                 }
         }
 
-        this.extensions = items
         return items
     }
 
@@ -218,22 +214,18 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
         state: InstallStep?,
         session: PackageInstaller.SessionInfo?,
     ): ExtensionItem? {
-        val extensions = extensions.toMutableList()
-        val position = extensions.indexOfFirst { it.extension.pkgName == extension.pkgName }
-
-        return if (position != -1) {
-            val item =
-                extensions[position].copy(
-                    installStep = state,
-                    session = session,
-                )
-            extensions[position] = item
-
-            this.extensions = extensions
-            item
-        } else {
-            null
+        var updatedItem: ExtensionItem? = null
+        ContentKind.entries.filter { it.accepts(extension) }.forEach { kind ->
+            val kindItems = extensions.getValue(kind).toMutableList()
+            val position = kindItems.indexOfFirst { it.extension.pkgName == extension.pkgName }
+            if (position != -1) {
+                val item = kindItems[position].copy(installStep = state, session = session)
+                kindItems[position] = item
+                extensions = extensions + (kind to kindItems)
+                updatedItem = updatedItem ?: item
+            }
         }
+        return updatedItem
     }
 
     fun cancelExtensionInstall(extItem: ExtensionItem) {
@@ -275,8 +267,8 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
         installExtension(availableExt)
     }
 
-    fun updateAllPendingExtensions() {
-        updateExtensions(extensionManager.installedExtensionsFlow.value.filter { it.hasUpdate })
+    fun updateAllPendingExtensions(contentKind: ContentKind) {
+        updateExtensions(extensionManager.installedExtensionsFlow.value.filter { contentKind.accepts(it) && it.hasUpdate })
     }
 
     fun updateExtensions(extensions: List<Extension.Installed>) {

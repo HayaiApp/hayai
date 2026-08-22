@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.source
 
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
+import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.AbstractSectionableItem
 import eu.davidea.flexibleadapter.items.IFlexible
@@ -26,7 +27,11 @@ class SourceItem(
      */
     override fun getLayoutRes(): Int = R.layout.source_item
 
-    override fun isSwipeable(): Boolean = source.id != LocalSource.ID && header != null && header.code != SourcePresenter.LAST_USED_KEY
+    override fun isSwipeable(): Boolean =
+        source.id != LocalSource.ID &&
+            source.id != LocalNovelSource.ID &&
+            header != null &&
+            header.code != SourcePresenter.LAST_USED_KEY
 
     /**
      * Creates a new view holder for this item.

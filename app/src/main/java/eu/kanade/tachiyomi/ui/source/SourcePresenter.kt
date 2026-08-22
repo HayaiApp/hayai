@@ -1,10 +1,13 @@
 package eu.kanade.tachiyomi.ui.source
 
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.util.system.withUIContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,15 +34,18 @@ class SourcePresenter(
     private val preferences: PreferencesHelper = Injekt.get(),
 ) {
     private var scope = CoroutineScope(Job() + Dispatchers.Default)
+    var contentKind: ContentKind = ContentKind.Manga
+        private set
     var sources = getEnabledSources()
 
     var sourceItems = emptyList<SourceItem>()
     var lastUsedItem: SourceItem? = null
 
+    private var sourceLoadJob: Job? = null
     var lastUsedJob: Job? = null
 
     fun onCreate() {
-        if (lastSources != null) {
+        if (lastSources != null && lastContentKind == contentKind) {
             if (sourceItems.isEmpty()) {
                 sourceItems = lastSources ?: emptyList()
             }
@@ -56,7 +62,9 @@ class SourcePresenter(
      * Unsubscribe and create a new subscription to fetch enabled sources.
      */
     private fun loadSources() {
-        scope.launch {
+        sourceLoadJob?.cancel()
+        sourceLoadJob = scope.launch {
+            val enabledSources = sources
             val pinnedSources = mutableListOf<SourceItem>()
             val pinnedCatalogues = preferences.pinnedCatalogues().get()
 
@@ -69,7 +77,7 @@ class SourcePresenter(
                         else -> d1.compareTo(d2)
                     }
                 }
-            val byLang = sources.groupByTo(map) { it.lang }
+            val byLang = enabledSources.groupByTo(map) { it.lang }
             sourceItems =
                 byLang.flatMap {
                     val langItem = LangItem(it.key)
@@ -112,6 +120,7 @@ class SourcePresenter(
 
     private fun getLastUsedSource(value: Long): SourceItem? =
         (sourceManager.get(value) as? CatalogueSource)?.let { source ->
+            if (!contentKind.accepts(source.isNovelSource())) return@let null
             val pinnedCatalogues = preferences.pinnedCatalogues().get()
             val isPinned = source.id.toString() in pinnedCatalogues
             if (isPinned) {
@@ -126,9 +135,16 @@ class SourcePresenter(
         loadSources()
     }
 
+    fun selectContentKind(kind: ContentKind) {
+        if (contentKind == kind) return
+        contentKind = kind
+        updateSources()
+    }
+
     fun onDestroy() {
         lastSources = sourceItems
         lastUsedItemRem = lastUsedItem
+        lastContentKind = contentKind
     }
 
     /**
@@ -142,7 +158,8 @@ class SourcePresenter(
 
         return sourceManager
             .getDiscoverableCatalogueSources()
-            .filter { it.lang in languages || it.id == LocalSource.ID }
+            .filter { it.lang in languages || it.id == LocalSource.ID || it.id == LocalNovelSource.ID }
+            .filter { contentKind.accepts(it.isNovelSource()) }
             .filterNot { it.id.toString() in hiddenCatalogues }
             .sortedBy { "(${it.lang}) ${it.name}" }
     }
@@ -153,10 +170,12 @@ class SourcePresenter(
 
         private var lastSources: List<SourceItem>? = null
         private var lastUsedItemRem: SourceItem? = null
+        private var lastContentKind: ContentKind? = null
 
         fun onLowMemory() {
             lastSources = null
             lastUsedItemRem = null
+            lastContentKind = null
         }
     }
 }
