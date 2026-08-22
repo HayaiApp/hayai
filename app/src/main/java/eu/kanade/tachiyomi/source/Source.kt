@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.source
 
+import android.app.Application
 import android.graphics.drawable.Drawable
 import dev.ahmedmohamed.hayai.source.presentation.BundledSourceIconResolver
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
@@ -144,7 +145,7 @@ interface Source {
 
 fun Source.icon(): Drawable? =
     Injekt.get<ExtensionManager>().getAppIconForSource(this)
-        ?: BundledSourceIconResolver.drawable(Injekt.get(), id)
+        ?: BundledSourceIconResolver.drawable(Injekt.get<Application>(), id)
 
 fun Source.pkgName() = Injekt.get<ExtensionManager>().getPackageName(id)
 

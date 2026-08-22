@@ -19,6 +19,7 @@ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
 import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUConfigHttpRemote
 import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateStateStore
 import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateWorker
+import dev.ahmedmohamed.hayai.process.HayaiProcessPolicy
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesHttpRemote
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesRemote
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncService
@@ -144,23 +145,25 @@ class AppModule(
 
         // Asynchronously init expensive components for a faster cold start
 
-        ContextCompat.getMainExecutor(app).execute {
-            get<PreferencesHelper>()
+        if (HayaiProcessPolicy.isMainProcess(app)) {
+            ContextCompat.getMainExecutor(app).execute {
+                get<PreferencesHelper>()
 
-            get<NetworkHelper>()
+                get<NetworkHelper>()
 
-            get<SourceManager>()
+                get<SourceManager>()
 
-            get<DatabaseHelper>()
+                get<DatabaseHelper>()
 
-            get<DownloadManager>()
+                get<DownloadManager>()
 
-            get<CustomMangaManager>()
+                get<CustomMangaManager>()
 
-            if (HayaiPreferences(get()).hentaiFeaturesEnabled.get()) {
-                EhGalleryUpdateWorker.schedule(app, EhGalleryUpdateStateStore(app, get()).policy())
-            } else {
-                EhGalleryUpdateWorker.cancel(app)
+                if (HayaiPreferences(get()).hentaiFeaturesEnabled.get()) {
+                    EhGalleryUpdateWorker.schedule(app, EhGalleryUpdateStateStore(app, get()).policy())
+                } else {
+                    EhGalleryUpdateWorker.cancel(app)
+                }
             }
         }
     }

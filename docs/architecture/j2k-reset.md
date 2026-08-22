@@ -16,6 +16,8 @@ J2K owns manga, chapters, history, categories, tracking, downloads, image readin
 
 `tools/verify-upstream-boundary.ps1` rejects unreviewed Kotlin edits outside this namespace. `App.kt`, `MainActivity.kt`, and the J2K image `ReaderActivity.kt` are protected explicitly.
 
+`AppModule` delegates process classification to `HayaiProcessPolicy` before scheduling asynchronous database, source, download, and WorkManager-backed initialization. The main process retains the normal startup path; the isolated crash-handler process imports only the synchronous dependencies its activity needs. This prevents a primary failure from being hidden by a second WorkManager initialization crash without changing `App.kt`.
+
 The sole approved image-reader seam is an initial-page intent read in `ReaderActivity.onCreate`. `ReaderLauncher` owns the namespaced extra and validates its zero-based value. This lets source page previews enter the existing J2K reader at the selected image without changing chapter loading, reader lifecycle, viewer state, persistence, or navigation.
 
 The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one optional high-numbered Hayai field, `BackupCreator` fills it, and `BackupRestorer` applies it only after J2K has restored manga and chapters. All payload validation, serialization models, stable identity mapping, and database behavior remain Hayai-owned. This preserves old-backup compatibility and avoids teaching J2K models about Hayai tables.
@@ -56,7 +58,7 @@ Built-in source settings are another deliberate adapter seam. `BrowseSourceContr
 
 J2K's extension-facing `JavaScriptEngine` delegates evaluation to Hayai's QuickJS runtime. The novel plugin bridge needs the Dokar binding API, while J2K previously packaged a second QuickJS implementation with the same native `libquickjs.so` name. One Hayai-owned evaluator preserves the extension API and prevents an unresolvable APK native-library collision without changing application lifecycle code.
 
-Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
+Source badges and bundled icons use Hayai-owned presentation resolvers. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. The J2K `Source.icon()` seam asks Injekt for the registered `Application`, not an unregistered raw `Context`, before resolving a bundled fallback. This keeps the badge UI honest and source rows safe while limiting J2K changes to presentation holders and one icon fallback.
 
 Release channels use a Hayai-owned policy. Stable and beta builds query `HayaiApp/hayai`. Nightly builds use the isolated `.nightly` application ID, numeric `rN` versions, and `HayaiApp/hayai-nightly`. J2K's update checker delegates tag comparison and APK selection to this policy. The nightly workflow chooses `max(commit count, latest published nightly + 1)`, which prevents version rollback after the J2K reset and remains safe when a canceled job retries.
 
