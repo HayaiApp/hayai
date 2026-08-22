@@ -14,9 +14,9 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
 | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; emulator login pending |
 | EH source settings, default filters, enhanced details toggle, and remote uconfig | Typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
 | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
-| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic paginated manga-details preview seam | implemented unverified; authenticated emulator details flow pending |
+| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, lazy cached details rows, full preview browser, and typed J2K reader-page handoff | implemented unverified; authenticated emulator details flow pending |
 | 8Muses/EroMuse, HBrowse, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | implemented unverified for the source-specific behavior SY exposes |
-| Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions and a bounded generic preview registry | implemented unverified; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not |
+| Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions plus bounded listing/image caches and a full preview browser | implemented unverified; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not |
 | Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI audit |
 | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
 | Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | source-supported preview and settings behavior implemented unverified |
@@ -29,7 +29,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | Capability | Hayai boundary | Status |
 |---|---|---|
 | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
-| Dedicated reader, central routing, and J2K history | `NovelReaderActivity` and `ReaderLauncher` | port |
+| Dedicated reader, central routing, and J2K history | Hayai-owned J2K-style XML shell, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | implemented unverified; emulator restart/recovery remains |
 | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
 | Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership and separate management entry points | implemented unverified; compile and emulator install flows pending |
 | LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
@@ -37,10 +37,10 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
 | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
 | Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | integration foundation verified; emulator bulk-flow pending |
-| Typography, themes, spacing, navigation, presets, snippets, search/replace | Text-reader profiles, typed customization store, and bounded document transforms | integration foundation verified; emulator settings-flow pending |
+| Typography, themes, spacing, navigation, presets, snippets, search/replace | Five-tab live reader sheet, Tsundoku preference keys and exact tap-zone tables, SAF-imported validated fonts shared by native/Web renderers, progress modes, ordered bottom/status registries, searchable full settings, ordered snippets with append semantics, and testable ordered replacements | implemented unverified; emulator settings/font-flow pending |
 | Translation and dictionary handoff | Bounded provider clients, cache, selection/chapter reader actions, installed-app lookup, and web fallback | implemented unverified |
-| TTS and playback controls | Reader-owned lifecycle-aware engine and controls | port |
-| Quotes | Typed `hayai_quotes`, selection capture, browse/copy/delete UI | port |
+| TTS and playback controls | Foreground media-playback service, notification actions, viewport start, paragraph navigation/highlight, chapter handoff, and activity reattachment | implemented unverified; emulator background/restart recovery pending |
+| Quotes | Typed `hayai_quotes`, native/Web selection capture, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | implemented unverified; emulator selection lifecycle pending |
 | Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, editing, schema, and backup | implemented unverified |
 | Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, progress-aware J2K chapter rows, and library statistics | integration foundation verified; emulator presentation pending |
 | Library content filter, shortcuts, and migration compatibility | Typed content policy with narrow J2K presentation and migration adapters | integration foundation verified; emulator flows pending |

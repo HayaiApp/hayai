@@ -15,6 +15,8 @@ class HayaiPreferences(
     val novelLibraryFilter: Preference<Int> =
         store.getInt(KEY_NOVEL_LIBRARY_FILTER, NovelLibraryFilter.Disabled.persistedValue)
 
+    val pagePreviewRows: Preference<Int> = store.getInt(KEY_PAGE_PREVIEW_ROWS, 4)
+
     val novelFontSize = store.getInt("pref_novel_font_size", 16)
     val novelFontFamily = store.getString("pref_novel_font_family", "sans-serif")
     val novelTheme = store.getString("pref_novel_theme", "app")
@@ -29,13 +31,18 @@ class HayaiPreferences(
     val novelMarginTop = store.getInt("pref_novel_margin_top", 50)
     val novelMarginBottom = store.getInt("pref_novel_margin_bottom", 16)
     val novelRenderingMode = store.getString("pref_novel_rendering_mode", "default")
+    val novelNavigationMode = store.getInt("reader_navigation_mode_novel", 5)
+    val novelNavigationInverted = store.getString("reader_tapping_inverted_novel", "NONE")
     val novelEnableEpubStyles = store.getBoolean("pref_novel_enable_epub_css", true)
     val novelEnableEpubJs = store.getBoolean("pref_novel_enable_epub_js", false)
     val novelSourceCssPriority = store.getBoolean("pref_novel_source_css_priority", false)
     val novelCustomCss = store.getString("pref_novel_custom_css", "")
     val novelCustomJs = store.getString("pref_novel_custom_js", "")
+    val novelWebViewDevTools = store.getBoolean("pref_novel_webview_devtools", false)
+    val novelConsoleErrorToast = store.getBoolean("pref_novel_console_error_toast", false)
     val novelCustomCssSnippets = store.getString("pref_novel_css_snippets", "[]")
     val novelCustomJsSnippets = store.getString("pref_novel_js_snippets", "[]")
+    val novelImportedFonts = store.getString("pref_novel_imported_fonts", "[]")
     val novelGlobalPresets = store.getString("pref_novel_global_presets", "[]")
     val novelRegexReplacements = store.getString("pref_novel_regex_replacements", "[]")
     val novelInfiniteScroll = store.getBoolean("pref_novel_infinite_scroll", false)
@@ -75,6 +82,11 @@ class HayaiPreferences(
     val novelTtsBackgroundPlayback = store.getBoolean("pref_novel_tts_background_playback", false)
     val novelTtsControlsVisible = store.getBoolean("pref_novel_tts_controls_visible", false)
     val novelTtsAutoStartOnPanelOpen = store.getBoolean("pref_novel_tts_auto_start_on_panel_open", false)
+    val novelBottomBarItems =
+        store.getString(
+            "novel_bottom_bar_items",
+            """[{"id":"prev_chapter","enabled":true},{"id":"scroll_to_top","enabled":true},{"id":"translate","enabled":false},{"id":"auto_scroll","enabled":false},{"id":"tts","enabled":true},{"id":"quotes","enabled":true},{"id":"orientation","enabled":false},{"id":"settings","enabled":true},{"id":"edit","enabled":false},{"id":"next_chapter","enabled":true}]""",
+        )
     val novelStatusBarEnabled = store.getBoolean("pref_novel_status_bar_enabled", false)
     val novelStatusBarShowTime = store.getBoolean("pref_novel_status_bar_show_time", true)
     val novelStatusBarShowBattery = store.getBoolean("pref_novel_status_bar_show_battery", true)
@@ -84,6 +96,9 @@ class HayaiPreferences(
     val novelStatusBarPosition = store.getString("pref_novel_status_bar_position", "bottom")
     val novelStatusBarSize = store.getString("pref_novel_status_bar_size", "small")
     val novelStatusBarShowCharging = store.getBoolean("pref_novel_status_bar_show_charging", true)
+    val novelStatusBarOrder = store.getString("pref_novel_status_bar_order", """["time","chapter","progress","battery"]""")
+    val novelOrientation = store.getInt("pref_novel_reader_orientation", 0)
+    val novelFullscreen = store.getBoolean("pref_novel_reader_fullscreen", true)
 
     // Keep the legacy Hayai keys so restored and in-place preferences migrate without a copy step.
     val hiddenSourcesInHistory = store.getStringSet(KEY_HIDDEN_SOURCES_IN_HISTORY, emptySet())
@@ -93,6 +108,7 @@ class HayaiPreferences(
         const val KEY_HENTAI_FEATURES = "eh_is_hentai_enabled"
         const val KEY_LEWD_LIBRARY_FILTER = "pref_filter_library_lewd_v2"
         const val KEY_NOVEL_LIBRARY_FILTER = "pref_filter_library_novel_v1"
+        const val KEY_PAGE_PREVIEW_ROWS = "pref_page_preview_rows"
         const val KEY_HIDDEN_SOURCES_IN_HISTORY = "hidden_sources_in_history"
         const val KEY_HIDDEN_SOURCES_IN_UPDATES = "hidden_sources_in_updates"
     }
