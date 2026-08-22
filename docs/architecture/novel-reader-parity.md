@@ -47,4 +47,6 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 
 ## Verification state
 
-The implementation has only received static inspection and `git diff --check` in this batch. Run the focused unit tests, Kotlin compilation, upstream-boundary check, and emulator reader flows before changing the audit status to **Port**. The emulator flow must cover native and WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery, notification handoff, incognito history, quotes, highlights, process restart, and orientation changes.
+The coherent batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` emulator run in `artifacts/emulator-verification/20260822-022932` verified legacy migration, native local-novel launch, the Reading/Appearance/Controls/TTS/Advanced sheet, offline save, process restart recovery, and the logged-out EH settings state. The emulator also exposed an initialization-order crash in the first tabbed-sheet implementation; the verifier was rerun successfully after the fix.
+
+Do not describe the entire reader as emulator-verified yet. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote/highlight selection, and orientation changes still need dedicated device flows.
