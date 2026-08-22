@@ -61,9 +61,9 @@ import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
 import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
 import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
-import dev.ahmedmohamed.hayai.source.preview.SourcePreviewActivity
+import dev.ahmedmohamed.hayai.source.preview.SourcePreviewController
 import dev.ahmedmohamed.hayai.source.preview.SourcePreviewBitmapDecoder
-import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataActivity
+import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataController
 import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
 import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataUi
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
@@ -1502,7 +1502,7 @@ class MangaDetailsController :
                         container = container,
                         document = document,
                         onMoreInfo = {
-                            manga.id?.let { startActivity(SourceMetadataActivity.newIntent(container.context, it)) }
+                            manga.id?.let { router.pushController(SourceMetadataController(it).withFadeTransaction()) }
                         },
                         onSearch = ::sourceSearch,
                     )
@@ -1553,13 +1553,18 @@ class MangaDetailsController :
                             },
                         )
                     }
+                    if (visible.isEmpty()) {
+                        container.addView(TextView(container.context).apply { setText(R.string.no_results_found) })
+                    }
                     container.addView(
                         MaterialButton(container.context).apply {
                             text = context.getString(R.string.hayai_more_previews)
-                            setOnClickListener { startActivity(SourcePreviewActivity.newIntent(context, requireNotNull(manga.id))) }
+                            setOnClickListener {
+                                router.pushController(SourcePreviewController(requireNotNull(manga.id)).withFadeTransaction())
+                            }
                         },
                     )
-                    featureRoot.visibility = if (visible.isNotEmpty()) View.VISIBLE else View.GONE
+                    featureRoot.visibility = View.VISIBLE
                 } else {
                     val error = result.exceptionOrNull()
                     container.addView(TextView(container.context).apply {
