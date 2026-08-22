@@ -14,7 +14,10 @@ internal class NovelAssetWebViewClient(
     private val assetProvider: NovelAssetProvider,
     private val chapterUrl: () -> String,
     private val offline: () -> Boolean,
+    private val chapterUrlForId: (Long) -> String? = { null },
+    private val offlineForId: (Long) -> Boolean? = { null },
     private val blockMedia: () -> Boolean,
+    private val fontStore: NovelFontStore,
 ) : WebViewClient() {
     override fun shouldInterceptRequest(
         view: WebView?,
@@ -39,11 +42,23 @@ internal class NovelAssetWebViewClient(
     ): Boolean = Uri.parse(url.orEmpty()).scheme != "about"
 
     private fun intercept(uri: Uri): WebResourceResponse? {
+        if (uri.scheme == NovelFontStore.WEB_SCHEME) {
+            val id = uri.encodedAuthority.orEmpty()
+            val item = fontStore.fonts().firstOrNull { it.id == id } ?: return notFoundResponse()
+            val stream = fontStore.open(id) ?: return notFoundResponse()
+            return WebResourceResponse(fontMimeType(item.extension), null, stream).apply {
+                responseHeaders = mapOf("Access-Control-Allow-Origin" to "*")
+            }
+        }
         if (blockMedia() && isMedia(uri)) return emptyResponse()
         if (offline() && uri.scheme in REMOTE_SCHEMES) return notFoundResponse()
         if (uri.scheme !in ASSET_SCHEMES) return null
         val path = decodeAssetPath(uri) ?: return notFoundResponse()
-        val stream = runBlocking { assetProvider.getChapterAsset(chapterUrl(), path) } ?: return notFoundResponse()
+        val blockId = uri.getQueryParameter(CHAPTER_ID_QUERY)?.toLongOrNull()
+        val resolvedChapterUrl = blockId?.let(chapterUrlForId) ?: chapterUrl()
+        val resolvedOffline = blockId?.let(offlineForId) ?: offline()
+        if (resolvedOffline && uri.scheme in REMOTE_SCHEMES) return notFoundResponse()
+        val stream = runBlocking { assetProvider.getChapterAsset(resolvedChapterUrl, path) } ?: return notFoundResponse()
         return WebResourceResponse(mimeType(path), null, stream)
     }
 
@@ -74,6 +89,15 @@ internal class NovelAssetWebViewClient(
             else -> "application/octet-stream"
         }
 
+    private fun fontMimeType(extension: String): String =
+        when (extension) {
+            "ttf" -> "font/ttf"
+            "otf" -> "font/otf"
+            "woff" -> "font/woff"
+            "woff2" -> "font/woff2"
+            else -> "application/octet-stream"
+        }
+
     private fun emptyResponse() = WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
 
     private fun notFoundResponse() =
@@ -82,6 +106,7 @@ internal class NovelAssetWebViewClient(
     private companion object {
         val ASSET_SCHEMES = setOf("hayai-novel-image", "novel-image")
         val REMOTE_SCHEMES = setOf("http", "https")
+        const val CHAPTER_ID_QUERY = "hayaiChapterId"
         val MEDIA_EXTENSIONS =
             setOf("jpg", "jpeg", "png", "gif", "webp", "svg", "avif", "bmp", "mp3", "m4a", "aac", "ogg", "wav", "mp4", "webm")
     }

@@ -5,6 +5,7 @@ import android.database.Cursor
 import com.pushtorefresh.storio.sqlite.queries.DeleteQuery
 import com.pushtorefresh.storio.sqlite.queries.InsertQuery
 import com.pushtorefresh.storio.sqlite.queries.RawQuery
+import com.pushtorefresh.storio.sqlite.queries.UpdateQuery
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import java.util.UUID
 
@@ -62,6 +63,56 @@ class NovelQuoteStore(
         database.lowLevel().delete(
             DeleteQuery.builder().table("hayai_quotes").where("quote_id = ?").whereArgs(quoteId).build(),
         ) > 0
+
+    fun update(
+        quoteId: String,
+        displayedContent: String,
+        chapterName: String,
+        language: String?,
+    ): NovelQuote? = synchronized(ADD_LOCK) {
+        val existing = get(quoteId) ?: return@synchronized null
+        val normalized = NovelQuoteText.normalize(displayedContent)
+        findDuplicate(existing.mangaId, chapterName, normalized)?.takeIf { it.id != quoteId }?.let {
+            error("This quote is already saved in that chapter.")
+        }
+        val updated =
+            existing.copy(
+                displayedContent = normalized,
+                chapterName = chapterName.trim().ifBlank { existing.chapterName },
+                language = language?.trim()?.takeIf(String::isNotEmpty),
+            )
+        database.lowLevel().update(
+            UpdateQuery.builder().table("hayai_quotes").where("quote_id = ?").whereArgs(quoteId).build(),
+            updated.toContentValues(),
+        )
+        get(quoteId)
+    }
+
+    fun move(
+        mangaId: Long,
+        quoteId: String,
+        direction: Int,
+    ): Boolean = synchronized(ADD_LOCK) {
+        val quotes = forManga(mangaId)
+        val index = quotes.indexOfFirst { it.id == quoteId }
+        val target = (index + direction.coerceIn(-1, 1)).takeIf { it in quotes.indices } ?: return@synchronized false
+        val reordered = quotes.toMutableList().apply { add(target, removeAt(index)) }
+        val newestTimestamp = maxOf(System.currentTimeMillis(), quotes.maxOfOrNull(NovelQuote::timestamp) ?: 0L)
+        database.inTransactionReturn {
+            reordered.forEachIndexed { position, quote ->
+                database.lowLevel().update(
+                    UpdateQuery.builder().table("hayai_quotes").where("quote_id = ?").whereArgs(quote.id).build(),
+                    ContentValues(1).apply { put("timestamp", newestTimestamp - position) },
+                )
+            }
+        }
+        true
+    }
+
+    fun get(quoteId: String): NovelQuote? =
+        database.lowLevel().rawQuery(
+            RawQuery.builder().query("SELECT $COLUMNS FROM hayai_quotes WHERE quote_id = ? LIMIT 1").args(quoteId).observesTables("hayai_quotes").build(),
+        ).use { cursor -> cursor.takeIf(Cursor::moveToFirst)?.toQuote() }
 
     private fun findDuplicate(
         mangaId: Long,
