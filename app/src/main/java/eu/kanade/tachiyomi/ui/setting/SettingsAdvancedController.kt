@@ -18,7 +18,7 @@ import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
 import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
-import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity
+import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddController
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
@@ -125,7 +125,7 @@ class SettingsAdvancedController : SettingsController() {
                     summaryRes = R.string.hayai_enhanced_batch_settings_summary
                     onClick {
                         if (hayaiPreferences.hentaiFeaturesEnabled.get()) {
-                            startActivity(EnhancedBatchAddActivity.newIntent(context))
+                            router.pushController(EnhancedBatchAddController().withFadeTransaction())
                         } else {
                             context.toast(R.string.hayai_hentai_features_summary)
                         }

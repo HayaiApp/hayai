@@ -1382,8 +1382,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManage
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	novelRequire(uri?.scheme == "https" && uri.host != null && uri.userInfo == null, NovelFailure.Code.ExtensionRepositoryHttps)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	private val tags = context.getSharedPreferences("hayai_novel_apk_repositories", Context.MODE_PRIVATE)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	val untrustedNovel = untrusted.filter { it.pkgName in fromNovelRepos.map(Extension.Available::pkgName) || it.pkgName.contains(".novel.") }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerActivity.kt	row(R.string.hayai_trust_signature, "${extension.name}\n${extension.signatureHash}") {
-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerActivity.kt	setOnClickListener { installJob?.cancel(CancellationException("Canceled by user")) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	.removePrefix("Tachiyomi: ")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	.removePrefix("Tsundoku: ")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	const val CONTENT_WARNING_KEY = "tachiyomix.contentWarning"
@@ -2741,7 +2739,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	choice.copy(label = "${choice.label} (${choice.sourceId})")
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	require(surface != RecentSurface.Mixed) { "Mixed visibility must be edited through History or Updates" }
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	val baseLabel = if (language == null) source.name else "${source.name} · $language"
-app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddActivity.kt	private const val STATE_INPUT = "hayai.enhanced.batch.input"
+app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddController.kt	private var currentInput = ""
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddService.kt	EnhancedBatchFailure.Network(error.message ?: "Network request failed"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt	private val mutableInput = MutableStateFlow("")
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt	val input: String = "",
