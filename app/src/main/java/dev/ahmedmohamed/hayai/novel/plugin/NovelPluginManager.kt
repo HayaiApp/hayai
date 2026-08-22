@@ -2,6 +2,9 @@ package dev.ahmedmohamed.hayai.novel.plugin
 
 import android.content.Context
 import android.content.SharedPreferences
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.network.GET
@@ -31,7 +34,7 @@ data class NovelPluginCatalog(
     val available: List<NovelPluginDescriptor> = emptyList(),
     val installed: List<InstalledNovelPlugin> = emptyList(),
     val sources: List<NovelPluginSource> = emptyList(),
-    val repositoryErrors: Map<String, String> = emptyMap(),
+    val repositoryErrors: Map<String, Throwable> = emptyMap(),
     val refreshing: Boolean = false,
 )
 
@@ -76,7 +79,7 @@ class NovelPluginManager(
                 val errors =
                     results
                         .mapNotNull { (repository, result) ->
-                            result.exceptionOrNull()?.let { repository.url to safeError(it) }
+                            result.exceptionOrNull()?.let { repository.url to it }
                         }.toMap()
                 val candidates = results.flatMap { (repository, result) -> result.getOrDefault(emptyList()).map { it to repository.url } }
                 val availablePairs =
@@ -102,7 +105,7 @@ class NovelPluginManager(
         url: String,
     ): NovelPluginCatalog =
         mutex.withLock {
-            require(name.isNotBlank() && name.length <= 256) { "Invalid repository name" }
+            novelRequire(name.isNotBlank() && name.length <= 256, NovelFailure.Code.PluginRepositoryName)
             requireSafeUrl(url, allowLocalHttp = true)
             store.saveRepository(NovelPluginRepository(name.trim(), url.trim(), true))
             trustStore.trustUnsigned(url.trim())
@@ -114,7 +117,7 @@ class NovelPluginManager(
         url: String,
         enabled: Boolean,
     ) = mutex.withLock {
-        val repository = store.repositories().firstOrNull { it.url == url } ?: error("Repository not found")
+        val repository = store.repositories().firstOrNull { it.url == url } ?: novelFailure(NovelFailure.Code.PluginRepositoryMissing)
         store.saveRepository(repository.copy(enabled = enabled))
         _catalog.value = rebuild(_catalog.value.copy(repositories = store.repositories()))
     }
@@ -128,8 +131,8 @@ class NovelPluginManager(
 
     suspend fun install(pluginId: String): InstalledNovelPlugin =
         mutex.withLock {
-            val descriptor = _catalog.value.available.firstOrNull { it.id == pluginId } ?: error("Plugin is not available")
-            val repositoryUrl = availableOrigins[pluginId] ?: error("Refresh repositories before installing this plugin")
+            val descriptor = _catalog.value.available.firstOrNull { it.id == pluginId } ?: novelFailure(NovelFailure.Code.PluginUnavailable)
+            val repositoryUrl = availableOrigins[pluginId] ?: novelFailure(NovelFailure.Code.PluginRefreshRequired)
             val bytes = download(descriptor.resolvedCodeUrl(repositoryUrl), NovelPluginStore.MAX_PLUGIN_BYTES)
             val installed = installValidated(descriptor, repositoryUrl, bytes, replacementPreferences = null)
             _catalog.value = rebuild(_catalog.value.copy(installed = store.installed()))
@@ -210,19 +213,19 @@ class NovelPluginManager(
         replacementPreferences: Map<String, String>?,
     ): InstalledNovelPlugin {
         descriptor.validate(repositoryUrl)
-        require(code.size in 1..NovelPluginStore.MAX_PLUGIN_BYTES.toInt()) { "Plugin code is empty or too large" }
+        novelRequire(code.size in 1..NovelPluginStore.MAX_PLUGIN_BYTES.toInt(), NovelFailure.Code.PluginCodeSize)
         val codeHash = sha256Hex(code)
-        descriptor.sha256?.let { require(codeHash.equals(it, true)) { "Plugin checksum does not match repository metadata" } }
+        descriptor.sha256?.let { novelRequire(codeHash.equals(it, true), NovelFailure.Code.PluginChecksum) }
         trustStore.verify(repositoryUrl, descriptor, code)
         val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
         val previousPreferences = preferences.all.toMap()
         try {
-            replacementPreferences?.let { check(replacePreferences(preferences, it)) { "Unable to restore plugin settings" } }
+            replacementPreferences?.let { novelRequire(replacePreferences(preferences, it), NovelFailure.Code.PluginRestoreSettings) }
             val candidate = InstalledNovelPlugin(descriptor, repositoryUrl, System.currentTimeMillis(), codeHash)
             NovelPluginSource(candidate, code.toString(Charsets.UTF_8)).use { it.warmUp() }
             return store.install(descriptor, repositoryUrl, code)
         } catch (error: Exception) {
-            runCatching { check(restorePreferences(preferences, previousPreferences)) { "Unable to roll back plugin settings" } }
+            runCatching { novelRequire(restorePreferences(preferences, previousPreferences), NovelFailure.Code.PluginRollbackSettings) }
                 .exceptionOrNull()
                 ?.let(error::addSuppressed)
             throw error
@@ -262,13 +265,13 @@ class NovelPluginManager(
         val array =
             when (root) {
                 is JsonArray -> root
-                is JsonObject -> root["plugins"] as? JsonArray ?: root["sources"] as? JsonArray ?: error("Repository has no plugins array")
-                else -> error("Invalid repository document")
+                is JsonObject -> root["plugins"] as? JsonArray ?: root["sources"] as? JsonArray ?: novelFailure(NovelFailure.Code.PluginRepositoryArray)
+                else -> novelFailure(NovelFailure.Code.PluginRepositoryDocument)
             }
-        require(array.size <= MAX_REPOSITORY_PLUGINS) { "Repository contains too many plugins" }
+        novelRequire(array.size <= MAX_REPOSITORY_PLUGINS, NovelFailure.Code.PluginRepositoryTooMany)
         val descriptors = array.map { json.decodeFromJsonElement<NovelPluginDescriptor>(it).validate(repository.url) }
         val signingKeys = descriptors.mapNotNull(NovelPluginDescriptor::signingKey).distinct()
-        require(signingKeys.size <= 1) { "Repository mixes multiple signing keys" }
+        novelRequire(signingKeys.size <= 1, NovelFailure.Code.PluginRepositoryMixedKeys)
         signingKeys.singleOrNull()?.let { trustStore.observeSigningKey(repository.url, it) }
         return descriptors
     }
@@ -280,10 +283,10 @@ class NovelPluginManager(
         withContext(Dispatchers.IO) {
             requireSafeUrl(url, allowLocalHttp = true)
             client.newCall(GET(url)).execute().use { response ->
-                check(response.isSuccessful) { "HTTP ${response.code}" }
+                novelRequire(response.isSuccessful, NovelFailure.Code.PluginHttp, response.code)
                 val body = response.body
                 val length = body.contentLength()
-                require(length <= maxBytes) { "Response is too large" }
+                novelRequire(length <= maxBytes, NovelFailure.Code.PluginResponseTooLarge)
                 val input = body.byteStream()
                 val output = ByteArrayOutputStream(if (length in 1..maxBytes) length.toInt() else 8192)
                 val buffer = ByteArray(8192)
@@ -292,14 +295,12 @@ class NovelPluginManager(
                     val count = input.read(buffer)
                     if (count < 0) break
                     total += count
-                    require(total <= maxBytes) { "Response is too large" }
+                    novelRequire(total <= maxBytes, NovelFailure.Code.PluginResponseTooLarge)
                     output.write(buffer, 0, count)
                 }
                 output.toByteArray()
             }
         }
-
-    private fun safeError(error: Throwable): String = (error.message ?: error.javaClass.simpleName).take(500)
 
     companion object {
         private const val MAX_REPOSITORY_BYTES = 4L * 1024 * 1024

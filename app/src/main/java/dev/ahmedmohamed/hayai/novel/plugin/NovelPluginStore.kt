@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.plugin
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import android.content.ContentValues
 import android.content.Context
 import android.system.Os
@@ -146,9 +148,9 @@ internal class NovelPluginStore(
     fun readCode(plugin: InstalledNovelPlugin): String {
         require(isSafeCodeFile(plugin.descriptor.id, plugin.codeSha256, plugin.codeFile))
         val file = File(root, plugin.codeFile)
-        require(file.isFile && file.length() in 1..MAX_PLUGIN_BYTES) { "Plugin code is missing or too large" }
+        novelRequire(file.isFile && file.length() in 1..MAX_PLUGIN_BYTES, NovelFailure.Code.PluginCodeSize)
         val bytes = file.readBytes()
-        require(sha256Hex(bytes) == plugin.codeSha256.lowercase()) { "Installed plugin checksum does not match" }
+        novelRequire(sha256Hex(bytes) == plugin.codeSha256.lowercase(), NovelFailure.Code.PluginChecksum)
         return bytes.toString(Charsets.UTF_8)
     }
 
@@ -157,10 +159,10 @@ internal class NovelPluginStore(
         repositoryUrl: String,
         code: ByteArray,
     ): InstalledNovelPlugin {
-        require(code.size in 1..MAX_PLUGIN_BYTES.toInt()) { "Plugin code is empty or too large" }
+        novelRequire(code.size in 1..MAX_PLUGIN_BYTES.toInt(), NovelFailure.Code.PluginCodeSize)
         val hash = sha256Hex(code)
-        descriptor.sha256?.let { require(hash.equals(it, true)) { "Plugin checksum does not match repository metadata" } }
-        require(code.toString(Charsets.UTF_8).isNotBlank()) { "Plugin code is empty" }
+        descriptor.sha256?.let { novelRequire(hash.equals(it, true), NovelFailure.Code.PluginChecksum) }
+        novelRequire(code.toString(Charsets.UTF_8).isNotBlank(), NovelFailure.Code.PluginCodeSize)
         val installed = InstalledNovelPlugin(descriptor, repositoryUrl, System.currentTimeMillis(), hash)
         val codeFile = File(root, installed.codeFile)
         val codeWasValid =
@@ -190,8 +192,8 @@ internal class NovelPluginStore(
         root
             .listFiles { file -> file.isFile && file.extension == "js" && file.name.startsWith("$pluginId-") }
             .orEmpty()
-            .forEach { check(it.delete()) { "Unable to remove plugin code" } }
-        check(!metadata.exists() || metadata.delete()) { "Unable to remove plugin metadata" }
+            .forEach { novelRequire(it.delete(), NovelFailure.Code.PluginRemoveCode) }
+        novelRequire(!metadata.exists() || metadata.delete(), NovelFailure.Code.PluginRemoveMetadata)
     }
 
     private fun atomicWrite(
@@ -216,7 +218,7 @@ internal class NovelPluginStore(
         checksum: String,
         codeFile: String,
     ): Boolean {
-        require(Regex("[A-Za-z0-9._-]{1,128}").matches(pluginId)) { "Invalid plugin ID" }
+        novelRequire(Regex("[A-Za-z0-9._-]{1,128}").matches(pluginId), NovelFailure.Code.PluginId)
         return checksum.matches(Regex("[a-f0-9]{64}")) && codeFile == "$pluginId-$checksum.js"
     }
 

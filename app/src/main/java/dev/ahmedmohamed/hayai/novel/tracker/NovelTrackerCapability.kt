@@ -1,5 +1,10 @@
 package dev.ahmedmohamed.hayai.novel.tracker
 
+import android.app.Application
+import eu.kanade.tachiyomi.R
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+
 data class NovelTrackerDescriptor(val serviceId: Long, val name: String, val novelNative: Boolean)
 
 data class NovelTrackSearchResult(
@@ -28,23 +33,28 @@ interface J2kNovelTrackingAdapter {
     suspend fun remove(mangaId: Long, serviceId: Long)
 }
 
-class NovelTrackerCapability(private val adapter: J2kNovelTrackingAdapter) {
+class NovelTrackerCapability(
+    private val adapter: J2kNovelTrackingAdapter,
+    private val stringResolver: (Int) -> String = { Injekt.get<Application>().getString(it) },
+) {
     fun available(): List<NovelTrackerDescriptor> =
         adapter.services().filter { it.novelNative || it.name.normalized() in NOVEL_SERVICES }
 
     suspend fun search(serviceId: Long, query: String): List<NovelTrackSearchResult> {
-        require(available().any { it.serviceId == serviceId }) { "Novel tracker is unavailable" }
-        require(query.isNotBlank() && query.length <= MAXIMUM_QUERY_LENGTH) { "Search query is invalid" }
+        require(available().any { it.serviceId == serviceId }) { stringResolver(R.string.hayai_tracker_unavailable) }
+        require(query.isNotBlank() && query.length <= MAXIMUM_QUERY_LENGTH) {
+            stringResolver(R.string.hayai_tracker_search_query_invalid)
+        }
         return adapter.search(serviceId, query.trim()).distinctBy { it.remoteId }.take(MAXIMUM_RESULTS)
     }
 
     suspend fun bind(mangaId: Long, serviceId: Long, result: NovelTrackSearchResult): NovelTrackState {
-        require(mangaId > 0 && available().any { it.serviceId == serviceId }) { "Novel tracker is unavailable" }
+        require(mangaId > 0 && available().any { it.serviceId == serviceId }) { stringResolver(R.string.hayai_tracker_unavailable) }
         return adapter.bind(mangaId, serviceId, result)
     }
 
     suspend fun updateProgress(mangaId: Long, state: NovelTrackState, chapter: Float): NovelTrackState {
-        require(mangaId > 0 && chapter >= 0f) { "Novel progress is invalid" }
+        require(mangaId > 0 && chapter >= 0f) { stringResolver(R.string.hayai_tracker_progress_invalid) }
         return adapter.update(mangaId, state.copy(chapterRead = maxOf(state.chapterRead, chapter)), setToRead = true)
     }
 
@@ -58,4 +68,3 @@ class NovelTrackerCapability(private val adapter: J2kNovelTrackingAdapter) {
         val NOVEL_SERVICES = setOf("novelupdates", "novellist", "ranobedb", "anilist", "myanimelist", "kitsu")
     }
 }
-

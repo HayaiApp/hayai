@@ -79,17 +79,29 @@ data class EhRemoteCookies(
     }
 }
 
-sealed class EhRemoteSettingsFailure(message: String, cause: Throwable? = null) : RuntimeException(message, cause) {
-    class AuthenticationRequired : EhRemoteSettingsFailure("Verify an ExHentai session before uploading settings.")
+enum class EhRemoteSettingsFailureReason {
+    AuthenticationRequired,
+    RateLimited,
+    RemoteRejected,
+    OutOfProfileSlots,
+    MalformedResponse,
+    Network,
+}
+
+sealed class EhRemoteSettingsFailure(
+    val reason: EhRemoteSettingsFailureReason,
+    diagnostic: String? = null,
+    cause: Throwable? = null,
+) : RuntimeException(diagnostic ?: reason.name, cause) {
+    class AuthenticationRequired : EhRemoteSettingsFailure(EhRemoteSettingsFailureReason.AuthenticationRequired)
     class RateLimited(val retryAfterSeconds: Long?) :
-        EhRemoteSettingsFailure(
-            retryAfterSeconds?.let { "E-Hentai rate-limited settings upload. Retry in $it seconds." }
-                ?: "E-Hentai rate-limited settings upload.",
-        )
-    class RemoteRejected(code: Int) : EhRemoteSettingsFailure("E-Hentai rejected the settings request with HTTP $code.")
-    class OutOfProfileSlots(site: EhSite) : EhRemoteSettingsFailure("${site.displayName} has no free application profile slot.")
-    class MalformedResponse(message: String, cause: Throwable? = null) : EhRemoteSettingsFailure(message, cause)
-    class Network(message: String, cause: Throwable? = null) : EhRemoteSettingsFailure(message, cause)
+        EhRemoteSettingsFailure(EhRemoteSettingsFailureReason.RateLimited)
+    class RemoteRejected(val code: Int) : EhRemoteSettingsFailure(EhRemoteSettingsFailureReason.RemoteRejected)
+    class OutOfProfileSlots(val site: EhSite) : EhRemoteSettingsFailure(EhRemoteSettingsFailureReason.OutOfProfileSlots)
+    class MalformedResponse(diagnostic: String, cause: Throwable? = null) :
+        EhRemoteSettingsFailure(EhRemoteSettingsFailureReason.MalformedResponse, diagnostic, cause)
+    class Network(diagnostic: String, cause: Throwable? = null) :
+        EhRemoteSettingsFailure(EhRemoteSettingsFailureReason.Network, diagnostic, cause)
 }
 
 sealed interface EhSiteUploadResult {

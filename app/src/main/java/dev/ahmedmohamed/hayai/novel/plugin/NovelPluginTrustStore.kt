@@ -2,6 +2,9 @@ package dev.ahmedmohamed.hayai.novel.plugin
 
 import android.content.Context
 import android.util.Base64
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.Signature
@@ -19,24 +22,22 @@ internal class NovelPluginTrustStore(context: Context) {
 
     fun trustUnsigned(repositoryUrl: String) {
         requireSafeUrl(repositoryUrl, allowLocalHttp = true)
-        check(preferences.edit().putString(key(repositoryUrl), "unsigned:${System.currentTimeMillis()}").commit())
+        novelRequire(preferences.edit().putString(key(repositoryUrl), "unsigned:${System.currentTimeMillis()}").commit(), NovelFailure.Code.PluginTrustPersist)
     }
 
     fun observeSigningKey(repositoryUrl: String, publicKey: String) {
         val bytes = decode(publicKey)
-        require(bytes.size in 32..128)
+        novelRequire(bytes.size in 32..128, NovelFailure.Code.PluginPublicKey)
         val fingerprint = sha256Hex(bytes)
         val stored = preferences.getString(key(repositoryUrl), null)
         if (stored != null && stored.startsWith("signed:")) {
-            require(stored.substringAfter("signed:").substringBefore(':') == fingerprint) {
-                "Repository signing key changed. Revoke and trust it again after verifying the new fingerprint."
-            }
+            novelRequire(stored.substringAfter("signed:").substringBefore(':') == fingerprint, NovelFailure.Code.PluginSigningKeyChanged)
         }
-        check(preferences.edit().putString(key(repositoryUrl), "signed:$fingerprint:${System.currentTimeMillis()}").commit())
+        novelRequire(preferences.edit().putString(key(repositoryUrl), "signed:$fingerprint:${System.currentTimeMillis()}").commit(), NovelFailure.Code.PluginTrustPersist)
     }
 
     fun revoke(repositoryUrl: String) {
-        check(preferences.edit().remove(key(repositoryUrl)).commit())
+        novelRequire(preferences.edit().remove(key(repositoryUrl)).commit(), NovelFailure.Code.PluginTrustPersist)
     }
 
     fun trust(repositoryUrl: String, publicKey: String?): NovelRepositoryTrust? {
@@ -51,23 +52,21 @@ internal class NovelPluginTrustStore(context: Context) {
     }
 
     fun verify(repositoryUrl: String, descriptor: NovelPluginDescriptor, code: ByteArray) {
-        val value = preferences.getString(key(repositoryUrl), null) ?: error("Repository is not trusted")
+        val value = preferences.getString(key(repositoryUrl), null) ?: novelFailure(NovelFailure.Code.PluginRepositoryUntrusted)
         if (descriptor.signingKey == null) {
-            require(value.startsWith("unsigned:")) { "Signed repository returned an unsigned plugin" }
+            novelRequire(value.startsWith("unsigned:"), NovelFailure.Code.PluginUnsignedFromSigned)
             return
         }
-        require(value.startsWith("signed:")) { "Repository signature was not trusted" }
+        novelRequire(value.startsWith("signed:"), NovelFailure.Code.PluginSignatureUntrusted)
         val keyBytes = decode(descriptor.signingKey)
-        require(sha256Hex(keyBytes) == value.substringAfter("signed:").substringBefore(':')) {
-            "Repository signing key does not match the trusted fingerprint"
-        }
+        novelRequire(sha256Hex(keyBytes) == value.substringAfter("signed:").substringBefore(':'), NovelFailure.Code.PluginSigningKeyChanged)
         val key = runCatching {
             KeyFactory.getInstance("Ed25519").generatePublic(X509EncodedKeySpec(normalizePublicKey(keyBytes)))
-        }.getOrElse { throw IllegalArgumentException("Unsupported or invalid Ed25519 public key", it) }
+        }.getOrElse { throw NovelFailure(NovelFailure.Code.PluginPublicKeyUnsupported, cause = it) }
         val verifier = Signature.getInstance("Ed25519")
         verifier.initVerify(key)
         verifier.update(code)
-        require(verifier.verify(decode(requireNotNull(descriptor.signature)))) { "Plugin signature verification failed" }
+        novelRequire(verifier.verify(decode(requireNotNull(descriptor.signature))), NovelFailure.Code.PluginSignatureFailed)
     }
 
     private fun normalizePublicKey(value: ByteArray): ByteArray =
@@ -75,7 +74,7 @@ internal class NovelPluginTrustStore(context: Context) {
 
     private fun decode(value: String): ByteArray = runCatching {
         Base64.decode(value, Base64.DEFAULT)
-    }.getOrElse { throw IllegalArgumentException("Invalid base64", it) }
+    }.getOrElse { throw NovelFailure(NovelFailure.Code.PluginBase64, cause = it) }
 
     private fun key(url: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(url.toByteArray())

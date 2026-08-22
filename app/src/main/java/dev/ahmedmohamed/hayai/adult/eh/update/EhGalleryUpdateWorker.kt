@@ -48,6 +48,7 @@ class EhGalleryUpdateWorker(
                 Timber.w(denied, "Notification permission denied for E-Hentai updater")
             }
             val runtime = EhGalleryUpdateRuntime(
+                context = applicationContext,
                 database = Injekt.get<DatabaseHelper>(),
                 sourceManager = Injekt.get<SourceManager>(),
                 gateway = Injekt.get<EhHttpGateway>(),

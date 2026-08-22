@@ -2,7 +2,6 @@ package dev.ahmedmohamed.hayai.source.enhanced
 
 import dev.ahmedmohamed.hayai.source.SourceFamily
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EnhancedDetailsParserTest {
@@ -33,7 +32,7 @@ class EnhancedDetailsParserTest {
         val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.HBrowse, html, "https://hbrowse.com/1"))
 
         assertEquals("Gallery", details.title)
-        assertTrue(details.description.orEmpty().contains("20 pages"))
+        assertEquals("20 pages", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Length }.value)
         assertEquals(listOf("artist: Alice"), details.genres)
     }
 
@@ -62,7 +61,7 @@ class EnhancedDetailsParserTest {
         assertEquals("English", details.title)
         assertEquals("日本語", details.alternateTitle)
         assertEquals(listOf("artist: Alice"), details.genres)
-        assertTrue(details.description.orEmpty().contains("Favorites:** 4"))
+        assertEquals("4", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Favorites }.value)
     }
 
     @Test
@@ -74,7 +73,7 @@ class EnhancedDetailsParserTest {
         assertEquals("Title", details.title)
         assertEquals("別名", details.alternateTitle)
         assertEquals(listOf("Action"), details.genres)
-        assertTrue(details.description.orEmpty().contains("Summary"))
+        assertEquals("Summary", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Description }.value)
     }
 
     @Test
@@ -85,6 +84,6 @@ class EnhancedDetailsParserTest {
 
         assertEquals("Archive", details.title)
         assertEquals(listOf("artist:Alice", "language:English"), details.genres)
-        assertTrue(details.description.orEmpty().contains("Pages:** 9"))
+        assertEquals("9", details.descriptionRows.single { it.label == EnhancedDescriptionLabel.Pages }.value)
     }
 }

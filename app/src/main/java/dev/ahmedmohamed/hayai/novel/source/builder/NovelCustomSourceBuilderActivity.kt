@@ -9,7 +9,9 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,36 +30,36 @@ class NovelCustomSourceBuilderActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title = "Custom novel source"
+        title = getString(R.string.hayai_custom_novel_source)
         setContentView(android.widget.ScrollView(this).apply {
             addView(LinearLayout(this@NovelCustomSourceBuilderActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(24, 24, 24, 24)
                 addView(TextView(context).apply {
-                    text = "Define the source with URL templates and CSS selectors. Validate and preview against the real site before installing."
+                    text = getString(R.string.hayai_custom_source_instructions)
                 })
                 FIELD_KEYS.forEach { key ->
-                    val field = EditText(context).apply { hint = key }
+                    val field = EditText(context).apply { hint = fieldHint(key) }
                     fields[key] = field
                     addView(field)
                 }
                 editor = EditText(context).apply {
-                    hint = "Advanced definition JSON for optional cover, dates, removal selectors, and headers"
+                    hint = getString(R.string.hayai_custom_source_advanced_hint)
                     inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
                     minLines = 4
                     setText(intent.getStringExtra(EXTRA_DEFINITION).orEmpty())
                 }
                 addView(editor)
                 addView(Button(context).apply {
-                    text = "Load advanced JSON into form"
+                    text = getString(R.string.hayai_custom_source_load_json)
                     setOnClickListener {
                         runCatching { store.parse(editor.text.toString()) }
                             .onSuccess(::populate)
-                            .onFailure { status.text = it.message }
+                            .onFailure { status.text = novelFailureMessage(it, R.string.hayai_custom_source_operation_failed) }
                     }
                 })
                 addView(Button(context).apply {
-                    text = "Update advanced JSON from form"
+                    text = getString(R.string.hayai_custom_source_update_json)
                     setOnClickListener {
                         runCatching { definitionFromForm() }
                             .onSuccess { definition ->
@@ -68,14 +70,14 @@ class NovelCustomSourceBuilderActivity : AppCompatActivity() {
                                     ),
                                 )
                             }
-                            .onFailure { status.text = it.message }
+                            .onFailure { status.text = novelFailureMessage(it, R.string.hayai_custom_source_operation_failed) }
                     }
                 })
                 status = TextView(context)
                 addView(status)
-                addView(Button(context).apply { text = "Validate"; setOnClickListener { validateDefinition() } })
-                addView(Button(context).apply { text = "Preview popular page"; setOnClickListener { preview() } })
-                addView(Button(context).apply { text = "Install source"; setOnClickListener { install() } })
+                addView(Button(context).apply { setText(R.string.hayai_validate); setOnClickListener { validateDefinition() } })
+                addView(Button(context).apply { setText(R.string.hayai_preview_popular_page); setOnClickListener { preview() } })
+                addView(Button(context).apply { setText(R.string.hayai_install_source); setOnClickListener { install() } })
             })
         })
         intent.getStringExtra(EXTRA_DEFINITION)?.takeIf(String::isNotBlank)?.let { serialized ->
@@ -84,14 +86,20 @@ class NovelCustomSourceBuilderActivity : AppCompatActivity() {
     }
 
     private fun validateDefinition(): NovelCustomSourceDefinition? = runCatching {
-        definitionFromForm().requireValid()
+        definitionFromForm()
     }.fold(
         onSuccess = {
-            status.text = "Valid source definition for ${it.name}"
-            it
+            val issues = it.validate()
+            if (issues.isEmpty()) {
+                status.text = getString(R.string.hayai_valid_source_definition, it.name)
+                it
+            } else {
+                status.text = issues.joinToString("\n", transform = ::validationIssueText)
+                null
+            }
         },
         onFailure = {
-            status.text = it.message
+            status.text = novelFailureMessage(it, R.string.hayai_custom_source_operation_failed)
             null
         },
     )
@@ -138,7 +146,7 @@ class NovelCustomSourceBuilderActivity : AppCompatActivity() {
     private fun preview() {
         val definition = validateDefinition() ?: return
         lifecycleScope.launch {
-            status.text = "Loading preview…"
+            status.text = getString(R.string.hayai_loading_preview)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     val headerValues = definition.headers.flatMap { (name, value) -> listOf(name, value) }.toTypedArray()
@@ -147,7 +155,7 @@ class NovelCustomSourceBuilderActivity : AppCompatActivity() {
                         .headers(Headers.headersOf(*headerValues))
                         .build()
                     network.client.newCall(request).execute().use { response ->
-                        check(response.isSuccessful) { "HTTP ${response.code}" }
+                        check(response.isSuccessful) { getString(R.string.hayai_http_status_error, response.code) }
                         val bytes = response.body.byteStream().readBounded(MAX_PREVIEW_BYTES)
                         NovelCustomSourcePreviewer.list(
                             bytes.toString(Charsets.UTF_8),
@@ -159,10 +167,12 @@ class NovelCustomSourceBuilderActivity : AppCompatActivity() {
             }
             result.fold(
                 onSuccess = { preview ->
-                    status.text = preview.issues.joinToString("\n") { "${it.field}: ${it.message}" }
-                        .ifBlank { "Found ${preview.title}\n${preview.url}" }
+                    status.text =
+                        preview.issues
+                            .joinToString("\n", transform = ::validationIssueText)
+                            .ifBlank { getString(R.string.hayai_custom_source_found_preview, preview.title, preview.url) }
                 },
-                onFailure = { status.text = it.message },
+                onFailure = { status.text = novelFailureMessage(it, R.string.hayai_custom_source_preview_failed) },
             )
         }
     }
@@ -175,7 +185,7 @@ class NovelCustomSourceBuilderActivity : AppCompatActivity() {
             val count = read(buffer)
             if (count < 0) break
             total += count
-            require(total <= max) { "Preview response is too large" }
+            require(total <= max) { getString(R.string.hayai_preview_response_too_large) }
             output.write(buffer, 0, count)
         }
         return output.toByteArray()
@@ -184,20 +194,67 @@ class NovelCustomSourceBuilderActivity : AppCompatActivity() {
     private fun install() {
         val definition = validateDefinition() ?: return
         AlertDialog.Builder(this)
-            .setTitle("Install ${definition.name}?")
-            .setMessage("This source can access the network and execute generated parsing code. Review the definition first.")
+            .setTitle(getString(R.string.hayai_install_named_item, definition.name))
+            .setMessage(R.string.hayai_custom_source_install_warning)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton("Install") { _, _ ->
+            .setPositiveButton(R.string.install) { _, _ ->
                 lifecycleScope.launch {
-                    status.text = "Installing…"
+                    status.text = getString(R.string.hayai_installing)
                     runCatching { store.save(definition) }.fold(
-                        onSuccess = { status.text = "Installed ${definition.name}" },
-                        onFailure = { status.text = it.message },
+                        onSuccess = { status.text = getString(R.string.installed_, definition.name) },
+                        onFailure = { status.text = novelFailureMessage(it, R.string.hayai_custom_source_install_failed) },
                     )
                 }
             }
             .show()
     }
+
+    private fun fieldHint(key: String): String =
+        getString(
+            when (key) {
+                "id" -> R.string.hayai_custom_source_field_id
+                "name" -> R.string.hayai_custom_source_field_name
+                "language" -> R.string.hayai_custom_source_field_language
+                "baseUrl" -> R.string.hayai_custom_source_field_base_url
+                "popularPath" -> R.string.hayai_custom_source_field_popular_path
+                "searchPath" -> R.string.hayai_custom_source_field_search_path
+                "list.item" -> R.string.hayai_custom_source_field_list_item
+                "list.title" -> R.string.hayai_custom_source_field_list_title
+                "list.link" -> R.string.hayai_custom_source_field_list_link
+                "details.title" -> R.string.hayai_custom_source_field_details_title
+                "chapters.item" -> R.string.hayai_custom_source_field_chapter_item
+                "chapters.title" -> R.string.hayai_custom_source_field_chapter_title
+                "chapters.link" -> R.string.hayai_custom_source_field_chapter_link
+                "content.body" -> R.string.hayai_custom_source_field_content_body
+                else -> error("Unknown custom source field: $key")
+            },
+        )
+
+    private fun validationIssueText(issue: NovelSourceValidationIssue): String =
+        getString(
+            R.string.hayai_field_issue,
+            when (issue.field) {
+                "content.remove" -> getString(R.string.hayai_custom_source_field_content_remove)
+                "headers" -> getString(R.string.hayai_custom_source_field_headers)
+                else -> fieldHint(issue.field)
+            },
+            getString(
+                when (issue.code) {
+                    NovelSourceValidationCode.InvalidId -> R.string.hayai_custom_source_invalid_id
+                    NovelSourceValidationCode.InvalidName -> R.string.hayai_custom_source_invalid_name
+                    NovelSourceValidationCode.InvalidLanguage -> R.string.hayai_custom_source_invalid_language
+                    NovelSourceValidationCode.InvalidBaseUrl -> R.string.hayai_custom_source_invalid_base_url
+                    NovelSourceValidationCode.InvalidPath -> R.string.hayai_custom_source_invalid_path
+                    NovelSourceValidationCode.MissingQueryPlaceholder -> R.string.hayai_custom_source_query_required
+                    NovelSourceValidationCode.InvalidSelector -> R.string.hayai_custom_source_invalid_selector
+                    NovelSourceValidationCode.InvalidRemovalSelectors -> R.string.hayai_custom_source_invalid_remove_selectors
+                    NovelSourceValidationCode.InvalidHeaders -> R.string.hayai_custom_source_invalid_headers
+                    NovelSourceValidationCode.PreviewItemMissing -> R.string.hayai_custom_source_no_preview_item
+                    NovelSourceValidationCode.PreviewTitleMissing -> R.string.hayai_custom_source_preview_title_missing
+                    NovelSourceValidationCode.PreviewLinkMissing -> R.string.hayai_custom_source_preview_link_missing
+                },
+            ),
+        )
 
     companion object {
         const val EXTRA_DEFINITION = "hayai.custom_source_definition"

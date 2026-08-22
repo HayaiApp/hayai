@@ -1,5 +1,6 @@
 package dev.ahmedmohamed.hayai.novel.settings
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -175,12 +176,12 @@ object NovelRegexSafety {
     private val nestedQuantifier = Regex("\\([^)]*[+*}]\\s*\\)[+*{]")
     private val numericBackReference = Regex("\\\\[1-9]")
 
-    fun rejectionReason(pattern: String): String? =
+    fun rejectionReason(pattern: String): NovelFailure.Code? =
         when {
-            pattern.length > 512 -> "Regular expressions are limited to 512 characters"
-            numericBackReference.containsMatchIn(pattern) -> "Backreferences are not supported because they can stall large chapters"
-            nestedQuantifier.containsMatchIn(pattern) -> "Nested repetition is not supported because it can stall large chapters"
-            runCatching { Regex(pattern) }.isFailure -> "Invalid regular expression"
+            pattern.length > 512 -> NovelFailure.Code.ReplacementPatternTooLong
+            numericBackReference.containsMatchIn(pattern) -> NovelFailure.Code.ReplacementBackreference
+            nestedQuantifier.containsMatchIn(pattern) -> NovelFailure.Code.ReplacementNestedRepetition
+            runCatching { Regex(pattern) }.isFailure -> NovelFailure.Code.ReplacementInvalidRegex
             else -> null
         }
 }
@@ -188,7 +189,7 @@ object NovelRegexSafety {
 object NovelReplacementEngine {
     fun apply(text: String, rule: NovelRegexReplacement): Result<String> = runCatching {
         if (!rule.enabled || rule.pattern.isBlank()) return@runCatching text
-        if (rule.isRegex) NovelRegexSafety.rejectionReason(rule.pattern)?.let(::error)
+        if (rule.isRegex) NovelRegexSafety.rejectionReason(rule.pattern)?.let { throw NovelFailure(it) }
         val source =
             if (rule.isRegex) {
                 rule.pattern

@@ -1,5 +1,8 @@
 package dev.ahmedmohamed.hayai.novel.download
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import dev.ahmedmohamed.hayai.novel.source.NovelContentType
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import kotlinx.coroutines.CancellationException
@@ -72,18 +75,18 @@ class NovelDownloadStore(
         document: NovelDocument,
         assetResolver: NovelDownloadAssetResolver?,
     ): NovelDownloadResult {
-        require(chapterUrl.isNotBlank()) { "A chapter URL is required for offline storage." }
+        novelRequire(chapterUrl.isNotBlank(), NovelFailure.Code.OfflineChapterUrl)
         ensureRoot()
         val references = NovelAssetReferences.extract(document)
         val offlinePaths = references.associateWith { reference -> "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}" }
         val offlineDocument = NovelAssetReferences.rewrite(document, offlinePaths)
         val documentBytes = offlineDocument.content.toByteArray(Charsets.UTF_8)
-        require(documentBytes.size <= MAX_DOCUMENT_BYTES) { "Novel chapter text exceeds the offline size limit." }
+        novelRequire(documentBytes.size <= MAX_DOCUMENT_BYTES, NovelFailure.Code.OfflineTextTooLarge)
         val key = chapterKey(sourceId, chapterUrl)
         val staging = File(root, ".$key.tmp-${UUID.randomUUID()}")
         val target = File(root, key)
         val backup = File(root, ".$key.bak-${UUID.randomUUID()}")
-        check(staging.mkdir()) { "Unable to create the novel download staging directory." }
+        novelRequire(staging.mkdir(), NovelFailure.Code.OfflineStaging)
 
         try {
             val documentFile = File(staging, DOCUMENT_FILE)
@@ -159,12 +162,12 @@ class NovelDownloadStore(
         backup: File,
     ) {
         val hadTarget = target.exists()
-        if (hadTarget && !target.renameTo(backup)) error("Unable to preserve the previous novel download.")
+        if (hadTarget && !target.renameTo(backup)) novelFailure(NovelFailure.Code.OfflinePreservePrevious)
         if (!staging.renameTo(target)) {
             if (hadTarget && !backup.renameTo(target)) {
-                error("Unable to publish the novel download; the previous copy remains in ${backup.name}.")
+                novelFailure(NovelFailure.Code.OfflinePublishPreserved, backup.name)
             }
-            error("Unable to publish the novel download.")
+            novelFailure(NovelFailure.Code.OfflinePublish)
         }
         backup.deleteRecursivelyWithin(root)
     }
@@ -175,7 +178,7 @@ class NovelDownloadStore(
         perAssetLimit: Long,
         totalRemaining: Long,
     ): CopiedAsset {
-        require(totalRemaining > 0) { "Novel chapter assets exceed the offline size limit." }
+        novelRequire(totalRemaining > 0, NovelFailure.Code.OfflineAssetsTooLarge)
         val digest = MessageDigest.getInstance("SHA-256")
         var size = 0L
         DigestInputStream(input, digest).use { source ->
@@ -185,7 +188,7 @@ class NovelDownloadStore(
                     val read = source.read(buffer)
                     if (read < 0) break
                     size += read
-                    require(size <= perAssetLimit && size <= totalRemaining) { "Novel chapter assets exceed the offline size limit." }
+                    novelRequire(size <= perAssetLimit && size <= totalRemaining, NovelFailure.Code.OfflineAssetsTooLarge)
                     output.write(buffer, 0, read)
                 }
                 output.fd.sync()

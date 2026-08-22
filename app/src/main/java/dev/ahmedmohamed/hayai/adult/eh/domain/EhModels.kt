@@ -1,29 +1,43 @@
 package dev.ahmedmohamed.hayai.adult.eh.domain
 
+enum class EhFailureReason {
+    AuthenticationRequired,
+    AccessDenied,
+    GalleryNotFound,
+    QuotaExceeded,
+    RateLimited,
+    RemoteWarning,
+    MalformedResponse,
+    BoundsExceeded,
+    Network,
+}
+
 sealed class EhFailure(
-    message: String,
+    val reason: EhFailureReason,
+    diagnostic: String? = null,
     cause: Throwable? = null,
-) : RuntimeException(message, cause) {
-    class AuthenticationRequired(message: String = "E-Hentai authentication is required") : EhFailure(message)
+) : RuntimeException(diagnostic ?: reason.name, cause) {
+    class AuthenticationRequired(diagnostic: String? = null) : EhFailure(EhFailureReason.AuthenticationRequired, diagnostic)
 
-    class AccessDenied(message: String) : EhFailure(message)
+    class AccessDenied(diagnostic: String? = null) : EhFailure(EhFailureReason.AccessDenied, diagnostic)
 
-    class GalleryNotFound(val key: GalleryKey? = null) : EhFailure("E-Hentai gallery was not found")
+    class GalleryNotFound(val key: GalleryKey? = null) : EhFailure(EhFailureReason.GalleryNotFound)
 
-    class QuotaExceeded : EhFailure("E-Hentai image quota was exceeded")
+    class QuotaExceeded : EhFailure(EhFailureReason.QuotaExceeded)
 
     class RateLimited(
-        message: String,
+        diagnostic: String? = null,
         val retryAfterSeconds: Long? = null,
-    ) : EhFailure(message)
+    ) : EhFailure(EhFailureReason.RateLimited, diagnostic)
 
-    class RemoteWarning(message: String) : EhFailure(message)
+    class RemoteWarning(val remoteMessage: String) : EhFailure(EhFailureReason.RemoteWarning, remoteMessage)
 
-    class MalformedDocument(message: String, cause: Throwable? = null) : EhFailure(message, cause)
+    class MalformedDocument(diagnostic: String, cause: Throwable? = null) :
+        EhFailure(EhFailureReason.MalformedResponse, diagnostic, cause)
 
-    class BoundsExceeded(message: String) : EhFailure(message)
+    class BoundsExceeded(diagnostic: String) : EhFailure(EhFailureReason.BoundsExceeded, diagnostic)
 
-    class Network(message: String, cause: Throwable? = null) : EhFailure(message, cause)
+    class Network(diagnostic: String, cause: Throwable? = null) : EhFailure(EhFailureReason.Network, diagnostic, cause)
 }
 
 enum class EhCategory(val exclusionBit: Int) {

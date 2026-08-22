@@ -1,5 +1,6 @@
 package dev.ahmedmohamed.hayai.adult.eh.source
 
+import android.content.Context
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhJumpTarget
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchSpec
@@ -7,55 +8,76 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagMode
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagTerm
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhToplist
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 
-internal class EhToplistFilter : Filter.Select<String>("Toplist", arrayOf("None", "All time", "Past year", "Past month", "Yesterday"))
-internal class EhWatchedFilter(state: Boolean) : Filter.CheckBox("Watched list", state)
-internal class EhCategoryFilter(val category: EhCategory, state: Boolean) :
-    Filter.CheckBox(category.name.replace("Cg", " CG").replace("NonH", "Non-H"), state)
-internal class EhCategoriesFilter(excluded: Set<EhCategory>) :
-    Filter.Group<EhCategoryFilter>("Categories to exclude", EhCategory.entries.map { EhCategoryFilter(it, it in excluded) })
-internal class EhTagFilter : Filter.Text("Tags (supports namespace, -, ~, and OR)")
-internal class EhExpungedFilter : Filter.CheckBox("Browse expunged galleries")
-internal class EhTorrentFilter : Filter.CheckBox("Require gallery torrent")
-internal class EhRatingFilter : Filter.Select<String>("Minimum rating", arrayOf("Any", "2", "3", "4", "5"))
-internal class EhMinimumPagesFilter : Filter.Text("Minimum pages")
-internal class EhMaximumPagesFilter : Filter.Text("Maximum pages")
-internal class EhDisableLanguageFilter : Filter.CheckBox("Disable language filter")
-internal class EhDisableUploaderFilter : Filter.CheckBox("Disable uploader filter")
-internal class EhDisableTagFilter : Filter.CheckBox("Disable tag filter")
-internal class EhReverseFilter : Filter.CheckBox("Reverse results")
-internal class EhJumpFilter : Filter.Text("Jump or seek (date, year, 7d, 2w, 3m)")
+internal class EhToplistFilter(context: Context) : Filter.Select<String>(
+    context.getString(R.string.hayai_eh_filter_toplist),
+    arrayOf(
+        context.getString(R.string.none),
+        context.getString(R.string.hayai_eh_filter_all_time),
+        context.getString(R.string.hayai_eh_filter_past_year),
+        context.getString(R.string.hayai_eh_filter_past_month),
+        context.getString(R.string.hayai_eh_filter_yesterday),
+    ),
+)
+internal class EhWatchedFilter(context: Context, state: Boolean) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_watched_list), state)
+internal class EhCategoryFilter(context: Context, val category: EhCategory, state: Boolean) :
+    Filter.CheckBox(category.localizedName(context), state)
+internal class EhCategoriesFilter(context: Context, excluded: Set<EhCategory>) :
+    Filter.Group<EhCategoryFilter>(
+        context.getString(R.string.hayai_eh_filter_categories_exclude),
+        EhCategory.entries.map { EhCategoryFilter(context, it, it in excluded) },
+    )
+internal class EhTagFilter(context: Context) : Filter.Text(context.getString(R.string.hayai_eh_filter_tags))
+internal class EhExpungedFilter(context: Context) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_expunged))
+internal class EhTorrentFilter(context: Context) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_torrent))
+internal class EhRatingFilter(context: Context) : Filter.Select<String>(
+    context.getString(R.string.hayai_eh_filter_minimum_rating),
+    arrayOf(context.getString(R.string.hayai_eh_filter_any), "2", "3", "4", "5"),
+)
+internal class EhMinimumPagesFilter(context: Context) : Filter.Text(context.getString(R.string.hayai_eh_filter_minimum_pages))
+internal class EhMaximumPagesFilter(context: Context) : Filter.Text(context.getString(R.string.hayai_eh_filter_maximum_pages))
+internal class EhDisableLanguageFilter(context: Context) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_disable_language))
+internal class EhDisableUploaderFilter(context: Context) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_disable_uploader))
+internal class EhDisableTagFilter(context: Context) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_disable_tag))
+internal class EhReverseFilter(context: Context) : Filter.CheckBox(context.getString(R.string.hayai_eh_filter_reverse))
+internal class EhJumpFilter(context: Context) : Filter.Text(context.getString(R.string.hayai_eh_filter_jump))
 
-internal fun ehFilterList(preferences: EhPreferences): FilterList = FilterList(
-    Filter.Header("A selected toplist ignores the query and other filters"),
-    EhToplistFilter(),
-    EhWatchedFilter(preferences.watchedListDefault.get()),
-    EhCategoriesFilter(preferences.excludedCategories()),
-    EhTagFilter(),
-    EhExpungedFilter(),
-    EhTorrentFilter(),
-    EhRatingFilter(),
-    EhMinimumPagesFilter(),
-    EhMaximumPagesFilter(),
-    EhDisableLanguageFilter(),
-    EhDisableUploaderFilter(),
-    EhDisableTagFilter(),
-    EhReverseFilter(),
-    EhJumpFilter(),
+internal fun ehFilterList(context: Context, preferences: EhPreferences): FilterList = FilterList(
+    Filter.Header(context.getString(R.string.hayai_eh_filter_toplist_warning)),
+    EhToplistFilter(context),
+    EhWatchedFilter(context, preferences.watchedListDefault.get()),
+    EhCategoriesFilter(context, preferences.excludedCategories()),
+    EhTagFilter(context),
+    EhExpungedFilter(context),
+    EhTorrentFilter(context),
+    EhRatingFilter(context),
+    EhMinimumPagesFilter(context),
+    EhMaximumPagesFilter(context),
+    EhDisableLanguageFilter(context),
+    EhDisableUploaderFilter(context),
+    EhDisableTagFilter(context),
+    EhReverseFilter(context),
+    EhJumpFilter(context),
 )
 
-internal fun FilterList.toEhSpec(query: String): EhSearchSpec {
+internal fun FilterList.toEhSpec(query: String, context: Context): EhSearchSpec {
     fun <T : Filter<*>> one(type: Class<T>): T? = firstOrNull { type.isInstance(it) }?.let(type::cast)
     val toplist = EhToplist.entries.getOrElse(one(EhToplistFilter::class.java)?.state ?: 0) { EhToplist.None }
     if (toplist != EhToplist.None) return EhSearchSpec(toplist = toplist)
-    val minimum = one(EhMinimumPagesFilter::class.java)?.state?.trim()?.takeIf(String::isNotEmpty)?.toIntOrNull()
-    val maximum = one(EhMaximumPagesFilter::class.java)?.state?.trim()?.takeIf(String::isNotEmpty)?.toIntOrNull()
-    val jump = one(EhJumpFilter::class.java)?.state?.trim()?.takeIf(String::isNotEmpty)?.let(EhJumpTarget::parse)
+    require(query.length <= 1_024) { context.getString(R.string.hayai_eh_filter_query_too_long) }
+    require(query.none(Char::isISOControl)) { context.getString(R.string.hayai_eh_filter_query_control_character) }
+    val minimum = one(EhMinimumPagesFilter::class.java)?.state.toPageCount(context, R.string.hayai_eh_filter_minimum_pages_invalid)
+    val maximum = one(EhMaximumPagesFilter::class.java)?.state.toPageCount(context, R.string.hayai_eh_filter_maximum_pages_invalid)
+    require(minimum == null || maximum == null || minimum <= maximum) { context.getString(R.string.hayai_eh_filter_page_range_invalid) }
+    val jump = one(EhJumpFilter::class.java)?.state?.trim()?.takeIf(String::isNotEmpty)?.let { value ->
+        runCatching { EhJumpTarget.parse(value) }.getOrElse { throw IllegalArgumentException(context.getString(R.string.hayai_eh_filter_invalid_jump), it) }
+    }
     return EhSearchSpec(
         query = query,
-        tags = parseTags(one(EhTagFilter::class.java)?.state.orEmpty()),
+        tags = parseTags(one(EhTagFilter::class.java)?.state.orEmpty(), context),
         watched = one(EhWatchedFilter::class.java)?.state == true,
         excludedCategories = one(EhCategoriesFilter::class.java)?.state.orEmpty().filter { it.state }.mapTo(linkedSetOf()) { it.category },
         browseExpunged = one(EhExpungedFilter::class.java)?.state == true,
@@ -71,7 +93,7 @@ internal fun FilterList.toEhSpec(query: String): EhSearchSpec {
     )
 }
 
-private fun parseTags(input: String): List<EhTagTerm> {
+private fun parseTags(input: String, context: Context): List<EhTagTerm> {
     val terms = Regex("(?:\\\"[^\\\"]+\\\"|\\S+)").findAll(input.trim()).map { match ->
         var value = match.value.trim().removeSurrounding("\"")
         val mode = when {
@@ -81,9 +103,22 @@ private fun parseTags(input: String): List<EhTagTerm> {
         }
         val namespace = value.substringBefore(':', "").takeIf(String::isNotBlank)
         val name = if (namespace == null) value else value.substringAfter(':')
-        require(name.isNotBlank()) { "A tag name is empty" }
+        require(name.isNotBlank()) { context.getString(R.string.hayai_eh_filter_empty_tag) }
         EhTagTerm(namespace, name, mode)
     }.toList()
-    require(terms.size <= 8) { "E-Hentai supports at most eight tag terms" }
+    require(terms.size <= 8) { context.getString(R.string.hayai_eh_filter_too_many_tags) }
     return terms
 }
+
+private fun String?.toPageCount(context: Context, message: Int): Int? {
+    val value = this?.trim()?.takeIf(String::isNotEmpty) ?: return null
+    return value.toIntOrNull()?.takeIf { it in 1..100_000 }
+        ?: throw IllegalArgumentException(context.getString(message))
+}
+
+private fun EhCategory.localizedName(context: Context): String =
+    name
+        .replace("Cg", context.getString(R.string.hayai_eh_category_cg))
+        .replace("NonH", context.getString(R.string.hayai_eh_category_non_h))
+        .replace("ImageSet", context.getString(R.string.hayai_eh_category_image_set))
+        .replace("AsianPorn", context.getString(R.string.hayai_eh_category_asian_porn))

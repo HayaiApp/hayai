@@ -16,7 +16,8 @@ class EhFavoritesProtocolTest {
         val categories = EhFavoritesHtmlParser.categories(html)
 
         assertEquals((0..9).toList(), categories.map { it.slot.value })
-        assertThrows(IllegalArgumentException::class.java) { EhFavoritesHtmlParser.categories(html.replace("Category 9", "")) }
+        val failure = assertThrows(EhFavoritesFailure::class.java) { EhFavoritesHtmlParser.categories(html.replace("Category 9", "")) }
+        assertEquals(EhFavoritesFailureReason.InvalidCategories, failure.reason)
     }
 
     @Test

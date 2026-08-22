@@ -24,6 +24,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.switchmaterial.SwitchMaterial
 import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
@@ -130,7 +131,9 @@ class NovelPluginManagerActivity : AppCompatActivity() {
     private fun render() {
         if (!::content.isInitialized) return
         progress.isVisible = latest.refreshing || actionInProgress != null
-        errorText.text = latest.repositoryErrors.entries.joinToString("\n") { (url, error) -> "$url: $error" }
+        errorText.text = latest.repositoryErrors.entries.joinToString("\n") { (url, error) ->
+            getString(R.string.hayai_repository_error, url, novelFailureMessage(error, R.string.unknown_error))
+        }
         errorText.isVisible = errorText.text.isNotBlank()
         content.removeAllViews()
         content.addView(sectionTitle(getString(R.string.hayai_novel_repositories)))
@@ -153,6 +156,7 @@ class NovelPluginManagerActivity : AppCompatActivity() {
         card().apply {
             addView(
                 TextView(context).apply {
+                    // localization-ignore: repository name and URL are runtime data; the newline is layout only.
                     text = "${repository.name}\n${repository.url}"
                     setTextIsSelectable(true)
                 },
@@ -251,7 +255,7 @@ class NovelPluginManagerActivity : AppCompatActivity() {
         val name = EditText(this).apply { hint = getString(R.string.name) }
         val url =
             EditText(this).apply {
-                hint = "https://example.org/plugins.json"
+                setHint(R.string.hayai_novel_plugin_repository_url_hint)
                 inputType = InputType.TYPE_TEXT_VARIATION_URI
             }
         form.addView(name, matchWidth())
@@ -277,7 +281,7 @@ class NovelPluginManagerActivity : AppCompatActivity() {
                     }.onSuccess {
                         dialog.dismiss()
                     }.onFailure {
-                        url.error = it.message ?: getString(R.string.unknown_error)
+                        url.error = novelFailureMessage(it, R.string.unknown_error)
                     }
                     actionInProgress = null
                     render()
@@ -300,7 +304,7 @@ class NovelPluginManagerActivity : AppCompatActivity() {
                     Toast
                         .makeText(
                             this@NovelPluginManagerActivity,
-                            it.message ?: getString(R.string.unknown_error),
+                            novelFailureMessage(it, R.string.unknown_error),
                             Toast.LENGTH_LONG,
                         ).show()
                 }

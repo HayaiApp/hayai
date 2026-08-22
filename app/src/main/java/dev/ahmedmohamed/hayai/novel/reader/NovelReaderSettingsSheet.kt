@@ -12,6 +12,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
@@ -45,11 +46,11 @@ internal class NovelReaderSettingsSheet(
     init {
         val tabs =
             listOf(
-                R.drawable.ic_text_fields_24dp to R.string.hayai_novel_tab_reader,
-                R.drawable.ic_palette_24dp to R.string.hayai_novel_tab_text,
+                R.drawable.ic_text_fields_24dp to R.string.reading,
+                R.drawable.ic_palette_24dp to R.string.appearance,
                 R.drawable.ic_swipe_24dp to R.string.hayai_novel_tab_layout,
                 R.drawable.ic_record_voice_over_24dp to R.string.hayai_novel_tab_tts,
-                R.drawable.ic_code_24dp to R.string.hayai_novel_tab_more,
+                R.drawable.ic_code_24dp to R.string.advanced,
             )
         tabs.forEachIndexed { index, (icon, label) ->
             binding.tabs.getTabAt(index)?.apply {
@@ -72,97 +73,97 @@ internal class NovelReaderSettingsSheet(
 
     override fun getTabTitles(): List<Int> =
         listOf(
-            R.string.hayai_novel_tab_reader,
-            R.string.hayai_novel_tab_text,
+            R.string.reading,
+            R.string.appearance,
             R.string.hayai_novel_tab_layout,
             R.string.hayai_novel_tab_tts,
-            R.string.hayai_novel_tab_more,
+            R.string.advanced,
         )
 
     private fun readerPage(page: LinearLayout) {
-        page.heading("Renderer")
-        page.choice("Reading engine", preferences.novelRenderingMode, listOf("Native text" to "default", "WebView" to "webview"), onStyleChanged)
+        page.heading(R.string.hayai_novel_reader_renderer)
+        page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingMode, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
         page.choice(
-            "Theme",
+            R.string.hayai_novel_reader_theme,
             preferences.novelTheme,
-            listOf("App" to "app", "Light" to "light", "Dark" to "dark", "Sepia" to "sepia", "Black" to "black", "Grey" to "grey", "Custom" to "custom"),
+            listOf(R.string.hayai_novel_reader_app to "app", R.string.hayai_novel_reader_light to "light", R.string.dark to "dark", R.string.hayai_novel_reader_sepia to "sepia", R.string.black to "black", R.string.hayai_novel_reader_grey to "grey", R.string.hayai_novel_reader_custom to "custom"),
             onStyleChanged,
         )
         page.choice(
-            "Tap zones",
+            R.string.tap_zones,
             preferences.novelNavigationMode,
-            listOf("Default" to 0, "L" to 1, "Kindlish" to 2, "Edge" to 3, "Left / right" to 4, "Disabled" to 5, "Center only" to 6),
+            listOf(R.string.default_value to 0, R.string.hayai_novel_reader_tap_zone_l to 1, R.string.hayai_novel_reader_tap_zone_kindlish to 2, R.string.edge_nav to 3, R.string.hayai_novel_reader_left_right to 4, R.string.disabled to 5, R.string.hayai_novel_reader_center_only to 6),
             onChromeChanged,
         )
         page.choice(
-            "Tap inversion",
+            R.string.hayai_novel_reader_tap_inversion,
             preferences.novelNavigationInverted,
-            listOf("None" to "NONE", "Horizontal" to "HORIZONTAL", "Vertical" to "VERTICAL", "Both" to "BOTH"),
+            listOf(R.string.none to "NONE", R.string.hayai_novel_reader_horizontal to "HORIZONTAL", R.string.vertical_viewer to "VERTICAL", R.string.hayai_novel_reader_both to "BOTH"),
             onChromeChanged,
         )
-        page.toggle("Tap to scroll", preferences.novelTapToScroll)
-        page.toggle("Swipe between chapters", preferences.novelSwipeNavigation)
-        page.toggle("Volume keys scroll", preferences.novelVolumeKeysScroll)
-        page.toggle("Keep screen on", preferences.novelKeepScreenOn, onChromeChanged)
-        page.toggle("Fullscreen", preferences.novelFullscreen, onChromeChanged)
-        page.toggle("Infinite scroll", preferences.novelInfiniteScroll, onStyleChanged)
-        page.slider("Load next chapter at", preferences.novelAutoLoadNextChapterAt, 50, 100, "%", onStyleChanged)
-        page.slider("Mark chapter read at", preferences.novelMarkAsReadThreshold, 50, 100, "%")
-        page.toggle("Mark short chapters read", preferences.novelMarkShortChapterAsRead)
-        page.toggle("Split long text blocks", preferences.novelAutoSplitText, onStyleChanged)
-        page.slider("Split after words", preferences.novelAutoSplitWordCount, 20, 200, "words", onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_tap_to_scroll, preferences.novelTapToScroll)
+        page.toggle(R.string.hayai_novel_reader_swipe_between_chapters, preferences.novelSwipeNavigation)
+        page.toggle(R.string.hayai_novel_reader_volume_keys_scroll, preferences.novelVolumeKeysScroll)
+        page.toggle(R.string.keep_screen_on, preferences.novelKeepScreenOn, onChromeChanged)
+        page.toggle(R.string.fullscreen, preferences.novelFullscreen, onChromeChanged)
+        page.toggle(R.string.hayai_novel_reader_infinite_scroll, preferences.novelInfiniteScroll, onStyleChanged)
+        page.slider(R.string.hayai_novel_reader_load_next_at, preferences.novelAutoLoadNextChapterAt, 50, 100, R.string.hayai_novel_reader_percent_value, onStyleChanged)
+        page.slider(R.string.hayai_novel_reader_mark_read_at, preferences.novelMarkAsReadThreshold, 50, 100, R.string.hayai_novel_reader_percent_value)
+        page.toggle(R.string.hayai_novel_reader_mark_short_read, preferences.novelMarkShortChapterAsRead)
+        page.toggle(R.string.hayai_novel_reader_split_blocks, preferences.novelAutoSplitText, onStyleChanged)
+        page.slider(R.string.hayai_novel_reader_split_after_words, preferences.novelAutoSplitWordCount, 20, 200, R.string.hayai_novel_reader_word_value, onStyleChanged)
     }
 
     private fun textPage(page: LinearLayout) {
-        page.heading("Typography")
-        page.slider("Font size", preferences.novelFontSize, 8, 72, "sp", onStyleChanged)
-        page.choice("Font", preferences.novelFontFamily, listOf("Sans serif" to "sans-serif", "Serif" to "serif", "Monospace" to "monospace"), onStyleChanged)
-        page.button("Import a font file") { onAction(NovelReaderAction.ImportFont) }
-        page.button("Choose or delete imported fonts") { onAction(NovelReaderAction.ManageFonts) }
-        page.choice("Alignment", preferences.novelTextAlign, listOf("Left" to "left", "Justified" to "justify", "Center" to "center", "Right" to "right"), onStyleChanged)
-        page.toggle("Selectable text", preferences.novelTextSelectable, onStyleChanged)
-        page.toggle("Force lowercase", preferences.novelForceTextLowercase, onStyleChanged)
-        page.toggle("Use source fonts", preferences.novelUseOriginalFonts, onStyleChanged)
-        page.sliderFloat("Line height", preferences.novelLineHeight, 8, 30, 10f, onStyleChanged)
-        page.sliderFloat("Paragraph indent", preferences.novelParagraphIndent, 0, 100, 10f, onStyleChanged)
-        page.sliderFloat("Paragraph spacing", preferences.novelParagraphSpacing, 0, 50, 10f, onStyleChanged)
-        page.button("Text color") { editColor("Text color", preferences.novelFontColor, onStyleChanged) }
-        page.button("Background color") { editColor("Background color", preferences.novelBackgroundColor, onStyleChanged) }
-        page.toggle("Custom brightness", preferences.novelCustomBrightness, onChromeChanged)
-        page.slider("Brightness adjustment", preferences.novelCustomBrightnessValue, -75, 100, "%", onChromeChanged)
+        page.heading(R.string.hayai_novel_reader_typography)
+        page.slider(R.string.hayai_novel_reader_font_size, preferences.novelFontSize, 8, 72, R.string.hayai_novel_reader_sp_value, onStyleChanged)
+        page.choice(R.string.hayai_novel_reader_font, preferences.novelFontFamily, listOf(R.string.hayai_novel_reader_sans_serif to "sans-serif", R.string.hayai_novel_reader_serif to "serif", R.string.hayai_novel_reader_monospace to "monospace"), onStyleChanged)
+        page.button(R.string.hayai_novel_reader_import_font_file) { onAction(NovelReaderAction.ImportFont) }
+        page.button(R.string.hayai_novel_reader_manage_imported_fonts) { onAction(NovelReaderAction.ManageFonts) }
+        page.choice(R.string.hayai_novel_reader_alignment, preferences.novelTextAlign, listOf(R.string.left to "left", R.string.hayai_novel_reader_justified to "justify", R.string.center to "center", R.string.right to "right"), onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_selectable_text, preferences.novelTextSelectable, onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_force_lowercase, preferences.novelForceTextLowercase, onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_use_source_fonts, preferences.novelUseOriginalFonts, onStyleChanged)
+        page.sliderFloat(R.string.hayai_novel_reader_line_height, preferences.novelLineHeight, 8, 30, 10f, onStyleChanged)
+        page.sliderFloat(R.string.hayai_novel_reader_paragraph_indent, preferences.novelParagraphIndent, 0, 100, 10f, onStyleChanged)
+        page.sliderFloat(R.string.hayai_novel_reader_paragraph_spacing, preferences.novelParagraphSpacing, 0, 50, 10f, onStyleChanged)
+        page.button(R.string.hayai_novel_reader_text_color) { editColor(R.string.hayai_novel_reader_text_color, preferences.novelFontColor, onStyleChanged) }
+        page.button(R.string.background_color) { editColor(R.string.background_color, preferences.novelBackgroundColor, onStyleChanged) }
+        page.toggle(R.string.hayai_novel_reader_custom_brightness, preferences.novelCustomBrightness, onChromeChanged)
+        page.slider(R.string.hayai_novel_reader_brightness_adjustment, preferences.novelCustomBrightnessValue, -75, 100, R.string.hayai_novel_reader_percent_value, onChromeChanged)
     }
 
     private fun layoutPage(page: LinearLayout) {
-        page.heading("Page")
-        page.slider("Left margin", preferences.novelMarginLeft, 0, 100, "dp", onStyleChanged)
-        page.slider("Right margin", preferences.novelMarginRight, 0, 100, "dp", onStyleChanged)
-        page.slider("Top margin", preferences.novelMarginTop, 0, 150, "dp", onStyleChanged)
-        page.slider("Bottom margin", preferences.novelMarginBottom, 0, 150, "dp", onStyleChanged)
+        page.heading(R.string.hayai_novel_reader_page)
+        page.slider(R.string.hayai_novel_reader_left_margin, preferences.novelMarginLeft, 0, 100, R.string.hayai_novel_reader_dp_value, onStyleChanged)
+        page.slider(R.string.hayai_novel_reader_right_margin, preferences.novelMarginRight, 0, 100, R.string.hayai_novel_reader_dp_value, onStyleChanged)
+        page.slider(R.string.hayai_novel_reader_top_margin, preferences.novelMarginTop, 0, 150, R.string.hayai_novel_reader_dp_value, onStyleChanged)
+        page.slider(R.string.hayai_novel_reader_bottom_margin, preferences.novelMarginBottom, 0, 150, R.string.hayai_novel_reader_dp_value, onStyleChanged)
         progressMode(page)
-        page.choice("Preload chapters", preferences.novelKeepChaptersLoaded, listOf("Current only" to 0, "Previous" to 1, "Next" to 2, "Both" to 3), onStyleChanged)
-        page.choice("Vertical progress size", preferences.novelVerticalProgressSliderSize, listOf("Half screen" to "half", "Full screen" to "full"), onChromeChanged)
-        page.toggle("Novel status bar", preferences.novelStatusBarEnabled, onChromeChanged)
-        page.choice("Status position", preferences.novelStatusBarPosition, listOf("Top" to "top", "Bottom" to "bottom"), onChromeChanged)
-        page.choice("Status size", preferences.novelStatusBarSize, listOf("Small" to "small", "Medium" to "medium"), onChromeChanged)
+        page.choice(R.string.hayai_novel_reader_preload_chapters, preferences.novelKeepChaptersLoaded, listOf(R.string.hayai_novel_reader_current_only to 0, R.string.previous to 1, R.string.next to 2, R.string.hayai_novel_reader_both to 3), onStyleChanged)
+        page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
+        page.toggle(R.string.hayai_novel_reader_novel_status_bar, preferences.novelStatusBarEnabled, onChromeChanged)
+        page.choice(R.string.hayai_novel_reader_status_position, preferences.novelStatusBarPosition, listOf(R.string.top to "top", R.string.bottom to "bottom"), onChromeChanged)
+        page.choice(R.string.hayai_novel_reader_status_size, preferences.novelStatusBarSize, listOf(R.string.hayai_novel_reader_small to "small", R.string.hayai_novel_reader_medium to "medium"), onChromeChanged)
     }
 
     private fun ttsPage(page: LinearLayout) {
-        page.heading("Read aloud")
-        page.sliderFloat("Speed", preferences.novelTtsSpeed, 5, 60, 10f)
-        page.sliderFloat("Pitch", preferences.novelTtsPitch, 5, 60, 10f)
-        page.button("Choose installed voice") { chooseVoice() }
-        page.toggle("Continue to next chapter", preferences.novelTtsAutoNextChapter)
-        page.toggle("Highlight spoken paragraph", preferences.novelTtsEnableHighlight)
-        page.toggle("Keep highlight in view", preferences.novelTtsKeepHighlightInView)
-        page.choice("Highlight style", preferences.novelTtsHighlightStyle, listOf("Background" to "background", "Underline" to "underline", "Outline" to "outline"), onStyleChanged)
-        page.toggle("Background playback", preferences.novelTtsBackgroundPlayback)
-        page.toggle("Show paragraph controls", preferences.novelTtsControlsVisible, onChromeChanged)
-        page.toggle("Start when TTS panel opens", preferences.novelTtsAutoStartOnPanelOpen)
-        page.button("Read from visible paragraph") { onAction(NovelReaderAction.StartTtsAtViewport) }
+        page.heading(R.string.hayai_novel_reader_read_aloud)
+        page.sliderFloat(R.string.hayai_novel_reader_speed, preferences.novelTtsSpeed, 5, 60, 10f)
+        page.sliderFloat(R.string.hayai_novel_reader_pitch, preferences.novelTtsPitch, 5, 60, 10f)
+        page.button(R.string.hayai_novel_reader_choose_voice) { chooseVoice() }
+        page.toggle(R.string.hayai_novel_reader_continue_next, preferences.novelTtsAutoNextChapter)
+        page.toggle(R.string.hayai_novel_reader_highlight_spoken, preferences.novelTtsEnableHighlight)
+        page.toggle(R.string.hayai_novel_reader_keep_highlight_view, preferences.novelTtsKeepHighlightInView)
+        page.choice(R.string.hayai_novel_reader_highlight_style, preferences.novelTtsHighlightStyle, listOf(R.string.hayai_novel_reader_background to "background", R.string.hayai_novel_reader_underline to "underline", R.string.hayai_novel_reader_outline to "outline"), onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_background_playback, preferences.novelTtsBackgroundPlayback)
+        page.toggle(R.string.hayai_novel_reader_show_paragraph_controls, preferences.novelTtsControlsVisible, onChromeChanged)
+        page.toggle(R.string.hayai_novel_reader_start_tts_panel, preferences.novelTtsAutoStartOnPanelOpen)
+        page.button(R.string.hayai_novel_reader_read_visible) { onAction(NovelReaderAction.StartTtsAtViewport) }
     }
 
     private fun progressMode(page: LinearLayout) {
-        val values = listOf("None", "Horizontal", "Vertical left", "Vertical right")
+        val values = listOf(R.string.none, R.string.hayai_novel_reader_horizontal, R.string.hayai_novel_reader_vertical_left, R.string.hayai_novel_reader_vertical_right)
         val current =
             when {
                 !preferences.novelShowProgressSlider.get() -> 0
@@ -170,12 +171,12 @@ internal class NovelReaderSettingsSheet(
                 preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
                 else -> 3
             }
-        page.addView(TextView(context).apply { text = "Progress mode"; setPadding(0, 12.dp, 0, 4.dp) })
+        page.addView(TextView(context).apply { setText(R.string.hayai_novel_reader_progress_mode); setPadding(0, 12.dp, 0, 4.dp) })
         val chips = ChipGroup(context).apply { isSingleSelection = true; isSelectionRequired = true; isSingleLine = true }
         values.forEachIndexed { selection, label ->
             chips.addView(
                 Chip(context).apply {
-                    text = label
+                    setText(label)
                     isCheckable = true
                     isChecked = selection == current
                     setOnClickListener {
@@ -193,27 +194,27 @@ internal class NovelReaderSettingsSheet(
     }
 
     private fun morePage(page: LinearLayout) {
-        page.heading("Content")
-        page.toggle("Use EPUB styles", preferences.novelEnableEpubStyles, onStyleChanged)
-        page.toggle("Allow trusted EPUB JavaScript", preferences.novelEnableEpubJs, onStyleChanged)
-        page.toggle("Prefer source CSS", preferences.novelSourceCssPriority, onStyleChanged)
-        page.toggle("Block embedded media", preferences.novelBlockMedia, onStyleChanged)
-        page.toggle("Show raw HTML", preferences.novelShowRawHtml, onStyleChanged)
-        page.toggle("WebView developer tools", preferences.novelWebViewDevTools)
-        page.toggle("Show WebView console errors", preferences.novelConsoleErrorToast)
-        page.heading("Bottom actions")
+        page.heading(R.string.hayai_novel_reader_content)
+        page.toggle(R.string.hayai_novel_reader_use_epub_styles, preferences.novelEnableEpubStyles, onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_allow_trusted_epub_js, preferences.novelEnableEpubJs, onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_prefer_source_css, preferences.novelSourceCssPriority, onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_block_media, preferences.novelBlockMedia, onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_show_raw_html, preferences.novelShowRawHtml, onStyleChanged)
+        page.toggle(R.string.hayai_novel_reader_webview_tools, preferences.novelWebViewDevTools)
+        page.toggle(R.string.hayai_novel_reader_webview_errors, preferences.novelConsoleErrorToast)
+        page.heading(R.string.hayai_novel_reader_bottom_actions)
         bottomActionEditor(page)
-        page.heading("Status order")
+        page.heading(R.string.hayai_novel_reader_status_order)
         statusEditor(page)
-        page.heading("Chapter tools")
-        page.button("Save selected quote") { onAction(NovelReaderAction.SaveQuote) }
-        page.button("Highlights") { onAction(NovelReaderAction.ShowHighlights) }
-        page.button("Dictionary lookup") { onAction(NovelReaderAction.DictionaryLookup) }
-        page.button("Translate chapter") { onAction(NovelReaderAction.TranslateChapter) }
-        page.button("Chapter statistics") { onAction(NovelReaderAction.ShowStatistics) }
-        page.button("Save or remove offline copy") { onAction(NovelReaderAction.ToggleOffline) }
-        page.button("Toggle chapter bookmark") { onAction(NovelReaderAction.ToggleBookmark) }
-        page.button("Edit chapter text") { onAction(NovelReaderAction.ToggleEditMode) }
+        page.heading(R.string.hayai_novel_reader_chapter_tools)
+        page.button(R.string.hayai_novel_reader_save_selected_quote) { onAction(NovelReaderAction.SaveQuote) }
+        page.button(R.string.hayai_novel_reader_highlights) { onAction(NovelReaderAction.ShowHighlights) }
+        page.button(R.string.hayai_novel_reader_dictionary_lookup) { onAction(NovelReaderAction.DictionaryLookup) }
+        page.button(R.string.hayai_novel_reader_translate_chapter) { onAction(NovelReaderAction.TranslateChapter) }
+        page.button(R.string.hayai_novel_reader_chapter_statistics) { onAction(NovelReaderAction.ShowStatistics) }
+        page.button(R.string.hayai_novel_reader_toggle_offline) { onAction(NovelReaderAction.ToggleOffline) }
+        page.button(R.string.hayai_novel_reader_toggle_bookmark) { onAction(NovelReaderAction.ToggleBookmark) }
+        page.button(R.string.hayai_novel_reader_edit_chapter_text) { onAction(NovelReaderAction.ToggleEditMode) }
     }
 
     private fun page(content: LinearLayout.() -> Unit): NestedScrollView =
@@ -228,10 +229,10 @@ internal class NovelReaderSettingsSheet(
             )
         }
 
-    private fun LinearLayout.heading(text: String) {
+    private fun LinearLayout.heading(@StringRes textRes: Int) {
         addView(
             TextView(context).apply {
-                this.text = text
+                setText(textRes)
                 textSize = 15f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(context.getResourceColor(R.attr.colorPrimary))
@@ -240,10 +241,10 @@ internal class NovelReaderSettingsSheet(
         )
     }
 
-    private fun LinearLayout.toggle(label: String, preference: Preference<Boolean>, changed: () -> Unit = {}) {
+    private fun LinearLayout.toggle(@StringRes labelRes: Int, preference: Preference<Boolean>, changed: () -> Unit = {}) {
         addView(
             MaterialSwitch(context).apply {
-                text = label
+                setText(labelRes)
                 textSize = 15f
                 isChecked = preference.get()
                 minHeight = 48.dp
@@ -257,12 +258,12 @@ internal class NovelReaderSettingsSheet(
         )
     }
 
-    private fun <T> LinearLayout.choice(label: String, preference: Preference<T>, values: List<Pair<String, T>>, changed: () -> Unit = {}) {
+    private fun <T> LinearLayout.choice(@StringRes labelRes: Int, preference: Preference<T>, values: List<Pair<Int, T>>, changed: () -> Unit = {}) {
         val selected = values.indexOfFirst { it.second == preference.get() }.coerceAtLeast(0)
         addView(
             MaterialSpinnerView(context, null).apply {
-                title = label
-                setEntries(values.map { it.first })
+                title = context.getString(labelRes)
+                setEntries(values.map { context.getString(it.first) })
                 setSelection(selected)
                 onItemSelectedListener = { position ->
                     val value = values[position].second
@@ -276,9 +277,9 @@ internal class NovelReaderSettingsSheet(
         )
     }
 
-    private fun LinearLayout.slider(label: String, preference: Preference<Int>, min: Int, max: Int, suffix: String, changed: () -> Unit = {}) {
-        val valueText = sliderHeader(label)
-        fun update(value: Int) { valueText.text = "$value $suffix" }
+    private fun LinearLayout.slider(@StringRes labelRes: Int, preference: Preference<Int>, min: Int, max: Int, @StringRes valueFormatRes: Int, changed: () -> Unit = {}) {
+        val valueText = sliderHeader(labelRes)
+        fun update(value: Int) { valueText.text = context.getString(valueFormatRes, value) }
         update(preference.get().coerceIn(min, max))
         addView(Slider(context).apply {
             valueFrom = min.toFloat()
@@ -296,9 +297,9 @@ internal class NovelReaderSettingsSheet(
         })
     }
 
-    private fun LinearLayout.sliderFloat(label: String, preference: Preference<Float>, min: Int, max: Int, scale: Float, changed: () -> Unit = {}) {
-        val valueText = sliderHeader(label)
-        fun update(value: Float) { valueText.text = "${"%.1f".format(value)}×" }
+    private fun LinearLayout.sliderFloat(@StringRes labelRes: Int, preference: Preference<Float>, min: Int, max: Int, scale: Float, changed: () -> Unit = {}) {
+        val valueText = sliderHeader(labelRes)
+        fun update(value: Float) { valueText.text = context.getString(R.string.hayai_novel_reader_multiplier_value, "%.1f".format(value)) }
         val initial = preference.get().coerceIn(min / scale, max / scale)
         update(initial)
         addView(Slider(context).apply {
@@ -316,10 +317,10 @@ internal class NovelReaderSettingsSheet(
         })
     }
 
-    private fun LinearLayout.button(label: String, action: () -> Unit) {
+    private fun LinearLayout.button(@StringRes labelRes: Int, action: () -> Unit) {
         addView(
             MaterialButton(context, null, android.R.attr.borderlessButtonStyle).apply {
-                text = label
+                setText(labelRes)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 minHeight = 48.dp
                 isAllCaps = false
@@ -330,7 +331,7 @@ internal class NovelReaderSettingsSheet(
         )
     }
 
-    private fun LinearLayout.sliderHeader(label: String): TextView {
+    private fun LinearLayout.sliderHeader(@StringRes labelRes: Int): TextView {
         val value = TextView(context).apply {
             textSize = 14f
             gravity = Gravity.END
@@ -341,7 +342,7 @@ internal class NovelReaderSettingsSheet(
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, 12.dp, 0, 0)
-                addView(TextView(context).apply { text = label; textSize = 15f }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(TextView(context).apply { setText(labelRes); textSize = 15f }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(value, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             },
             matchWrap(),
@@ -356,18 +357,18 @@ internal class NovelReaderSettingsSheet(
         }.setNegativeButton(android.R.string.cancel, null).show()
     }
 
-    private fun editColor(title: String, preference: Preference<Int>, changed: () -> Unit) {
+    private fun editColor(@StringRes titleRes: Int, preference: Preference<Int>, changed: () -> Unit) {
         val input = android.widget.EditText(context).apply {
             setSingleLine()
-            hint = "#AARRGGBB, blank for automatic"
+            hint = context.getString(R.string.hayai_novel_reader_color_hint)
             setText(preference.get().takeUnless { it == 0 }?.let { String.format("#%08X", it) }.orEmpty())
         }
-        val dialog = AlertDialog.Builder(context).setTitle(title).setView(input).setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
+        val dialog = AlertDialog.Builder(context).setTitle(titleRes).setView(input).setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val value = input.text.toString().trim()
                 val parsed = if (value.isBlank()) 0 else runCatching { Color.parseColor(value) }.getOrNull()
-                if (parsed == null) input.error = "Use #RRGGBB or #AARRGGBB" else { preference.set(parsed); changed(); dialog.dismiss() }
+                if (parsed == null) input.error = context.getString(R.string.hayai_novel_reader_color_error) else { preference.set(parsed); changed(); dialog.dismiss() }
             }
         }
         dialog.show()
@@ -378,11 +379,11 @@ internal class NovelReaderSettingsSheet(
         engine = android.speech.tts.TextToSpeech(context) { result ->
             if (result == android.speech.tts.TextToSpeech.SUCCESS) {
                 val voices = engine?.voices.orEmpty().filterNot { it.isNetworkConnectionRequired }.sortedWith(compareBy({ it.locale.displayName }, { it.name }))
-                val labels = listOf("System default") + voices.map { voice ->
-                    "${voice.locale.displayName} · ${voice.name}"
+                val labels = listOf(context.getString(R.string.system_default)) + voices.map { voice ->
+                    context.getString(R.string.hayai_novel_reader_voice_label, voice.locale.displayName, voice.name)
                 }
                 val values = listOf("") + voices.map { it.name }
-                AlertDialog.Builder(context).setTitle("Installed voice").setSingleChoiceItems(labels.toTypedArray(), values.indexOf(preferences.novelTtsVoice.get()).coerceAtLeast(0)) { dialog, index ->
+                AlertDialog.Builder(context).setTitle(R.string.hayai_novel_reader_installed_voice).setSingleChoiceItems(labels.toTypedArray(), values.indexOf(preferences.novelTtsVoice.get()).coerceAtLeast(0)) { dialog, index ->
                     preferences.novelTtsVoice.set(values[index]); dialog.dismiss()
                 }.setOnDismissListener { engine?.shutdown() }.show()
             } else {
@@ -438,7 +439,7 @@ internal class NovelReaderSettingsSheet(
             items.forEachIndexed { index, item ->
                 group.addView(
                     orderedRow(
-                        title = item.name,
+                        title = item.displayName(),
                         enabled = null,
                         canMoveUp = index > 0,
                         canMoveDown = index < items.lastIndex,
@@ -497,8 +498,8 @@ internal class NovelReaderSettingsSheet(
                     LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
                 )
             }
-            addView(orderButton(R.drawable.ic_arrow_upward_24dp, "Move $title up", canMoveUp, onMoveUp))
-            addView(orderButton(R.drawable.ic_arrow_downward_24dp, "Move $title down", canMoveDown, onMoveDown))
+            addView(orderButton(R.drawable.ic_arrow_upward_24dp, context.getString(R.string.hayai_novel_reader_move_up, title), canMoveUp, onMoveUp))
+            addView(orderButton(R.drawable.ic_arrow_downward_24dp, context.getString(R.string.hayai_novel_reader_move_down, title), canMoveDown, onMoveDown))
         }
 
     private fun orderButton(icon: Int, label: String, enabled: Boolean, action: () -> Unit): ImageButton =
@@ -516,20 +517,30 @@ internal class NovelReaderSettingsSheet(
 
     private fun NovelBottomAction.displayName(): String =
         when (this) {
-            NovelBottomAction.PreviousChapter -> "Previous chapter"
-            NovelBottomAction.NextChapter -> "Next chapter"
-            NovelBottomAction.ScrollToTop -> "Scroll to top"
-            NovelBottomAction.Translate -> "Translate"
-            NovelBottomAction.AutoScroll -> "Auto-scroll"
-            NovelBottomAction.Tts -> "Read aloud"
-            NovelBottomAction.TtsViewport -> "Read from viewport"
-            NovelBottomAction.TtsPreviousParagraph -> "Previous paragraph"
-            NovelBottomAction.TtsNextParagraph -> "Next paragraph"
-            NovelBottomAction.Orientation -> "Orientation"
-            NovelBottomAction.Settings -> "Settings"
-            NovelBottomAction.Edit -> "Edit"
-            NovelBottomAction.Quotes -> "Quotes"
+            NovelBottomAction.PreviousChapter -> context.getString(R.string.previous_chapter)
+            NovelBottomAction.NextChapter -> context.getString(R.string.next_chapter)
+            NovelBottomAction.ScrollToTop -> context.getString(R.string.hayai_novel_reader_scroll_top)
+            NovelBottomAction.Translate -> context.getString(R.string.hayai_novel_reader_translate)
+            NovelBottomAction.AutoScroll -> context.getString(R.string.hayai_novel_reader_auto_scroll)
+            NovelBottomAction.Tts -> context.getString(R.string.hayai_novel_reader_read_aloud)
+            NovelBottomAction.TtsViewport -> context.getString(R.string.hayai_novel_reader_read_viewport)
+            NovelBottomAction.TtsPreviousParagraph -> context.getString(R.string.hayai_novel_reader_previous_paragraph)
+            NovelBottomAction.TtsNextParagraph -> context.getString(R.string.hayai_novel_reader_next_paragraph)
+            NovelBottomAction.Orientation -> context.getString(R.string.orientation)
+            NovelBottomAction.Settings -> context.getString(R.string.settings)
+            NovelBottomAction.Edit -> context.getString(R.string.edit)
+            NovelBottomAction.Quotes -> context.getString(R.string.hayai_novel_reader_quotes)
         }
+
+    private fun NovelStatusItem.displayName(): String =
+        context.getString(
+            when (this) {
+                NovelStatusItem.Time -> R.string.hayai_novel_reader_time
+                NovelStatusItem.Chapter -> R.string.hayai_novel_reader_chapter
+                NovelStatusItem.Progress -> R.string.progress
+                NovelStatusItem.Battery -> R.string.hayai_novel_reader_battery
+            },
+        )
 
     private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 

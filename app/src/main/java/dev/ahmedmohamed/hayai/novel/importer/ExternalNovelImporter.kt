@@ -2,6 +2,8 @@
 
 package dev.ahmedmohamed.hayai.novel.importer
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromByteArray
@@ -25,10 +27,12 @@ import java.util.zip.ZipInputStream
 
 enum class ExternalNovelFormat { TSUNDOKU, LNREADER }
 enum class NovelImportSeverity { WARNING, ERROR }
+enum class NovelImportIssueCode { MissingCategoryAssignments }
 data class NovelImportIssue(
     val severity: NovelImportSeverity,
     val location: String,
-    val message: String,
+    val code: NovelImportIssueCode,
+    val count: Int,
 )
 data class ExternalNovelSource(
     val sourceId: Long?,
@@ -96,7 +100,7 @@ interface NovelImportTransaction {
 
 class ExternalNovelImportService(private val target: NovelImportTarget) {
     suspend fun apply(plan: NovelImportPlan): NovelImportResult {
-        require(plan.canApply) { "Import plan has validation errors" }
+        novelRequire(plan.canApply, NovelFailure.Code.ImportPlanInvalid)
         if (target.hasApplied(plan.id)) return NovelImportResult(plan.id, true, 0, 0, 0, 0)
         return target.transaction {
             val categoryIds = plan.categories.associate { it.externalId to upsertCategory(it) }
@@ -135,7 +139,7 @@ class ExternalNovelImportParser(
 ) {
     fun dryRun(input: InputStream): NovelImportPlan {
         val bytes = input.readBounded(MAX_INPUT_BYTES)
-        require(bytes.isNotEmpty()) { "Import file is empty" }
+        novelRequire(bytes.isNotEmpty(), NovelFailure.Code.ImportEmpty)
         return if (bytes.size >= 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()) {
             parseLnReader(bytes)
         } else {
@@ -150,15 +154,16 @@ class ExternalNovelImportParser(
             original
         }
         val backup = runCatching { protobuf.decodeFromByteArray<Backup>(payload) }
-            .getOrElse { throw IllegalArgumentException("Invalid Tsundoku backup", it) }
-        require(backup.backupManga.size <= MAX_NOVELS && backup.backupCategories.size <= MAX_CATEGORIES)
+            .getOrElse { throw NovelFailure(NovelFailure.Code.ImportInvalidTsundoku, cause = it) }
+        novelRequire(backup.backupManga.size <= MAX_NOVELS, NovelFailure.Code.ImportTooManyNovels)
+        novelRequire(backup.backupCategories.size <= MAX_CATEGORIES, NovelFailure.Code.ImportTooManyCategories)
         val novels = backup.backupManga.mapIndexed { index, manga ->
-            require(manga.chapters.size <= MAX_CHAPTERS_PER_NOVEL)
+            novelRequire(manga.chapters.size <= MAX_CHAPTERS_PER_NOVEL, NovelFailure.Code.ImportTooManyChapters)
             ExternalNovel(
                 externalId = "ts:$index:${manga.source}:${manga.url}",
                 source = ExternalNovelSource(manga.source, null),
-                url = bounded(manga.url, 8_192, "manga URL"),
-                title = bounded(manga.title, 1_024, "title"),
+                url = bounded(manga.url, 8_192, NovelFailure.ImportField.MangaUrl),
+                title = bounded(manga.title, 1_024, NovelFailure.ImportField.Title),
                 author = manga.author?.take(1_024),
                 description = manga.description?.take(MAX_DESCRIPTION),
                 coverUrl = manga.thumbnailUrl?.take(8_192),
@@ -166,8 +171,8 @@ class ExternalNovelImportParser(
                 chapters = manga.chapters.mapIndexed { chapterIndex, chapter ->
                     ExternalNovelChapter(
                         externalId = "ts:$index:$chapterIndex:${chapter.url}",
-                        url = bounded(chapter.url, 8_192, "chapter URL"),
-                        title = bounded(chapter.name, 1_024, "chapter title"),
+                        url = bounded(chapter.url, 8_192, NovelFailure.ImportField.ChapterUrl),
+                        title = bounded(chapter.name, 1_024, NovelFailure.ImportField.ChapterTitle),
                         number = chapter.chapterNumber,
                         read = chapter.read,
                         bookmarked = chapter.bookmark,
@@ -177,11 +182,11 @@ class ExternalNovelImportParser(
                 },
             )
         }
-        require(novels.sumOf { it.chapters.size.toLong() } <= MAX_TOTAL_CHAPTERS) { "Import contains too many chapters" }
+        novelRequire(novels.sumOf { it.chapters.size.toLong() } <= MAX_TOTAL_CHAPTERS, NovelFailure.Code.ImportTooManyChapters)
         val categories = backup.backupCategories.mapIndexed { index, category ->
             ExternalNovelCategory(
                 externalId = "ts-cat:$index",
-                name = bounded(category.name, 256, "category"),
+                name = bounded(category.name, 256, NovelFailure.ImportField.Category),
                 order = category.order,
                 novelIds = novels.filterIndexed { novelIndex, _ ->
                     category.order in backup.backupManga[novelIndex].categories
@@ -200,23 +205,23 @@ class ExternalNovelImportParser(
             while (true) {
                 val entry = zip.nextEntry ?: break
                 entries++
-                require(entries <= MAX_ZIP_ENTRIES) { "LNReader backup has too many files" }
+                novelRequire(entries <= MAX_ZIP_ENTRIES, NovelFailure.Code.ImportTooManyFiles)
                 if (entry.isDirectory) continue
                 val bytes = zip.readBounded(MAX_ENTRY_BYTES)
                 total += bytes.size
-                require(total <= MAX_UNCOMPRESSED_BYTES) { "LNReader backup expands beyond the supported limit" }
+                novelRequire(total <= MAX_UNCOMPRESSED_BYTES, NovelFailure.Code.ImportExpandedTooLarge)
                 val safeName = entry.name.replace('\\', '/')
-                require(!safeName.startsWith('/') && safeName.split('/').none { it == ".." }) { "Unsafe ZIP path" }
+                novelRequire(!safeName.startsWith('/') && safeName.split('/').none { it == ".." }, NovelFailure.Code.ImportUnsafeZipPath)
                 when {
                     safeName.equals("Category.json", true) -> categories = parseLnCategories(bytes)
                     safeName.startsWith("NovelAndChapters/", true) && safeName.endsWith(".json", true) -> {
-                        require(novels.size < MAX_NOVELS) { "LNReader backup contains too many novels" }
+                        novelRequire(novels.size < MAX_NOVELS, NovelFailure.Code.ImportTooManyNovels)
                         novels += parseLnNovel(novels.size, json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonObject)
                     }
                 }
             }
         }
-        require(novels.sumOf { it.chapters.size.toLong() } <= MAX_TOTAL_CHAPTERS) { "Import contains too many chapters" }
+        novelRequire(novels.sumOf { it.chapters.size.toLong() } <= MAX_TOTAL_CHAPTERS, NovelFailure.Code.ImportTooManyChapters)
         val known = novels.mapTo(mutableSetOf(), ExternalNovel::externalId)
         val checkedCategories = categories.map { it.copy(novelIds = it.novelIds.intersect(known)) }
         val missing = categories.sumOf { (it.novelIds - known).size }
@@ -225,7 +230,8 @@ class ExternalNovelImportParser(
                 NovelImportIssue(
                     NovelImportSeverity.WARNING,
                     "Category.json",
-                    "$missing category assignments referenced missing novels",
+                    NovelImportIssueCode.MissingCategoryAssignments,
+                    missing,
                 ),
             )
         } else {
@@ -238,26 +244,26 @@ class ExternalNovelImportParser(
         val numericId = obj.int("id", index)
         val externalId = "ln:$numericId"
         val chapters = obj["chapters"]?.jsonArray ?: JsonArray(emptyList())
-        require(chapters.size <= MAX_CHAPTERS_PER_NOVEL)
+        novelRequire(chapters.size <= MAX_CHAPTERS_PER_NOVEL, NovelFailure.Code.ImportTooManyChapters)
         return ExternalNovel(
             externalId = externalId,
             source = ExternalNovelSource(null, obj.string("pluginId"), obj.bool("isLocal")),
-            url = bounded(obj.string("path"), 8_192, "novel path"),
-            title = bounded(obj.string("name"), 1_024, "novel name"),
+            url = bounded(obj.string("path"), 8_192, NovelFailure.ImportField.NovelPath),
+            title = bounded(obj.string("name"), 1_024, NovelFailure.ImportField.NovelName),
             author = obj.optional("author")?.take(1_024),
             description = obj.optional("summary")?.take(MAX_DESCRIPTION),
             coverUrl = obj.optional("cover")?.take(8_192),
             favorite = obj.bool("inLibrary"),
             chapters = chapters.mapIndexed { chapterIndex, element ->
                 val chapter = element.jsonObject
-                val url = bounded(chapter.string("path"), 8_192, "chapter path")
+                val url = bounded(chapter.string("path"), 8_192, NovelFailure.ImportField.ChapterPath)
                 val progress = chapter["progress"]?.jsonPrimitive?.intOrNull
                     ?: chapter["position"]?.jsonPrimitive?.intOrNull
                     ?: 0
                 ExternalNovelChapter(
                     externalId = "$externalId:${chapter.int("id", chapterIndex)}:$url",
                     url = url,
-                    title = bounded(chapter.string("name"), 1_024, "chapter name"),
+                    title = bounded(chapter.string("name"), 1_024, NovelFailure.ImportField.ChapterName),
                     number = chapter["chapterNumber"]?.jsonPrimitive?.floatOrNull,
                     read = !chapter.bool("unread", true),
                     bookmarked = chapter.bool("bookmark"),
@@ -269,12 +275,13 @@ class ExternalNovelImportParser(
     }
 
     private fun parseLnCategories(bytes: ByteArray): List<ExternalNovelCategory> {
-        val array = json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonArray; require(array.size <= MAX_CATEGORIES)
+        val array = json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonArray
+        novelRequire(array.size <= MAX_CATEGORIES, NovelFailure.Code.ImportTooManyCategories)
         return array.mapIndexed { index, element ->
             val obj = element.jsonObject
             ExternalNovelCategory(
                 externalId = "ln-cat:${obj.int("id", index)}",
-                name = bounded(obj.string("name"), 256, "category"),
+                name = bounded(obj.string("name"), 256, NovelFailure.ImportField.Category),
                 order = obj.int("sort", index),
                 novelIds = (obj["novelIds"]?.jsonArray ?: JsonArray(emptyList()))
                     .mapNotNull { item -> item.jsonPrimitive.intOrNull?.let { id -> "ln:$id" } }
@@ -291,8 +298,8 @@ class ExternalNovelImportParser(
             primitive.booleanOrNull ?: primitive.intOrNull?.let { number -> number != 0 }
         } ?: fallback
     private fun parseTimestamp(value: String?): Long? = value?.toLongOrNull()?.takeIf { it > 0 }
-    private fun bounded(value: String, max: Int, label: String): String {
-        require(value.isNotBlank() && value.length <= max) { "Invalid $label" }
+    private fun bounded(value: String, max: Int, label: NovelFailure.ImportField): String {
+        novelRequire(value.isNotBlank() && value.length <= max, NovelFailure.Code.ImportInvalidField, label)
         return value
     }
     private fun hash(value: ByteArray) = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
@@ -304,7 +311,7 @@ class ExternalNovelImportParser(
             val count = read(buffer)
             if (count < 0) break
             total += count
-            require(total <= max) { "Import data exceeds ${max / 1024 / 1024} MiB" }
+            novelRequire(total <= max, NovelFailure.Code.ImportDataTooLarge, max / 1024 / 1024)
             output.write(buffer, 0, count)
         }
         return output.toByteArray()

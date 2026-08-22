@@ -4,7 +4,10 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.EhFavoriteSnapshot
 import dev.ahmedmohamed.hayai.adult.eh.persistence.EhSyncMode
 import dev.ahmedmohamed.hayai.adult.eh.persistence.EhSyncOperationStatus
 import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
+import dev.ahmedmohamed.hayai.adult.eh.presentation.EhTextResolver
+import dev.ahmedmohamed.hayai.adult.eh.presentation.localizedMessage
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+import eu.kanade.tachiyomi.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +17,7 @@ import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 class EhFavoritesSyncService(
+    private val text: EhTextResolver,
     private val remote: EhFavoritesRemote,
     private val local: J2kEhFavoritesLocal,
     private val persistence: HayaiEhPersistenceStore,
@@ -22,7 +26,7 @@ class EhFavoritesSyncService(
 ) {
     private val mutex = Mutex()
     private val mutableStatus = MutableStateFlow<EhFavoritesStatus>(
-        persistence.activeSyncRunId()?.let { EhFavoritesStatus.Paused(it, "An interrupted favorites sync can be resumed.") }
+        persistence.activeSyncRunId()?.let { EhFavoritesStatus.Paused(it, text.get(R.string.hayai_eh_favorites_interrupted)) }
             ?: EhFavoritesStatus.Idle,
     )
     val status: StateFlow<EhFavoritesStatus> = mutableStatus.asStateFlow()
@@ -32,8 +36,8 @@ class EhFavoritesSyncService(
     fun remapCategory(slot: EhFavoriteSlot, categoryId: Int) = local.remapCategory(slot, categoryId)
 
     suspend fun preview(request: EhSyncRequest = preferences.favoritesSyncRequest()): EhFavoritesPlan = mutex.withLock {
-        check(persistence.activeSyncRunId() == null) { "Resume the interrupted sync before creating another preview." }
-        mutableStatus.value = EhFavoritesStatus.Planning("Building a read-only favorites preview")
+        check(persistence.activeSyncRunId() == null) { text.get(R.string.hayai_eh_favorites_resume_first) }
+        mutableStatus.value = EhFavoritesStatus.Planning(text.get(R.string.hayai_eh_favorites_building_preview))
         val remoteSnapshot = remote.snapshot()
         val mappings = local.ensureCategoryMappings(remoteSnapshot.categories)
         val aliases = EhGalleryAliasIndex(persistence.aliases())
@@ -43,11 +47,11 @@ class EhFavoritesSyncService(
 
     suspend fun start(request: EhSyncRequest = preferences.favoritesSyncRequest()): EhFavoritesStatus = mutex.withLock {
         persistence.activeSyncRunId()?.let { return@withLock resumeLocked(it, request.lenient) }
-        mutableStatus.value = EhFavoritesStatus.Planning("Downloading remote favorites")
+        mutableStatus.value = EhFavoritesStatus.Planning(text.get(R.string.hayai_eh_favorites_downloading))
         val remoteSnapshot = remote.snapshot()
         val mappings = local.ensureCategoryMappings(remoteSnapshot.categories)
         val aliases = EhGalleryAliasIndex(persistence.aliases())
-        mutableStatus.value = EhFavoritesStatus.Planning("Comparing the J2K library with the last completed snapshot")
+        mutableStatus.value = EhFavoritesStatus.Planning(text.get(R.string.hayai_eh_favorites_comparing))
         val localSnapshot = local.snapshot(aliases, mappings)
         val runId = UUID.randomUUID().toString()
         val plan = planner.plan(persistence.favorites(), localSnapshot, remoteSnapshot, aliases, request, runId)
@@ -57,7 +61,7 @@ class EhFavoritesSyncService(
             plan = plan,
         )
         if (plan.conflicts.isNotEmpty()) {
-            persistence.failSync(runId, "Sync needs conflict review")
+            persistence.failSync(runId, text.get(R.string.hayai_eh_sync_needs_review))
             return@withLock EhFavoritesStatus.NeedsReview(runId, plan.conflicts).also { mutableStatus.value = it }
         }
         resumeLocked(runId, request.lenient)
@@ -86,7 +90,8 @@ class EhFavoritesSyncService(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Exception) {
-                    val message = failure.message?.take(8_000) ?: "Favorite operation failed"
+                    val message = (failure as? EhFavoritesFailure)?.localizedMessage(text)
+                        ?: text.get(R.string.hayai_eh_favorite_operation_failed)
                     persistence.markOperation(operation.operationId, EhSyncOperationStatus.Failed, message)
                     failures += message
                     if (!lenient) {
@@ -96,7 +101,10 @@ class EhFavoritesSyncService(
             }
 
             if (failures.isNotEmpty()) {
-                return EhFavoritesStatus.Paused(runId, "${failures.size} favorite operations failed and can be retried.")
+                return EhFavoritesStatus.Paused(
+                    runId,
+                    text.quantity(R.plurals.hayai_eh_favorite_operations_failed, failures.size, failures.size),
+                )
                     .also { mutableStatus.value = it }
             }
 
@@ -104,15 +112,15 @@ class EhFavoritesSyncService(
             val expected = persistence.runExpectedFingerprint(runId)
             if (finalRemote.fingerprint != expected) {
                 persistence.requireFullReconcile()
-                persistence.failSync(runId, "Remote favorites changed while the sync was running")
-                return EhFavoritesStatus.Paused(runId, "Remote favorites changed while the sync was running. Start a fresh reconciliation.")
+                persistence.failSync(runId, text.get(R.string.hayai_eh_remote_changed_persisted))
+                return EhFavoritesStatus.Paused(runId, text.get(R.string.hayai_eh_remote_changed))
                     .also { mutableStatus.value = it }
             }
             val snapshot = finalRemote.favorites.values.map { EhFavoriteSnapshot(it.gallery, it.title, it.category.value) }
             persistence.completeSyncWithSnapshot(runId, snapshot, finalRemote.fingerprint)
             return EhFavoritesStatus.Complete(runId, failures).also { mutableStatus.value = it }
         } catch (cancelled: CancellationException) {
-            mutableStatus.value = EhFavoritesStatus.Paused(runId, "Sync was interrupted and can be resumed.")
+            mutableStatus.value = EhFavoritesStatus.Paused(runId, text.get(R.string.hayai_eh_sync_interrupted))
             throw cancelled
         }
     }
@@ -124,11 +132,13 @@ class EhFavoritesSyncService(
                 persistence.markOperation(operation.operationId, EhSyncOperationStatus.Applied)
                 return
             }
-            is EhRemoteRecoveryDecision.Conflict -> error("Remote favorite changed after planning.")
+            is EhRemoteRecoveryDecision.Conflict -> error(text.get(R.string.hayai_eh_remote_changed_after_planning))
             EhRemoteRecoveryDecision.Execute -> Unit
         }
         remote.setFavorite(operation.desired)
-        check(EhFavoriteRecovery.sameRemoteState(remote.state(operation.gallery), operation.desired)) { "Remote favorite update could not be verified." }
+        check(EhFavoriteRecovery.sameRemoteState(remote.state(operation.gallery), operation.desired)) {
+            text.get(R.string.hayai_eh_remote_update_unverified)
+        }
         persistence.markOperation(operation.operationId, EhSyncOperationStatus.Applied)
     }
 
@@ -139,11 +149,11 @@ class EhFavoritesSyncService(
                 persistence.markOperation(operation.operationId, EhSyncOperationStatus.Applied)
                 return
             }
-            is EhRemoteRecoveryDecision.Conflict -> error("Remote favorite changed after planning.")
+            is EhRemoteRecoveryDecision.Conflict -> error(text.get(R.string.hayai_eh_remote_changed_after_planning))
             EhRemoteRecoveryDecision.Execute -> Unit
         }
         remote.removeFavorite(operation.expected)
-        check(remote.state(operation.gallery) == null) { "Remote favorite removal could not be verified." }
+        check(remote.state(operation.gallery) == null) { text.get(R.string.hayai_eh_remote_removal_unverified) }
         persistence.markOperation(operation.operationId, EhSyncOperationStatus.Applied)
     }
 

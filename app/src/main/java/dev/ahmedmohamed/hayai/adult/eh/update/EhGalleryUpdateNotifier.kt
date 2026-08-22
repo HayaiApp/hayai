@@ -12,23 +12,23 @@ class EhGalleryUpdateNotifier(
     private val context: Context,
 ) {
     fun foreground(workId: java.util.UUID): Notification = base()
-        .setContentTitle("Updating E-Hentai galleries")
-        .setContentText("Preparing gallery updates")
+        .setContentTitle(context.getString(R.string.hayai_eh_updating_galleries))
+        .setContentText(context.getString(R.string.hayai_eh_preparing_updates))
         .setOngoing(true)
         .setProgress(0, 0, true)
-        .addAction(0, "Cancel", WorkManager.getInstance(context).createCancelPendingIntent(workId))
+        .addAction(0, context.getString(R.string.cancel), WorkManager.getInstance(context).createCancelPendingIntent(workId))
         .build()
 
     fun progress(workId: java.util.UUID, candidate: EhGalleryUpdateCandidate, current: Int, total: Int) {
         notify(
             PROGRESS_ID,
             base()
-                .setContentTitle("Updating E-Hentai galleries")
+                .setContentTitle(context.getString(R.string.hayai_eh_updating_galleries))
                 .setContentText(candidate.title.take(80))
                 .setOnlyAlertOnce(true)
                 .setOngoing(true)
                 .setProgress(total.coerceAtLeast(1), current.coerceAtMost(total), false)
-                .addAction(0, "Cancel", WorkManager.getInstance(context).createCancelPendingIntent(workId))
+                .addAction(0, context.getString(R.string.cancel), WorkManager.getInstance(context).createCancelPendingIntent(workId))
                 .build(),
         )
     }
@@ -37,15 +37,19 @@ class EhGalleryUpdateNotifier(
         cancelProgress()
         if (run.stats.newRevisions == 0 && run.stats.transientFailures == 0 && run.stats.permanentFailures == 0) return
         val summary = buildList {
-            if (run.stats.newRevisions > 0) add("${run.stats.newRevisions} new revisions")
-            if (run.stats.notFound > 0) add("${run.stats.notFound} unavailable")
+            if (run.stats.newRevisions > 0) {
+                add(context.resources.getQuantityString(R.plurals.hayai_eh_new_revisions, run.stats.newRevisions, run.stats.newRevisions))
+            }
+            if (run.stats.notFound > 0) {
+                add(context.resources.getQuantityString(R.plurals.hayai_eh_unavailable_galleries, run.stats.notFound, run.stats.notFound))
+            }
             val failures = run.stats.transientFailures + run.stats.permanentFailures
-            if (failures > 0) add("$failures failed")
+            if (failures > 0) add(context.resources.getQuantityString(R.plurals.hayai_eh_failed_galleries, failures, failures))
         }.joinToString(" · ")
         notify(
             COMPLETE_ID,
             base()
-                .setContentTitle("E-Hentai gallery update complete")
+                .setContentTitle(context.getString(R.string.hayai_eh_update_complete))
                 .setContentText(summary)
                 .setAutoCancel(true)
                 .build(),

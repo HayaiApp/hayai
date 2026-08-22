@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.plugin.source
 
+import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+import dev.ahmedmohamed.hayai.novel.error.novelFailure
 import android.content.Context
 import android.webkit.CookieManager
 import androidx.preference.PreferenceScreen
@@ -421,7 +423,7 @@ class NovelPluginSource(
             if (attempts >= maxAttempts) {
                 logcat(LogPriority.WARN) { "NovelPluginSource[$pluginId]: Execution timed out after ${maxAttempts * 50}ms" }
                 invalidateInstance(expected = instance)
-                throw IllegalStateException("Plugin execution timed out after ${maxAttempts * 50} ms")
+                novelFailure(NovelFailure.Code.PluginExecutionTimeout, maxAttempts * 50)
             }
 
             // Read results FIRST before cleanup
@@ -442,7 +444,7 @@ class NovelPluginSource(
 
             // Check for errors - "null" string from error means no error, not "Plugin error: null"
             if (!error.isNullOrEmpty() && error != "null") {
-                throw Exception("Plugin error while executing [$methodCall]: $error")
+                novelFailure(NovelFailure.Code.PluginExecutionError, methodCall, error)
             }
 
             logcat(LogPriority.INFO) { "NovelPluginSource[$pluginId]: Result: ${jsonResult?.take(200)}" }
@@ -1575,7 +1577,7 @@ class NovelPluginSource(
             // Validate URL before calling plugin - avoid fetching base URL with empty path
             if (normalizePluginPath(page.url).isBlank()) {
                 logcat(LogPriority.WARN) { "[$id] fetchPageText: page.url is blank, cannot parse chapter" }
-                throw IllegalStateException("Chapter content unavailable (empty URL)")
+                novelFailure(NovelFailure.Code.PluginChapterUrlEmpty)
             }
 
             try {
@@ -1647,7 +1649,7 @@ private class BoundedResponseInputStream(
         bytesRead += count
         if (bytesRead > byteLimit) {
             close()
-            throw IllegalStateException("Novel asset exceeds the $byteLimit byte limit")
+            novelFailure(NovelFailure.Code.PluginAssetTooLarge, byteLimit)
         }
     }
 }

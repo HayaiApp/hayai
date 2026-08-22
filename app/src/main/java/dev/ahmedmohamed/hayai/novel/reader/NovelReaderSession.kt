@@ -1,5 +1,6 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
+import android.content.Context
 import dev.ahmedmohamed.hayai.novel.download.NovelAssetReferences
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadResult
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
@@ -13,6 +14,7 @@ import dev.ahmedmohamed.hayai.novel.statistics.NovelStatisticsResolver
 import dev.ahmedmohamed.hayai.novel.tracker.NovelChapterTrackSync
 import dev.ahmedmohamed.hayai.novel.tracker.syncIfRead
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.History
 import eu.kanade.tachiyomi.data.database.models.Manga
@@ -29,12 +31,14 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 
 internal class NovelReaderSession(
+    context: Context,
     private val database: DatabaseHelper,
     private val sourceManager: SourceManager,
     private val downloadStore: NovelDownloadStore,
     private val network: NetworkHelper,
     private val chapterTrackSync: NovelChapterTrackSync = NovelChapterTrackSync.None,
 ) : NovelAssetProvider {
+    private val resources = context.applicationContext.resources
     private val chapterStatStore = NovelChapterStatStore(database)
     lateinit var manga: Manga
         private set
@@ -88,21 +92,21 @@ internal class NovelReaderSession(
         recordHistory: Boolean = true,
     ): LoadedNovelChapter {
         this.recordHistory = recordHistory
-        manga = requireNotNull(database.getManga(mangaId).executeAsBlocking()) { "Novel not found" }
+        manga = requireNotNull(database.getManga(mangaId).executeAsBlocking()) { resources.getString(R.string.hayai_novel_reader_novel_not_found) }
         source =
-            requireNotNull(sourceManager.get(manga.source)) { "Novel source is not installed" }
+            requireNotNull(sourceManager.get(manga.source)) { resources.getString(R.string.hayai_novel_reader_source_not_installed) }
                 .takeIf { it.isNovelSource() }
-                ?: error("This source does not provide novel text")
+                ?: error(resources.getString(R.string.hayai_novel_reader_source_no_text))
 
         val databaseChapters = database.getChapters(manga).executeAsBlocking()
-        val selected = requireNotNull(databaseChapters.find { it.id == chapterId }) { "Novel chapter not found" }
+        val selected = requireNotNull(databaseChapters.find { it.id == chapterId }) { resources.getString(R.string.hayai_novel_reader_chapter_not_found) }
         chapters = ChapterSort(manga).getChaptersSorted(databaseChapters, filterForReader = true, currentChapter = selected)
         chapterIndex = chapters.indexOfFirst { it.id == chapterId }
         if (chapterIndex < 0) {
             chapters = ChapterSort(manga).getChaptersSorted(databaseChapters, andFiltered = false)
             chapterIndex = chapters.indexOfFirst { it.id == chapterId }
         }
-        require(chapterIndex >= 0) { "Novel chapter is unavailable with the current filters" }
+        require(chapterIndex >= 0) { resources.getString(R.string.hayai_novel_reader_chapter_filtered) }
         return loadCurrent()
     }
 
@@ -143,7 +147,7 @@ internal class NovelReaderSession(
         }
 
     fun removeOffline(chapter: LoadedNovelChapter) {
-        check(downloadStore.remove(source.id, chapter.chapter.url)) { "The offline copy no longer exists." }
+        check(downloadStore.remove(source.id, chapter.chapter.url)) { resources.getString(R.string.hayai_novel_reader_offline_missing) }
     }
 
     suspend fun reload(): LoadedNovelChapter = loadCurrent()

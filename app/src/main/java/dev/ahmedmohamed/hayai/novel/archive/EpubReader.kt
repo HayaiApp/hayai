@@ -1,5 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.archive
 
+import android.content.res.Resources
+import eu.kanade.tachiyomi.R
 import org.jsoup.Jsoup
 import org.jsoup.nodes.DataNode
 import org.jsoup.nodes.Document
@@ -13,7 +15,7 @@ import java.net.URLDecoder
 /**
  * Wrapper over ArchiveReader to load files in epub format.
  */
-class EpubReader(private val reader: ArchiveReader) : Closeable by reader {
+class EpubReader(private val reader: ArchiveReader, private val resources: Resources) : Closeable by reader {
 
     private fun String.urlDecoded(): String = urlDecode(this)
 
@@ -293,7 +295,7 @@ class EpubReader(private val reader: ArchiveReader) : Closeable by reader {
         val pages = getPagesFromDocument(doc)
         return pages.mapIndexed { index, page ->
             EpubChapter(
-                title = "Chapter ${index + 1}",
+                title = resources.getString(R.string.hayai_novel_reader_fallback_chapter_title, index + 1),
                 href = resolveZipPath(opfBasePath, page),
                 order = index,
             )
