@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bluelinelabs.conductor.ControllerChangeHandler
 import com.bluelinelabs.conductor.ControllerChangeType
 import com.google.android.material.snackbar.Snackbar
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
@@ -46,6 +47,7 @@ import uy.kohesive.injekt.injectLazy
 open class GlobalSearchController(
     protected val initialQuery: String? = null,
     val extensionFilter: String? = null,
+    val contentKind: ContentKind? = null,
     bundle: Bundle? = null,
 ) : BaseCoroutineController<SourceGlobalSearchControllerBinding, GlobalSearchPresenter>(bundle),
     SearchControllerInterface,
@@ -116,7 +118,7 @@ open class GlobalSearchController(
     override fun getSearchTitle(): String? =
         customTitle ?: presenter.query.ifBlank { view?.context?.getString(R.string.label_global_search) }
 
-    override val presenter = GlobalSearchPresenter(initialQuery, extensionFilter)
+    override val presenter = GlobalSearchPresenter(initialQuery, extensionFilter, contentKind = contentKind)
 
     override fun onTitleClick(position: Int) {
         val source = (adapter?.getItem(position) as? GlobalSearchItem)?.source ?: return

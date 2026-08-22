@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.source
 import android.content.res.ColorStateList
 import android.view.View
 import androidx.core.view.isVisible
+import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.databinding.SourceItemBinding
@@ -68,6 +69,7 @@ class SourceHolder(
             when {
                 icon != null -> binding.sourceImage.setImageDrawable(icon)
                 item.source.id == LocalSource.ID -> binding.sourceImage.setImageResource(R.mipmap.ic_local_source)
+                item.source.id == LocalNovelSource.ID -> binding.sourceImage.setImageResource(R.drawable.ic_local_novel_source)
             }
         }
 

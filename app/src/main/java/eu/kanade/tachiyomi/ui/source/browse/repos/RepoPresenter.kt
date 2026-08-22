@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.source.browse.repos
 
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.api.ExtensionApi
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
@@ -17,7 +19,9 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 class RepoPresenter(
     private val controller: RepoController,
+    private val contentKind: ContentKind,
     private val preferences: PreferencesHelper = Injekt.get(),
+    private val novelRepositories: NovelApkRepositoryRegistry = Injekt.get(),
 ) : BaseCoroutinePresenter<RepoController>() {
     private var scope = CoroutineScope(Job() + Dispatchers.Default)
 
@@ -25,14 +29,36 @@ class RepoPresenter(
      * List containing repos, keyed by their literal index URL (whatever the user entered or a
      * repo.json pointer resolved to) - no filename or path pattern is assumed.
      */
-    private var repos: Set<String>
+    private val repos: Set<String>
         get() =
             preferences
                 .extensionRepos()
                 .get()
+                .let { all ->
+                    if (contentKind == ContentKind.Novel) {
+                        all.intersect(novelRepositories.repositoriesNow())
+                    } else {
+                        all - novelRepositories.novelOnlyRepositoriesNow()
+                    }
+                }
                 .sorted()
                 .toSet()
-        set(value) = preferences.extensionRepos().set(value)
+
+    private suspend fun addRepo(url: String) {
+        if (contentKind == ContentKind.Novel) {
+            novelRepositories.add(url)
+        } else {
+            novelRepositories.addMangaOwnership(url)
+        }
+    }
+
+    private suspend fun removeRepo(url: String) {
+        if (contentKind == ContentKind.Novel) {
+            novelRepositories.remove(url)
+        } else {
+            novelRepositories.removeMangaOwnership(url)
+        }
+    }
 
     /**
      * Called when the presenter is created.
@@ -64,8 +90,8 @@ class RepoPresenter(
             try {
                 val resolvedUrl = ExtensionApi().validateRepo(repo)
                 if (resolvedUrl != repo) {
-                    repos -= repo
-                    repos += resolvedUrl
+                    removeRepo(repo)
+                    addRepo(resolvedUrl)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -133,10 +159,10 @@ class RepoPresenter(
             try {
                 val resolvedUrl = ExtensionApi().validateRepo(newName)
                 oldRepo?.let {
-                    repos -= it
-                    preferences.extensionRepoMetadata().set(preferences.extensionRepoMetadata().get() - it)
+                    removeRepo(it)
+                    removeMetadataIfUnreferenced(it)
                 }
-                repos += resolvedUrl
+                addRepo(resolvedUrl)
                 // validateRepo() above already fetched and saved metadata for resolvedUrl, but
                 // re-fetching it fresh (mirroring what getRepos() does) is what reliably
                 // surfaces it. Done before onResult so the row keeps its loading spinner
@@ -162,9 +188,17 @@ class RepoPresenter(
      */
     fun deleteRepo(repo: String?) {
         val safeRepo = repo ?: return
-        repos -= safeRepo
-        preferences.extensionRepoMetadata().set(preferences.extensionRepoMetadata().get() - safeRepo)
-        controller.updateRepos()
+        scope.launch(Dispatchers.IO) {
+            removeRepo(safeRepo)
+            removeMetadataIfUnreferenced(safeRepo)
+            withContext(Dispatchers.Main) { controller.updateRepos() }
+        }
+    }
+
+    private fun removeMetadataIfUnreferenced(repo: String) {
+        if (preferences.extensionRepos().get().none { it.equals(repo, true) }) {
+            preferences.extensionRepoMetadata().set(preferences.extensionRepoMetadata().get() - repo)
+        }
     }
 
     /**
