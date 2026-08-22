@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.ui.source.browse
 
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -36,7 +35,7 @@ import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.pkgName
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
-import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
 import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
@@ -535,7 +534,7 @@ open class BrowseSourceController(
 
     private fun openSourceSettings() {
         if (EhSite.entries.any { it.sourceId == presenter.source.id }) {
-            activity?.let { startActivity(Intent(it, EhSettingsActivity::class.java)) }
+            router.pushController(EhSettingsController().withFadeTransaction())
             return
         }
         val pkgName = presenter.source.pkgName()

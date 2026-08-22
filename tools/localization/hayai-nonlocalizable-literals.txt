@@ -750,15 +750,15 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	if (rawR
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	private const val ALTERNATE_LOGIN_URL = "https://e-hentai.org/bounce_login.php"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	private const val EXH_URL = "https://exhentai.org/"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	private const val LOGIN_URL = "https://forums.e-hentai.org/index.php?act=Login&CODE=00"
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	.replace("AsianPorn", getString(R.string.hayai_eh_category_asian_porn))
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	.replace("Cg", getString(R.string.hayai_eh_category_cg))
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	.replace("ImageSet", getString(R.string.hayai_eh_category_image_set))
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	.replace("NonH", getString(R.string.hayai_eh_category_non_h))
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	"https://exhentai.org/mytags",
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	"local" -> getString(R.string.hayai_eh_conflict_local_value)
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	"remote" -> getString(R.string.hayai_eh_conflict_remote_value)
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	remoteStatus.text = summary.joinToString("\n")
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	val values = listOf("stop", "remote", "local")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	.replace("AsianPorn", getString(R.string.hayai_eh_category_asian_porn))
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	.replace("Cg", getString(R.string.hayai_eh_category_cg))
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	.replace("ImageSet", getString(R.string.hayai_eh_category_image_set))
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	.replace("NonH", getString(R.string.hayai_eh_category_non_h))
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	"https://exhentai.org/mytags",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	"local" -> getString(R.string.hayai_eh_conflict_local_value)
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	"remote" -> getString(R.string.hayai_eh_conflict_remote_value)
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	remoteStatus.summary = summary.joinToString("\n")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	val values = listOf("stop", "remote", "local")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt	.put("chapterId", value.chapterId)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt	.put("mangaId", value.mangaId)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt	.put("newName", value.newName),

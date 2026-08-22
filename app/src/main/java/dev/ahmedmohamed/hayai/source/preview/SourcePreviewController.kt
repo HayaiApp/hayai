@@ -19,7 +19,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.loadingindicator.LoadingIndicator
 import com.google.android.material.slider.Slider
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
-import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
 import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.system.withUIContext
 import eu.kanade.tachiyomi.util.view.scrollViewWith
+import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import eu.kanade.tachiyomi.widget.EmptyView
 import okhttp3.CacheControl
 import uy.kohesive.injekt.Injekt
@@ -131,7 +132,11 @@ class SourcePreviewController(
                     val actions = buildList {
                         add(EmptyView.Action(R.string.retry) { load(targetPage, forceRefresh = true) })
                         if (manga.source == EhSite.ExHentai.sourceId) {
-                            add(EmptyView.Action(R.string.hayai_open_ehentai_settings) { startActivity(EhSettingsActivity.newIntent(emptyView.context)) })
+                            add(
+                                EmptyView.Action(R.string.hayai_open_ehentai_settings) {
+                                    router.pushController(EhSettingsController().withFadeTransaction())
+                                },
+                            )
                         }
                     }
                     emptyView.show(
