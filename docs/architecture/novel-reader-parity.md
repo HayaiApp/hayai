@@ -4,7 +4,7 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 
 ## Ownership
 
-- `NovelReaderActivity` owns the reader shell, chapter focus, progress, and typed actions.
+- `NovelReaderActivity` owns novel chapter focus, progress, and typed actions while inflating J2K's unmodified `reader_activity.xml` shell.
 - `NativeNovelRenderer` owns selectable native text blocks.
 - `WebNovelRenderer` owns isolated WebView chapter blocks.
 - `NovelChapterQueue` bounds retained chapter data. A prefetched chapter never becomes current until its block becomes visible.
@@ -17,12 +17,13 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 | Behavior | Tsundoku source | Hayai implementation |
 |---|---|---|
 | Reader preferences and stable keys | `ReaderPreferences.kt` | `HayaiPreferences.kt` |
-| Reading, Appearance, Controls, TTS, and Advanced tabs | `NovelPage.kt` | `NovelReaderSettingsSheet.kt` and `NovelSettingsController.kt` |
+| Reading, Appearance, Controls, TTS, and Advanced tabs | `NovelPage.kt` | Tsundoku icon tabs with J2K spinner, switch, slider, and toolbar-settings controls in `NovelReaderSettingsSheet.kt`; searchable counterparts in `NovelSettingsController.kt` |
 | Tap-zone mode IDs | `NovelConfig.kt` and `viewer/navigation/*` | `NovelTapZones` |
 | Continuous chapter loading | `NovelTextViewViewer.kt` and `NovelWebViewViewer.kt` | `NovelChapterQueue`, both renderers, and visible-block callbacks |
 | Web styling and append snippets | `NovelWebViewStyler.kt` | `NovelHtmlDocumentBuilder`, `WebNovelRenderer`, and `NovelCustomizationStore` |
-| Progress controls | `NovelReaderAppBars.kt` | the horizontal slider and `NovelVerticalProgressView` |
-| TTS | `viewer/text/shared/TtsController.kt` | `NovelTtsController` and `NovelTtsPlaybackService` |
+| Reader app bars and chapter actions | `NovelReaderAppBars.kt` | the actual J2K `reader_activity.xml`, `reader_nav.xml`, collapsible `reader_chapters_sheet.xml`, and a Hayai-owned chapter adapter |
+| Progress controls | `NovelReaderAppBars.kt` | J2K's real `ReaderNavView` and `ReaderSlider`, without the manga page-number cells, plus `NovelVerticalProgressView` when explicitly selected |
+| TTS | `viewer/text/shared/TtsController.kt` | `NovelTtsController` and `NovelTtsPlaybackService`; active transport controls replace novel action slots inside J2K's reader sheet |
 | Quotes and highlights | the novel reader selection tools | `NovelQuoteStore`, `NovelHighlightStore`, and typed reader actions |
 
 ## Continuous-flow rules
@@ -47,6 +48,6 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 
 ## Verification state
 
-The coherent batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` emulator run in `artifacts/emulator-verification/20260822-022932` verified legacy migration, native local-novel launch, the Reading/Appearance/Controls/TTS/Advanced sheet, offline save, process restart recovery, and the logged-out EH settings state. The emulator also exposed an initialization-order crash in the first tabbed-sheet implementation; the verifier was rerun successfully after the fix.
+The coherent reader batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` run in `artifacts/emulator-verification/20260822-043650` verified legacy migration, the exact J2K reader shell, the absence of manga page-number labels, active TTS transport controls, all five reader settings tabs, offline save, process restart recovery, the logged-out E-Hentai settings state, and Browse.
 
-Do not describe the entire reader as emulator-verified yet. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote/highlight selection, and orientation changes still need dedicated device flows.
+The discarded custom-shell workflow remains in `artifacts/emulator-verification/20260822-032809` only as regression evidence. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote and highlight selection, and orientation changes still need dedicated device flows.

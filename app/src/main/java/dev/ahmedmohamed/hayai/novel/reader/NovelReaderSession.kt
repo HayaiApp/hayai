@@ -60,6 +60,21 @@ internal class NovelReaderSession(
 
     fun adjacent(next: Boolean): Chapter? = chapters.getOrNull(chapterIndex + if (next) 1 else -1)
 
+    fun chapterSnapshot(): List<Chapter> = chapters.toList()
+
+    suspend fun moveTo(chapterId: Long): LoadedNovelChapter? {
+        val previousIndex = chapterIndex
+        val targetIndex = chapters.indexOfFirst { it.id == chapterId }
+        if (targetIndex < 0) return null
+        chapterIndex = targetIndex
+        return try {
+            loadCurrent()
+        } catch (error: Throwable) {
+            chapterIndex = previousIndex
+            throw error
+        }
+    }
+
     fun focus(chapterId: Long): Boolean {
         val index = chapters.indexOfFirst { it.id == chapterId }
         if (index < 0) return false

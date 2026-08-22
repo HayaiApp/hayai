@@ -31,6 +31,7 @@ internal class NovelTtsController(
     }
 
     val isPlaying: Boolean get() = service?.isPlaying == true
+    val hasActivePlayback: Boolean get() = service?.hasActivePlayback == true
 
     fun configure(speed: Float, pitch: Float, voiceName: String, allowBackground: Boolean = false) = whenReady { configure(speed, pitch, voiceName, allowBackground) }
     fun setChapter(mangaId: Long, chapterId: Long, novelTitle: String, chapterTitle: String) =

@@ -279,9 +279,27 @@ try {
     Start-Sleep -Seconds 2
     Dismiss-CompatibilityWarning
     Start-Sleep -Seconds 1
-    Assert-Node "Verification Novel" "02-novel-reader"
-    Assert-Node "Read aloud" "02-novel-reader-actions"
+    $readerWindow = Dump-Window "02-novel-reader-actions"
+    [void](Find-Node $readerWindow "Verification Novel")
+    [void](Find-Node $readerWindow "Read aloud")
+    $mangaProgressLabels = $readerWindow.SelectNodes("//node") | Where-Object {
+        $_.'resource-id' -match ':(id/)?(left_page_text|right_page_text)$'
+    }
+    if ($mangaProgressLabels) { throw "Novel mode exposed J2K's manga page-number labels." }
     Capture "02-novel-reader"
+    Tap-Node "^Read aloud$" "02a-open-tts-controls"
+    $ttsWindow = $null
+    for ($attempt = 0; $attempt -lt 8 -and $null -eq $ttsWindow; $attempt++) {
+        Start-Sleep -Seconds 1
+        $candidate = Dump-Window "02b-tts-controls-$attempt"
+        if ($null -ne (Find-NodeOptional $candidate "^Read from viewport$")) { $ttsWindow = $candidate }
+    }
+    if ($null -eq $ttsWindow) { throw "The J2K action row did not enter active TTS mode." }
+    @("Read from viewport", "Previous paragraph", "Next paragraph", "Stop reading aloud") | ForEach-Object {
+        [void](Find-Node $ttsWindow "^$([regex]::Escape($_))$")
+    }
+    Capture "02b-tts-controls"
+    Tap-WindowNode (Find-Node $ttsWindow "^Stop reading aloud$") "Stop reading aloud"
     $readerWindow = Dump-Window "02-novel-reader-settings-action"
     if ($null -eq (Find-NodeOptional $readerWindow "^Reading$")) {
         if ($null -eq (Find-NodeOptional $readerWindow "^Reader settings$")) { throw "Neither the reader settings action nor its sheet was visible." }
@@ -289,10 +307,24 @@ try {
     }
     $settingsWindow = Dump-Window "03-reader-settings-tabs"
     @("Reading", "Appearance", "Controls", "TTS", "Advanced") | ForEach-Object { [void](Find-Node $settingsWindow "^$([regex]::Escape($_))$") }
-    Capture "03-reader-settings-tabs"
+    [void](Find-Node $settingsWindow "Reading engine")
+    Capture "03-reader-settings-reading"
+    foreach ($tab in @(
+        @{ Name = "Appearance"; Evidence = "04-reader-settings-appearance"; Expected = "Typography" },
+        @{ Name = "Controls"; Evidence = "05-reader-settings-controls"; Expected = "Page" },
+        @{ Name = "TTS"; Evidence = "06-reader-settings-tts"; Expected = "Read aloud" }
+    )) {
+        Tap-Node "^$($tab.Name)$" "$($tab.Evidence)-tap"
+        Assert-Node "$($tab.Expected)" "$($tab.Evidence)-content"
+        Capture $tab.Evidence
+    }
+    $settingsWindow = Dump-Window "07-reader-settings-tabs"
     Tap-WindowNode (Find-Node $settingsWindow "^Advanced$") "Advanced"
     $advancedWindow = Dump-Window "07-reader-advanced"
     [void](Find-Node $advancedWindow "Content")
+    [void](Find-Node $advancedWindow "Use EPUB styles")
+    [void](Find-Node $advancedWindow "Move Previous chapter down")
+    Capture "07-reader-settings-advanced"
     Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
     Start-Sleep -Seconds 3
     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null

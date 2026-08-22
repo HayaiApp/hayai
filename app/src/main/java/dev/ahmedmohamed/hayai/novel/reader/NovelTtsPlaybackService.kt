@@ -41,6 +41,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     private var chunksChapterId = -1L
 
     val isPlaying: Boolean get() = initialized && playing && !paused
+    val hasActivePlayback: Boolean get() = chunks.isNotEmpty() && (playing || paused)
 
     override fun onCreate() {
         super.onCreate()
