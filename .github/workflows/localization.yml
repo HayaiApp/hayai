@@ -1,0 +1,36 @@
+name: Localization
+
+on:
+  pull_request:
+    paths:
+      - 'app/src/main/java/**'
+      - 'app/src/main/res/**'
+      - 'docs/development/localization-coverage.md'
+      - 'tools/localization/**'
+      - 'tools/verify-localization.ps1'
+  schedule:
+    - cron: '17 6 1 * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify resources and coverage
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify localization
+        shell: pwsh
+        run: ./tools/verify-localization.ps1 -WriteCoverage
+
+      - name: Check generated coverage
+        run: git diff --exit-code -- docs/development/localization-coverage.md

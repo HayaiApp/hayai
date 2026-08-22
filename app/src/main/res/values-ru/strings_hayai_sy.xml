@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">Использовать оригинальные изображения</string>
+    <string name="hayai_eh_tag_filtering_threshold">Порог фильтрации тэгов</string>
+    <string name="hayai_eh_tag_watching_threshold">Порог отслеживания тегов</string>
+    <string name="hayai_eh_watched_tags_web_title">Отслеживание тэгов ExHentai</string>
+    <string name="hayai_eh_category_non_h">Не хентай</string>
+    <string name="hayai_eh_category_image_set">Набор изображений</string>
+    <string name="hayai_eh_category_asian_porn">Азиатское порно</string>
+    <string name="hayai_eh_language_filtering">Языковая фильтрация</string>
+    <string name="hayai_eh_custom_igneous">Пользовательское Igneous Cookie</string>
+    <string name="hayai_custom_source_field_base_url">Основной URL-адрес</string>
+    <string name="hayai_api_key">Ключ API</string>
+    <string name="hayai_page_previews">Предосмотр страниц</string>
+    <string name="hayai_more_previews">Просмотреть ещё</string>
+    <string name="hayai_clear_preview_cache">Очистить кэш предосмотренных страниц</string>
+</resources>

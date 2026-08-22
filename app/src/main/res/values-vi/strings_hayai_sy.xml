@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">Dùng hình ảnh gốc</string>
+    <string name="hayai_eh_tag_filtering_threshold">Ngưỡng lọc thẻ</string>
+    <string name="hayai_eh_tag_watching_threshold">Ngưỡng theo dõi thẻ</string>
+    <string name="hayai_eh_watched_tags_web_title">Thẻ theo dõi ExHentai</string>
+    <string name="hayai_eh_language_filtering">Bộ lọc Ngôn ngữ</string>
+</resources>

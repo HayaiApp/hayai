@@ -1,0 +1,38 @@
+# J2K-owned hardcoded UI literals present at cdae5f2d77c055c95407a0d62345babd51f96b10.
+# Regenerate only while rebasing onto a reviewed J2K baseline:
+# .\tools\verify-localization.ps1 -WriteUpstreamBaseline -UpstreamRef j2k/master
+app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadNotifier.kt	setContentTitle("$title - $chapter".chop(30))
+app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt	.setContentTitle("${context.getString(R.string.updating_library)} (${current + 1}/$total)")
+app/src/main/java/eu/kanade/tachiyomi/ui/download/DownloadHeaderHolder.kt	binding.title.text = "${item.name} (${item.size})"
+app/src/main/java/eu/kanade/tachiyomi/ui/download/DownloadHolder.kt	binding.downloadProgressText.text = "${download.downloadedImages}/${pages.size}"
+app/src/main/java/eu/kanade/tachiyomi/ui/manga/EditMangaDialog.kt	binding.mangaArtist.hint = "${resources?.getString(R.string.artist)}: ${manga.originalArtist}"
+app/src/main/java/eu/kanade/tachiyomi/ui/manga/EditMangaDialog.kt	binding.mangaAuthor.hint = "${resources?.getString(R.string.author)}: ${manga.originalAuthor}"
+app/src/main/java/eu/kanade/tachiyomi/ui/manga/EditMangaDialog.kt	binding.title.hint = "${resources?.getString(R.string.title)}: ${manga.originalTitle}"
+app/src/main/java/eu/kanade/tachiyomi/ui/manga/EditMangaDialog.kt	binding.title.hint = "${resources?.getString(R.string.title)}: ${manga.url}"
+app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt	val text = "${manga.title}: ${if (chapter.isRecognizedNumber) {
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/BackupSchemaController.kt	const val title = "Backup file schema"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	summary = "${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE})"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	summary = "${DeviceUtil.miuiMajorVersion}"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	summary = "${DeviceUtil.oneUiVersion}"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	summary = "$androidVersion (${Build.DISPLAY})"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "Android version"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "App Info"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "Build Time"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "Device info"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "MIUI version"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "Model"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "OneUI version"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "Version"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/DebugController.kt	title = "WebView version"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/debug/WorkerInfoController.kt	const val title = "Worker info"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt	title = "Don't kill my app!"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt	title = "${context.getString(R.string.cutout_area_behavior)} (${context.getString(R.string.landscape)})"
+app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt	title = "\t\t${context.getString(R.string.all_sources)}"
+app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt	context.toast("Failed to get logs")
+app/src/main/res/layout/pref_about_links.xml	android:contentDescription="Discord"
+app/src/main/res/layout/pref_about_links.xml	android:contentDescription="Facebook"
+app/src/main/res/layout/pref_about_links.xml	android:contentDescription="GitHub"
+app/src/main/res/layout/pref_about_links.xml	android:contentDescription="Mihon"
+app/src/main/res/layout/pref_about_links.xml	android:contentDescription="Reddit"
+app/src/main/res/layout/pref_about_links.xml	android:contentDescription="X"
+app/src/main/res/layout/pref_about_links.xml	tools:ignore="HardcodedText" />

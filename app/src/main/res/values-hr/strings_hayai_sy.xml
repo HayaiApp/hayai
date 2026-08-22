@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">Koristi originalne slike</string>
+    <string name="hayai_eh_tag_filtering_threshold">Prag filtriranja oznaka</string>
+    <string name="hayai_eh_tag_watching_threshold">Prag praćenja oznaka</string>
+    <string name="hayai_eh_watched_tags_web_title">E/ExHentai praćene oznake</string>
+    <string name="hayai_eh_category_non_h">Bez erotskog sadržaja</string>
+    <string name="hayai_eh_category_image_set">Skup slika</string>
+    <string name="hayai_eh_category_asian_porn">Azijski pornići</string>
+    <string name="hayai_eh_language_filtering">Filtriranje jezika</string>
+    <string name="hayai_eh_custom_igneous">Prilagođeni igneous kolačić</string>
+    <string name="hayai_custom_source_field_base_url">Osnovni URL</string>
+    <string name="hayai_api_key">API ključ</string>
+    <string name="hayai_page_previews">Pregledi stranica</string>
+    <string name="hayai_more_previews">Više pregleda</string>
+    <string name="hayai_clear_preview_cache">Izbriši predmemoriju pregleda stranica</string>
+</resources>

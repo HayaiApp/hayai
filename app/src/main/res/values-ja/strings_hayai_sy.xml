@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">オリジナルの画像を使用</string>
+    <string name="hayai_eh_tag_filtering_threshold">タグフィルターのしきい値</string>
+    <string name="hayai_eh_tag_watching_threshold">タグ閲覧のしきい値</string>
+    <string name="hayai_eh_watched_tags_web_title">ExHentai 既読タグ</string>
+    <string name="hayai_eh_category_non_h">Non-H</string>
+    <string name="hayai_eh_category_image_set">Image Set</string>
+    <string name="hayai_eh_category_asian_porn">Asian Porn</string>
+    <string name="hayai_eh_language_filtering">言語フィルター</string>
+    <string name="hayai_eh_custom_igneous">任意の火成 Cookie</string>
+    <string name="hayai_api_key">API キー</string>
+    <string name="hayai_page_previews">ページプレビュー</string>
+    <string name="hayai_more_previews">もっと表示</string>
+    <string name="hayai_clear_preview_cache">ページプレビューのキャッシュを消去</string>
+</resources>
