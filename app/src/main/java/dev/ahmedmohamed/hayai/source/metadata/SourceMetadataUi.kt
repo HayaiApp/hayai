@@ -349,7 +349,7 @@ object SourceMetadataUi {
             "cosplay" -> R.string.hayai_source_type_cosplay
             "asianporn", "asian porn" -> R.string.hayai_source_type_asian_porn
             "misc" -> R.string.hayai_source_type_misc
-            else -> return type
+            else -> return type.ifBlank { context.getString(R.string.unknown) }
         }
         return context.getString(label)
     }
