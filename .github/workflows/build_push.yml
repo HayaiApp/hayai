@@ -1,12 +1,9 @@
 name: CI
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version'
+        description: 'Release tag, for example v1.8.1'
         required: true
         type: string
 
@@ -21,6 +18,7 @@ jobs:
   build:
     name: Build app
     runs-on: ubuntu-24.04
+    environment: build
 
     steps:
       - name: Checkout
@@ -76,24 +74,24 @@ jobs:
         run: |
           set -e
 
-          mv app/build/outputs/apk/standard/release/app-standard-universal-release-unsigned-signed.apk tachiyomij2k-${{ env.VERSION_TAG }}.apk
-          sha=`sha256sum tachiyomij2k-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+          mv app/build/outputs/apk/standard/release/app-standard-universal-release-unsigned-signed.apk hayai-${{ env.VERSION_TAG }}.apk
+          sha=`sha256sum hayai-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
           echo "APK_UNIVERSAL_SHA=$sha" >> $GITHUB_ENV
 
-          cp app/build/outputs/apk/standard/release/app-standard-arm64-v8a-release-unsigned-signed.apk tachiyomij2k-arm64-v8a-${{ env.VERSION_TAG }}.apk
-          sha=`sha256sum tachiyomij2k-arm64-v8a-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+          cp app/build/outputs/apk/standard/release/app-standard-arm64-v8a-release-unsigned-signed.apk hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk
+          sha=`sha256sum hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
           echo "APK_ARM64_V8A_SHA=$sha" >> $GITHUB_ENV
 
-          cp app/build/outputs/apk/standard/release/app-standard-armeabi-v7a-release-unsigned-signed.apk tachiyomij2k-armeabi-v7a-${{ env.VERSION_TAG }}.apk
-          sha=`sha256sum tachiyomij2k-armeabi-v7a-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+          cp app/build/outputs/apk/standard/release/app-standard-armeabi-v7a-release-unsigned-signed.apk hayai-armeabi-v7a-${{ env.VERSION_TAG }}.apk
+          sha=`sha256sum hayai-armeabi-v7a-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
           echo "APK_ARMEABI_V7A_SHA=$sha" >> $GITHUB_ENV
 
-          cp app/build/outputs/apk/standard/release/app-standard-x86-release-unsigned-signed.apk tachiyomij2k-x86-${{ env.VERSION_TAG }}.apk
-          sha=`sha256sum tachiyomij2k-x86-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+          cp app/build/outputs/apk/standard/release/app-standard-x86-release-unsigned-signed.apk hayai-x86-${{ env.VERSION_TAG }}.apk
+          sha=`sha256sum hayai-x86-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
           echo "APK_X86_SHA=$sha" >> $GITHUB_ENV
 
-          cp app/build/outputs/apk/standard/release/app-standard-x86_64-release-unsigned-signed.apk tachiyomij2k-x86_64-${{ env.VERSION_TAG }}.apk
-          sha=`sha256sum tachiyomij2k-x86_64-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+          cp app/build/outputs/apk/standard/release/app-standard-x86_64-release-unsigned-signed.apk hayai-x86_64-${{ env.VERSION_TAG }}.apk
+          sha=`sha256sum hayai-x86_64-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
           echo "APK_X86_64_SHA=$sha" >> $GITHUB_ENV
 
       - name: Create Release
@@ -101,7 +99,7 @@ jobs:
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ env.VERSION_TAG }}
-          name: TachiyomiJ2K ${{ env.VERSION_TAG }}
+          name: Hayai ${{ env.VERSION_TAG }}
           body: |
             ---
 
@@ -109,17 +107,17 @@ jobs:
 
             | Variant | SHA-256 |
             | ------- | ------- |
-            | Universal | ${{ env.APK_UNIVERSAL_SHA }}
-            | arm64-v8a | ${{ env.APK_ARM64_V8A_SHA }}
-            | armeabi-v7a | ${{ env.APK_ARMEABI_V7A_SHA }}
+            | Universal | ${{ env.APK_UNIVERSAL_SHA }} |
+            | arm64-v8a | ${{ env.APK_ARM64_V8A_SHA }} |
+            | armeabi-v7a | ${{ env.APK_ARMEABI_V7A_SHA }} |
             | x86 | ${{ env.APK_X86_SHA }} |
             | x86_64 | ${{ env.APK_X86_64_SHA }} |
           files: |
-            tachiyomij2k-${{ env.VERSION_TAG }}.apk
-            tachiyomij2k-arm64-v8a-${{ env.VERSION_TAG }}.apk
-            tachiyomij2k-armeabi-v7a-${{ env.VERSION_TAG }}.apk
-            tachiyomij2k-x86-${{ env.VERSION_TAG }}.apk
-            tachiyomij2k-x86_64-${{ env.VERSION_TAG }}.apk
+            hayai-${{ env.VERSION_TAG }}.apk
+            hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk
+            hayai-armeabi-v7a-${{ env.VERSION_TAG }}.apk
+            hayai-x86-${{ env.VERSION_TAG }}.apk
+            hayai-x86_64-${{ env.VERSION_TAG }}.apk
           draft: true
           prerelease: false
         env:
