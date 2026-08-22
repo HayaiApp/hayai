@@ -151,6 +151,7 @@ import eu.kanade.tachiyomi.util.view.setTextColorAlpha
 import eu.kanade.tachiyomi.util.view.snack
 import eu.kanade.tachiyomi.util.view.toolbarHeight
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
+import eu.kanade.tachiyomi.widget.EmptyView
 import eu.kanade.tachiyomi.widget.LinearLayoutManagerAccurateOffset
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Job
@@ -1539,39 +1540,57 @@ class MangaDetailsController :
                         featureRoot.visibility = View.GONE
                         return@withUIContext
                     }
-                    val visible = loaded.previews.take(rows * INLINE_COLUMNS)
-                    visible.chunked(INLINE_COLUMNS).forEach { rowItems ->
+                    val columns = previewColumns(container)
+                    val visible = loaded.previews.take(rows * columns)
+                    visible.chunked(columns).forEach { rowItems ->
                         container.addView(
                             LinearLayout(container.context).apply {
                                 orientation = LinearLayout.HORIZONTAL
-                                rowItems.forEach { preview -> addView(createPreviewCell(this, manga, preview, density)) }
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                                setPadding((8 * density).toInt(), 0, (8 * density).toInt(), (8 * density).toInt())
+                                rowItems.forEachIndexed { index, preview ->
+                                    addView(
+                                        createPreviewCell(this, manga, preview, density),
+                                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                                            if (index > 0) marginStart = (16 * density).toInt()
+                                        },
+                                    )
+                                }
                             },
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
                         )
                     }
                     if (visible.isEmpty()) {
                         container.addView(TextView(container.context).apply { setText(R.string.no_results_found) })
                     }
                     container.addView(
-                        MaterialButton(container.context).apply {
-                            text = context.getString(R.string.hayai_more_previews)
+                        (LayoutInflater.from(container.context).inflate(R.layout.material_text_button, container, false) as MaterialButton).apply {
+                            setText(R.string.hayai_more_previews)
                             setOnClickListener {
                                 router.pushController(SourcePreviewController(requireNotNull(manga.id)).withFadeTransaction())
                             }
+                        },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            gravity = android.view.Gravity.CENTER_HORIZONTAL
                         },
                     )
                     featureRoot.visibility = View.VISIBLE
                 } else {
                     val error = result.exceptionOrNull()
-                    container.addView(TextView(container.context).apply {
-                        text = error?.message ?: context.getString(R.string.hayai_page_previews_failed)
-                    })
-                    container.addView(MaterialButton(container.context).apply {
-                        text = context.getString(R.string.retry)
-                        setOnClickListener {
-                            container.tag = null
-                            loadSourceDetailsPreview(container, featureRoot, manga, page)
-                        }
-                    })
+                    container.addView(
+                        EmptyView(container.context).apply {
+                            show(
+                                R.drawable.ic_search_off_24dp,
+                                error?.message ?: context.getString(R.string.hayai_page_previews_failed),
+                                listOf(
+                                    EmptyView.Action(R.string.retry) {
+                                        container.tag = null
+                                        loadSourceDetailsPreview(container, featureRoot, manga, page)
+                                    },
+                                ),
+                            )
+                        },
+                    )
                     featureRoot.visibility = View.VISIBLE
                 }
             }
@@ -1593,12 +1612,13 @@ class MangaDetailsController :
                 if (chapter != null) startActivity(ReaderLauncher.newIntent(context, manga, chapter, preview.index - 1))
             }
         }
-        val image = ImageView(parent.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        val image = ImageView(parent.context).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
+        }
         cell.addView(
             image,
-            LinearLayout.LayoutParams((120 * density).toInt(), (200 * density).toInt()).apply {
-                marginEnd = (8 * density).toInt()
-            },
+            LinearLayout.LayoutParams((120 * density).toInt(), (200 * density).toInt()),
         )
         cell.addView(TextView(parent.context).apply { text = preview.index.toString() })
         sourceDetailsImageJobs += viewScope.launchIO {
@@ -1615,6 +1635,15 @@ class MangaDetailsController :
             }
         }
         return cell
+    }
+
+    private fun previewColumns(container: View): Int {
+        val width = container.width.takeIf { it > 0 } ?: container.resources.displayMetrics.widthPixels
+        val density = container.resources.displayMetrics.density
+        val horizontalPadding = (16 * density).toInt()
+        val minimumCell = (120 * density).toInt()
+        val spacing = (16 * density).toInt()
+        return ((width - horizontalPadding + spacing) / (minimumCell + spacing)).coerceAtLeast(1)
     }
 
     private fun containerTagMatches(manga: Manga): Boolean =
@@ -2417,7 +2446,6 @@ class MangaDetailsController :
 
         private const val MENU_COPY_COVER = 1
         private const val MENU_PASTE_COVER = 2
-        private const val INLINE_COLUMNS = 3
 
         private enum class RangeMode {
             Download,

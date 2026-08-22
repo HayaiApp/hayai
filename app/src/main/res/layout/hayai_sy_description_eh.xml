@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/hayai_sy_genre_card"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:background="@drawable/hayai_sy_metadata_badge_background"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/hayai_sy_genre"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="8dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="4dp"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+        </androidx.cardview.widget.CardView>
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/hayai_sy_pages"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <Button
+            android:id="@+id/hayai_sy_more_info"
+            style="?attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginEnd="16dp"
+            android:text="@string/hayai_source_metadata_more_info"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout
+            android:id="@+id/hayai_sy_rating_layout"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="8dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <RatingBar
+                android:id="@+id/hayai_sy_rating_bar"
+                style="?android:attr/ratingBarStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="20dp"
+                android:focusable="false"
+                android:isIndicator="true"
+                android:numStars="5"
+                android:stepSize="0.5" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/hayai_sy_rating"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginStart="8dp"
+                android:textAppearance="?attr/textAppearanceBodySmall" />
+        </LinearLayout>
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/hayai_sy_language"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="16dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/hayai_sy_rating_layout" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/hayai_sy_size"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintBottom_toBottomOf="@id/hayai_sy_rating_layout"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/hayai_sy_rating_layout" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/hayai_sy_favorites"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintBottom_toBottomOf="@id/hayai_sy_language"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/hayai_sy_language" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/hayai_sy_visible"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="16dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/hayai_sy_language" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/hayai_sy_uploader"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintBottom_toBottomOf="@id/hayai_sy_visible"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/hayai_sy_visible" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>
