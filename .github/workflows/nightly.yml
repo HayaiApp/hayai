@@ -38,6 +38,8 @@ jobs:
         run: |
           mkdir -p ~/.gradle
           cp .github/runner-files/ci-gradle.properties ~/.gradle/gradle.properties
+          mkdir -p app/src/dev
+          cp app/src/standard/google-services.json app/src/dev/google-services.json
 
       - name: Choose nightly number
         env:
