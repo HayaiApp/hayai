@@ -50,6 +50,8 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 
 The reader settings sheet deliberately contains no second UI vocabulary. Progress mode uses J2K's filter button layout, actions use J2K's text button layout, numeric values use J2K subtitle styling so values such as 100 percent cannot collide with or split the title, and configurable action/status order uses J2K's draggable download-header card with `ItemTouchHelper`. Hayai owns only the preference mapping and callbacks.
 
+The installed-APK run captured in `artifacts/emulator-verification/reader-settings-refactor-reader-chrome.xml`, `reader-settings-refactor-options.png`, and `reader-settings-refactor-more.png` verifies the reader toolbar safe area, separate title and metadata rows, intact percentage subtitles, all five option tabs, and native drag-handle ordering rows against the restored migration fixture.
+
 The coherent reader batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` run in `artifacts/emulator-verification/20260822-043650` verified legacy migration, the exact J2K reader shell, the absence of manga page-number labels, active TTS transport controls, all five reader settings tabs, offline save, process restart recovery, the logged-out E-Hentai settings state, and Browse.
 
 The discarded custom-shell workflow remains in `artifacts/emulator-verification/20260822-032809` only as regression evidence. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote and highlight selection, and orientation changes still need dedicated device flows.
