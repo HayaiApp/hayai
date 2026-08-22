@@ -8,6 +8,7 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryMetadata
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryPage
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhPageBatch
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhPagePreview
+import dev.ahmedmohamed.hayai.adult.eh.domain.EhPreviewPage
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhPreviewCrop
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhResolvedImage
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhRevision
@@ -34,35 +35,57 @@ object EhHtmlParser {
         location: String,
         site: EhSite,
         maxItems: Int = 40,
-    ): List<EhPagePreview> {
+    ): List<EhPagePreview> = parsePreviewPage(html, location, site, maxItems).previews
+
+    fun parsePreviewPage(
+        html: String,
+        location: String,
+        site: EhSite,
+        maxItems: Int = 100,
+    ): EhPreviewPage {
         require(maxItems in 1..100)
         val document = parseDocument(html, location)
         validateLocation(location, site)
         guard(document)
-        return document
-            .select("#gdt .gdtm, #gdt .gdtl")
-            .take(maxItems)
-            .mapIndexedNotNull { index, cell ->
+        val listingPage = runCatching { URI(location).query.orEmpty().split('&').firstOrNull { it.startsWith("p=") }?.substringAfter('=')?.toInt() }.getOrNull() ?: 0
+        val cells = document.select("#gdt .gdtm, #gdt .gdtl")
+        if (cells.size > maxItems) throw EhFailure.BoundsExceeded("E-Hentai preview page exceeds $maxItems entries")
+        val previews = cells
+            .mapNotNull { cell ->
                 val link = cell.selectFirst("a[href]")?.absUrl("href").orEmpty()
-                if (!link.startsWith("https://")) return@mapIndexedNotNull null
+                if (!link.startsWith("https://")) return@mapNotNull null
+                val index = previewIndex(cell, link) ?: return@mapNotNull null
                 val image = cell.selectFirst("img[src], img[data-src]")
                 val direct = image?.absUrl(if (image.hasAttr("data-src")) "data-src" else "src").orEmpty()
                 if (direct.startsWith("https://")) {
-                    return@mapIndexedNotNull EhPagePreview(index + 1, link, direct)
+                    return@mapNotNull runCatching { EhPagePreview(index, link, direct) }.getOrNull()
                 }
                 val sprite = cell.select("div[style]").firstOrNull { it.attr("style").contains("url(", ignoreCase = true) }
-                    ?: return@mapIndexedNotNull null
+                    ?: return@mapNotNull null
                 val style = sprite.attr("style")
                 val imageUrl = STYLE_URL.find(style)?.groupValues?.get(1)?.trim('\'', '"')?.let { sprite.absUrlFromStyle(it) }
-                    ?: return@mapIndexedNotNull null
-                val width = STYLE_WIDTH.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapIndexedNotNull null
-                val height = STYLE_HEIGHT.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapIndexedNotNull null
+                    ?: return@mapNotNull null
+                val width = STYLE_WIDTH.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
+                val height = STYLE_HEIGHT.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
                 val position = STYLE_POSITION.find(style)
                 val x = position?.groupValues?.get(1)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
                 val y = position?.groupValues?.get(2)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
-                runCatching { EhPagePreview(index + 1, link, imageUrl, EhPreviewCrop(x, y, width, height)) }.getOrNull()
+                runCatching { EhPagePreview(index, link, imageUrl, EhPreviewCrop(x, y, width, height)) }.getOrNull()
             }
+        val navigation = document.select("table.ptt td")
+        val totalPages = navigation.mapNotNull { it.text().trim().toIntOrNull() }.maxOrNull()
+        val hasNext = when {
+            totalPages != null -> listingPage + 1 < totalPages
+            navigation.isNotEmpty() -> !navigation.last().hasClass("ptdd")
+            else -> false
+        }
+        return EhPreviewPage(listingPage, previews, hasNext, totalPages)
     }
+
+    private fun previewIndex(cell: Element, pageUrl: String): Int? =
+        cell.selectFirst("img[alt]")?.attr("alt")?.trim()?.toIntOrNull()
+            ?: cell.selectFirst("[title^=Page]")?.attr("title")?.removePrefix("Page")?.trim()?.substringBefore(':')?.toIntOrNull()
+            ?: PAGE_URL_INDEX.find(pageUrl)?.groupValues?.get(1)?.toIntOrNull()
 
     private fun org.jsoup.nodes.Element.absUrlFromStyle(value: String): String =
         runCatching { java.net.URI(baseUri()).resolve(value).toString() }.getOrDefault("").takeIf { it.startsWith("https://") }.orEmpty()
@@ -71,6 +94,7 @@ object EhHtmlParser {
     private val STYLE_WIDTH = Regex("width\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
     private val STYLE_HEIGHT = Regex("height\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
     private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)px\\s+(-?\\d+)px", RegexOption.IGNORE_CASE)
+    private val PAGE_URL_INDEX = Regex("-(\\d+)(?:[/?#]|$)")
 
     fun parseBrowse(
         html: String,

@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
 import androidx.preference.PreferenceScreen
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.asImmediateFlow
 import eu.kanade.tachiyomi.data.preference.asImmediateFlowIn
@@ -23,6 +24,7 @@ import kotlin.math.max
 import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
 
 class SettingsAppearanceController : SettingsController() {
+    private val hayaiPreferences by lazy { HayaiPreferences(uy.kohesive.injekt.Injekt.get()) }
     var lastThemeXLight: Int? = null
     var lastThemeXDark: Int? = null
     var themePreference: ThemePreference? = null
@@ -136,6 +138,14 @@ class SettingsAppearanceController : SettingsController() {
                     titleRes = R.string.show_missing_chapters
                     summaryRes = R.string.show_missing_chapters_summary
                     defaultValue = true
+                }
+                intListPreference(activity) {
+                    bindTo(hayaiPreferences.pagePreviewRows)
+                    titleRes = R.string.hayai_preview_rows
+                    summaryRes = R.string.hayai_preview_rows_summary
+                    entries = (0..10).map(Int::toString)
+                    entryRange = 0..10
+                    defaultValue = 4
                 }
             }
 

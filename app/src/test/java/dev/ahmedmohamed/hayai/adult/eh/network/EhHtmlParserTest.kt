@@ -27,6 +27,39 @@ class EhHtmlParserTest {
         assertEquals(5, previews[1].crop?.y)
         assertEquals(100, previews[1].crop?.width)
         assertEquals(140, previews[1].crop?.height)
+        assertEquals(listOf(1, 2), previews.map { it.index })
+    }
+
+    @Test
+    fun `preview page keeps absolute indices and parses navigation`() {
+        val html = """
+            <html><body><div id="gdt">
+              <div class="gdtl"><a href="https://e-hentai.org/s/one/100-41"><img alt="41" src="https://ehgt.org/41.jpg"></a></div>
+              <div class="gdtl"><a href="https://e-hentai.org/s/two/100-42"><img alt="42" src="https://ehgt.org/42.jpg"></a></div>
+            </div><table class="ptt"><tr><td><a>1</a></td><td class="ptds">2</td><td><a>3</a></td></tr></table></body></html>
+        """.trimIndent()
+
+        val page = EhHtmlParser.parsePreviewPage(html, "https://e-hentai.org/g/100/token/?p=1", EhSite.EHentai)
+
+        assertEquals(listOf(41, 42), page.previews.map { it.index })
+        assertEquals(3, page.totalPages)
+        assertEquals(true, page.hasNextPage)
+    }
+
+    @Test
+    fun `preview page rejects an oversized response instead of silently truncating it`() {
+        val cells = (1..3).joinToString("") { index ->
+            "<div class='gdtl'><a href='https://e-hentai.org/s/hash/100-$index'><img alt='$index' src='https://ehgt.org/$index.jpg'></a></div>"
+        }
+
+        assertThrows(EhFailure.BoundsExceeded::class.java) {
+            EhHtmlParser.parsePreviewPage(
+                "<div id='gdt'>$cells</div>",
+                "https://e-hentai.org/g/100/token/?p=0",
+                EhSite.EHentai,
+                maxItems = 2,
+            )
+        }
     }
 
     @Test

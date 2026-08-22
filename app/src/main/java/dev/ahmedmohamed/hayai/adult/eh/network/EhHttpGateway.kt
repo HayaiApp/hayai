@@ -5,7 +5,7 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhDetailsPage
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryPage
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhResolvedImage
-import dev.ahmedmohamed.hayai.adult.eh.domain.EhPagePreview
+import dev.ahmedmohamed.hayai.adult.eh.domain.EhPreviewPage
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhRevision
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchCursor
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchSpec
@@ -84,10 +84,10 @@ class EhHttpGateway(
         site: EhSite,
         key: GalleryKey,
         page: Int = 0,
-    ): List<EhPagePreview> {
+    ): EhPreviewPage {
         require(page in 0..199)
         val url = site.baseUrl + key.normalizedPath + "&p=$page"
-        return getDocument(site, url) { html, location -> EhHtmlParser.parsePreviews(html, location, site) }
+        return getDocument(site, url) { html, location -> EhHtmlParser.parsePreviewPage(html, location, site) }
     }
 
     fun imageRequest(site: EhSite, imageUrl: String): Request = request(site, imageUrl)
