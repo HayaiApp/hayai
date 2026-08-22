@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/novel_reader_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground">
+
+    <FrameLayout
+        android:id="@+id/novel_viewer_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <ProgressBar
+        android:id="@+id/novel_reader_loading"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:indeterminate="true" />
+
+    <TextView
+        android:id="@+id/novel_reader_status_top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="?android:colorBackground"
+        android:ellipsize="end"
+        android:gravity="center_vertical"
+        android:maxLines="1"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:textColor="?android:textColorPrimary"
+        android:visibility="gone"
+        tools:text="10:42   Chapter 3   48%   82%" />
+
+    <LinearLayout
+        android:id="@+id/novel_reader_app_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="@drawable/reader_toolbar_ripple"
+        android:orientation="vertical">
+
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/novel_reader_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@android:color/transparent"
+            app:navigationIcon="@drawable/ic_close_24dp"
+            app:subtitleTextColor="@color/action_bar_tint_alpha"
+            app:titleTextColor="?actionBarTintColor"
+            tools:subtitle="Chapter 3 of 20"
+            tools:title="Novel title" />
+
+        <TextView
+            android:id="@+id/novel_reader_chapter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="8dp"
+            android:textColor="?actionBarTintColor"
+            android:textSize="12sp"
+            tools:text="Chapter 3   3/20   1,850 words   8 min" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/novel_reader_bottom_chrome"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/chapter_nav"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/novel_reader_status_bottom"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="center_vertical"
+            android:maxLines="1"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:textColor="?actionBarTintColor"
+            android:visibility="gone"
+            tools:text="10:42   Chapter 3   48%   82%" />
+
+        <LinearLayout
+            android:id="@+id/novel_reader_progress_row"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp">
+
+            <ImageButton
+                android:id="@+id/novel_reader_previous"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?selectableItemBackgroundBorderless"
+                android:contentDescription="@string/previous_chapter"
+                android:padding="8dp"
+                app:srcCompat="@drawable/ic_skip_previous_24"
+                app:tint="?actionBarTintColor" />
+
+            <TextView
+                android:id="@+id/novel_reader_progress_text"
+                android:layout_width="48dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="?actionBarTintColor"
+                tools:text="48%" />
+
+            <SeekBar
+                android:id="@+id/novel_reader_progress"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:max="100" />
+
+            <ImageButton
+                android:id="@+id/novel_reader_next"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?selectableItemBackgroundBorderless"
+                android:contentDescription="@string/next_chapter"
+                android:padding="8dp"
+                app:srcCompat="@drawable/ic_skip_next_24"
+                app:tint="?actionBarTintColor" />
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/novel_reader_actions"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

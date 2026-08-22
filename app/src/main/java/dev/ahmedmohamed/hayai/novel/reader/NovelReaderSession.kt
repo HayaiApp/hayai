@@ -42,7 +42,7 @@ internal class NovelReaderSession(
         private set
     private lateinit var chapters: List<Chapter>
     private var chapterIndex = -1
-    private var offlineChapterUrl: String? = null
+    private val offlineChapterUrls = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private var recordHistory = true
     private val prefetchedDocuments =
         java.util.Collections.synchronizedMap(
@@ -57,6 +57,15 @@ internal class NovelReaderSession(
         get() = chapterIndex > 0
     val hasNext: Boolean
         get() = chapterIndex in 0 until chapters.lastIndex
+
+    fun adjacent(next: Boolean): Chapter? = chapters.getOrNull(chapterIndex + if (next) 1 else -1)
+
+    fun focus(chapterId: Long): Boolean {
+        val index = chapters.indexOfFirst { it.id == chapterId }
+        if (index < 0) return false
+        chapterIndex = index
+        return true
+    }
 
     suspend fun initialize(
         mangaId: Long,
@@ -84,14 +93,12 @@ internal class NovelReaderSession(
 
     suspend fun previous(): LoadedNovelChapter? {
         if (!hasPrevious) return null
-        chapterIndex -= 1
-        return loadCurrent()
+        return move(-1)
     }
 
     suspend fun next(): LoadedNovelChapter? {
         if (!hasNext) return null
-        chapterIndex += 1
-        return loadCurrent()
+        return move(1)
     }
 
     suspend fun saveProgress(
@@ -126,6 +133,29 @@ internal class NovelReaderSession(
 
     suspend fun reload(): LoadedNovelChapter = loadCurrent()
 
+    suspend fun loadAdjacent(next: Boolean): LoadedNovelChapter? {
+        val index = chapterIndex + if (next) 1 else -1
+        if (index !in chapters.indices) return null
+        val previousIndex = chapterIndex
+        chapterIndex = index
+        return try {
+            loadCurrent(recordAccess = false)
+        } finally {
+            chapterIndex = previousIndex
+        }
+    }
+
+    private suspend fun move(delta: Int): LoadedNovelChapter {
+        val previousIndex = chapterIndex
+        chapterIndex += delta
+        return try {
+            loadCurrent()
+        } catch (error: Throwable) {
+            chapterIndex = previousIndex
+            throw error
+        }
+    }
+
     suspend fun prefetchAdjacent(radius: Int) {
         val bounded = radius.coerceIn(0, MAX_PREFETCHED_DOCUMENTS / 2)
         if (bounded == 0 || chapterIndex !in chapters.indices) return
@@ -150,14 +180,14 @@ internal class NovelReaderSession(
         assetPath: String,
     ): InputStream? =
         downloadStore.openAsset(source.id, chapterUrl, assetPath)
-            ?: if (chapterUrl == offlineChapterUrl) null else (source as? NovelAssetProvider)?.getChapterAsset(chapterUrl, assetPath)
+            ?: if (chapterUrl in offlineChapterUrls) null else (source as? NovelAssetProvider)?.getChapterAsset(chapterUrl, assetPath)
 
-    fun isOffline(chapterUrl: String): Boolean = chapterUrl == offlineChapterUrl
+    fun isOffline(chapterUrl: String): Boolean = chapterUrl in offlineChapterUrls
 
-    private suspend fun loadCurrent(): LoadedNovelChapter {
+    private suspend fun loadCurrent(recordAccess: Boolean = true): LoadedNovelChapter {
         val chapter = currentChapter
         val offlineDocument = downloadStore.loadDocument(source.id, chapter.url)
-        offlineChapterUrl = chapter.url.takeIf { offlineDocument != null }
+        if (offlineDocument != null) offlineChapterUrls += chapter.url else offlineChapterUrls -= chapter.url
         val document =
             offlineDocument
                 ?: prefetchedDocuments.remove(chapter.url)
@@ -168,10 +198,12 @@ internal class NovelReaderSession(
         val statistics =
             NovelStatisticsResolver.resolve(document, persisted = { chapterStatStore.get(chapterId) })
         runCatching { chapterStatStore.store(chapterId, statistics) }
-        database
-            .upsertHistoryLastRead(
-                History.create(chapter).apply { last_read = System.currentTimeMillis() },
-            ).executeAsBlocking()
+        if (recordHistory && recordAccess) {
+            database
+                .upsertHistoryLastRead(
+                    History.create(chapter).apply { last_read = System.currentTimeMillis() },
+                ).executeAsBlocking()
+        }
         return LoadedNovelChapter(
             manga = manga,
             chapter = chapter,
