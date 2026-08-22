@@ -156,6 +156,77 @@
                     app:iconSize="22dp" />
             </FrameLayout>
 
+            <LinearLayout
+                android:id="@+id/hayai_browse_metadata"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginEnd="8dp"
+                android:gravity="bottom"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                app:layout_constraintEnd_toStartOf="@id/unread_download_badge"
+                app:layout_constraintStart_toEndOf="@id/card"
+                app:layout_constraintTop_toBottomOf="@id/subtitle"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <RatingBar
+                        android:id="@+id/hayai_rating"
+                        style="?android:attr/ratingBarStyleSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:isIndicator="true"
+                        android:numStars="5"
+                        android:stepSize="0.5" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/hayai_type_badge"
+                        style="?textAppearanceLabelMedium"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        tools:text="Doujinshi" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/hayai_language_pages"
+                        style="?textAppearanceBodySmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:textColor="?android:attr/textColorSecondary"
+                        tools:text="EN · 42 pages" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/hayai_posted"
+                        style="?textAppearanceBodySmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:gravity="end"
+                        android:textColor="?android:attr/textColorSecondary"
+                        tools:text="2026-08-22 12:00" />
+                </LinearLayout>
+            </LinearLayout>
+
+
             <androidx.constraintlayout.widget.Barrier
                 android:id="@+id/bottom_list_line"
                 android:layout_width="wrap_content"
@@ -163,7 +234,7 @@
                 android:layout_margin="6dp"
                 android:orientation="horizontal"
                 app:barrierDirection="bottom"
-                app:constraint_referenced_ids="card,subtitle" />
+                app:constraint_referenced_ids="card,subtitle,hayai_browse_metadata" />
 
             <View
                 android:id="@+id/padding"

@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">Предосмотр страниц</string>
     <string name="hayai_more_previews">Просмотреть ещё</string>
     <string name="hayai_clear_preview_cache">Очистить кэш предосмотренных страниц</string>
+    <string name="hayai_source_metadata_base_url">Основной URL-адрес</string>
+    <string name="hayai_source_metadata_path">Путь</string>
+    <string name="hayai_source_metadata_thumbnail_url">URL-адрес миниатюры</string>
+    <string name="hayai_source_metadata_token">Токен</string>
+    <string name="hayai_source_metadata_url">URL-адрес</string>
+    <string name="hayai_source_metadata_is_exhentai">Галерея ExHentai</string>
+    <string name="hayai_source_metadata_parent">URL-адрес родителя</string>
+    <string name="hayai_source_metadata_translated">Переведено</string>
+    <string name="hayai_source_type_doujinshi">Додзинси</string>
+    <string name="hayai_source_type_artist_cg">Худож. графика</string>
+    <string name="hayai_source_type_game_cg">Игровая графика</string>
+    <string name="hayai_source_type_western">Западное</string>
+    <string name="hayai_source_type_non_h">Не хентай</string>
+    <string name="hayai_source_type_image_set">Набор изображений</string>
+    <string name="hayai_source_type_cosplay">Косплей</string>
+    <string name="hayai_source_type_asian_porn">Азиатское порно</string>
+    <string name="hayai_source_type_misc">Разное</string>
 </resources>

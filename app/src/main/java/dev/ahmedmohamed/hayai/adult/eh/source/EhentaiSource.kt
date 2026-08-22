@@ -16,6 +16,7 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadata
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadataTag
 import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadataTitle
 import dev.ahmedmohamed.hayai.adult.eh.presentation.EhTextResolver
+import dev.ahmedmohamed.hayai.adult.eh.presentation.EhBrowsePresentation
 import dev.ahmedmohamed.hayai.adult.eh.presentation.localizedMessage
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import eu.kanade.tachiyomi.R
@@ -27,6 +28,9 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
+import dev.ahmedmohamed.hayai.source.presentation.BoundedSourceBrowsePresentationStore
+import dev.ahmedmohamed.hayai.source.presentation.SourceBrowsePresentation
+import dev.ahmedmohamed.hayai.source.presentation.SourceBrowsePresentationProvider
 import okhttp3.Response
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
@@ -40,7 +44,7 @@ class EhentaiSource(
     private val gateway: EhHttpGateway,
     private val metadataStore: HayaiEhPersistenceStore,
     private val preferences: EhPreferences,
-) : HttpSource() {
+) : HttpSource(), SourceBrowsePresentationProvider {
     override val id: Long = site.sourceId
     override val name: String = site.displayName
     override val lang: String = "all"
@@ -50,6 +54,7 @@ class EhentaiSource(
     private val cursors = EhCursorStore(context)
     private val text = EhTextResolver(context)
     private val retryPageUrls = ConcurrentHashMap<String, String>()
+    private val browsePresentations = BoundedSourceBrowsePresentationStore()
 
     override suspend fun getPopularManga(page: Int): MangasPage {
         require(page == 1) { context.getString(R.string.hayai_eh_popular_single_page) }
@@ -72,7 +77,7 @@ class EhentaiSource(
         directGallery(query)?.let { key ->
             if (page > 1) return MangasPage(emptyList(), false)
             val details = request { gateway.details(site, key) }
-            return MangasPage(listOf(details.metadata.toSManga()), false)
+            return MangasPage(listOf(details.metadata.toPresentedSManga()), false)
         }
         val spec = filters.toEhSpec(query, context)
         val fingerprint = spec.toString()
@@ -130,6 +135,9 @@ class EhentaiSource(
 
     override fun getChapterUrl(chapter: SChapter): String = GalleryKey.parse(chapter.url).absoluteUrl(site)
 
+    override fun browsePresentation(manga: eu.kanade.tachiyomi.data.database.models.Manga): SourceBrowsePresentation? =
+        browsePresentations.get(manga.url)
+
     private suspend fun <T> request(block: suspend () -> T): T = try {
         block()
     } catch (failure: EhFailure) {
@@ -142,7 +150,16 @@ class EhentaiSource(
     }
 
     private fun dev.ahmedmohamed.hayai.adult.eh.domain.EhBrowsePage.toMangasPage(): MangasPage =
-        MangasPage(galleries.map(EhBrowseGallery::metadata).map { it.toSManga() }, nextCursor != null)
+        MangasPage(
+            galleries.map(EhBrowseGallery::metadata).map { metadata ->
+                metadata.toPresentedSManga()
+            },
+            nextCursor != null,
+        )
+
+    private fun EhGalleryMetadata.toPresentedSManga(): SManga = toSManga().also { manga ->
+        browsePresentations.put(manga.url, EhBrowsePresentation.from(this))
+    }
 
     private fun EhGalleryMetadata.toSManga(): SManga = SManga.create().apply {
         url = key.normalizedPath

@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">Sayfa önizlemeleri</string>
     <string name="hayai_more_previews">Daha fazla önizleme</string>
     <string name="hayai_clear_preview_cache">Sayfa önizlemesi önbelleğini temizle</string>
+    <string name="hayai_source_metadata_base_url">Ana url</string>
+    <string name="hayai_source_metadata_path">Yol</string>
+    <string name="hayai_source_metadata_thumbnail_url">Küçük resim bağlantısı</string>
+    <string name="hayai_source_metadata_token">Anahtar</string>
+    <string name="hayai_source_metadata_url">Url</string>
+    <string name="hayai_source_metadata_is_exhentai">Exhentai galerisi</string>
+    <string name="hayai_source_metadata_parent">Üst gönderi</string>
+    <string name="hayai_source_metadata_translated">Çevrilmiş</string>
+    <string name="hayai_source_type_doujinshi">Doujinshi</string>
+    <string name="hayai_source_type_artist_cg">Sanatçı CG</string>
+    <string name="hayai_source_type_game_cg">Oyun CG</string>
+    <string name="hayai_source_type_western">Batı</string>
+    <string name="hayai_source_type_non_h">H-Değil</string>
+    <string name="hayai_source_type_image_set">Görsel Seti</string>
+    <string name="hayai_source_type_cosplay">Kostüm</string>
+    <string name="hayai_source_type_asian_porn">Asya Pornosu</string>
+    <string name="hayai_source_type_misc">Çeşitli</string>
 </resources>

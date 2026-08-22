@@ -29,6 +29,9 @@ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.source.enhanced.EnhancedDetailsPreviewLoader
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
 import dev.ahmedmohamed.hayai.source.preview.SourcePreviewCache
+import dev.ahmedmohamed.hayai.source.metadata.EhSourceMetadataProvider
+import dev.ahmedmohamed.hayai.source.metadata.EnhancedSourceMetadataProvider
+import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
 import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
 import eu.kanade.tachiyomi.data.cache.ChapterCache
@@ -119,6 +122,16 @@ class AppModule(
             )
         }
         addSingletonFactory { SourceManager(app, get(), get(), get()) }
+        addSingletonFactory { EhSourceMetadataProvider(get(), get(), HayaiPreferences(get()), get()) }
+        addSingletonFactory { EnhancedSourceMetadataProvider(get(), get()) }
+        addSingletonFactory {
+            SourceMetadataProviderRegistry(
+                listOf(
+                    get<EhSourceMetadataProvider>(),
+                    get<EnhancedSourceMetadataProvider>(),
+                ),
+            )
+        }
         addSingletonFactory { NovelJ2kIntegration(get(), get()) }
         addSingletonFactory { NovelMigrationPolicy(get(), get()) }
 

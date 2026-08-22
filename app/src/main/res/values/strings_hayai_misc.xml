@@ -160,6 +160,39 @@
     <string name="hayai_source_badge_adult">Adult</string>
     <string name="hayai_source_badge_enhanced">Enhanced</string>
     <string name="hayai_page_range">%1$d–%2$d</string>
+    <string name="hayai_eh_filter_tags_hint">Search tags and namespaces. Add up to %1$d tags; prefix with - to exclude or ~ to match any.</string>
+    <string name="hayai_eh_filter_invalid_tag">Enter one valid E-Hentai tag.</string>
+
+    <!-- Source metadata -->
+    <string name="hayai_source_metadata_title">Source metadata</string>
+    <string name="hayai_source_metadata_more_info">More information</string>
+    <string name="hayai_source_metadata_failed">Source metadata could not be loaded.</string>
+    <string name="hayai_source_metadata_translated">Translated</string>
+    <string name="hayai_source_metadata_visibility">Visibility</string>
+    <string name="hayai_source_metadata_base_url">Base url</string>
+    <string name="hayai_source_metadata_path">Path</string>
+    <string name="hayai_source_metadata_thumbnail_url">Thumbnail url</string>
+    <string name="hayai_source_metadata_token">Token</string>
+    <string name="hayai_source_metadata_url">Url</string>
+    <string name="hayai_source_metadata_is_exhentai">is Exhentai gallery</string>
+    <string name="hayai_source_metadata_parent">Parent</string>
+    <string name="hayai_source_metadata_yes">Yes</string>
+    <string name="hayai_source_metadata_no">No</string>
+    <string name="hayai_source_metadata_field">%1$s: %2$s</string>
+    <plurals name="hayai_source_browse_pages">
+        <item quantity="one">%1$d page</item>
+        <item quantity="other">%1$d pages</item>
+    </plurals>
+    <string name="hayai_source_type_doujinshi">Doujinshi</string>
+    <string name="hayai_source_type_manga">Manga</string>
+    <string name="hayai_source_type_artist_cg">Artist CG</string>
+    <string name="hayai_source_type_game_cg">Game CG</string>
+    <string name="hayai_source_type_western">Western</string>
+    <string name="hayai_source_type_non_h">Non-H</string>
+    <string name="hayai_source_type_image_set">Image Set</string>
+    <string name="hayai_source_type_cosplay">Cosplay</string>
+    <string name="hayai_source_type_asian_porn">Asian Porn</string>
+    <string name="hayai_source_type_misc">Misc</string>
 
     <!-- Enhanced-source description labels -->
     <string name="hayai_enhanced_label_alternative_title">Alternative title</string>

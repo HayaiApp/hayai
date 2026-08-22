@@ -29,6 +29,9 @@ import eu.kanade.tachiyomi.ui.source.filter.TriStateSectionItem
 import eu.kanade.tachiyomi.ui.source.searchhistory.FilterApplyResult
 import eu.kanade.tachiyomi.ui.source.searchhistory.SavedFilter
 import eu.kanade.tachiyomi.ui.source.searchhistory.applyTo
+import dev.ahmedmohamed.hayai.source.filter.SourceTagCompletionFilter
+import dev.ahmedmohamed.hayai.source.filter.SourceTagCompletionItem
+import dev.ahmedmohamed.hayai.source.presentation.SourceBrowsePresentationProvider
 import eu.kanade.tachiyomi.util.manga.duplicateLibraryMangaIds
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.withUIContext
@@ -224,6 +227,7 @@ open class BrowseSourcePresenter(
                                         sourceListType,
                                         outlineCovers,
                                         isDuplicateInLibrary = it.id in duplicateIds,
+                                        sourcePresentation = (source as? SourceBrowsePresentationProvider)?.browsePresentation(it),
                                     )
                                 }
                             this@BrowseSourcePresenter.items.addAll(items)
@@ -362,7 +366,12 @@ open class BrowseSourcePresenter(
                 is Filter.Separator -> SeparatorItem(filter)
                 is Filter.CheckBox -> CheckboxItem(filter)
                 is Filter.TriState -> TriStateItem(filter)
-                is Filter.Text -> TextItem(filter)
+                is Filter.Text ->
+                    if (filter is SourceTagCompletionFilter) {
+                        SourceTagCompletionItem(filter, filter)
+                    } else {
+                        TextItem(filter)
+                    }
                 is Filter.Select<*> -> SelectItem(filter)
                 is Filter.Group<*> -> {
                     val group = GroupItem(filter)

@@ -14,13 +14,26 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
 | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; logged-out emulator screen verified; authenticated login pending |
 | EH source settings, default filters, enhanced details toggle, and remote uconfig | Typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
 | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
-| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, lazy cached details rows, full preview browser, and typed J2K reader-page handoff | implemented unverified; authenticated emulator details flow pending |
+| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, SY-style inline/full metadata UI, lazy cached preview pages, full preview browser, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | implemented unverified; authenticated emulator details/search flow pending |
 | 8Muses/EroMuse, HBrowse, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | implemented unverified for the source-specific behavior SY exposes |
 | Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions plus bounded listing/image caches and a full preview browser | implemented unverified; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not |
-| Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI audit |
+| Raised metadata, titles, and tags | Additive schema, typed source documents, durable enhanced-source cache, inline summary, and full metadata activity | implemented unverified; emulator source fixtures pending |
 | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
 | Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | source-supported preview and settings behavior implemented unverified |
-| Source type and origin badges | Hayai presentation resolver plus browse and migration adapters | implemented unverified |
+| Source type and origin badges | Hayai presentation resolver plus SY category colors and EH rich browse adapter | implemented unverified; live browse verification pending |
+
+Source-surface parity at the pinned SY reference is intentionally capability-specific:
+
+| Source family | Rich browse/category badge | Custom metadata | Page previews | Tag autocomplete |
+|---|---:|---:|---:|---:|
+| E-Hentai / ExHentai | yes | yes | yes | yes |
+| 8Muses / EroMuse | upstream list | yes | not exposed by SY | upstream filter UI |
+| HBrowse | upstream list | yes | not exposed by SY | upstream filter UI |
+| NHentai | upstream list | yes | yes | upstream filter UI |
+| Pururin / Puruin | upstream list | yes | not exposed by SY | upstream filter UI |
+| LANraragi | upstream list | yes | yes | upstream filter UI |
+
+The details adapter resolves metadata and previews independently so a failure in one surface does not suppress the other. MangaDex-specific expansion remains excluded by the requested scope.
 
 SY areas audited include its EH/ExHentai source, login and preferences; metadata models/parsers; adult classifier and library filters; favorites/update flows; enhanced source handlers; merged/feed/saved-search systems; and reader/network extras. Exact behavior is rebuilt behind Hayai contracts rather than copied into J2K presenters.
 

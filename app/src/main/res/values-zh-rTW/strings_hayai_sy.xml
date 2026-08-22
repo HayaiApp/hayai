@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">頁面預覽</string>
     <string name="hayai_more_previews">更多預覽</string>
     <string name="hayai_clear_preview_cache">清除頁面預覽快取</string>
+    <string name="hayai_source_metadata_base_url">基礎url</string>
+    <string name="hayai_source_metadata_path">路徑</string>
+    <string name="hayai_source_metadata_thumbnail_url">縮圖</string>
+    <string name="hayai_source_metadata_token">Token</string>
+    <string name="hayai_source_metadata_url">Url</string>
+    <string name="hayai_source_metadata_is_exhentai">Exhentai 畫廊</string>
+    <string name="hayai_source_metadata_parent">上層圖庫</string>
+    <string name="hayai_source_metadata_translated">已翻譯</string>
+    <string name="hayai_source_type_doujinshi">同人誌</string>
+    <string name="hayai_source_type_artist_cg">藝術 CG</string>
+    <string name="hayai_source_type_game_cg">遊戲 CG</string>
+    <string name="hayai_source_type_western">歐美</string>
+    <string name="hayai_source_type_non_h">非色情</string>
+    <string name="hayai_source_type_image_set">圖片集</string>
+    <string name="hayai_source_type_cosplay">角色扮演</string>
+    <string name="hayai_source_type_asian_porn">亞洲色情</string>
+    <string name="hayai_source_type_misc">雜項</string>
 </resources>

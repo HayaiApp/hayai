@@ -24,6 +24,23 @@ $mapping = [ordered]@{
     hayai_page_previews = "page_previews"
     hayai_more_previews = "more_previews"
     hayai_clear_preview_cache = "pref_clear_page_preview_cache"
+    hayai_source_metadata_base_url = "base_url"
+    hayai_source_metadata_path = "path"
+    hayai_source_metadata_thumbnail_url = "thumbnail_url"
+    hayai_source_metadata_token = "token"
+    hayai_source_metadata_url = "url"
+    hayai_source_metadata_is_exhentai = "is_exhentai_gallery"
+    hayai_source_metadata_parent = "parent"
+    hayai_source_metadata_translated = "translated"
+    hayai_source_type_doujinshi = "doujinshi"
+    hayai_source_type_artist_cg = "artist_cg"
+    hayai_source_type_game_cg = "game_cg"
+    hayai_source_type_western = "western"
+    hayai_source_type_non_h = "non_h"
+    hayai_source_type_image_set = "image_set"
+    hayai_source_type_cosplay = "cosplay"
+    hayai_source_type_asian_porn = "asian_porn"
+    hayai_source_type_misc = "misc"
 }
 
 function Read-GitXml([string] $Path) {

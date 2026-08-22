@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">Pregledi stranica</string>
     <string name="hayai_more_previews">Više pregleda</string>
     <string name="hayai_clear_preview_cache">Izbriši predmemoriju pregleda stranica</string>
+    <string name="hayai_source_metadata_base_url">Osnovni URL</string>
+    <string name="hayai_source_metadata_path">Staza</string>
+    <string name="hayai_source_metadata_thumbnail_url">URL minijature</string>
+    <string name="hayai_source_metadata_token">Token</string>
+    <string name="hayai_source_metadata_url">Url</string>
+    <string name="hayai_source_metadata_is_exhentai">je Exhentai galerija</string>
+    <string name="hayai_source_metadata_parent">Roditelj</string>
+    <string name="hayai_source_metadata_translated">Prevedeno</string>
+    <string name="hayai_source_type_doujinshi">Doujinshi</string>
+    <string name="hayai_source_type_artist_cg">Dizajner računalne grafike</string>
+    <string name="hayai_source_type_game_cg">Igra računalne grafike</string>
+    <string name="hayai_source_type_western">Zapadni</string>
+    <string name="hayai_source_type_non_h">Bez erotskog sadržaja</string>
+    <string name="hayai_source_type_image_set">Skup slika</string>
+    <string name="hayai_source_type_cosplay">Kostimirano igranje uloga</string>
+    <string name="hayai_source_type_asian_porn">Azijski pornići</string>
+    <string name="hayai_source_type_misc">Razno</string>
 </resources>

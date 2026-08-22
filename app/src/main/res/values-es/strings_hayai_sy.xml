@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">Vistas previas de página</string>
     <string name="hayai_more_previews">Más vistas previas</string>
     <string name="hayai_clear_preview_cache">Limpiar la caché de vista previa de página</string>
+    <string name="hayai_source_metadata_base_url">Dirección URL base</string>
+    <string name="hayai_source_metadata_path">Ruta</string>
+    <string name="hayai_source_metadata_thumbnail_url">Enlace de la miniatura</string>
+    <string name="hayai_source_metadata_token">Token</string>
+    <string name="hayai_source_metadata_url">Dirección URL</string>
+    <string name="hayai_source_metadata_is_exhentai">Galería Exhentai</string>
+    <string name="hayai_source_metadata_parent">Padre</string>
+    <string name="hayai_source_metadata_translated">Traducido</string>
+    <string name="hayai_source_type_doujinshi">Doujinshi</string>
+    <string name="hayai_source_type_artist_cg">Artista CG</string>
+    <string name="hayai_source_type_game_cg">Juego CG</string>
+    <string name="hayai_source_type_western">Oeste</string>
+    <string name="hayai_source_type_non_h">No-H</string>
+    <string name="hayai_source_type_image_set">Conjunto de imágenes</string>
+    <string name="hayai_source_type_cosplay">Cosplay</string>
+    <string name="hayai_source_type_asian_porn">Porno asiático</string>
+    <string name="hayai_source_type_misc">Miscelánea</string>
 </resources>

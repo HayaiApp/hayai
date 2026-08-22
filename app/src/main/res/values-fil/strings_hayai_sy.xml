@@ -15,4 +15,21 @@
     <string name="hayai_page_previews">Preview ng mga pahina</string>
     <string name="hayai_more_previews">Maraming preview</string>
     <string name="hayai_clear_preview_cache">Linisin ang cache ng pag preview</string>
+    <string name="hayai_source_metadata_base_url">Base url</string>
+    <string name="hayai_source_metadata_path">Path</string>
+    <string name="hayai_source_metadata_thumbnail_url">URL ng thumbnail</string>
+    <string name="hayai_source_metadata_token">Token</string>
+    <string name="hayai_source_metadata_url">Url</string>
+    <string name="hayai_source_metadata_is_exhentai">ay Exhentai na gallery</string>
+    <string name="hayai_source_metadata_parent">Parent</string>
+    <string name="hayai_source_metadata_translated">Naisalin</string>
+    <string name="hayai_source_type_doujinshi">Doujinshi</string>
+    <string name="hayai_source_type_artist_cg">CG ng Taga-guhit</string>
+    <string name="hayai_source_type_game_cg">CG ng Laro</string>
+    <string name="hayai_source_type_western">Kanluranin</string>
+    <string name="hayai_source_type_non_h">Hindi-H</string>
+    <string name="hayai_source_type_image_set">Set ng Imahe</string>
+    <string name="hayai_source_type_cosplay">Cosplay</string>
+    <string name="hayai_source_type_asian_porn">Asyano Porno</string>
+    <string name="hayai_source_type_misc">Sari-sari</string>
 </resources>
