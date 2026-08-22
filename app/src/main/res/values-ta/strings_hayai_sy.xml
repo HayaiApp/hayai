@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">அசல் படங்களைப் பயன்படுத்துங்கள்</string>
+    <string name="hayai_eh_tag_filtering_threshold">குறிச்சொல் வடிகட்டுதல் வாசல்</string>
+    <string name="hayai_eh_tag_watching_threshold">குறிச்சொல் வாசல் பார்க்கும்</string>
+    <string name="hayai_eh_watched_tags_web_title">கண்காட்சி குறிச்சொற்களைப் பார்த்தது</string>
+    <string name="hayai_eh_category_non_h">அல்லாத எச்</string>
+    <string name="hayai_eh_category_image_set">பட தொகுப்பு</string>
+    <string name="hayai_eh_category_asian_porn">ஆசிய ஆபாச</string>
+    <string name="hayai_eh_language_filtering">மொழி வடிகட்டுதல்</string>
+    <string name="hayai_eh_custom_igneous">தனிப்பயன் பற்றவைப்பு குக்கீ</string>
+    <string name="hayai_custom_source_field_base_url">அடிப்படை முகவரி</string>
+    <string name="hayai_api_key">பநிஇ விசை</string>
+    <string name="hayai_page_previews">பக்க முன்னோட்டங்கள்</string>
+    <string name="hayai_more_previews">மேலும் முன்னோட்டங்கள்</string>
+    <string name="hayai_clear_preview_cache">தெளிவான பக்க முன்னோட்டம் தற்காலிக சேமிப்பு</string>
+</resources>

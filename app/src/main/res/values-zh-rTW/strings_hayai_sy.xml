@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">使用原圖</string>
+    <string name="hayai_eh_tag_filtering_threshold">標籤過濾臨界值</string>
+    <string name="hayai_eh_tag_watching_threshold">標籤收藏臨界值</string>
+    <string name="hayai_eh_watched_tags_web_title">ExHentai 收藏的標籤</string>
+    <string name="hayai_eh_category_non_h">非色情</string>
+    <string name="hayai_eh_category_image_set">圖片集</string>
+    <string name="hayai_eh_category_asian_porn">亞洲色情</string>
+    <string name="hayai_eh_language_filtering">語言過濾</string>
+    <string name="hayai_eh_custom_igneous">自訂 igneous cookie</string>
+    <string name="hayai_custom_source_field_base_url">基礎url</string>
+    <string name="hayai_api_key">API 金鑰</string>
+    <string name="hayai_page_previews">頁面預覽</string>
+    <string name="hayai_more_previews">更多預覽</string>
+    <string name="hayai_clear_preview_cache">清除頁面預覽快取</string>
+</resources>

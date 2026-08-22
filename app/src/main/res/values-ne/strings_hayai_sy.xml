@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">मूल चित्रहरू प्रयोग गर्नुहोस्</string>
+    <string name="hayai_eh_tag_filtering_threshold">ट्याग फिल्टरिङ थ्रेसहोल्ड</string>
+    <string name="hayai_eh_tag_watching_threshold">ट्याग निगरानीको न्यूनतम सीमा</string>
+    <string name="hayai_eh_watched_tags_web_title">ExHentai मा हेरिएको ट्यागहरू</string>
+    <string name="hayai_eh_language_filtering">भाषा फिल्टरिङ</string>
+</resources>

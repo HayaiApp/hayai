@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">원본 이미지 사용</string>
+    <string name="hayai_eh_tag_filtering_threshold">태그 필터 임계값</string>
+    <string name="hayai_eh_tag_watching_threshold">태그 열람 임계값</string>
+    <string name="hayai_eh_watched_tags_web_title">ExHentai 관심 태그</string>
+    <string name="hayai_eh_language_filtering">언어 필터</string>
+    <string name="hayai_eh_custom_igneous">커스텀 igneous 쿠키</string>
+    <string name="hayai_api_key">API 키</string>
+</resources>

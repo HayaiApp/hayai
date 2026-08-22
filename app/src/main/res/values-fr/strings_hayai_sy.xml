@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from TachiyomiSY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42 by tools/import-sy-translations.ps1. -->
+<resources>
+    <string name="hayai_eh_use_original_images">Utiliser des images originales</string>
+    <string name="hayai_eh_tag_filtering_threshold">Seuil de filtrage des tags</string>
+    <string name="hayai_eh_tag_watching_threshold">Seuil des tags sélectionné</string>
+    <string name="hayai_eh_watched_tags_web_title">Tags Sélectionné de ExHentai</string>
+    <string name="hayai_eh_category_non_h">Non-H</string>
+    <string name="hayai_eh_category_image_set">Image Set</string>
+    <string name="hayai_eh_category_asian_porn">Porno Asiatique</string>
+    <string name="hayai_eh_language_filtering">Filtrage de la langue</string>
+    <string name="hayai_eh_custom_igneous">Cookie igné personnalisé</string>
+    <string name="hayai_custom_source_field_base_url">URL de base</string>
+    <string name="hayai_api_key">Clé API</string>
+    <string name="hayai_page_previews">Aperçu des pages</string>
+    <string name="hayai_more_previews">Plus d\&apos;aperçus</string>
+    <string name="hayai_clear_preview_cache">Effacer le cache de l\&apos;aperçu de la page</string>
+</resources>
