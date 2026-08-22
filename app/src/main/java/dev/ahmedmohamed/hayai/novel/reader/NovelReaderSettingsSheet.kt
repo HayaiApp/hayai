@@ -1,23 +1,30 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
 import android.app.Activity
-import android.graphics.Typeface
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.CheckBox
+import android.widget.HorizontalScrollView
+import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.SeekBar
-import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
-import eu.kanade.tachiyomi.R
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.slider.Slider
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.Preference
+import eu.kanade.tachiyomi.util.system.getResourceColor
+import eu.kanade.tachiyomi.widget.MaterialSpinnerView
 import eu.kanade.tachiyomi.widget.TabbedBottomSheetDialog
 
 internal class NovelReaderSettingsSheet(
@@ -34,6 +41,32 @@ internal class NovelReaderSettingsSheet(
     private val layoutView = page { layoutPage(this) }
     private val ttsView = page { ttsPage(this) }
     private val moreView = page { morePage(this) }
+
+    init {
+        val tabs =
+            listOf(
+                R.drawable.ic_text_fields_24dp to R.string.hayai_novel_tab_reader,
+                R.drawable.ic_palette_24dp to R.string.hayai_novel_tab_text,
+                R.drawable.ic_swipe_24dp to R.string.hayai_novel_tab_layout,
+                R.drawable.ic_record_voice_over_24dp to R.string.hayai_novel_tab_tts,
+                R.drawable.ic_code_24dp to R.string.hayai_novel_tab_more,
+            )
+        tabs.forEachIndexed { index, (icon, label) ->
+            binding.tabs.getTabAt(index)?.apply {
+                setIcon(icon)
+                text = null
+                contentDescription = context.getString(label)
+            }
+        }
+        binding.menu.isVisible = true
+        binding.menu.tooltipText = context.getString(R.string.reader_settings)
+        binding.menu.contentDescription = context.getString(R.string.reader_settings)
+        binding.menu.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_outline_settings_24dp))
+        binding.menu.setOnClickListener {
+            onAction(NovelReaderAction.OpenFullSettings)
+            dismiss()
+        }
+    }
 
     override fun getTabViews(): List<View> = listOf(readerView, textView, layoutView, ttsView, moreView)
 
@@ -137,21 +170,26 @@ internal class NovelReaderSettingsSheet(
                 preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
                 else -> 3
             }
-        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(8.dp, 4.dp, 8.dp, 4.dp) }
-        row.addView(TextView(context).apply { text = "Progress mode" }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(Spinner(context).apply {
-            adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, values)
-            setSelection(current)
-            onItemSelectedListener = SimpleItemSelectedListener { selection ->
-                val enabled = selection != 0
-                val vertical = selection >= 2
-                if (preferences.novelShowProgressSlider.get() != enabled) preferences.novelShowProgressSlider.set(enabled)
-                if (preferences.novelVerticalScrollbar.get() != vertical) preferences.novelVerticalScrollbar.set(vertical)
-                if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
-                onChromeChanged()
-            }
-        })
-        page.addView(row)
+        page.addView(TextView(context).apply { text = "Progress mode"; setPadding(0, 12.dp, 0, 4.dp) })
+        val chips = ChipGroup(context).apply { isSingleSelection = true; isSelectionRequired = true; isSingleLine = true }
+        values.forEachIndexed { selection, label ->
+            chips.addView(
+                Chip(context).apply {
+                    text = label
+                    isCheckable = true
+                    isChecked = selection == current
+                    setOnClickListener {
+                        val enabled = selection != 0
+                        val vertical = selection >= 2
+                        if (preferences.novelShowProgressSlider.get() != enabled) preferences.novelShowProgressSlider.set(enabled)
+                        if (preferences.novelVerticalScrollbar.get() != vertical) preferences.novelVerticalScrollbar.set(vertical)
+                        if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
+                        onChromeChanged()
+                    }
+                },
+            )
+        }
+        page.addView(HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(chips) })
     }
 
     private fun morePage(page: LinearLayout) {
@@ -163,7 +201,6 @@ internal class NovelReaderSettingsSheet(
         page.toggle("Show raw HTML", preferences.novelShowRawHtml, onStyleChanged)
         page.toggle("WebView developer tools", preferences.novelWebViewDevTools)
         page.toggle("Show WebView console errors", preferences.novelConsoleErrorToast)
-        page.button("Open full novel settings") { onAction(NovelReaderAction.OpenFullSettings) }
         page.heading("Bottom actions")
         bottomActionEditor(page)
         page.heading("Status order")
@@ -184,7 +221,7 @@ internal class NovelReaderSettingsSheet(
             addView(
                 LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(16.dp, 8.dp, 16.dp, 24.dp)
+                    setPadding(24.dp, 4.dp, 24.dp, 24.dp)
                     content()
                 },
                 ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
@@ -192,59 +229,124 @@ internal class NovelReaderSettingsSheet(
         }
 
     private fun LinearLayout.heading(text: String) {
-        addView(TextView(context).apply { this.text = text; textSize = 14f; setTypeface(typeface, Typeface.BOLD); setPadding(8.dp, 16.dp, 8.dp, 4.dp) })
+        addView(
+            TextView(context).apply {
+                this.text = text
+                textSize = 15f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(context.getResourceColor(R.attr.colorPrimary))
+                setPadding(0, 16.dp, 0, 4.dp)
+            },
+        )
     }
 
     private fun LinearLayout.toggle(label: String, preference: Preference<Boolean>, changed: () -> Unit = {}) {
-        addView(CheckBox(context).apply {
-            text = label
-            isChecked = preference.get()
-            setPadding(8.dp, 4.dp, 8.dp, 4.dp)
-            setOnCheckedChangeListener { _, checked -> preference.set(checked); changed() }
-        })
+        addView(
+            MaterialSwitch(context).apply {
+                text = label
+                textSize = 15f
+                isChecked = preference.get()
+                minHeight = 48.dp
+                setTextColor(context.getResourceColor(R.attr.colorOnBackground))
+                setOnCheckedChangeListener { _, checked ->
+                    preference.set(checked)
+                    changed()
+                }
+            },
+            matchWrap(),
+        )
     }
 
     private fun <T> LinearLayout.choice(label: String, preference: Preference<T>, values: List<Pair<String, T>>, changed: () -> Unit = {}) {
-        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(8.dp, 4.dp, 8.dp, 4.dp) }
-        row.addView(TextView(context).apply { text = label }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(Spinner(context).apply {
-            adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, values.map { it.first })
-            setSelection(values.indexOfFirst { it.second == preference.get() }.coerceAtLeast(0))
-            onItemSelectedListener = SimpleItemSelectedListener { position ->
-                val selected = values[position].second
-                if (selected != preference.get()) { preference.set(selected); changed() }
-            }
-        })
-        addView(row)
+        val selected = values.indexOfFirst { it.second == preference.get() }.coerceAtLeast(0)
+        addView(
+            MaterialSpinnerView(context, null).apply {
+                title = label
+                setEntries(values.map { it.first })
+                setSelection(selected)
+                onItemSelectedListener = { position ->
+                    val value = values[position].second
+                    if (value != preference.get()) {
+                        preference.set(value)
+                        changed()
+                    }
+                }
+            },
+            matchWrap(),
+        )
     }
 
     private fun LinearLayout.slider(label: String, preference: Preference<Int>, min: Int, max: Int, suffix: String, changed: () -> Unit = {}) {
-        val title = TextView(context)
-        fun update(value: Int) { title.text = "$label   $value $suffix" }
-        update(preference.get())
-        addView(title.apply { setPadding(8.dp, 8.dp, 8.dp, 0) })
-        addView(SeekBar(context).apply {
-            this.max = max - min
-            progress = preference.get().coerceIn(min, max) - min
-            setOnSeekBarChangeListener(SimpleSeekBarListener { value -> preference.set(value + min); update(value + min); changed() })
+        val valueText = sliderHeader(label)
+        fun update(value: Int) { valueText.text = "$value $suffix" }
+        update(preference.get().coerceIn(min, max))
+        addView(Slider(context).apply {
+            valueFrom = min.toFloat()
+            valueTo = max.toFloat()
+            stepSize = 1f
+            value = preference.get().coerceIn(min, max).toFloat()
+            addOnChangeListener { _, newValue, fromUser ->
+                if (fromUser) {
+                    val resolved = newValue.toInt()
+                    preference.set(resolved)
+                    update(resolved)
+                    changed()
+                }
+            }
         })
     }
 
     private fun LinearLayout.sliderFloat(label: String, preference: Preference<Float>, min: Int, max: Int, scale: Float, changed: () -> Unit = {}) {
-        val title = TextView(context)
-        fun update(value: Int) { title.text = "$label   ${"%.1f".format(value / scale)}×" }
-        val initial = (preference.get() * scale).toInt().coerceIn(min, max)
+        val valueText = sliderHeader(label)
+        fun update(value: Float) { valueText.text = "${"%.1f".format(value)}×" }
+        val initial = preference.get().coerceIn(min / scale, max / scale)
         update(initial)
-        addView(title.apply { setPadding(8.dp, 8.dp, 8.dp, 0) })
-        addView(SeekBar(context).apply {
-            this.max = max - min
-            progress = initial - min
-            setOnSeekBarChangeListener(SimpleSeekBarListener { value -> val actual = value + min; preference.set(actual / scale); update(actual); changed() })
+        addView(Slider(context).apply {
+            valueFrom = min / scale
+            valueTo = max / scale
+            stepSize = 1f / scale
+            value = initial
+            addOnChangeListener { _, newValue, fromUser ->
+                if (fromUser) {
+                    preference.set(newValue)
+                    update(newValue)
+                    changed()
+                }
+            }
         })
     }
 
     private fun LinearLayout.button(label: String, action: () -> Unit) {
-        addView(Button(context).apply { text = label; setOnClickListener { action() } })
+        addView(
+            MaterialButton(context, null, android.R.attr.borderlessButtonStyle).apply {
+                text = label
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                minHeight = 48.dp
+                isAllCaps = false
+                setPadding(0, 0, 0, 0)
+                setOnClickListener { action() }
+            },
+            matchWrap(),
+        )
+    }
+
+    private fun LinearLayout.sliderHeader(label: String): TextView {
+        val value = TextView(context).apply {
+            textSize = 14f
+            gravity = Gravity.END
+            setTextColor(context.getResourceColor(android.R.attr.textColorSecondary))
+        }
+        addView(
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 12.dp, 0, 0)
+                addView(TextView(context).apply { text = label; textSize = 15f }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(value, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            },
+            matchWrap(),
+        )
+        return value
     }
 
     private fun editString(title: String, preference: Preference<String>, changed: () -> Unit) {
@@ -296,25 +398,31 @@ internal class NovelReaderSettingsSheet(
             val group = LinearLayout(context).apply { tag = marker; orientation = LinearLayout.VERTICAL }
             val items = NovelBottomActions.deserialize(preferences.novelBottomBarItems.get()).toMutableList()
             items.forEachIndexed { index, state ->
-                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                row.addView(CheckBox(context).apply {
-                    text = state.action.name.replace(Regex("([a-z])([A-Z])"), "$1 $2")
-                    isChecked = state.enabled
-                    setOnCheckedChangeListener { _, checked ->
+                group.addView(
+                    orderedRow(
+                        title = state.action.displayName(),
+                        enabled = state.enabled,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < items.lastIndex,
+                        onEnabledChanged = { checked ->
                         items[index] = state.copy(enabled = checked)
                         preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
                         onChromeChanged()
-                    }
-                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                row.addView(Button(context).apply { text = "↑"; isEnabled = index > 0; setOnClickListener {
-                    val moved = items.removeAt(index); items.add(index - 1, moved)
-                    preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items)); onChromeChanged(); render()
-                } })
-                row.addView(Button(context).apply { text = "↓"; isEnabled = index < items.lastIndex; setOnClickListener {
-                    val moved = items.removeAt(index); items.add(index + 1, moved)
-                    preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items)); onChromeChanged(); render()
-                } })
-                group.addView(row)
+                        },
+                        onMoveUp = {
+                            items.add(index - 1, items.removeAt(index))
+                            preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
+                            onChromeChanged()
+                            render()
+                        },
+                        onMoveDown = {
+                            items.add(index + 1, items.removeAt(index))
+                            preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
+                            onChromeChanged()
+                            render()
+                        },
+                    ),
+                )
             }
             container.addView(group)
         }
@@ -328,35 +436,102 @@ internal class NovelReaderSettingsSheet(
             val group = LinearLayout(context).apply { tag = marker; orientation = LinearLayout.VERTICAL }
             val items = NovelStatusItems.deserialize(preferences.novelStatusBarOrder.get()).toMutableList()
             items.forEachIndexed { index, item ->
-                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                row.addView(TextView(context).apply { text = item.name }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                row.addView(Button(context).apply { text = "↑"; isEnabled = index > 0; setOnClickListener {
-                    val moved = items.removeAt(index); items.add(index - 1, moved)
-                    preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items)); onChromeChanged(); render()
-                } })
-                row.addView(Button(context).apply { text = "↓"; isEnabled = index < items.lastIndex; setOnClickListener {
-                    val moved = items.removeAt(index); items.add(index + 1, moved)
-                    preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items)); onChromeChanged(); render()
-                } })
-                group.addView(row)
+                group.addView(
+                    orderedRow(
+                        title = item.name,
+                        enabled = null,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < items.lastIndex,
+                        onEnabledChanged = {},
+                        onMoveUp = {
+                            items.add(index - 1, items.removeAt(index))
+                            preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items))
+                            onChromeChanged()
+                            render()
+                        },
+                        onMoveDown = {
+                            items.add(index + 1, items.removeAt(index))
+                            preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items))
+                            onChromeChanged()
+                            render()
+                        },
+                    ),
+                )
             }
             container.addView(group)
         }
         render()
     }
 
+    private fun orderedRow(
+        title: String,
+        enabled: Boolean?,
+        canMoveUp: Boolean,
+        canMoveDown: Boolean,
+        onEnabledChanged: (Boolean) -> Unit,
+        onMoveUp: () -> Unit,
+        onMoveDown: () -> Unit,
+    ): View =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = 48.dp
+            if (enabled == null) {
+                addView(
+                    TextView(context).apply {
+                        text = title
+                        textSize = 15f
+                        setTextColor(context.getResourceColor(R.attr.colorOnBackground))
+                    },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                )
+            } else {
+                addView(
+                    MaterialSwitch(context).apply {
+                        text = title
+                        textSize = 15f
+                        isChecked = enabled
+                        setTextColor(context.getResourceColor(R.attr.colorOnBackground))
+                        setOnCheckedChangeListener { _, checked -> onEnabledChanged(checked) }
+                    },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                )
+            }
+            addView(orderButton(R.drawable.ic_arrow_upward_24dp, "Move $title up", canMoveUp, onMoveUp))
+            addView(orderButton(R.drawable.ic_arrow_downward_24dp, "Move $title down", canMoveDown, onMoveDown))
+        }
+
+    private fun orderButton(icon: Int, label: String, enabled: Boolean, action: () -> Unit): ImageButton =
+        ImageButton(context).apply {
+            layoutParams = LinearLayout.LayoutParams(40.dp, 40.dp)
+            setImageResource(icon)
+            imageTintList = ColorStateList.valueOf(context.getResourceColor(R.attr.colorOnBackground))
+            setBackgroundResource(R.drawable.square_ripple)
+            contentDescription = label
+            isEnabled = enabled
+            alpha = if (enabled) 1f else 0.38f
+            setPadding(8.dp, 8.dp, 8.dp, 8.dp)
+            setOnClickListener { action() }
+        }
+
+    private fun NovelBottomAction.displayName(): String =
+        when (this) {
+            NovelBottomAction.PreviousChapter -> "Previous chapter"
+            NovelBottomAction.NextChapter -> "Next chapter"
+            NovelBottomAction.ScrollToTop -> "Scroll to top"
+            NovelBottomAction.Translate -> "Translate"
+            NovelBottomAction.AutoScroll -> "Auto-scroll"
+            NovelBottomAction.Tts -> "Read aloud"
+            NovelBottomAction.TtsViewport -> "Read from viewport"
+            NovelBottomAction.TtsPreviousParagraph -> "Previous paragraph"
+            NovelBottomAction.TtsNextParagraph -> "Next paragraph"
+            NovelBottomAction.Orientation -> "Orientation"
+            NovelBottomAction.Settings -> "Settings"
+            NovelBottomAction.Edit -> "Edit"
+            NovelBottomAction.Quotes -> "Quotes"
+        }
+
+    private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+
     private val Int.dp: Int get() = (this * context.resources.displayMetrics.density).toInt()
-
-    private class SimpleSeekBarListener(private val changed: (Int) -> Unit) : SeekBar.OnSeekBarChangeListener {
-        override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) { if (fromUser) changed(progress) }
-        override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
-        override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
-    }
-}
-
-private class SimpleItemSelectedListener(
-    private val selected: (Int) -> Unit,
-) : android.widget.AdapterView.OnItemSelectedListener {
-    override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) = selected(position)
-    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
 }

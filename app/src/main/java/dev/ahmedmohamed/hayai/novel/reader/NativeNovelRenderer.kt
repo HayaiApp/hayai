@@ -260,6 +260,8 @@ internal class NativeNovelRenderer(
         }
         block.textView = textView
         block.style = request.style
+        scroll.setBackgroundColor(request.style.backgroundColor)
+        container.setBackgroundColor(request.style.backgroundColor)
         val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
         val spanned = HtmlCompat.fromHtml(title + request.content.html, HtmlCompat.FROM_HTML_MODE_LEGACY)
         block.original = SpannableStringBuilder(spanned)
