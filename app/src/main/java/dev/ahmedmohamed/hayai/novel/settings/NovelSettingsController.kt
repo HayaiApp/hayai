@@ -2,7 +2,6 @@ package dev.ahmedmohamed.hayai.novel.settings
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.text.InputType
 import android.view.View
 import android.view.ViewGroup
@@ -18,6 +17,8 @@ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerActivity
 import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
 import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
+import dev.ahmedmohamed.hayai.novel.reader.NovelColorPickerDialog
+import dev.ahmedmohamed.hayai.novel.reader.NovelThemeColors
 import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderActivity
 import dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsActivity
 import eu.kanade.tachiyomi.R
@@ -52,6 +53,20 @@ class NovelSettingsController : SettingsController() {
         titleRes = R.string.hayai_novel_reader_settings
 
         preferenceCategory {
+            title = context.getString(R.string.hayai_novel_reader_theme_and_colors)
+            summary = context.getString(R.string.hayai_novel_reader_custom_theme_summary)
+            val themePreference = listPreference(activity) {
+                bindTo(novel.novelTheme)
+                title = context.getString(R.string.hayai_novel_reader_theme)
+                entries = listOf(R.string.hayai_novel_reader_follow_app, R.string.hayai_novel_reader_light, R.string.dark, R.string.hayai_novel_reader_sepia, R.string.black, R.string.hayai_novel_reader_grey, R.string.hayai_novel_reader_custom).map(context::getString)
+                entryValues = listOf("app", "light", "dark", "sepia", "black", "grey", "custom")
+            }
+            val showCustomTheme = { themePreference.summary = context.getString(R.string.hayai_novel_reader_custom) }
+            colorPreference(R.string.hayai_novel_reader_custom_text_color, novel.novelFontColor, NovelThemeColors.LIGHT_TEXT, activateCustomTheme = true, onApplied = showCustomTheme)
+            colorPreference(R.string.hayai_novel_reader_custom_background_color, novel.novelBackgroundColor, NovelThemeColors.LIGHT_BACKGROUND, activateCustomTheme = true, onApplied = showCustomTheme)
+        }
+
+        preferenceCategory {
             title = context.getString(R.string.hayai_novel_reader_typography)
             sliderPreference {
                 bindTo(novel.novelFontSize)
@@ -80,8 +95,6 @@ class NovelSettingsController : SettingsController() {
             switchPreference { bindTo(novel.novelTextSelectable); title = context.getString(R.string.hayai_novel_reader_selectable_text) }
             switchPreference { bindTo(novel.novelForceTextLowercase); title = context.getString(R.string.hayai_novel_reader_force_lowercase) }
             switchPreference { bindTo(novel.novelUseOriginalFonts); title = context.getString(R.string.hayai_novel_reader_use_source_fonts) }
-            colorPreference(context.getString(R.string.hayai_novel_reader_custom_text_color), novel.novelFontColor)
-            colorPreference(context.getString(R.string.hayai_novel_reader_custom_background_color), novel.novelBackgroundColor)
         }
 
         preferenceCategory {
@@ -92,12 +105,6 @@ class NovelSettingsController : SettingsController() {
             sliderPreference { bindTo(novel.novelMarginBottom); title = context.getString(R.string.hayai_novel_reader_bottom_margin); entryValues = (0..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
             floatChoice(context.getString(R.string.hayai_novel_reader_paragraph_indent), novel.novelParagraphIndent, listOf(0f, 0.5f, 1f, 1.5f, 2f, 3f)) { context.getString(R.string.hayai_novel_reader_em_value, it) }
             floatChoice(context.getString(R.string.hayai_novel_reader_paragraph_spacing), novel.novelParagraphSpacing, listOf(0f, 0.25f, 0.5f, 0.75f, 1f, 1.5f)) { context.getString(R.string.hayai_novel_reader_em_value, it) }
-            listPreference(activity) {
-                bindTo(novel.novelTheme)
-                title = context.getString(R.string.hayai_novel_reader_theme)
-                entries = listOf(R.string.hayai_novel_reader_follow_app, R.string.hayai_novel_reader_light, R.string.dark, R.string.hayai_novel_reader_sepia, R.string.black, R.string.hayai_novel_reader_grey, R.string.hayai_novel_reader_custom).map(context::getString)
-                entryValues = listOf("app", "light", "dark", "sepia", "black", "grey", "custom")
-            }
             listPreference(activity) {
                 bindTo(novel.novelRenderingMode)
                 title = context.getString(R.string.hayai_novel_reader_rendering_mode)
@@ -211,8 +218,8 @@ class NovelSettingsController : SettingsController() {
                 entries = listOf(R.string.hayai_novel_reader_background, R.string.hayai_novel_reader_underline, R.string.hayai_novel_reader_outline).map(context::getString)
                 entryValues = listOf("background", "underline", "outline")
             }
-            colorPreference(context.getString(R.string.hayai_novel_reader_highlight_color), novel.novelTtsHighlightColor)
-            colorPreference(context.getString(R.string.hayai_novel_reader_highlight_text_color), novel.novelTtsHighlightTextColor)
+            colorPreference(R.string.hayai_novel_reader_highlight_color, novel.novelTtsHighlightColor, 0xFFFFD54F.toInt())
+            colorPreference(R.string.hayai_novel_reader_highlight_text_color, novel.novelTtsHighlightTextColor, 0xFF1A1A1A.toInt())
             switchPreference { bindTo(novel.novelTtsBackgroundPlayback); title = context.getString(R.string.hayai_novel_reader_background_playback) }
             switchPreference { bindTo(novel.novelTtsControlsVisible); title = context.getString(R.string.hayai_novel_reader_keep_tts_controls) }
             switchPreference { bindTo(novel.novelTtsAutoStartOnPanelOpen); title = context.getString(R.string.hayai_novel_reader_start_tts_panel_long) }
@@ -379,44 +386,39 @@ class NovelSettingsController : SettingsController() {
     }
 
     private fun PreferenceGroup.colorPreference(
-        titleText: String,
+        @androidx.annotation.StringRes titleRes: Int,
         valuePreference: Preference<Int>,
+        defaultColor: Int,
+        activateCustomTheme: Boolean = false,
+        onApplied: () -> Unit = {},
     ) {
         preference {
-            title = titleText
+            title = context.getString(titleRes)
             summary = colorSummary(valuePreference.get())
             onClick {
-                val input = EditText(context).apply {
-                    inputType = InputType.TYPE_CLASS_TEXT
-                    setSingleLine(true)
-                    setText(if (valuePreference.get() == 0) "" else String.format("#%08X", valuePreference.get()))
-                    hint = context.getString(R.string.hayai_novel_reader_color_hint)
-                }
-                val dialog = context.materialAlertDialog()
-                    .setTitle(titleText)
-                    .setView(input)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .create()
-                dialog.setOnShowListener {
-                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        val text = input.text?.toString()?.trim().orEmpty()
-                        val parsed = if (text.isBlank()) 0 else runCatching { Color.parseColor(text) }.getOrNull()
-                        if (parsed == null) {
-                            input.error = context.getString(R.string.hayai_novel_reader_color_error)
-                        } else {
-                            valuePreference.set(parsed)
-                            summary = colorSummary(parsed)
-                            dialog.dismiss()
-                        }
-                    }
-                }
-                dialog.show()
+                NovelColorPickerDialog.show(
+                    context = context,
+                    titleRes = titleRes,
+                    initialColor = valuePreference.get(),
+                    defaultColor = defaultColor,
+                    onConfirm = { color ->
+                        valuePreference.set(color)
+                        if (activateCustomTheme) novel.novelTheme.set("custom")
+                        summary = colorSummary(color)
+                        onApplied()
+                    },
+                    onDefault = {
+                        valuePreference.set(0)
+                        if (activateCustomTheme) novel.novelTheme.set("custom")
+                        summary = colorSummary(0)
+                        onApplied()
+                    },
+                )
             }
         }
     }
 
-    private fun colorSummary(color: Int): String = if (color == 0) activity?.getString(R.string.automatic).orEmpty() else String.format("#%08X", color)
+    private fun colorSummary(color: Int): String = if (color == 0) activity?.getString(R.string.automatic).orEmpty() else NovelThemeColors.formatRgb(color)
 
     private fun showSnippetList(kind: SnippetKind) {
         val items = if (kind == SnippetKind.Css) customization.cssSnippets() else customization.jsSnippets()

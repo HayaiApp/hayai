@@ -13,6 +13,8 @@
     <string name="hayai_novel_reader_sepia">Sepia</string>
     <string name="hayai_novel_reader_grey">Grey</string>
     <string name="hayai_novel_reader_custom">Custom</string>
+    <string name="hayai_novel_reader_theme_and_colors">Theme and colors</string>
+    <string name="hayai_novel_reader_custom_theme_summary">The color controls apply to the Custom reader theme. Choosing a color activates Custom automatically.</string>
     <string name="hayai_novel_reader_tap_zone_l">L</string>
     <string name="hayai_novel_reader_tap_zone_kindlish">Kindlish</string>
     <string name="hayai_novel_reader_left_right">Left / right</string>
@@ -169,8 +171,17 @@
     <string name="hayai_novel_reader_word_value">%1$d words</string>
     <string name="hayai_novel_reader_em_value">%1$s em</string>
     <string name="hayai_novel_reader_multiplier_value">%1$s×</string>
-    <string name="hayai_novel_reader_color_hint">#AARRGGBB, blank for automatic</string>
-    <string name="hayai_novel_reader_color_error">Use #RRGGBB or #AARRGGBB</string>
+    <string name="hayai_novel_reader_color_hint">#RRGGBB</string>
+    <string name="hayai_novel_reader_color_error">Enter a three-digit or six-digit RGB hex color</string>
+    <string name="hayai_novel_reader_use_theme_default">Use theme default</string>
+    <string name="hayai_novel_reader_red">Red</string>
+    <string name="hayai_novel_reader_blue">Blue</string>
+    <string name="hayai_novel_reader_dark_gray">Dark gray</string>
+    <string name="hayai_novel_reader_light_gray">Light gray</string>
+    <string name="hayai_novel_reader_off_white">Off-white</string>
+    <string name="hayai_novel_reader_sepia_color">Sepia brown</string>
+    <string name="hayai_novel_reader_cream">Cream</string>
+    <string name="hayai_novel_reader_charcoal">Charcoal</string>
 
     <!-- Full settings -->
     <string name="hayai_novel_reader_reading_behavior">Reading behavior</string>

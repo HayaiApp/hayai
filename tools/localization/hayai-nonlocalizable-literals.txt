@@ -2066,13 +2066,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val resolvedFontFamily = if (importedFontId != null) "'HayaiImported'" else fontFamily
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val selection = if (style.textSelectable) "text" else "none"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	.joinToString("\n\n"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"black" -> 0xFF000000.toInt() to 0xFFECECEC.toInt()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"chapter:${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"custom" ->
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"dark" -> 0xFF121212.toInt() to 0xFFE6E1E5.toInt()
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"grey" -> 0xFF303030.toInt() to 0xFFF1F1F1.toInt()
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"light" -> 0xFFFFFFFF.toInt() to 0xFF202124.toInt()
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"sepia" -> 0xFFF4ECD8.toInt() to 0xFF3B2F2F.toInt()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	).joinToString(" ").takeIf(String::isNotBlank)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	customCss = listOf(preferences.novelCustomCss.get(), customization.enabledCss()).filter(String::isNotBlank).joinToString("\n"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	customJs = listOf(preferences.novelCustomJs.get(), customization.enabledJs()).filter(String::isNotBlank).joinToString("\n"),
@@ -2118,12 +2112,21 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_position, preferences.novelStatusBarPosition, listOf(R.string.top to "top", R.string.bottom to "bottom"), onChromeChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_size, preferences.novelStatusBarSize, listOf(R.string.hayai_novel_reader_small to "small", R.string.hayai_novel_reader_medium to "medium"), onChromeChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelTheme.set("custom")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	setText(preference.get().takeUnless { it == 0 }?.let { String.format("#%08X", it) }.orEmpty())
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val marker = "hayai-bottom-actions"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val marker = "hayai-status-actions"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val values = listOf("") + voices.map { it.name }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt	val appendJavaScript: String = "",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"black" -> 0xFF000000.toInt() to 0xFFECECEC.toInt()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"custom" ->
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"dark" -> DARK_BACKGROUND to DARK_TEXT
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"grey" -> 0xFF303030.toInt() to 0xFFF1F1F1.toInt()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"light" -> LIGHT_BACKGROUND to LIGHT_TEXT
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"sepia" -> 0xFFF4ECD8.toInt() to 0xFF3B2F2F.toInt()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	3 -> value.flatMap { listOf(it, it) }.joinToString("")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	fun formatRgb(color: Int): String = "#%06X".format(color and 0xFFFFFF)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	val value = input.trim().removePrefix("#")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	@Deprecated("Deprecated by Android") override fun onError(utteranceId: String?) { if (utteranceId == activeUtterance) reportError(getString(R.string.hayai_novel_reader_tts_passage_error)) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	@Suppress("DEPRECATION")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	activeUtterance = "hayai-$generation-$chunkIndex"
@@ -2198,10 +2201,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("sans-serif", "serif", "monospace")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("small", "medium", "large")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("top", "bottom")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	if (activateCustomTheme) novel.novelTheme.set("custom")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	if (novel.novelFontFamily.get() == store.token(font)) novel.novelFontFamily.set("sans-serif")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	private fun colorSummary(color: Int): String = if (color == 0) activity?.getString(R.string.automatic).orEmpty() else String.format("#%08X", color)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("font/ttf", "font/otf", "application/font-sfnt", "application/octet-stream"))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	setText(if (valuePreference.get() == 0) "" else String.format("#%08X", valuePreference.get()))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	type = "font/*"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	val input = textInput(activity!!.getString(R.string.hayai_novel_reader_preset_name), "", singleLine = true)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	val input = textInput(activity!!.getString(R.string.hayai_novel_reader_sample_text), "")
