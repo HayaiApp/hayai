@@ -81,6 +81,7 @@ import com.google.android.material.slider.SliderOrientation
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.transition.platform.MaterialContainerTransform
 import com.google.android.material.transition.platform.MaterialContainerTransformSharedElementCallback
+import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Chapter
@@ -296,6 +297,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      * Called when the activity is created. Initializes the view model and configuration.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
+        intentPageNumber = ReaderLauncher.initialPage(intent)
         SubsamplingScaleImageView.setPreferredBitmapConfig(Bitmap.Config.ARGB_8888)
 
         // Setup shared element transitions

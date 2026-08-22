@@ -2,6 +2,8 @@
 
 Hayai rebuilds the E-Hentai feature set behind `dev.ahmedmohamed.hayai.adult.eh`. TachiyomiJ2K continues to own manga, chapters, history, categories, downloads, and image reading. TachiyomiSY commit `14648c7cf0aa84e5a35d48de9dbf1386df6cca42` is the behavior reference, not an architectural parent.
 
+The bundled source artwork is copied unchanged from TachiyomiSY. The E-Hentai density assets trace to commit `5499404267f6a197de322318500f40c51e5f38b4`; the ExHentai density assets trace to `21a4a935232df32444a11d2dbef640deff71869a`.
+
 ## Domain boundaries
 
 - `domain` validates gallery IDs, tokens, normalized URLs, sites, cursors, search modes, and failure classes.
@@ -35,4 +37,4 @@ Legacy `search_metadata`, `search_tags`, and `search_titles` are promoted once t
 
 ## Completion gate
 
-The port is complete only when browse, search filters, details, revisions, pages, URL import, login/logout, remote configuration, metadata backup, batch import, favorites synchronization, and gallery updates work end to end. Pure fixtures cover compact and extended result layouts, malformed/challenge pages, revision cycles, page quota, filter encoding, cookies, metadata promotion, backup compatibility, sync conflicts, interruption, and retry. The final boundary check must leave `App.kt`, `MainActivity.kt`, and J2K's image `ReaderActivity.kt` unchanged.
+The port is complete only when browse, search filters, details, revisions, pages, URL import, login/logout, remote configuration, metadata backup, batch import, favorites synchronization, and gallery updates work end to end. Pure fixtures cover compact and extended result layouts, malformed/challenge pages, revision cycles, page quota, filter encoding, cookies, metadata promotion, backup compatibility, sync conflicts, interruption, and retry. The final boundary check must leave `App.kt` and `MainActivity.kt` unchanged. The only approved `ReaderActivity` change is the documented initial-page extra read owned by `ReaderLauncher`.

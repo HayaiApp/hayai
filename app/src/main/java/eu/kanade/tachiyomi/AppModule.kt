@@ -26,6 +26,7 @@ import dev.ahmedmohamed.hayai.adult.eh.favorites.J2kEhFavoritesLocal
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.source.enhanced.EnhancedDetailsPreviewLoader
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+import dev.ahmedmohamed.hayai.source.preview.SourcePreviewCache
 import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
 import eu.kanade.tachiyomi.data.cache.ChapterCache
@@ -103,12 +104,15 @@ class AppModule(
         addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
         addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
         addSingletonFactory { EnhancedDetailsPreviewLoader(get(), get()) }
+        addSingletonFactory { SourcePreviewCache(app) }
         addSingletonFactory {
             SourceDetailsPreviewRegistry(
                 listOf(
                     get<EhDetailsPreviewLoader>(),
                     get<EnhancedDetailsPreviewLoader>(),
                 ),
+                get(),
+                get(),
             )
         }
         addSingletonFactory { SourceManager(app, get(), get(), get()) }
