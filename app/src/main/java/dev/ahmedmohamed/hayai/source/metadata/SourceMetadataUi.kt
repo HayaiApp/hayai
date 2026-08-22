@@ -6,20 +6,27 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.text.format.Formatter
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.RatingBar
 import android.widget.TextView
 import androidx.annotation.StringRes
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.cardview.widget.CardView
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.drawable.DrawableCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import dev.ahmedmohamed.hayai.source.SourceFamily
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.util.system.clipboardManager
+import eu.kanade.tachiyomi.util.system.getResourceColor
 import java.text.DateFormat
 import java.util.Date
+import java.util.Locale
 
 object SourceMetadataUi {
     data class Row(val title: String, val value: String)
@@ -32,6 +39,19 @@ object SourceMetadataUi {
     ) {
         container.removeAllViews()
         container.orientation = LinearLayout.VERTICAL
+        when (document.family) {
+            SourceFamily.EHentai, SourceFamily.ExHentai -> renderEhSummary(container, document, onMoreInfo, onSearch)
+            SourceFamily.EightMuses -> renderEightMusesSummary(container, document, onMoreInfo)
+            SourceFamily.HBrowse -> renderHBrowseSummary(container, document, onMoreInfo)
+            SourceFamily.Lanraragi -> renderLanraragiSummary(container, document, onMoreInfo)
+            SourceFamily.NHentai -> renderNHentaiSummary(container, document, onMoreInfo)
+            SourceFamily.Pururin -> renderPururinSummary(container, document, onMoreInfo)
+            else -> null
+        }?.let {
+            container.setPadding(0, 0, 0, dp(container.context, 8))
+            container.addView(it, matchWrap())
+            return
+        }
         container.setPadding(dp(container.context, 16), dp(container.context, 4), dp(container.context, 16), dp(container.context, 8))
 
         val primary = LinearLayout(container.context).apply {
@@ -69,7 +89,7 @@ object SourceMetadataUi {
                             addView(
                                 metadataText(context, key, value).apply {
                                     if (key == SourceMetadataKey.Uploader) {
-                                        setOnClickListener { onSearch("uploader:\"$value\"") }
+                                        setOnClickListener { onSearch(uploaderSearch(value)) }
                                     }
                                 },
                                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
@@ -143,6 +163,153 @@ object SourceMetadataUi {
             }
         }
     }
+
+    private fun renderEhSummary(
+        container: LinearLayout,
+        document: SourceMetadataDocument,
+        onMoreInfo: () -> Unit,
+        onSearch: (String) -> Unit,
+    ) = LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_eh, container, false).apply {
+        val context = container.context
+        val genre = findViewById<TextView>(R.id.hayai_sy_genre)
+        val genreCard = findViewById<CardView>(R.id.hayai_sy_genre_card)
+        val pages = findViewById<TextView>(R.id.hayai_sy_pages)
+        val ratingBar = findViewById<RatingBar>(R.id.hayai_sy_rating_bar)
+        val rating = findViewById<TextView>(R.id.hayai_sy_rating)
+        val language = findViewById<TextView>(R.id.hayai_sy_language)
+        val size = findViewById<TextView>(R.id.hayai_sy_size)
+        val favorites = findViewById<TextView>(R.id.hayai_sy_favorites)
+        val visible = findViewById<TextView>(R.id.hayai_sy_visible)
+        val uploader = findViewById<TextView>(R.id.hayai_sy_uploader)
+        val moreInfo = findViewById<TextView>(R.id.hayai_sy_more_info)
+
+        val category = document.value(SourceMetadataKey.Category).orEmpty()
+        val categoryColor = typeColor(category)
+        genre.text = typeLabel(context, category)
+        genre.setTextColor(contrastingTextColor(categoryColor))
+        genreCard.setCardBackgroundColor(categoryColor)
+
+        val pageCount = document.value(SourceMetadataKey.Pages)?.toIntOrNull() ?: 0
+        pages.text = context.resources.getQuantityString(R.plurals.num_pages, pageCount, pageCount)
+        pages.bindIcon(R.drawable.ic_book_24dp)
+
+        val ratingValue = document.value(SourceMetadataKey.Rating)?.toFloatOrNull()?.coerceIn(0f, 5f) ?: 0f
+        ratingBar.rating = ratingValue
+        rating.text = ratingValue.toString()
+
+        val languageValue = document.value(SourceMetadataKey.Language).orEmpty()
+        val translated = document.value(SourceMetadataKey.Translated)?.toBooleanStrictOrNull() == true
+        language.text = if (translated) context.getString(R.string.hayai_eh_language_translated, languageValue) else languageValue
+
+        size.text = document.value(SourceMetadataKey.FileSize)?.let { formatValue(context, SourceMetadataKey.FileSize, it) }.orEmpty()
+        favorites.text = document.value(SourceMetadataKey.Favorites).orEmpty()
+        favorites.bindIcon(R.drawable.ic_book_24dp)
+        visible.text = context.getString(
+            R.string.hayai_source_metadata_field,
+            context.getString(label(SourceMetadataKey.Visibility)),
+            document.value(SourceMetadataKey.Visibility).orEmpty(),
+        )
+        uploader.text = document.value(SourceMetadataKey.Uploader).orEmpty()
+        uploader.setOnClickListener { uploader.text.toString().takeIf(String::isNotBlank)?.let { onSearch(uploaderSearch(it)) } }
+        moreInfo.bindIcon(R.drawable.ic_info_24dp)
+        moreInfo.setOnClickListener { onMoreInfo() }
+
+        listOf(genre, pages, rating, language, size, favorites, visible, uploader).forEach { value ->
+            value.copyOnLongClick()
+        }
+    }
+
+    private fun renderEightMusesSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
+        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_8m, container, false).apply {
+            findViewById<TextView>(R.id.hayai_sy_8m_title).apply {
+                text = document.titles.firstOrNull() ?: context.getString(R.string.unknown)
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_8m_more_info).bindMoreInfo(onMoreInfo)
+        }
+
+    private fun renderHBrowseSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
+        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_hb, container, false).apply {
+            findViewById<TextView>(R.id.hayai_sy_hb_pages).apply {
+                text = pagesText(document.value(SourceMetadataKey.Length) ?: document.value(SourceMetadataKey.Pages))
+                bindIcon(R.drawable.ic_book_24dp)
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_hb_more_info).bindMoreInfo(onMoreInfo)
+        }
+
+    private fun renderLanraragiSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
+        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_la, container, false).apply {
+            findViewById<TextView>(R.id.hayai_sy_la_extension).apply {
+                text = document.value(SourceMetadataKey.ArchiveType).orEmpty().uppercase(Locale.ROOT)
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_la_pages).apply {
+                text = pagesText(document.value(SourceMetadataKey.Pages))
+                bindIcon(R.drawable.ic_book_24dp)
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_la_more_info).bindMoreInfo(onMoreInfo)
+        }
+
+    private fun renderNHentaiSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
+        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_nh, container, false).apply {
+            val category = document.value(SourceMetadataKey.Category) ?: document.tags.firstOrNull()?.name.orEmpty()
+            bindGenre(
+                findViewById(R.id.hayai_sy_nh_genre_card),
+                findViewById(R.id.hayai_sy_nh_genre),
+                category,
+            )
+            findViewById<TextView>(R.id.hayai_sy_nh_pages).apply {
+                text = pagesText(document.value(SourceMetadataKey.Pages) ?: document.value(SourceMetadataKey.Length))
+                bindIcon(R.drawable.ic_book_24dp)
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_nh_id).apply {
+                text = document.value(SourceMetadataKey.GalleryId)?.let { context.getString(R.string.hayai_enhanced_id_format, it) }.orEmpty()
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_nh_favorites).apply {
+                text = document.value(SourceMetadataKey.Favorites).orEmpty()
+                bindIcon(R.drawable.ic_book_24dp)
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_nh_posted).apply {
+                text = document.value(SourceMetadataKey.Posted)?.let { formatValue(context, SourceMetadataKey.Posted, it) }.orEmpty()
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_nh_more_info).bindMoreInfo(onMoreInfo)
+        }
+
+    private fun renderPururinSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
+        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_pu, container, false).apply {
+            val category = document.value(SourceMetadataKey.Category) ?: document.tags.firstOrNull()?.name.orEmpty()
+            bindGenre(
+                findViewById(R.id.hayai_sy_pu_genre_card),
+                findViewById(R.id.hayai_sy_pu_genre),
+                category,
+            )
+            findViewById<TextView>(R.id.hayai_sy_pu_pages).apply {
+                text = pagesText(document.value(SourceMetadataKey.Pages))
+                bindIcon(R.drawable.ic_book_24dp)
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_pu_uploader).apply {
+                text = document.value(SourceMetadataKey.Uploader).orEmpty()
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_pu_size).apply {
+                text = document.value(SourceMetadataKey.FileSize)?.let { formatValue(context, SourceMetadataKey.FileSize, it) }.orEmpty()
+                copyOnLongClick()
+            }
+            val ratingValue = document.value(SourceMetadataKey.Rating)?.toFloatOrNull()?.coerceIn(0f, 5f) ?: 0f
+            findViewById<RatingBar>(R.id.hayai_sy_pu_rating_bar).rating = ratingValue
+            findViewById<TextView>(R.id.hayai_sy_pu_rating).apply {
+                text = ratingValue.toString()
+                copyOnLongClick()
+            }
+            findViewById<TextView>(R.id.hayai_sy_pu_more_info).bindMoreInfo(onMoreInfo)
+        }
 
     fun fullRows(context: Context, document: SourceMetadataDocument): List<Row> = buildList {
         document.titles.forEachIndexed { index, title ->
@@ -291,6 +458,42 @@ object SourceMetadataUi {
     private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     private fun dp(context: Context, value: Int): Int = (value * context.resources.displayMetrics.density).toInt()
     private const val INLINE_TAG_LIMIT = 12
+
+    private fun TextView.bindIcon(drawableRes: Int) {
+        val icon = AppCompatResources.getDrawable(context, drawableRes)?.mutate() ?: return
+        DrawableCompat.setTint(icon, context.getResourceColor(R.attr.colorAccent))
+        icon.setBounds(0, 0, dp(context, 20), dp(context, 20))
+        compoundDrawablePadding = dp(context, 4)
+        setCompoundDrawablesRelative(icon, null, null, null)
+    }
+
+    private fun TextView.bindMoreInfo(onMoreInfo: () -> Unit) {
+        bindIcon(R.drawable.ic_info_24dp)
+        setOnClickListener { onMoreInfo() }
+    }
+
+    private fun TextView.copyOnLongClick() {
+        setOnLongClickListener {
+            context.copyMetadata(text.toString(), text.toString())
+            true
+        }
+    }
+
+    private fun bindGenre(card: CardView, label: TextView, category: String) {
+        val value = category.ifBlank { label.context.getString(R.string.unknown) }
+        val background = typeColor(value)
+        label.text = typeLabel(label.context, value)
+        label.setTextColor(contrastingTextColor(background))
+        card.setCardBackgroundColor(background)
+        label.copyOnLongClick()
+    }
+
+    private fun TextView.pagesText(raw: String?): String {
+        val count = raw?.toIntOrNull() ?: 0
+        return resources.getQuantityString(R.plurals.num_pages, count, count)
+    }
+
+    private fun uploaderSearch(value: String) = "uploader:\"$value\""
 }
 
 private fun Context.copyMetadata(label: String, value: String) {

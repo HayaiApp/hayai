@@ -210,13 +210,14 @@ class SourcePreviewController(
             val column = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(dp(4), dp(4), dp(4), dp(8))
+                setPadding(dp(8), dp(4), dp(8), dp(8))
             }
             val previewFrame = FrameLayout(parent.context).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(120), dp(200))
             }
             val image = ImageView(parent.context).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                adjustViewBounds = true
             }
             previewFrame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             val loading = LoadingIndicator(parent.context)
