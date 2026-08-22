@@ -15,7 +15,7 @@ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.novel.error.NovelFailure
 import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerController
-import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
+import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsController
 import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
 import dev.ahmedmohamed.hayai.novel.reader.NovelColorPickerDialog
 import dev.ahmedmohamed.hayai.novel.reader.NovelThemeColors
@@ -279,7 +279,7 @@ class NovelSettingsController : SettingsController() {
             preference {
                 title = context.getString(R.string.hayai_novel_reader_import_external)
                 summary = context.getString(R.string.hayai_novel_reader_import_external_summary)
-                onClick { startActivity(Intent(context, NovelDataToolsActivity::class.java)) }
+                onClick { router.pushController(NovelDataToolsController().withFadeTransaction()) }
             }
         }
 

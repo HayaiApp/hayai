@@ -1461,29 +1461,30 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/ExternalNovelImporter.kt
 app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("INSERT OR REPLACE INTO hayai_novel_import_runs(plan_id,status,completed_at) VALUES (?,'complete',?)")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("SELECT 1 FROM hayai_novel_import_runs WHERE plan_id=? AND status='complete'")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("SELECT 1 FROM mangas_categories WHERE manga_id=? AND category_id=?")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.ifBlank { "asset.bin" }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.joinToString("") { "%02x".format(it) }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.replace("&", "&amp;")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.replace("<", "&lt;")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.replace(">", "&gt;")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.replace(Regex("[^A-Za-z0-9._-]"), "_")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"gif" -> "image/gif"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"jpg", "jpeg" -> "image/jpeg"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"png" -> "image/png"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"svg" -> "image/svg+xml"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"webp" -> "image/webp"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	const val EXTRA_MANGA_ID = "hayai.manga_id"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	contentResolver.openOutputStream(uri, "w").use { output ->
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	else -> "<pre>${escape(document.content)}</pre>"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	else -> "application/octet-stream"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	identifier = "hayai:${manga.source}:${manga.url}",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	importPicker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-protobuf"))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	plan.issues.joinToString("\n") {
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	private val exportPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("application/epub+zip")) { uri -> uri?.let(::exportTo) }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	return "$digest-$raw"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	val cover = coverUrl?.takeIf { mediaType(it).startsWith("image/") }?.let { url ->
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	val digest = MessageDigest.getInstance("SHA-256")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	val language = source.lang.takeUnless { it.isBlank() || it == "all" } ?: "en"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.ifBlank { "asset.bin" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.joinToString("") { "%02x".format(it) }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace("&", "&amp;")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace("<", "&lt;")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace(">", "&gt;")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace(Regex("[^A-Za-z0-9._-]"), "_")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"gif" -> "image/gif"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"jpg", "jpeg" -> "image/jpeg"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"png" -> "image/png"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"svg" -> "image/svg+xml"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"webp" -> "image/webp"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	else -> "<pre>${escape(document.content)}</pre>"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	else -> "application/octet-stream"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	identifier = "hayai:${manga.source}:${manga.url}",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	plan.issues.joinToString("\n") {
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	private const val MANGA_ID = "hayai.manga_id"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/octet-stream", "application/x-protobuf"))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	requireNotNull(activity).contentResolver.openOutputStream(uri, "w").use { output ->
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	return "$digest-$raw"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	type = "application/epub+zip"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	type = "application/octet-stream"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val cover = coverUrl?.takeIf { mediaType(it).startsWith("image/") }?.let { url ->
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val digest = MessageDigest.getInstance("SHA-256")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val language = source.lang.takeUnless { it.isBlank() || it == "all" } ?: "en"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"COALESCE(SUM(CASE WHEN c.read = 1 THEN s.word_count " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"ELSE (s.word_count * MIN(MAX(c.last_page_read, 0), 100) / 100) END), 0) " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"FROM hayai_novel_chapter_stats s JOIN chapters c ON c._id = s.chapter_id " +
