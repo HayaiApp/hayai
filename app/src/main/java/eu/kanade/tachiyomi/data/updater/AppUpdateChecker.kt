@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.updater
 
 import android.content.Context
 import android.os.Build
+import dev.ahmedmohamed.hayai.update.HayaiReleasePolicy
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.network.GET
@@ -19,6 +20,12 @@ class AppUpdateChecker {
     private val json: Json by injectLazy()
     private val networkService: NetworkHelper by injectLazy()
     private val preferences: PreferencesHelper by injectLazy()
+    private val releasePolicy =
+        HayaiReleasePolicy.current(
+            nightly = BuildConfig.NIGHTLY,
+            versionName = BuildConfig.VERSION_NAME,
+            buildNumber = BuildConfig.COMMIT_COUNT,
+        )
 
     suspend fun checkForUpdate(
         context: Context,
@@ -91,50 +98,16 @@ class AppUpdateChecker {
 
     private fun isNewVersion(
         versionTag: String,
-        currentVersion: String = BuildConfig.VERSION_NAME,
-    ): Boolean {
-        // Removes prefixes like "r" or "v"
-        val newVersion = versionTag.replace("[^\\d.-]".toRegex(), "")
-        val oldVersion = currentVersion.replace("[^\\d.-]".toRegex(), "")
-        val newPreReleaseVer = newVersion.split("-")
-        val oldPreReleaseVer = oldVersion.split("-")
-        val newSemVer = newPreReleaseVer.first().split(".").map { it.toInt() }
-        val oldSemVer = oldPreReleaseVer.first().split(".").map { it.toInt() }
-
-        oldSemVer.mapIndexed { index, i ->
-            if (newSemVer.getOrElse(index) { i } > i) {
-                return true
-            } else if (newSemVer.getOrElse(index) { i } < i) {
-                return false
-            }
-        }
-        // For cases of extreme patch versions (new: 1.2.3.1 vs old: 1.2.3, return true)
-        return if (newSemVer.size > oldSemVer.size) {
-            true
-        } else if (newSemVer.size < oldSemVer.size) {
-            false
-        } else {
-            // If the version numbers match, check the beta versions
-            val newPreVersion =
-                newPreReleaseVer.getOrNull(1)?.replace("[^\\d.-]".toRegex(), "")?.toIntOrNull()
-            val oldPreVersion =
-                oldPreReleaseVer.getOrNull(1)?.replace("[^\\d.-]".toRegex(), "")?.toIntOrNull()
-            when {
-                // For prod, don't bother with betas (current: 1.2.3 vs new: 1.2.3-b1)
-                oldPreVersion == null -> false
-                // For betas, always use prod builds (current: 1.2.3-b1 vs new: 1.2.3)
-                newPreVersion == null -> true
-                // For betas, higher beta ver is newer (current: 1.2.3-b1 vs new: 1.2.3-b2)
-                else -> (oldPreVersion < newPreVersion)
-            }
-        }
-    }
+        currentVersion: String = releasePolicy.currentVersion,
+    ): Boolean = HayaiReleasePolicy.isNewer(releasePolicy.channel, versionTag, currentVersion)
 }
 
 val RELEASE_TAG: String by lazy {
-    "v${BuildConfig.VERSION_NAME}"
+    HayaiReleasePolicy.current(BuildConfig.NIGHTLY, BuildConfig.VERSION_NAME, BuildConfig.COMMIT_COUNT).releaseTag
 }
 
-const val GITHUB_REPO: String = "HayaiApp/hayai"
+val GITHUB_REPO: String by lazy {
+    HayaiReleasePolicy.current(BuildConfig.NIGHTLY, BuildConfig.VERSION_NAME, BuildConfig.COMMIT_COUNT).repository
+}
 
 val RELEASE_URL = "https://github.com/$GITHUB_REPO/releases/tag/$RELEASE_TAG"

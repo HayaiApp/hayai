@@ -1,6 +1,6 @@
 # Hayai on TachiyomiJ2K
 
-Hayai is rooted directly at TachiyomiJ2K commit `57935d373fab209da0104d1a6ce2cb14ffd762dd`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the new baseline.
+Hayai is rooted directly at TachiyomiJ2K commit `cdae5f2d77d63529c974d97c4a37c0c8ac188397`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the new baseline.
 
 ## Boundaries
 
@@ -47,6 +47,10 @@ Built-in source settings are another deliberate adapter seam. `BrowseSourceContr
 J2K's extension-facing `JavaScriptEngine` delegates evaluation to Hayai's QuickJS runtime. The novel plugin bridge needs the Dokar binding API, while J2K previously packaged a second QuickJS implementation with the same native `libquickjs.so` name. One Hayai-owned evaluator preserves the extension API and prevents an unresolvable APK native-library collision without changing application lifecycle code.
 
 Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
+
+Release channels use a Hayai-owned policy. Stable and beta builds query `HayaiApp/hayai`. Nightly builds use the isolated `.nightly` application ID, numeric `rN` versions, and `HayaiApp/hayai-nightly`. J2K's update checker delegates tag comparison and APK selection to this policy. The nightly workflow chooses `max(commit count, latest published nightly + 1)`, which prevents version rollback after the J2K reset and remains safe when a canceled job retries.
+
+`main` is the active reset branch. The previous application remains on `master` and `legacy/hayai-pre-j2k` for migration evidence. Release procedures live in `docs/development/releases.md`.
 
 Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, normal URLs, cookies, and headers to the installed extension. Hayai adds the source-specific behavior SY exposes for 8Muses, HBrowse, Pururin, NHentai, and LANraragi. This includes host-validated URL import where supported, richer descriptions, generic batch add for importable sources, NHentai previews, and authenticated LANraragi previews. MangaDex-specific recommendations, related titles, and follows are outside this requested slice. A secondary parser failure returns the extension result and never removes a usable source.
 

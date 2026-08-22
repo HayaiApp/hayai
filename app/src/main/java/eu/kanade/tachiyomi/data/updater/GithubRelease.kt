@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.updater
 
 import android.os.Build
+import dev.ahmedmohamed.hayai.update.HayaiReleasePolicy
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -26,17 +27,7 @@ data class GithubRelease(
      */
     val downloadLink: String
         get() {
-            val apkVariant =
-                when (Build.SUPPORTED_ABIS[0]) {
-                    "arm64-v8a" -> "-arm64-v8a"
-                    "armeabi-v7a" -> "-armeabi-v7a"
-                    "x86" -> "-x86"
-                    "x86_64" -> "-x86_64"
-                    else -> ""
-                }
-
-            return assets.find { it.downloadLink.contains("tachiyomij2k$apkVariant-") }?.downloadLink
-                ?: assets[0].downloadLink
+            return HayaiReleasePolicy.selectApk(assets.map { it.downloadLink }, Build.SUPPORTED_ABIS[0])
         }
 
     /**

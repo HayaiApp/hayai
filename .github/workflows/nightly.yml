@@ -1,0 +1,123 @@
+name: Nightly
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: hayai-nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and publish nightly
+    runs-on: ubuntu-24.04
+    environment: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Copy CI gradle.properties
+        run: |
+          mkdir -p ~/.gradle
+          cp .github/runner-files/ci-gradle.properties ~/.gradle/gradle.properties
+
+      - name: Choose nightly number
+        env:
+          GH_TOKEN: ${{ secrets.NIGHTLY_PAT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_tag=$(gh api repos/HayaiApp/hayai-nightly/releases/latest --jq '.tag_name')
+          if [[ ! "$latest_tag" =~ ^r([0-9]+)$ ]]; then
+            echo "Unexpected latest nightly tag: $latest_tag" >&2
+            exit 1
+          fi
+          next_remote=$((BASH_REMATCH[1] + 1))
+          commit_count=$(git rev-list --count HEAD)
+          if (( commit_count > next_remote )); then
+            build_number=$commit_count
+          else
+            build_number=$next_remote
+          fi
+          echo "NIGHTLY_BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
+          echo "VERSION_TAG=r$build_number" >> "$GITHUB_ENV"
+          echo "COMMIT_SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        run: ./gradlew assembleStandardNightly testStandardNightlyUnitTest -x formatKotlin
+
+      - name: Detect Android build tools
+        shell: bash
+        run: |
+          build_tools_version=$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort -V | tail -1)
+          echo "BUILD_TOOLS_VERSION=$build_tools_version" >> "$GITHUB_ENV"
+
+      - name: Sign APKs
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/apk/standard/nightly
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=app/build/outputs/apk/standard/nightly
+          mv "$dir/app-standard-universal-nightly-unsigned-signed.apk" "hayai-${VERSION_TAG}.apk"
+          cp "$dir/app-standard-arm64-v8a-nightly-unsigned-signed.apk" "hayai-arm64-v8a-${VERSION_TAG}.apk"
+          cp "$dir/app-standard-armeabi-v7a-nightly-unsigned-signed.apk" "hayai-armeabi-v7a-${VERSION_TAG}.apk"
+          cp "$dir/app-standard-x86-nightly-unsigned-signed.apk" "hayai-x86-${VERSION_TAG}.apk"
+          cp "$dir/app-standard-x86_64-nightly-unsigned-signed.apk" "hayai-x86_64-${VERSION_TAG}.apk"
+          for apk in hayai-*-${VERSION_TAG}.apk hayai-${VERSION_TAG}.apk; do
+            sha256sum "$apk"
+          done | tee nightly-checksums.txt
+
+      - name: Publish nightly
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          repository: HayaiApp/hayai-nightly
+          tag_name: ${{ env.VERSION_TAG }}
+          name: Hayai Nightly ${{ env.VERSION_TAG }}
+          body: |
+            This test build comes from [`${{ env.COMMIT_SHORT_SHA }}`](https://github.com/HayaiApp/hayai/commit/${{ github.sha }}).
+
+            Back up your library before installing a nightly build.
+          files: |
+            hayai-${{ env.VERSION_TAG }}.apk
+            hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk
+            hayai-armeabi-v7a-${{ env.VERSION_TAG }}.apk
+            hayai-x86-${{ env.VERSION_TAG }}.apk
+            hayai-x86_64-${{ env.VERSION_TAG }}.apk
+            nightly-checksums.txt
+          draft: false
+          prerelease: false
+          token: ${{ secrets.NIGHTLY_PAT }}
+
+      - name: Upload mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-mapping-${{ github.sha }}
+          path: app/build/outputs/mapping/standardNightly
