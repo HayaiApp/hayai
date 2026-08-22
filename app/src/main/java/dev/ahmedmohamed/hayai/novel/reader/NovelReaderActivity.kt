@@ -328,17 +328,13 @@ class NovelReaderActivity :
     private fun readerStyle(options: NovelContentOptions): NovelReaderStyle {
         val dark = resources.configuration.uiMode and 0x30 == 0x20
         val themeColors =
-            when (preferences.novelTheme.get()) {
-                "light" -> 0xFFFFFFFF.toInt() to 0xFF202124.toInt()
-                "dark" -> 0xFF121212.toInt() to 0xFFE6E1E5.toInt()
-                "sepia" -> 0xFFF4ECD8.toInt() to 0xFF3B2F2F.toInt()
-                "black" -> 0xFF000000.toInt() to 0xFFECECEC.toInt()
-                "grey" -> 0xFF303030.toInt() to 0xFFF1F1F1.toInt()
-                "custom" ->
-                    (preferences.novelBackgroundColor.get().takeUnless { it == 0 } ?: 0xFFFFFBFE.toInt()) to
-                        (preferences.novelFontColor.get().takeUnless { it == 0 } ?: 0xFF1C1B1F.toInt())
-                else -> if (dark) 0xFF121212.toInt() to 0xFFE6E1E5.toInt() else 0xFFFFFBFE.toInt() to 0xFF1C1B1F.toInt()
-            }
+            NovelThemeColors.resolve(
+                theme = preferences.novelTheme.get(),
+                customBackground = preferences.novelBackgroundColor.get(),
+                customText = preferences.novelFontColor.get(),
+                appBackground = if (dark) NovelThemeColors.DARK_BACKGROUND else 0xFFFFFBFE.toInt(),
+                appText = if (dark) NovelThemeColors.DARK_TEXT else 0xFF1C1B1F.toInt(),
+            )
         val defaultBackground = themeColors.first
         val defaultText = themeColors.second
         return NovelReaderStyle(
@@ -346,8 +342,8 @@ class NovelReaderActivity :
             fontFamily = preferences.novelFontFamily.get(),
             lineHeight = preferences.novelLineHeight.get(),
             textAlign = preferences.novelTextAlign.get(),
-            textColor = preferences.novelFontColor.get().takeUnless { it == 0 } ?: defaultText,
-            backgroundColor = preferences.novelBackgroundColor.get().takeUnless { it == 0 } ?: defaultBackground,
+            textColor = defaultText,
+            backgroundColor = defaultBackground,
             linkColor = if (dark) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt(),
             paragraphIndent = preferences.novelParagraphIndent.get(),
             paragraphSpacing = preferences.novelParagraphSpacing.get(),

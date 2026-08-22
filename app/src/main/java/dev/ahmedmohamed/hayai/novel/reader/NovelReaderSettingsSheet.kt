@@ -2,8 +2,8 @@ package dev.ahmedmohamed.hayai.novel.reader
 
 import android.app.Activity
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +14,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
+import androidx.core.view.children
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.button.MaterialButton
@@ -84,12 +85,6 @@ internal class NovelReaderSettingsSheet(
         page.heading(R.string.hayai_novel_reader_renderer)
         page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingMode, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
         page.choice(
-            R.string.hayai_novel_reader_theme,
-            preferences.novelTheme,
-            listOf(R.string.hayai_novel_reader_app to "app", R.string.hayai_novel_reader_light to "light", R.string.dark to "dark", R.string.hayai_novel_reader_sepia to "sepia", R.string.black to "black", R.string.hayai_novel_reader_grey to "grey", R.string.hayai_novel_reader_custom to "custom"),
-            onStyleChanged,
-        )
-        page.choice(
             R.string.tap_zones,
             preferences.novelNavigationMode,
             listOf(R.string.default_value to 0, R.string.hayai_novel_reader_tap_zone_l to 1, R.string.hayai_novel_reader_tap_zone_kindlish to 2, R.string.edge_nav to 3, R.string.hayai_novel_reader_left_right to 4, R.string.disabled to 5, R.string.hayai_novel_reader_center_only to 6),
@@ -115,6 +110,31 @@ internal class NovelReaderSettingsSheet(
     }
 
     private fun textPage(page: LinearLayout) {
+        page.heading(R.string.hayai_novel_reader_theme)
+        val themeControl = page.choice(
+            R.string.hayai_novel_reader_theme,
+            preferences.novelTheme,
+            listOf(R.string.hayai_novel_reader_app to "app", R.string.hayai_novel_reader_light to "light", R.string.dark to "dark", R.string.hayai_novel_reader_sepia to "sepia", R.string.black to "black", R.string.hayai_novel_reader_grey to "grey", R.string.hayai_novel_reader_custom to "custom"),
+            onStyleChanged,
+        )
+        val activateCustomTheme = {
+            preferences.novelTheme.set("custom")
+            themeControl.setSelection(6)
+        }
+        page.colorChoice(
+            R.string.hayai_novel_reader_custom_text_color,
+            preferences.novelFontColor,
+            NovelThemeColors.LIGHT_TEXT,
+            FONT_COLORS,
+            activateCustomTheme,
+        )
+        page.colorChoice(
+            R.string.hayai_novel_reader_custom_background_color,
+            preferences.novelBackgroundColor,
+            NovelThemeColors.LIGHT_BACKGROUND,
+            BACKGROUND_COLORS,
+            activateCustomTheme,
+        )
         page.heading(R.string.hayai_novel_reader_typography)
         page.slider(R.string.hayai_novel_reader_font_size, preferences.novelFontSize, 8, 72, R.string.hayai_novel_reader_sp_value, onStyleChanged)
         page.choice(R.string.hayai_novel_reader_font, preferences.novelFontFamily, listOf(R.string.hayai_novel_reader_sans_serif to "sans-serif", R.string.hayai_novel_reader_serif to "serif", R.string.hayai_novel_reader_monospace to "monospace"), onStyleChanged)
@@ -127,8 +147,6 @@ internal class NovelReaderSettingsSheet(
         page.sliderFloat(R.string.hayai_novel_reader_line_height, preferences.novelLineHeight, 8, 30, 10f, onStyleChanged)
         page.sliderFloat(R.string.hayai_novel_reader_paragraph_indent, preferences.novelParagraphIndent, 0, 100, 10f, onStyleChanged)
         page.sliderFloat(R.string.hayai_novel_reader_paragraph_spacing, preferences.novelParagraphSpacing, 0, 50, 10f, onStyleChanged)
-        page.button(R.string.hayai_novel_reader_text_color) { editColor(R.string.hayai_novel_reader_text_color, preferences.novelFontColor, onStyleChanged) }
-        page.button(R.string.background_color) { editColor(R.string.background_color, preferences.novelBackgroundColor, onStyleChanged) }
         page.toggle(R.string.hayai_novel_reader_custom_brightness, preferences.novelCustomBrightness, onChromeChanged)
         page.slider(R.string.hayai_novel_reader_brightness_adjustment, preferences.novelCustomBrightnessValue, -75, 100, R.string.hayai_novel_reader_percent_value, onChromeChanged)
     }
@@ -258,9 +276,9 @@ internal class NovelReaderSettingsSheet(
         )
     }
 
-    private fun <T> LinearLayout.choice(@StringRes labelRes: Int, preference: Preference<T>, values: List<Pair<Int, T>>, changed: () -> Unit = {}) {
+    private fun <T> LinearLayout.choice(@StringRes labelRes: Int, preference: Preference<T>, values: List<Pair<Int, T>>, changed: () -> Unit = {}): MaterialSpinnerView {
         val selected = values.indexOfFirst { it.second == preference.get() }.coerceAtLeast(0)
-        addView(
+        val spinner =
             MaterialSpinnerView(context, null).apply {
                 title = context.getString(labelRes)
                 setEntries(values.map { context.getString(it.first) })
@@ -272,9 +290,9 @@ internal class NovelReaderSettingsSheet(
                         changed()
                     }
                 }
-            },
-            matchWrap(),
-        )
+            }
+        addView(spinner, matchWrap())
+        return spinner
     }
 
     private fun LinearLayout.slider(@StringRes labelRes: Int, preference: Preference<Int>, min: Int, max: Int, @StringRes valueFormatRes: Int, changed: () -> Unit = {}) {
@@ -331,6 +349,72 @@ internal class NovelReaderSettingsSheet(
         )
     }
 
+    private fun LinearLayout.colorChoice(
+        @StringRes labelRes: Int,
+        preference: Preference<Int>,
+        defaultColor: Int,
+        values: List<Pair<Int, Int>>,
+        activateCustomTheme: () -> Unit,
+    ) {
+        addView(TextView(context).apply { setText(labelRes); textSize = 15f; setPadding(0, 12.dp, 0, 4.dp) }, matchWrap())
+        val group = ChipGroup(context).apply { isSingleSelection = true; isSelectionRequired = true; isSingleLine = true }
+        fun renderSelection() {
+            val current = preference.get()
+            val presetValues = values.mapTo(hashSetOf()) { it.second }
+            group.children.forEachIndexed { index, view ->
+                val option = values[index]
+                val custom = option.second == CUSTOM_COLOR
+                (view as Chip).isChecked = if (custom) current != 0 && current !in presetValues else current == option.second
+            }
+        }
+        values.forEach { (optionLabel, color) ->
+            val custom = color == CUSTOM_COLOR
+            group.addView(
+                Chip(context).apply {
+                    setText(optionLabel)
+                    isCheckable = true
+                    if (custom) {
+                        chipIcon = ContextCompat.getDrawable(context, R.drawable.ic_palette_24dp)
+                        isChipIconVisible = true
+                    } else if (color != 0) {
+                        chipIcon = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color); setSize(16.dp, 16.dp) }
+                        chipIconTint = null
+                        isChipIconVisible = true
+                    }
+                    setOnClickListener {
+                        if (custom) {
+                            NovelColorPickerDialog.show(
+                                context = context,
+                                titleRes = labelRes,
+                                initialColor = preference.get(),
+                                defaultColor = defaultColor,
+                                onConfirm = { selected ->
+                                    preference.set(selected)
+                                    activateCustomTheme()
+                                    renderSelection()
+                                    onStyleChanged()
+                                },
+                                onDefault = {
+                                    preference.set(0)
+                                    activateCustomTheme()
+                                    renderSelection()
+                                    onStyleChanged()
+                                },
+                            )
+                        } else {
+                            preference.set(color)
+                            activateCustomTheme()
+                            renderSelection()
+                            onStyleChanged()
+                        }
+                    }
+                },
+            )
+        }
+        renderSelection()
+        addView(HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(group) }, matchWrap())
+    }
+
     private fun LinearLayout.sliderHeader(@StringRes labelRes: Int): TextView {
         val value = TextView(context).apply {
             textSize = 14f
@@ -355,23 +439,6 @@ internal class NovelReaderSettingsSheet(
         AlertDialog.Builder(context).setTitle(title).setView(input).setPositiveButton(android.R.string.ok) { _, _ ->
             input.text.toString().trim().takeIf(String::isNotBlank)?.let { preference.set(it); changed() }
         }.setNegativeButton(android.R.string.cancel, null).show()
-    }
-
-    private fun editColor(@StringRes titleRes: Int, preference: Preference<Int>, changed: () -> Unit) {
-        val input = android.widget.EditText(context).apply {
-            setSingleLine()
-            hint = context.getString(R.string.hayai_novel_reader_color_hint)
-            setText(preference.get().takeUnless { it == 0 }?.let { String.format("#%08X", it) }.orEmpty())
-        }
-        val dialog = AlertDialog.Builder(context).setTitle(titleRes).setView(input).setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val value = input.text.toString().trim()
-                val parsed = if (value.isBlank()) 0 else runCatching { Color.parseColor(value) }.getOrNull()
-                if (parsed == null) input.error = context.getString(R.string.hayai_novel_reader_color_error) else { preference.set(parsed); changed(); dialog.dismiss() }
-            }
-        }
-        dialog.show()
     }
 
     private fun chooseVoice() {
@@ -545,4 +612,32 @@ internal class NovelReaderSettingsSheet(
     private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
     private val Int.dp: Int get() = (this * context.resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val CUSTOM_COLOR = Int.MIN_VALUE
+        val FONT_COLORS =
+            listOf(
+                R.string.default_value to 0,
+                R.string.black to 0xFF000000.toInt(),
+                R.string.white to 0xFFFFFFFF.toInt(),
+                R.string.gray_background to 0xFF808080.toInt(),
+                R.string.hayai_novel_reader_dark_gray to 0xFF404040.toInt(),
+                R.string.hayai_novel_reader_light_gray to 0xFFC0C0C0.toInt(),
+                R.string.hayai_novel_reader_off_white to 0xFFCCCCCC.toInt(),
+                R.string.hayai_novel_reader_sepia_color to 0xFF5C4033.toInt(),
+                R.string.hayai_novel_reader_custom to CUSTOM_COLOR,
+            )
+        val BACKGROUND_COLORS =
+            listOf(
+                R.string.default_value to 0,
+                R.string.white to 0xFFFFFFFF.toInt(),
+                R.string.black to 0xFF000000.toInt(),
+                R.string.hayai_novel_reader_light_gray to 0xFFF5F5F5.toInt(),
+                R.string.hayai_novel_reader_dark_gray to 0xFF1A1A1A.toInt(),
+                R.string.hayai_novel_reader_sepia to 0xFFF4ECD8.toInt(),
+                R.string.hayai_novel_reader_cream to 0xFFFFFDD0.toInt(),
+                R.string.hayai_novel_reader_charcoal to 0xFF292832.toInt(),
+                R.string.hayai_novel_reader_custom to CUSTOM_COLOR,
+            )
+    }
 }
