@@ -397,9 +397,10 @@ class LocalNovelSource(
         const val HELP_URL = "https://tsundoku-otaku.github.io/docs/guides/local-source/novels"
         private val LATEST_THRESHOLD = TimeUnit.MILLISECONDS.convert(7, TimeUnit.DAYS)
         private const val MAX_ASSET_BYTES = 50L * 1024 * 1024
+        private const val STORAGE_DIRECTORY = "Hayai"
 
         private fun getBaseDirectories(context: Context): List<File> {
-            val relativePath = context.getString(R.string.app_name) + File.separator + "localnovels"
+            val relativePath = STORAGE_DIRECTORY + File.separator + "localnovels"
             return DiskUtil.getExternalStorages(context).map { File(it, relativePath).apply { mkdirs() } }
         }
     }

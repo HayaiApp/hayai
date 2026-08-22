@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!-- Debug-only emulator verification entry points. Production variants keep these private. -->
+        <activity
+            android:name="dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
+        <activity
+            android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity"
+            android:exported="true"
+            tools:replace="android:exported" />
+    </application>
+</manifest>

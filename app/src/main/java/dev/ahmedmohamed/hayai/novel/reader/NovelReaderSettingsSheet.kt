@@ -27,16 +27,15 @@ internal class NovelReaderSettingsSheet(
     private val onChromeChanged: () -> Unit,
     private val onAction: (NovelReaderAction) -> Unit,
 ) : TabbedBottomSheetDialog(activity) {
-    private val pages =
-        listOf(
-            page { readerPage(this) },
-            page { textPage(this) },
-            page { layoutPage(this) },
-            page { ttsPage(this) },
-            page { morePage(this) },
-        )
+    // Keep these as individual fields, matching J2K's own tabbed sheets. The base class asks
+    // for the tab count from its constructor, before a subclass collection field can exist.
+    private val readerView = page { readerPage(this) }
+    private val textView = page { textPage(this) }
+    private val layoutView = page { layoutPage(this) }
+    private val ttsView = page { ttsPage(this) }
+    private val moreView = page { morePage(this) }
 
-    override fun getTabViews(): List<View> = pages
+    override fun getTabViews(): List<View> = listOf(readerView, textView, layoutView, ttsView, moreView)
 
     override fun getTabTitles(): List<Int> =
         listOf(
