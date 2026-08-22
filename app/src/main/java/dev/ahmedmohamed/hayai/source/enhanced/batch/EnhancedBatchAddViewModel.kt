@@ -1,17 +1,14 @@
 package dev.ahmedmohamed.hayai.source.enhanced.batch
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.source.SourceManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -26,16 +23,17 @@ data class EnhancedBatchAddUiState(
 
 enum class EnhancedBatchUiError { InvalidInput, Cancelled, Failed }
 
-class EnhancedBatchAddViewModel(
+class EnhancedBatchAddCoordinator(
+    private val scope: CoroutineScope,
     sourceManager: SourceManager = Injekt.get(),
     database: DatabaseHelper = Injekt.get(),
-) : ViewModel() {
+) {
     private val service = EnhancedBatchAddService(J2kEnhancedBatchLibraryGateway(sourceManager, database))
     private val mutableInput = MutableStateFlow("")
     private val mutableResult = MutableStateFlow<ResultState>(ResultState.Idle)
     @Volatile private var runJob: Job? = null
 
-    val state: StateFlow<EnhancedBatchAddUiState> = combine(mutableInput, mutableResult, service.progress) { input, result, progress ->
+    val state: Flow<EnhancedBatchAddUiState> = combine(mutableInput, mutableResult, service.progress) { input, result, progress ->
         EnhancedBatchAddUiState(
             input = input,
             running = result is ResultState.Running,
@@ -43,7 +41,7 @@ class EnhancedBatchAddViewModel(
             report = (result as? ResultState.Finished)?.report,
             error = (result as? ResultState.Error)?.reason,
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, EnhancedBatchAddUiState())
+    }
 
     fun updateInput(value: String) {
         if (runJob == null) mutableInput.value = value
@@ -56,7 +54,7 @@ class EnhancedBatchAddViewModel(
             return
         }
         mutableResult.value = ResultState.Running
-        runJob = viewModelScope.launch(Dispatchers.IO) {
+        runJob = scope.launch(Dispatchers.IO) {
             try {
                 val report = service.run(plan)
                 mutableResult.value = ResultState.Finished(report)
