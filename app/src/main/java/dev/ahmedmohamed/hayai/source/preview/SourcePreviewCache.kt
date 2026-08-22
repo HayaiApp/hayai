@@ -57,12 +57,17 @@ class SourcePreviewCache(private val context: Context) {
     }
 
     private fun write(directory: File, key: String, bytes: ByteArray) {
+        check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
         val target = File(directory, key)
-        val temporary = File(directory, "$key.tmp")
-        temporary.writeBytes(bytes)
-        if (!temporary.renameTo(target)) {
-            target.delete()
-            check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
+        val temporary = File.createTempFile("$key.", ".tmp", directory)
+        try {
+            temporary.writeBytes(bytes)
+            if (!temporary.renameTo(target)) {
+                target.delete()
+                check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
+            }
+        } finally {
+            temporary.delete()
         }
     }
 

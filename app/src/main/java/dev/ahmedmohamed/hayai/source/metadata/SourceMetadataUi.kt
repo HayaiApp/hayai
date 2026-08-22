@@ -22,6 +22,8 @@ import java.text.DateFormat
 import java.util.Date
 
 object SourceMetadataUi {
+    data class Row(val title: String, val value: String)
+
     fun renderSummary(
         container: LinearLayout,
         document: SourceMetadataDocument,
@@ -139,6 +141,19 @@ object SourceMetadataUi {
                     matchWrap(),
                 )
             }
+        }
+    }
+
+    fun fullRows(context: Context, document: SourceMetadataDocument): List<Row> = buildList {
+        document.titles.forEachIndexed { index, title ->
+            val key = if (index == 0) SourceMetadataKey.EnglishTitle else SourceMetadataKey.AlternativeTitle
+            add(Row(context.getString(label(key)), title))
+        }
+        document.fields.forEach { field ->
+            add(Row(context.getString(label(field.key)), formatValue(context, field.key, field.value)))
+        }
+        document.tags.groupBy { it.namespace }.forEach { (namespace, tags) ->
+            add(Row(namespace ?: context.getString(R.string.tags), tags.joinToString { it.name }))
         }
     }
 

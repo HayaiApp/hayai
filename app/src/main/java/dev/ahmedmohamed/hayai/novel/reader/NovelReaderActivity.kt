@@ -28,6 +28,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.setPadding
 import androidx.core.view.isVisible
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat.Type.displayCutout
+import androidx.core.view.WindowInsetsCompat.Type.systemBars
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -60,6 +65,7 @@ import eu.kanade.tachiyomi.ui.reader.ReaderSlider
 import eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterSheet
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
 import eu.kanade.tachiyomi.ui.main.SearchActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -1063,11 +1069,10 @@ class NovelReaderActivity :
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-        if (preferences.novelFullscreen.get()) {
-            window.decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        } else {
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            if (preferences.novelFullscreen.get()) hide(systemBars()) else show(systemBars())
         }
         requestedOrientation = orientationValue(preferences.novelOrientation.get())
         val brightness =
@@ -1080,6 +1085,42 @@ class NovelReaderActivity :
                 WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             }
         window.attributes = window.attributes.apply { screenBrightness = brightness }
+        bindReaderInsets()
+    }
+
+    private fun bindReaderInsets() {
+        val readerLayout = findViewById<View>(R.id.reader_layout)
+        val navigation = findViewById<View>(R.id.nav_layout)
+        readerLayout.doOnApplyWindowInsetsCompat { _, insets, _ ->
+            val systemInsets = insets.getInsetsIgnoringVisibility(systemBars())
+            val cutoutInsets = insets.getInsetsIgnoringVisibility(displayCutout())
+            val contentInsets = insets.getInsetsIgnoringVisibility(systemBars() or displayCutout())
+            appBar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                leftMargin = systemInsets.left
+                rightMargin = systemInsets.right
+            }
+            toolbar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                topMargin = systemInsets.top
+                leftMargin = cutoutInsets.left
+                rightMargin = cutoutInsets.right
+            }
+            viewerContainer.updateLayoutParams<androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams> {
+                leftMargin = cutoutInsets.left
+                rightMargin = cutoutInsets.right
+                val systemTop = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else contentInsets.top
+                val readerChrome = systemInsets.top + toolbar.layoutParams.height.coerceAtLeast(0)
+                topMargin = if (controlsVisible) readerChrome else systemTop
+                bottomMargin = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else contentInsets.bottom
+            }
+            navigation.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                leftMargin = 12.dp + contentInsets.left
+                rightMargin = 12.dp + contentInsets.right
+            }
+            statusView.updateLayoutParams<androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams> {
+                bottomMargin = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else systemInsets.bottom
+            }
+            viewerContainer.requestLayout()
+        }
     }
 
     private fun showError(message: String) {
@@ -1438,6 +1479,7 @@ class NovelReaderActivity :
         findViewById<View>(R.id.nav_layout).isVisible = visible && chapterSheetBehavior.state != BottomSheetBehavior.STATE_EXPANDED
         chapterSheetBehavior.state = if (visible) BottomSheetBehavior.STATE_COLLAPSED else BottomSheetBehavior.STATE_HIDDEN
         configureProgressControls()
+        findViewById<View>(R.id.reader_layout).requestApplyInsets()
     }
 
     private fun setEditMode(enabled: Boolean) {
