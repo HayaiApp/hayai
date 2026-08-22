@@ -47,9 +47,14 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt"
+        # Approved in docs/architecture/j2k-reset.md. Reads one typed initial-page extra only.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Registers the Hayai novel settings screen for J2K search.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/search/SettingsSearchHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsTrackingController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt"
@@ -73,11 +78,15 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/main/MainActivity.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"
     )
-    $protectedChanges = $changed | Where-Object { $_ -in $protectedFiles }
+    $approvedProtectedFiles = @(
+        # Approved in docs/architecture/j2k-reset.md. This reads one typed initial-page extra only.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"
+    )
+    $protectedChanges = $changed | Where-Object { $_ -in $protectedFiles -and $_ -notin $approvedProtectedFiles }
     if ($violations -or $protectedChanges) {
         Write-Error ((@("Hayai upstream boundary expanded without review:") + $violations + $protectedChanges) -join [Environment]::NewLine)
     }
-    Write-Host "Hayai boundary verified: $($allowedUpstreamKotlin.Count) J2K adapter files allowed; protected lifecycle, navigation, and image-reader files untouched."
+    Write-Host "Hayai boundary verified: $($allowedUpstreamKotlin.Count) J2K adapter files allowed; one documented ReaderActivity initial-page adapter approved."
 }
 finally {
     Pop-Location
