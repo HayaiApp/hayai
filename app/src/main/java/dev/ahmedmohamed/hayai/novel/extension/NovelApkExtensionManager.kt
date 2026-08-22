@@ -16,16 +16,45 @@ import kotlinx.coroutines.launch
 
 interface NovelApkRepositoryRegistry {
     suspend fun repositories(): Set<String>
+    fun repositoriesNow(): Set<String>
+    fun novelOnlyRepositoriesNow(): Set<String>
+    suspend fun addMangaOwnership(indexUrl: String)
+    suspend fun removeMangaOwnership(indexUrl: String)
     suspend fun add(indexUrl: String)
     suspend fun remove(indexUrl: String)
+    fun migrate(
+        oldUrl: String,
+        newUrl: String,
+    )
 }
 
 class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: PreferencesHelper) : NovelApkRepositoryRegistry {
     private val tags = context.getSharedPreferences("hayai_novel_apk_repositories", Context.MODE_PRIVATE)
-    override suspend fun repositories(): Set<String> = tags.getStringSet(KEY, emptySet()).orEmpty().toSet()
+    override suspend fun repositories(): Set<String> = repositoriesNow()
+    override fun repositoriesNow(): Set<String> = tags.getStringSet(KEY, emptySet()).orEmpty().toSet()
+    override fun novelOnlyRepositoriesNow(): Set<String> = tags.getStringSet(OWNED_KEY, emptySet()).orEmpty().toSet()
+
+    override suspend fun addMangaOwnership(indexUrl: String) {
+        val global = preferences.extensionRepos().get()
+        val novelOnly = novelOnlyRepositoriesNow()
+        if (indexUrl in novelOnly) {
+            check(tags.edit().putStringSet(OWNED_KEY, novelOnly - indexUrl).commit())
+        }
+        if (indexUrl !in global) preferences.extensionRepos().set(global + indexUrl)
+    }
+
+    override suspend fun removeMangaOwnership(indexUrl: String) {
+        val global = preferences.extensionRepos().get()
+        if (indexUrl in repositoriesNow()) {
+            check(tags.edit().putStringSet(OWNED_KEY, novelOnlyRepositoriesNow() + indexUrl).commit())
+        } else if (indexUrl in global) {
+            preferences.extensionRepos().set(global - indexUrl)
+        }
+    }
+
     override suspend fun add(indexUrl: String) {
         val global = preferences.extensionRepos().get()
-        val owned = tags.getStringSet(OWNED_KEY, emptySet()).orEmpty().toSet()
+        val owned = novelOnlyRepositoriesNow()
         check(
             tags.edit()
                 .putStringSet(KEY, repositories() + indexUrl)
@@ -35,7 +64,7 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
         if (indexUrl !in global) preferences.extensionRepos().set(global + indexUrl)
     }
     override suspend fun remove(indexUrl: String) {
-        val owned = tags.getStringSet(OWNED_KEY, emptySet()).orEmpty().toSet()
+        val owned = novelOnlyRepositoriesNow()
         if (indexUrl in owned) preferences.extensionRepos().set(preferences.extensionRepos().get() - indexUrl)
         check(
             tags.edit()
@@ -44,7 +73,25 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
                 .commit(),
         )
     }
-    private companion object { const val KEY = "urls_v1"; const val OWNED_KEY = "owned_global_urls_v1" }
+
+    override fun migrate(
+        oldUrl: String,
+        newUrl: String,
+    ) {
+        if (oldUrl == newUrl || oldUrl !in repositoriesNow()) return
+        val owned = novelOnlyRepositoriesNow()
+        check(
+            tags.edit()
+                .putStringSet(KEY, repositoriesNow() - oldUrl + newUrl)
+                .putStringSet(OWNED_KEY, if (oldUrl in owned) owned - oldUrl + newUrl else owned)
+                .commit(),
+        )
+    }
+
+    private companion object {
+        const val KEY = "urls_v1"
+        const val OWNED_KEY = "owned_global_urls_v1"
+    }
 }
 
 data class NovelApkExtensionCatalog(

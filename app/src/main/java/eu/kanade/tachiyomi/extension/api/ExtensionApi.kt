@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.extension.api
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -119,7 +120,12 @@ internal class ExtensionApi {
     ) {
         val repos = preferences.extensionRepos().get()
         if (oldUrl !in repos) return
+        Injekt.get<NovelApkRepositoryRegistry>().migrate(oldUrl, newUrl)
         preferences.extensionRepos().set(repos - oldUrl + newUrl)
+        val metadata = preferences.extensionRepoMetadata().get()
+        metadata[oldUrl]?.let { oldMetadata ->
+            preferences.extensionRepoMetadata().set(metadata - oldUrl + (newUrl to oldMetadata))
+        }
     }
 
     /**
@@ -306,6 +312,7 @@ internal class ExtensionApi {
                     libVersion = it.extractLibVersion(),
                     lang = it.lang,
                     isNsfw = it.nsfw == 1,
+                    isNovel = it.pkg.startsWith(NOVEL_EXTENSION_PACKAGE_PREFIX),
                     sources = it.sources ?: emptyList(),
                     apkName = it.apk,
                     iconUrl = "$repoUrl/icon/${it.pkg}.png",
@@ -328,6 +335,7 @@ internal class ExtensionApi {
                     libVersion = it.extensionLib.toDouble(),
                     lang = if (langs.size == 1) langs.first() else "all",
                     isNsfw = it.contentWarning >= ExtensionProtoObject.ContentWarning.MIXED,
+                    isNovel = it.isNovel || it.packageName.startsWith(NOVEL_EXTENSION_PACKAGE_PREFIX),
                     sources =
                         it.sources.map { source ->
                             Extension.AvailableSource(
@@ -405,6 +413,7 @@ private data class ExtensionProtoObject(
     @ProtoNumber(6) val versionName: String,
     @ProtoNumber(7) val contentWarning: ContentWarning = ContentWarning.UNSPECIFIED,
     @ProtoNumber(8) val sources: List<SourceProtoObject> = emptyList(),
+    @ProtoNumber(8000) val isNovel: Boolean = false,
 ) {
     @Serializable
     enum class ContentWarning {
@@ -435,3 +444,5 @@ private data class SourceProtoObject(
     @ProtoNumber(3) val language: String,
     @ProtoNumber(4) val homeUrl: String = "",
 )
+
+private const val NOVEL_EXTENSION_PACKAGE_PREFIX = "eu.kanade.tachiyomi.novelextension"
