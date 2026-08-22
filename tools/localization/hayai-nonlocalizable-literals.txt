@@ -1967,12 +1967,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	val type = settingObj["type"]?.jsonPrimitive?.content ?: "Text"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	value.replace(Regex("/{2,}"), "/")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	when (obj["status"]?.jsonPrimitive?.content) {
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	append("\n").append(getString(R.string.version)).append(' ').append(descriptor.version)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	append(descriptor.lang).append(" · ").append(descriptor.id)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	errorText.text = latest.repositoryErrors.entries.joinToString("\n") { (url, error) ->
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	if (installed != null) append(" · ").append(getString(R.string.installed))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	private var query = ""
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	text = "${repository.name}\n${repository.url}"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	append(descriptor.lang).append(" · ").append(descriptor.id)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	if (installed != null) append(" · ").append(context.getString(R.string.installed))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	key = "hayai.plugin.repository.${repository.url.hashCode()}"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	private var query = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	.observesTables("hayai_quotes")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	.query("SELECT $COLUMNS FROM hayai_quotes WHERE manga_id = ? ORDER BY timestamp DESC, quote_id")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	"quote_id, manga_id, novel_name, chapter_name, displayed_content, original_content, translated_content, language, timestamp"
