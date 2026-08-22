@@ -76,7 +76,7 @@ object EhHtmlParser {
         val totalPages = navigation.mapNotNull { it.text().trim().toIntOrNull() }.maxOrNull()
         val hasNext = when {
             totalPages != null -> listingPage + 1 < totalPages
-            navigation.isNotEmpty() -> !navigation.last().hasClass("ptdd")
+            navigation.isNotEmpty() -> navigation.lastOrNull()?.hasClass("ptdd") != true
             else -> false
         }
         return EhPreviewPage(listingPage, previews, hasNext, totalPages)

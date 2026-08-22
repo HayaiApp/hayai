@@ -31,7 +31,7 @@ internal class NativeNovelRenderer(
     private val container = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val scroll = NestedScrollView(context).apply {
         isFillViewport = true
-        addView(container, NestedScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(container, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
     override val view: View = scroll
     private val blocks = linkedMapOf<Long, NativeBlock>()
@@ -103,7 +103,9 @@ internal class NativeNovelRenderer(
 
     override fun step(direction: Int) = scroll.smoothScrollBy(0, (scroll.height * 0.85f * direction.coerceIn(-1, 1)).toInt())
     override fun stepPixels(pixels: Int) = scroll.scrollBy(0, pixels)
-    override fun scrollToTop() = activeBlock()?.let { scroll.smoothScrollTo(0, it.root.top) }
+    override fun scrollToTop() {
+        activeBlock()?.let { scroll.smoothScrollTo(0, it.root.top) }
+    }
 
     override fun selection(callback: (NovelSelection?) -> Unit) {
         val textView = activeBlock()?.textView ?: return callback(null)
