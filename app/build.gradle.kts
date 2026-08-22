@@ -38,6 +38,7 @@ android {
         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime()}\"")
         buildConfigField("Boolean", "INCLUDE_UPDATER", "false")
         buildConfigField("boolean", "BETA", "false")
+        buildConfigField("boolean", "NIGHTLY", "false")
 
         ndk {
             abiFilters += supportedAbis
@@ -73,6 +74,16 @@ android {
             buildConfigField("boolean", "BETA", "true")
             versionNameSuffix = "-b${getBetaCount()}"
             applicationIdSuffix = ".beta"
+        }
+        create("nightly") {
+            initWith(getByName("release"))
+            val nightlyBuildNumber = getNightlyBuildNumber()
+            buildConfigField("boolean", "BETA", "true")
+            buildConfigField("boolean", "NIGHTLY", "true")
+            buildConfigField("String", "COMMIT_COUNT", "\"$nightlyBuildNumber\"")
+            matchingFallbacks += "release"
+            versionNameSuffix = "-r$nightlyBuildNumber"
+            applicationIdSuffix = ".nightly"
         }
     }
 

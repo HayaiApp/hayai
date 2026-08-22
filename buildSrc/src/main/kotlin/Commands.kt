@@ -21,6 +21,14 @@ fun Project.getBetaCount(): String {
     // return "1"
 }
 
+fun Project.getNightlyBuildNumber(): String {
+    val supplied = providers.environmentVariable("NIGHTLY_BUILD_NUMBER").orNull?.trim()
+    require(supplied == null || supplied.matches(Regex("[0-9]+"))) {
+        "NIGHTLY_BUILD_NUMBER must contain only decimal digits."
+    }
+    return supplied ?: getCommitCount()
+}
+
 
 fun Project.getGitSha(): String {
     return runCommand("git rev-parse --short HEAD")
