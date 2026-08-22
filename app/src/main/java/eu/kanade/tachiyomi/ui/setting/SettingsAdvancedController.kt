@@ -16,7 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
 import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerController
-import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddController
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
@@ -117,7 +117,7 @@ class SettingsAdvancedController : SettingsController() {
                 preference {
                     titleRes = R.string.hayai_eh_account
                     summaryRes = R.string.hayai_eh_account_summary
-                    onClick { startActivity(Intent(context, EhSettingsActivity::class.java)) }
+                    onClick { router.pushController(EhSettingsController().withFadeTransaction()) }
                 }
 
                 preference {

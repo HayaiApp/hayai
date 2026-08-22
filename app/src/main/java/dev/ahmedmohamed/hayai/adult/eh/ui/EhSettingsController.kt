@@ -1,27 +1,13 @@
 package dev.ahmedmohamed.hayai.adult.eh.ui
 
-import android.content.Context
 import android.content.Intent
-import android.os.Bundle
 import android.text.InputType
-import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.view.setPadding
-import androidx.core.view.isVisible
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.viewbinding.ViewBinding
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.switchmaterial.SwitchMaterial
+import androidx.annotation.StringRes
+import androidx.preference.Preference
+import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
-import dev.ahmedmohamed.hayai.adult.eh.favorites.EhConflictPolicy
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperation
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteSlot
 import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesStatus
@@ -48,14 +34,20 @@ import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateStateStore
 import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateWorker
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.NetworkHelper
-import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
+import eu.kanade.tachiyomi.ui.setting.SettingsController
+import eu.kanade.tachiyomi.ui.setting.onChange
+import eu.kanade.tachiyomi.ui.setting.onClick
+import eu.kanade.tachiyomi.ui.setting.preference
+import eu.kanade.tachiyomi.ui.setting.preferenceCategory
+import eu.kanade.tachiyomi.ui.setting.switchPreference
+import eu.kanade.tachiyomi.ui.setting.titleRes
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
-import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import uy.kohesive.injekt.injectLazy
 
-class EhSettingsActivity : BaseActivity<ViewBinding>() {
+class EhSettingsController : SettingsController() {
     private val text by injectLazy<EhTextResolver>()
     private val sessionStore by injectLazy<EhSessionStore>()
     private val ehPreferences by injectLazy<EhPreferences>()
@@ -64,256 +56,274 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private val favoritesSync by injectLazy<EhFavoritesSyncService>()
     private val ehPersistence by injectLazy<HayaiEhPersistenceStore>()
     private val verifier by lazy { EhSessionVerifier(network.client) }
-    private val galleryUpdateStore by lazy { EhGalleryUpdateStateStore(this, ehPersistence) }
+    private val galleryUpdateStore by lazy { EhGalleryUpdateStateStore(requireNotNull(activity), ehPersistence) }
 
-    private lateinit var status: TextView
-    private lateinit var recheck: MaterialButton
-    private lateinit var watchedTags: MaterialButton
-    private lateinit var categories: MaterialButton
-    private lateinit var imageQuality: MaterialButton
-    private lateinit var hentaiAtHome: MaterialButton
-    private lateinit var filterThreshold: MaterialButton
-    private lateinit var watchingThreshold: MaterialButton
-    private lateinit var languages: MaterialButton
-    private lateinit var remoteStatus: TextView
-    private lateinit var uploadSettings: MaterialButton
-    private lateinit var retryUpload: MaterialButton
-    private lateinit var favoritesStatus: TextView
-    private lateinit var conflictPolicy: MaterialButton
-    private lateinit var categoryMappings: MaterialButton
-    private lateinit var galleryUpdateInterval: MaterialButton
-    private lateinit var galleryUpdateStats: TextView
+    private lateinit var status: Preference
+    private lateinit var recheck: Preference
+    private lateinit var watchedTags: Preference
+    private lateinit var categories: Preference
+    private lateinit var imageQuality: Preference
+    private lateinit var hentaiAtHome: Preference
+    private lateinit var filterThreshold: Preference
+    private lateinit var watchingThreshold: Preference
+    private lateinit var languages: Preference
+    private lateinit var remoteStatus: Preference
+    private lateinit var uploadSettings: Preference
+    private lateinit var retryUpload: Preference
+    private lateinit var favoritesStatus: Preference
+    private lateinit var conflictPolicy: Preference
+    private lateinit var categoryMappings: Preference
+    private lateinit var galleryUpdateInterval: Preference
+    private lateinit var galleryUpdateStats: Preference
     private val uploadResults = linkedMapOf<EhSite, EhSiteUploadResult>()
     private var retrySites = emptySet<EhSite>()
 
-    private val loginLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val outcome = result.data?.getStringExtra(EhLoginActivity.EXTRA_OUTCOME)
-            if (outcome == EhLoginOutcome.Success.name) {
-                ehPreferences.clearRemoteSettingsApplied()
-                remoteChanged()
-            } else if (outcome != null) {
-                status.text =
-                    when (outcome) {
-                        EhLoginOutcome.Cloudflare.name -> getString(R.string.hayai_eh_login_cloudflare_interrupted)
-                        EhLoginOutcome.InvalidCredentials.name -> getString(R.string.hayai_eh_login_invalid_credentials)
-                        else -> getString(R.string.hayai_eh_login_cancelled)
+    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
+        titleRes = R.string.hayai_eh_settings_title
+        preferenceCategory {
+            status = preference {
+                summary = getString(R.string.hayai_eh_session_logged_out)
+                isSelectable = false
+            }
+            preference {
+                summary = getString(R.string.hayai_eh_credentials_explanation)
+                isSelectable = false
+            }
+            preference {
+                title = getString(R.string.hayai_eh_login_or_replace)
+                onClick { startActivityForResult(EhLoginActivity.newIntent(context), LOGIN_REQUEST) }
+            }
+            recheck = preference {
+                title = getString(R.string.hayai_eh_recheck_credentials)
+                onClick { recheckSession() }
+            }
+            preference {
+                title = getString(R.string.log_out)
+                onClick { confirmLogout() }
+            }
+        }
+
+        preferenceCategory {
+            title = getString(R.string.hayai_eh_server_gallery_settings)
+            remoteStatus = preference { isSelectable = false }
+            imageQuality = preference {
+                onClick { chooseImageQuality() }
+            }
+            hentaiAtHome = preference {
+                onClick { chooseHentaiAtHome() }
+            }
+            switchPreference {
+                title = getString(R.string.hayai_eh_use_japanese_titles)
+                summary = getString(R.string.hayai_eh_use_japanese_titles_summary)
+                isPersistent = false
+                isChecked = ehPreferences.useJapaneseTitle.get()
+                onChange {
+                    ehPreferences.useJapaneseTitle.set(it as Boolean)
+                    remoteChanged()
+                    true
+                }
+            }
+            switchPreference {
+                title = getString(R.string.hayai_eh_use_original_images)
+                summary = getString(R.string.hayai_eh_use_original_images_summary)
+                isPersistent = false
+                isChecked = ehPreferences.useOriginalImages.get()
+                onChange {
+                    ehPreferences.useOriginalImages.set(it as Boolean)
+                    remoteChanged()
+                    true
+                }
+            }
+            filterThreshold = preference {
+                onClick {
+                    editThreshold(
+                        getString(R.string.hayai_eh_tag_filtering_threshold),
+                        ehPreferences.tagFilterThreshold.get(),
+                        -9999..0,
+                    ) {
+                        ehPreferences.tagFilterThreshold.set(it)
+                        filterThreshold.title = filterThresholdText()
+                        remoteChanged()
                     }
+                }
+            }
+            watchingThreshold = preference {
+                onClick {
+                    editThreshold(
+                        getString(R.string.hayai_eh_tag_watching_threshold),
+                        ehPreferences.tagWatchingThreshold.get(),
+                        0..9999,
+                    ) {
+                        ehPreferences.tagWatchingThreshold.set(it)
+                        watchingThreshold.title = watchingThresholdText()
+                        remoteChanged()
+                    }
+                }
+            }
+            languages = preference {
+                onClick { editLanguages() }
+            }
+            categories = preference {
+                onClick { editDefaultCategories() }
+            }
+            uploadSettings = preference {
+                title = getString(R.string.hayai_eh_apply_remote_settings)
+                onClick { requestUpload(EhSite.entries.toSet()) }
+            }
+            retryUpload = preference {
+                title = getString(R.string.hayai_eh_retry_failed_sites)
+                isVisible = false
+                onClick { requestUpload(retrySites) }
             }
         }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val root = buildContent()
-        binding = ViewBinding { root }
-        setContentView(root)
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                sessionStore.state.collect(::renderState)
+        preferenceCategory {
+            title = getString(R.string.hayai_eh_browsing_and_details)
+            switchPreference {
+                title = getString(R.string.hayai_eh_open_on_watched_list)
+                summary = getString(R.string.hayai_eh_open_on_watched_list_summary)
+                isPersistent = false
+                isChecked = ehPreferences.watchedListDefault.get()
+                onChange { ehPreferences.watchedListDefault.set(it as Boolean); true }
+            }
+            switchPreference {
+                title = getString(R.string.hayai_eh_enhanced_gallery_details)
+                summary = getString(R.string.hayai_eh_enhanced_gallery_details_summary)
+                isPersistent = false
+                isChecked = ehPreferences.enhancedView.get()
+                onChange { ehPreferences.enhancedView.set(it as Boolean); true }
+            }
+            watchedTags = preference {
+                title = getString(R.string.hayai_eh_manage_watched_tags)
+                onClick {
+                    startActivity(
+                        WebViewActivity.newIntent(
+                            context,
+                            "https://exhentai.org/mytags",
+                            EhSite.ExHentai.sourceId,
+                            getString(R.string.hayai_eh_watched_tags_web_title),
+                        ),
+                    )
+                }
             }
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                favoritesSync.status.collect(::renderFavoritesStatus)
+
+        preferenceCategory {
+            title = getString(R.string.hayai_eh_favorites_sync)
+            switchPreference {
+                title = getString(R.string.hayai_eh_remote_to_device_only)
+                summary = getString(R.string.hayai_eh_remote_to_device_only_summary)
+                isPersistent = false
+                isChecked = ehPreferences.favoritesReadOnly.get()
+                onChange { ehPreferences.favoritesReadOnly.set(it as Boolean); true }
             }
+            switchPreference {
+                title = getString(R.string.hayai_eh_continue_independent_errors)
+                summary = getString(R.string.hayai_eh_continue_independent_errors_summary)
+                isPersistent = false
+                isChecked = ehPreferences.favoritesLenient.get()
+                onChange { ehPreferences.favoritesLenient.set(it as Boolean); true }
+            }
+            conflictPolicy = preference { onClick { chooseConflictPolicy() } }
+            categoryMappings = preference {
+                title = getString(R.string.hayai_eh_edit_category_mappings)
+                onClick { editCategoryMapping() }
+            }
+            preference {
+                summary = getString(R.string.hayai_eh_category_notes_explanation)
+                isSelectable = false
+            }
+            favoritesStatus = preference { isSelectable = false }
+            preference {
+                title = getString(R.string.hayai_eh_preview_favorites_sync)
+                onClick { previewFavoritesSync() }
+            }
+            preference {
+                title = getString(R.string.hayai_eh_start_favorites_sync)
+                onClick { startFavoritesSync() }
+            }
+        }
+
+        preferenceCategory {
+            title = getString(R.string.hayai_eh_gallery_updater)
+            preference {
+                summary = getString(R.string.hayai_eh_gallery_updater_summary)
+                isSelectable = false
+            }
+            galleryUpdateInterval = preference { onClick { chooseGalleryUpdateInterval() } }
+            val updatePolicy = galleryUpdateStore.policy()
+            switchPreference {
+                title = getString(R.string.hayai_eh_wifi_only)
+                summary = getString(R.string.hayai_eh_wifi_only_summary)
+                isPersistent = false
+                isChecked = updatePolicy.wifiOnly
+                onChange { updateGalleryPolicy(galleryUpdateStore.policy().copy(wifiOnly = it as Boolean)); true }
+            }
+            switchPreference {
+                title = getString(R.string.hayai_eh_charging_only)
+                summary = getString(R.string.hayai_eh_charging_only_summary)
+                isPersistent = false
+                isChecked = updatePolicy.requiresCharging
+                onChange { updateGalleryPolicy(galleryUpdateStore.policy().copy(requiresCharging = it as Boolean)); true }
+            }
+            galleryUpdateStats = preference { isSelectable = false }
+            preference {
+                title = getString(R.string.hayai_eh_run_updater_now)
+                onClick {
+                    EhGalleryUpdateWorker.runNow(context, galleryUpdateStore.policy())
+                    galleryUpdateStats.summary = getString(R.string.hayai_eh_updater_queued)
+                }
+            }
+            preference {
+                title = getString(R.string.hayai_eh_cancel_updater)
+                onClick {
+                    EhGalleryUpdateWorker.cancel(context)
+                    galleryUpdateStats.summary = getString(R.string.hayai_eh_updater_cancelled)
+                }
+            }
+        }
+        refreshPreferenceTitles()
+        renderGalleryUpdateStats()
+        renderState(sessionStore.state.value)
+        renderFavoritesStatus(favoritesSync.status.value)
+        viewScope.launch { sessionStore.state.collect(::renderState) }
+        viewScope.launch { favoritesSync.status.collect(::renderFavoritesStatus) }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode != LOGIN_REQUEST) return
+        val outcome = data?.getStringExtra(EhLoginActivity.EXTRA_OUTCOME)
+        if (outcome == EhLoginOutcome.Success.name) {
+            ehPreferences.clearRemoteSettingsApplied()
+            remoteChanged()
+        } else if (outcome != null) {
+            status.summary =
+                when (outcome) {
+                    EhLoginOutcome.Cloudflare.name -> getString(R.string.hayai_eh_login_cloudflare_interrupted)
+                    EhLoginOutcome.InvalidCredentials.name -> getString(R.string.hayai_eh_login_invalid_credentials)
+                    else -> getString(R.string.hayai_eh_login_cancelled)
+                }
         }
     }
 
-    private fun buildContent(): LinearLayout {
-        val root =
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                fitsSystemWindows = true
-            }
-        root.addView(
-            MaterialToolbar(this).apply {
-                title = getString(R.string.hayai_eh_settings_title)
-                setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
-                navigationContentDescription = getString(R.string.hayai_eh_navigate_up)
-                setNavigationOnClickListener { finish() }
-            },
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-        )
-        val content =
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(20.dpToPx)
-            }
-        status = TextView(this).apply { textSize = 16f }
-        content.addView(status, matchWidth())
-        content.addView(
-            TextView(this).apply {
-                text = getString(R.string.hayai_eh_credentials_explanation)
-                setPadding(0, 8.dpToPx, 0, 16.dpToPx)
-            },
-            matchWidth(),
-        )
-        content.addView(button(getString(R.string.hayai_eh_login_or_replace)) { loginLauncher.launch(EhLoginActivity.newIntent(this)) })
-        recheck = button(getString(R.string.hayai_eh_recheck_credentials), ::recheckSession)
-        content.addView(recheck)
-        content.addView(button(getString(R.string.log_out)) { confirmLogout() })
+    override fun onDestroy() {
+        viewScope.cancel()
+        super.onDestroy()
+    }
 
-        content.addView(sectionLabel(getString(R.string.hayai_eh_server_gallery_settings)))
-        remoteStatus = TextView(this).apply { setPadding(0, 0, 0, 8.dpToPx) }
-        content.addView(remoteStatus, matchWidth())
-        imageQuality = button(imageQualityText(), ::chooseImageQuality)
-        content.addView(imageQuality)
-        hentaiAtHome = button(hentaiAtHomeText(), ::chooseHentaiAtHome)
-        content.addView(hentaiAtHome)
-        content.addView(
-            settingSwitch(
-                title = getString(R.string.hayai_eh_use_japanese_titles),
-                summary = getString(R.string.hayai_eh_use_japanese_titles_summary),
-                checked = ehPreferences.useJapaneseTitle.get(),
-                onChanged = { ehPreferences.useJapaneseTitle.set(it); remoteChanged() },
-            ),
-        )
-        content.addView(
-            settingSwitch(
-                title = getString(R.string.hayai_eh_use_original_images),
-                summary = getString(R.string.hayai_eh_use_original_images_summary),
-                checked = ehPreferences.useOriginalImages.get(),
-                onChanged = { ehPreferences.useOriginalImages.set(it); remoteChanged() },
-            ),
-        )
-        filterThreshold = button(filterThresholdText()) {
-            editThreshold(getString(R.string.hayai_eh_tag_filtering_threshold), ehPreferences.tagFilterThreshold.get(), -9999..0) {
-                ehPreferences.tagFilterThreshold.set(it)
-                filterThreshold.text = filterThresholdText()
-                remoteChanged()
-            }
-        }
-        content.addView(filterThreshold)
-        watchingThreshold = button(watchingThresholdText()) {
-            editThreshold(getString(R.string.hayai_eh_tag_watching_threshold), ehPreferences.tagWatchingThreshold.get(), 0..9999) {
-                ehPreferences.tagWatchingThreshold.set(it)
-                watchingThreshold.text = watchingThresholdText()
-                remoteChanged()
-            }
-        }
-        content.addView(watchingThreshold)
-        languages = button(languageButtonText(), ::editLanguages)
-        content.addView(languages)
-        categories = button(categoryButtonText(), ::editDefaultCategories)
-        content.addView(categories)
-        uploadSettings = button(getString(R.string.hayai_eh_apply_remote_settings)) { requestUpload(EhSite.entries.toSet()) }
-        content.addView(uploadSettings)
-        retryUpload = button(getString(R.string.hayai_eh_retry_failed_sites)) { requestUpload(retrySites) }.apply { isVisible = false }
-        content.addView(retryUpload)
-
-        content.addView(sectionLabel(getString(R.string.hayai_eh_browsing_and_details)))
-        content.addView(
-            settingSwitch(
-                title = getString(R.string.hayai_eh_open_on_watched_list),
-                summary = getString(R.string.hayai_eh_open_on_watched_list_summary),
-                checked = ehPreferences.watchedListDefault.get(),
-                onChanged = ehPreferences.watchedListDefault::set,
-            ),
-        )
-        content.addView(
-            settingSwitch(
-                title = getString(R.string.hayai_eh_enhanced_gallery_details),
-                summary = getString(R.string.hayai_eh_enhanced_gallery_details_summary),
-                checked = ehPreferences.enhancedView.get(),
-                onChanged = ehPreferences.enhancedView::set,
-            ),
-        )
-        watchedTags = button(getString(R.string.hayai_eh_manage_watched_tags)) {
-            startActivity(
-                WebViewActivity.newIntent(
-                    this,
-                    "https://exhentai.org/mytags",
-                    EhSite.ExHentai.sourceId,
-                    getString(R.string.hayai_eh_watched_tags_web_title),
-                ),
-            )
-        }
-        content.addView(watchedTags)
-
-        content.addView(sectionLabel(getString(R.string.hayai_eh_favorites_sync)))
-        content.addView(
-            settingSwitch(
-                title = getString(R.string.hayai_eh_remote_to_device_only),
-                summary = getString(R.string.hayai_eh_remote_to_device_only_summary),
-                checked = ehPreferences.favoritesReadOnly.get(),
-                onChanged = ehPreferences.favoritesReadOnly::set,
-            ),
-        )
-        content.addView(
-            settingSwitch(
-                title = getString(R.string.hayai_eh_continue_independent_errors),
-                summary = getString(R.string.hayai_eh_continue_independent_errors_summary),
-                checked = ehPreferences.favoritesLenient.get(),
-                onChanged = ehPreferences.favoritesLenient::set,
-            ),
-        )
-        conflictPolicy = button(conflictPolicyText(), ::chooseConflictPolicy)
-        content.addView(conflictPolicy)
-        categoryMappings = button(getString(R.string.hayai_eh_edit_category_mappings), ::editCategoryMapping)
-        content.addView(categoryMappings)
-        content.addView(
-            TextView(this).apply {
-                text = getString(R.string.hayai_eh_category_notes_explanation)
-                alpha = 0.72f
-                setPadding(0, 4.dpToPx, 0, 8.dpToPx)
-            },
-            matchWidth(),
-        )
-        favoritesStatus = TextView(this)
-        content.addView(favoritesStatus, matchWidth())
-        content.addView(button(getString(R.string.hayai_eh_preview_favorites_sync), ::previewFavoritesSync))
-        content.addView(button(getString(R.string.hayai_eh_start_favorites_sync), ::startFavoritesSync))
-
-        content.addView(sectionLabel(getString(R.string.hayai_eh_gallery_updater)))
-        content.addView(
-            TextView(this).apply {
-                text = getString(R.string.hayai_eh_gallery_updater_summary)
-                alpha = 0.72f
-                setPadding(0, 0, 0, 8.dpToPx)
-            },
-            matchWidth(),
-        )
-        galleryUpdateInterval = button(galleryUpdateIntervalText(), ::chooseGalleryUpdateInterval)
-        content.addView(galleryUpdateInterval)
-        val updatePolicy = galleryUpdateStore.policy()
-        content.addView(
-            settingSwitch(
-                title = getString(R.string.hayai_eh_wifi_only),
-                summary = getString(R.string.hayai_eh_wifi_only_summary),
-                checked = updatePolicy.wifiOnly,
-                onChanged = { updateGalleryPolicy(galleryUpdateStore.policy().copy(wifiOnly = it)) },
-            ),
-        )
-        content.addView(
-            settingSwitch(
-                title = getString(R.string.hayai_eh_charging_only),
-                summary = getString(R.string.hayai_eh_charging_only_summary),
-                checked = updatePolicy.requiresCharging,
-                onChanged = { updateGalleryPolicy(galleryUpdateStore.policy().copy(requiresCharging = it)) },
-            ),
-        )
-        galleryUpdateStats = TextView(this).apply { setPadding(0, 4.dpToPx, 0, 8.dpToPx) }
-        content.addView(galleryUpdateStats, matchWidth())
-        content.addView(button(getString(R.string.hayai_eh_run_updater_now)) {
-            EhGalleryUpdateWorker.runNow(this, galleryUpdateStore.policy())
-            galleryUpdateStats.text = getString(R.string.hayai_eh_updater_queued)
-        })
-        content.addView(button(getString(R.string.hayai_eh_cancel_updater)) {
-            EhGalleryUpdateWorker.cancel(this)
-            galleryUpdateStats.text = getString(R.string.hayai_eh_updater_cancelled)
-        })
-        renderGalleryUpdateStats()
-
-        root.addView(
-            ScrollView(this).apply { addView(content) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
-        )
-        return root
+    private fun refreshPreferenceTitles() {
+        imageQuality.title = imageQualityText()
+        hentaiAtHome.title = hentaiAtHomeText()
+        filterThreshold.title = filterThresholdText()
+        watchingThreshold.title = watchingThresholdText()
+        languages.title = languageButtonText()
+        categories.title = categoryButtonText()
+        conflictPolicy.title = conflictPolicyText()
+        galleryUpdateInterval.title = galleryUpdateIntervalText()
     }
 
     private fun renderState(state: EhSessionState) {
-        status.text =
+        status.summary =
             when (state) {
                 EhSessionState.LoggedOut -> getString(R.string.hayai_eh_session_logged_out)
                 is EhSessionState.CredentialsAvailable -> getString(R.string.hayai_eh_session_unverified)
@@ -329,24 +339,24 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
 
     private fun recheckSession() {
         recheck.isEnabled = false
-        status.text = getString(R.string.hayai_eh_verifying_credentials)
-        lifecycleScope.launch {
+        status.summary = getString(R.string.hayai_eh_verifying_credentials)
+        viewScope.launch {
             when (val result = verifier.verify(sessionStore)) {
                 EhVerificationResult.Verified -> {
                     if (sessionStore.markVerified() is EhSessionMutationResult.Failure) {
-                        status.text = getString(R.string.hayai_eh_no_complete_credentials)
+                        status.summary = getString(R.string.hayai_eh_no_complete_credentials)
                     }
                 }
-                EhVerificationResult.Cloudflare -> status.text = getString(R.string.hayai_eh_login_cloudflare_failure)
+                EhVerificationResult.Cloudflare -> status.summary = getString(R.string.hayai_eh_login_cloudflare_failure)
                 EhVerificationResult.InvalidCredentials -> sessionStore.markInvalid()
-                is EhVerificationResult.NetworkFailure -> status.text = getString(R.string.hayai_eh_login_network_failure)
+                is EhVerificationResult.NetworkFailure -> status.summary = getString(R.string.hayai_eh_login_network_failure)
             }
             recheck.isEnabled = sessionStore.state.value !is EhSessionState.LoggedOut
         }
     }
 
     private fun confirmLogout() {
-        materialAlertDialog()
+        dialog()
             .setTitle(R.string.hayai_eh_logout_title)
             .setMessage(R.string.hayai_eh_logout_message)
             .setPositiveButton(R.string.log_out) { _, _ ->
@@ -357,44 +367,10 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             .show()
     }
 
-    private fun sectionLabel(text: String) =
-        TextView(this).apply {
-            this.text = text
-            textSize = 18f
-            setPadding(0, 24.dpToPx, 0, 8.dpToPx)
-        }
-
-    private fun settingSwitch(
-        title: String,
-        summary: String,
-        checked: Boolean,
-        onChanged: (Boolean) -> Unit,
-    ): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 8.dpToPx, 0, 8.dpToPx)
-            addView(
-                SwitchMaterial(context).apply {
-                    text = title
-                    isChecked = checked
-                    setOnCheckedChangeListener { _, value -> onChanged(value) }
-                },
-                matchWidth(),
-            )
-            addView(
-                TextView(context).apply {
-                    text = summary
-                    alpha = 0.72f
-                    setPadding(48.dpToPx, 0, 0, 0)
-                },
-                matchWidth(),
-            )
-        }
-
     private fun editDefaultCategories() {
         val all = EhCategory.entries
         val selected = ehPreferences.excludedCategories().toMutableSet()
-        materialAlertDialog()
+        dialog()
             .setTitle(R.string.hayai_eh_categories_excluded_title)
             .setMultiChoiceItems(
                 all.map(::categoryName).toTypedArray(),
@@ -404,7 +380,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             }
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 ehPreferences.setExcludedCategories(selected)
-                categories.text = categoryButtonText()
+                categories.title = categoryButtonText()
                 remoteChanged()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -431,11 +407,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         val values = EhImageQuality.entries
         val labels = imageQualityLabels()
         val current = values.indexOf(EhImageQuality.fromPreference(ehPreferences.imageQuality.get()))
-        materialAlertDialog()
+        dialog()
             .setTitle(R.string.hayai_eh_image_resolution)
             .setSingleChoiceItems(labels, current) { dialog, index ->
                 ehPreferences.imageQuality.set(values[index].preferenceValue)
-                imageQuality.text = imageQualityText()
+                imageQuality.title = imageQualityText()
                 remoteChanged()
                 dialog.dismiss()
             }
@@ -451,11 +427,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             getString(R.string.never),
         )
         val current = values.indexOf(EhHentaiAtHome.fromPreference(ehPreferences.useHentaiAtHome.get()))
-        materialAlertDialog()
+        dialog()
             .setTitle(R.string.hayai_eh_hath_title)
             .setSingleChoiceItems(labels, current) { dialog, index ->
                 ehPreferences.useHentaiAtHome.set(values[index].preferenceValue)
-                hentaiAtHome.text = hentaiAtHomeText()
+                hentaiAtHome.title = hentaiAtHomeText()
                 remoteChanged()
                 dialog.dismiss()
             }
@@ -469,12 +445,12 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
         range: IntRange,
         save: (Int) -> Unit,
     ) {
-        val input = EditText(this).apply {
+        val input = EditText(requireNotNull(activity)).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
             setText(current.toString())
             selectAll()
         }
-        val dialog = materialAlertDialog()
+        val dialog = dialog()
             .setTitle(title)
             .setMessage(getString(R.string.hayai_eh_allowed_range, range.first, range.last))
             .setView(input)
@@ -511,7 +487,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             val value = selected.getValue(options[index].language)
             when (options[index].field) { 0 -> value.original; 1 -> value.translated; else -> value.rewritten }
         }
-        materialAlertDialog()
+        dialog()
             .setTitle(R.string.hayai_eh_language_filtering)
             .setMultiChoiceItems(options.map(Option::label).toTypedArray(), checked) { _, index, enabled ->
                 val option = options[index]
@@ -524,7 +500,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             }
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 ehPreferences.setLanguageSelections(selected)
-                languages.text = languageButtonText()
+                languages.title = languageButtonText()
                 remoteChanged()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -534,11 +510,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private fun requestUpload(targets: Set<EhSite>) {
         if (targets.isEmpty()) return
         if (sessionStore.state.value !is EhSessionState.Verified) {
-            status.text = getString(R.string.hayai_eh_verify_before_upload)
+            status.summary = getString(R.string.hayai_eh_verify_before_upload)
             return
         }
         if (ehPreferences.showSettingsUploadWarning.get()) {
-            materialAlertDialog()
+            dialog()
                 .setTitle(R.string.hayai_eh_create_remote_profiles_title)
                 .setMessage(R.string.hayai_eh_create_remote_profiles_message)
                 .setPositiveButton(R.string.hayai_eh_continue) { _, _ ->
@@ -555,11 +531,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private fun performUpload(targets: Set<EhSite>) {
         uploadSettings.isEnabled = false
         retryUpload.isEnabled = false
-        lifecycleScope.launch {
+        viewScope.launch {
             try {
                 val report = settingsUploader.upload(ehPreferences.remoteSettings(), targets) { progress ->
                     if (progress is EhUploadProgress.Started) {
-                        remoteStatus.text = getString(R.string.hayai_eh_uploading_site, progress.site.displayName)
+                        remoteStatus.summary = getString(R.string.hayai_eh_uploading_site, progress.site.displayName)
                     }
                 }
                 uploadResults.putAll(report.results)
@@ -599,7 +575,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
                 }
             }
         }
-        remoteStatus.text = summary.joinToString("\n")
+        remoteStatus.summary = summary.joinToString("\n")
     }
 
     private fun imageQualityText(): String {
@@ -648,11 +624,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             getString(R.string.hayai_eh_conflict_local),
         )
         val current = values.indexOf(ehPreferences.favoritesConflictPolicy.get()).coerceAtLeast(0)
-        materialAlertDialog()
+        dialog()
             .setTitle(R.string.hayai_eh_conflict_policy)
             .setSingleChoiceItems(labels, current) { dialog, index ->
                 ehPreferences.favoritesConflictPolicy.set(values[index])
-                conflictPolicy.text = conflictPolicyText()
+                conflictPolicy.title = conflictPolicyText()
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -662,11 +638,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     private fun editCategoryMapping() {
         val mappings = favoritesSync.categoryMappings()
         if (mappings.isEmpty()) {
-            favoritesStatus.text = getString(R.string.hayai_eh_create_mappings_first)
+            favoritesStatus.summary = getString(R.string.hayai_eh_create_mappings_first)
             return
         }
         val labels = mappings.map { getString(R.string.hayai_eh_mapping_label, it.slot.value, it.remoteName, it.categoryId) }.toTypedArray()
-        materialAlertDialog()
+        dialog()
             .setTitle(R.string.hayai_eh_choose_remote_slot)
             .setItems(labels) { _, index -> chooseMappedCategory(mappings[index].slot) }
             .setNegativeButton(android.R.string.cancel, null)
@@ -675,39 +651,39 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
 
     private fun chooseMappedCategory(slot: EhFavoriteSlot) {
         val categories = favoritesSync.availableCategories()
-        materialAlertDialog()
+        dialog()
             .setTitle(getString(R.string.hayai_eh_choose_j2k_category, slot.value))
             .setItems(categories.map { it.second }.toTypedArray()) { _, index ->
                 runCatching { favoritesSync.remapCategory(slot, categories[index].first) }
-                    .onSuccess { favoritesStatus.text = getString(R.string.hayai_eh_mapping_updated) }
-                    .onFailure { favoritesStatus.text = it.localizedEhMessage(text, R.string.hayai_eh_mapping_failed) }
+                    .onSuccess { favoritesStatus.summary = getString(R.string.hayai_eh_mapping_updated) }
+                    .onFailure { favoritesStatus.summary = it.localizedEhMessage(text, R.string.hayai_eh_mapping_failed) }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
     private fun previewFavoritesSync() {
-        lifecycleScope.launch {
+        viewScope.launch {
             runCatching { favoritesSync.preview() }
                 .onSuccess { plan ->
                     val remote = plan.operations.count { it is EhFavoriteOperation.SetRemote || it is EhFavoriteOperation.RemoveRemote }
                     val local = plan.operations.size - remote
                     val removals = plan.operations.count { it is EhFavoriteOperation.RemoveRemote || it is EhFavoriteOperation.RemoveLocal }
-                    favoritesStatus.text = getString(R.string.hayai_eh_favorites_preview_result, remote, local, removals, plan.conflicts.size)
+                    favoritesStatus.summary = getString(R.string.hayai_eh_favorites_preview_result, remote, local, removals, plan.conflicts.size)
                 }
-                .onFailure { favoritesStatus.text = it.localizedEhMessage(text, R.string.hayai_eh_favorites_preview_failed) }
+                .onFailure { favoritesStatus.summary = it.localizedEhMessage(text, R.string.hayai_eh_favorites_preview_failed) }
         }
     }
 
     private fun startFavoritesSync() {
-        lifecycleScope.launch {
+        viewScope.launch {
             runCatching { favoritesSync.start() }
-                .onFailure { favoritesStatus.text = it.localizedEhMessage(text, R.string.hayai_eh_favorites_sync_failed) }
+                .onFailure { favoritesStatus.summary = it.localizedEhMessage(text, R.string.hayai_eh_favorites_sync_failed) }
         }
     }
 
     private fun renderFavoritesStatus(value: EhFavoritesStatus) {
-        favoritesStatus.text = when (value) {
+        favoritesStatus.summary = when (value) {
             EhFavoritesStatus.Idle -> getString(R.string.hayai_eh_favorites_idle)
             is EhFavoritesStatus.Planning -> value.message
             is EhFavoritesStatus.NeedsReview -> getString(R.string.hayai_eh_favorites_needs_review, value.conflicts.size)
@@ -747,11 +723,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             getString(R.string.hayai_eh_every_week),
         )
         val current = values.indexOf(galleryUpdateStore.policy().intervalHours).takeIf { it >= 0 } ?: 0
-        materialAlertDialog()
+        dialog()
             .setTitle(R.string.hayai_eh_gallery_update_interval)
             .setSingleChoiceItems(labels, current) { dialog, index ->
                 updateGalleryPolicy(galleryUpdateStore.policy().copy(intervalHours = values[index]))
-                galleryUpdateInterval.text = galleryUpdateIntervalText()
+                galleryUpdateInterval.title = galleryUpdateIntervalText()
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -759,8 +735,8 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
     }
 
     private fun updateGalleryPolicy(policy: EhGalleryUpdatePolicy) {
-        EhGalleryUpdateWorker.schedule(this, policy)
-        galleryUpdateInterval.text = galleryUpdateIntervalText()
+        EhGalleryUpdateWorker.schedule(requireNotNull(activity), policy)
+        galleryUpdateInterval.title = galleryUpdateIntervalText()
     }
 
     private fun galleryUpdateIntervalText(): String =
@@ -775,7 +751,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
 
     private fun renderGalleryUpdateStats() {
         val stats = galleryUpdateStore.stats()
-        galleryUpdateStats.text =
+        galleryUpdateStats.summary =
             if (stats == null) {
                 getString(R.string.hayai_eh_updater_never_run)
             } else {
@@ -792,20 +768,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
             }
     }
 
-    private fun button(
-        text: String,
-        action: () -> Unit,
-    ) = MaterialButton(this).apply {
-        this.text = text
-        setOnClickListener {
-            action()
-        }
-    }
+    private fun dialog() = requireNotNull(activity).materialAlertDialog()
 
-    private fun matchWidth() =
-        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    private fun getString(@StringRes id: Int, vararg args: Any): String = requireNotNull(resources).getString(id, *args)
 
     companion object {
-        fun newIntent(context: Context): Intent = Intent(context, EhSettingsActivity::class.java)
+        private const val LOGIN_REQUEST = 4101
     }
 }
