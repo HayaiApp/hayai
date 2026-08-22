@@ -67,24 +67,53 @@ function Assert-TestAvd {
 }
 function Dump-Window([string] $Name) {
     $remote = "/data/local/tmp/hayai-window.xml"
-    Invoke-Adb @("shell", "rm", "-f", $remote) | Out-Null
-    Invoke-Adb @("shell", "uiautomator", "dump", $remote) | Out-Null
     $path = Join-Path $script:evidence "$Name.xml"
-    Invoke-Adb @("pull", $remote, $path) | Out-Null
+    $pulled = $false
+    for ($attempt = 0; $attempt -lt 5 -and !$pulled; $attempt++) {
+        & $Adb -s $Serial shell rm -f $remote 2>$null | Out-Null
+        & $Adb -s $Serial shell uiautomator dump --compressed $remote 2>$null | Out-Null
+        & $Adb -s $Serial pull $remote $path 2>$null | Out-Null
+        $pulled = $LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $path -PathType Leaf)
+        if (!$pulled) { Start-Sleep -Milliseconds 500 }
+    }
+    if (!$pulled) { throw "UI hierarchy was not created at $remote." }
     return [xml](Get-Content -Raw -LiteralPath $path)
 }
 function Find-Node([xml] $Window, [string] $Pattern) {
-    $node = $Window.SelectNodes("//node") | Where-Object { $_.text -match $Pattern -or $_.'content-desc' -match $Pattern } | Select-Object -First 1
+    $node = Find-NodeOptional $Window $Pattern
     if ($null -eq $node) { throw "UI node was not found: $Pattern" }
     return $node
 }
+function Find-NodeOptional([xml] $Window, [string] $Pattern) {
+    return $Window.SelectNodes("//node") | Where-Object { $_.text -match $Pattern -or $_.'content-desc' -match $Pattern } | Select-Object -First 1
+}
 function Tap-Node([string] $Pattern, [string] $EvidenceName) {
     $node = Find-Node (Dump-Window $EvidenceName) $Pattern
+    Tap-WindowNode $node $Pattern
+}
+function Tap-WindowNode($Node, [string] $Pattern) {
+    $node = $Node
     if ($node.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "UI node has invalid bounds: $Pattern" }
     $x = ([int]$Matches[1] + [int]$Matches[3]) / 2
     $y = ([int]$Matches[2] + [int]$Matches[4]) / 2
     Invoke-Adb @("shell", "input", "tap", ([int]$x), ([int]$y)) | Out-Null
     Start-Sleep -Milliseconds 800
+}
+function Tap-NodeAfterSwiping([string] $Pattern, [string] $EvidenceName, [int] $MaximumSwipes = 8) {
+    for ($attempt = 0; $attempt -le $MaximumSwipes; $attempt++) {
+        $window = Dump-Window "$EvidenceName-$attempt"
+        $node = $window.SelectNodes("//node") | Where-Object { $_.text -match $Pattern -or $_.'content-desc' -match $Pattern } | Select-Object -First 1
+        if ($null -ne $node -and $node.bounds -match '\[(\d+),(\d+)\]\[(\d+),(\d+)\]' -and [int]$Matches[4] -gt 0) {
+            $x = ([int]$Matches[1] + [int]$Matches[3]) / 2
+            $y = ([int]$Matches[2] + [int]$Matches[4]) / 2
+            Invoke-Adb @("shell", "input", "tap", ([int]$x), ([int]$y)) | Out-Null
+            Start-Sleep -Milliseconds 800
+            return
+        }
+        Invoke-Adb @("shell", "input", "swipe", "672", "2300", "672", "1150", "500") | Out-Null
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Scrollable UI node was not found: $Pattern"
 }
 function Assert-Node([string] $Pattern, [string] $EvidenceName) { [void](Find-Node (Dump-Window $EvidenceName) $Pattern) }
 function Dismiss-CompatibilityWarning {
@@ -96,7 +125,7 @@ function Dismiss-CompatibilityWarning {
     }
     $warning = $window.SelectNodes("//node") | Where-Object { $_.text -eq "Android App Compatibility" } | Select-Object -First 1
     if ($warning) {
-        Tap-Node "Don't Show Again|OK" "00-compatibility-warning"
+        Tap-Node "Don't Show Again" "00-compatibility-warning-dismiss"
     }
 }
 function Capture([string] $Name) {
@@ -104,13 +133,13 @@ function Capture([string] $Name) {
     Invoke-Adb @("shell", "screencap", "-p", $remote) | Out-Null
     Invoke-Adb @("pull", $remote, (Join-Path $script:evidence "$Name.png")) | Out-Null
 }
-function Export-PrivateDatabase([string] $Destination) {
+function Export-PrivateFile([string] $Source, [string] $Destination, [bool] $Required = $true) {
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $Adb
     $start.UseShellExecute = $false
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
-    @("-s", $Serial, "exec-out", "run-as", $ApplicationId, "cat", "databases/hayai-j2k.db") | ForEach-Object {
+    @("-s", $Serial, "exec-out", "run-as", $ApplicationId, "cat", $Source) | ForEach-Object {
         [void] $start.ArgumentList.Add($_)
     }
     $process = [Diagnostics.Process]::new()
@@ -127,13 +156,20 @@ function Export-PrivateDatabase([string] $Destination) {
     $errorText = $errorRead.GetAwaiter().GetResult()
     if ($process.ExitCode -ne 0) {
         Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
+        if (!$Required) { return $false }
         throw "adb private database export failed: $errorText"
     }
+    return $true
+}
+function Export-PrivateDatabase([string] $Destination) {
+    [void](Export-PrivateFile "databases/hayai-j2k.db" $Destination)
+    [void](Export-PrivateFile "databases/hayai-j2k.db-wal" "$Destination-wal" $false)
+    [void](Export-PrivateFile "databases/hayai-j2k.db-shm" "$Destination-shm" $false)
     $bytes = [IO.File]::ReadAllBytes($Destination)
     $header = if ($bytes.Length -ge 16) { [Text.Encoding]::ASCII.GetString($bytes, 0, 16) } else { "" }
     if ($bytes.Length -lt 512 -or $header -ne "SQLite format 3`0") {
         Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
-        throw "The active database export is missing or is not SQLite. $errorText"
+        throw "The active database export is missing or is not SQLite."
     }
 }
 function Wait-ForActiveDatabase([int] $TimeoutSeconds = 60) {
@@ -213,6 +249,13 @@ try {
     Invoke-Adb @("shell", "run-as", $ApplicationId, "mkdir", "-p", "databases", "shared_prefs") | Out-Null
     Invoke-Adb @("shell", "run-as", $ApplicationId, "cp", "/data/local/tmp/hayai-tachiyomi.db", "databases/tachiyomi.db") | Out-Null
 
+    # Force the first database open to inspect the fixture even if an Android component opened
+    # the pristine target database between package install and fixture placement.
+    $migrationPrefsFile = Join-Path $temporary "hayai_legacy_migration.xml"
+    Set-Content -LiteralPath $migrationPrefsFile -Value '<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><boolean name="retry_requested" value="true" /></map>' -Encoding utf8
+    Invoke-Adb @("push", $migrationPrefsFile, "/data/local/tmp/hayai-migration-preferences.xml") | Out-Null
+    Invoke-Adb @("shell", "run-as", $ApplicationId, "cp", "/data/local/tmp/hayai-migration-preferences.xml", "shared_prefs/hayai_legacy_migration.xml") | Out-Null
+
     if (!$SkipAuthenticatedEh) {
         $prefs = "<?xml version=`"1.0`" encoding=`"utf-8`" standalone=`"yes`" ?><map><string name=`"__PRIVATE_eh_ipb_member_id`">$(XmlEscape $secrets.memberId)</string><string name=`"__PRIVATE_eh_ipb_pass_hash`">$(XmlEscape $secrets.passHash)</string><string name=`"__PRIVATE_eh_igneous`">$(XmlEscape $secrets.igneous)</string></map>"
         $prefsFile = Join-Path $temporary "$ApplicationId`_preferences.xml"
@@ -232,29 +275,41 @@ try {
     Capture "01-migrated-library"
     Database-Report "01-migrated"
 
-    Invoke-Adb @("shell", "run-as", $ApplicationId, "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
-    Start-Sleep -Seconds 3
-    Assert-Node "Verification Novel" "02-novel-reader"
-    Capture "02-novel-reader"
-    Invoke-Adb @("shell", "input", "swipe", "300", "700", "650", "700", "1200") | Out-Null
+    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
+    Start-Sleep -Seconds 2
+    Dismiss-CompatibilityWarning
     Start-Sleep -Seconds 1
-    Assert-Node "Highlight|Translate|Dictionary|Look up" "03-novel-selection-actions"
-    Capture "03-novel-selection-actions"
-    Invoke-Adb @("shell", "input", "keyevent", "BACK") | Out-Null
-    Tap-Node "Aa" "04-reader-menu-button"
-    Tap-Node "Save chapter offline" "05-save-offline"
-    Start-Sleep -Seconds 2
+    Assert-Node "Verification Novel" "02-novel-reader"
+    Assert-Node "Read aloud" "02-novel-reader-actions"
+    Capture "02-novel-reader"
+    $readerWindow = Dump-Window "02-novel-reader-settings-action"
+    if ($null -eq (Find-NodeOptional $readerWindow "^Reading$")) {
+        if ($null -eq (Find-NodeOptional $readerWindow "^Reader settings$")) { throw "Neither the reader settings action nor its sheet was visible." }
+        Tap-Node "^Reader settings$" "03-reader-settings-button"
+    }
+    $settingsWindow = Dump-Window "03-reader-settings-tabs"
+    @("Reading", "Appearance", "Controls", "TTS", "Advanced") | ForEach-Object { [void](Find-Node $settingsWindow "^$([regex]::Escape($_))$") }
+    Capture "03-reader-settings-tabs"
+    Tap-WindowNode (Find-Node $settingsWindow "^Advanced$") "Advanced"
+    $advancedWindow = Dump-Window "07-reader-advanced"
+    [void](Find-Node $advancedWindow "Content")
+    Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
+    Start-Sleep -Seconds 3
     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
-    Invoke-Adb @("shell", "run-as", $ApplicationId, "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
+    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
     Start-Sleep -Seconds 2
-    Assert-Node "Offline" "06-offline-after-restart"
-    Capture "06-offline-after-restart"
+    Dismiss-CompatibilityWarning
+    Start-Sleep -Seconds 1
+    Assert-Node "Offline" "09-offline-after-restart"
+    Capture "09-offline-after-restart"
 
-    Invoke-Adb @("shell", "run-as", $ApplicationId, "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity") | Out-Null
-    Start-Sleep -Seconds 2
+    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity") | Out-Null
+    Start-Sleep -Seconds 1
+    Dismiss-CompatibilityWarning
+    Start-Sleep -Seconds 1
     if ($SkipAuthenticatedEh) {
-        Assert-Node "E-Hentai|ExHentai|Log in|credentials" "07-eh-logged-out"
-        Capture "07-eh-logged-out"
+        Assert-Node "E-Hentai|ExHentai|Log in|credentials" "10-eh-logged-out"
+        Capture "10-eh-logged-out"
     } else {
         Tap-Node "Recheck current credentials" "07-eh-recheck"
         Start-Sleep -Seconds 5
