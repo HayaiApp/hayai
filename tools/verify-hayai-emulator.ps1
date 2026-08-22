@@ -328,7 +328,24 @@ try {
         Assert-Node "Gallery page 1" "14-eh-previews"
         Capture "14-eh-previews"
     }
-    Database-Report "15-final"
+
+    Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
+    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity") | Out-Null
+    Start-Sleep -Seconds 3
+    Dismiss-CompatibilityWarning
+    $mainWindow = Dump-Window "15-main-before-browse"
+    if ($null -eq (Find-NodeOptional $mainWindow "^Search sources$")) {
+        Tap-WindowNode (Find-Node $mainWindow "^Browse$") "Browse"
+        Start-Sleep -Seconds 3
+    }
+    $browseWindow = Dump-Window "16-browse"
+    [void](Find-Node $browseWindow "^Search sources$")
+    [void](Find-Node $browseWindow "^Manga$")
+    [void](Find-Node $browseWindow "^Novels$")
+    [void](Find-Node $browseWindow "^E-Hentai$")
+    Capture "16-browse"
+
+    Database-Report "17-final"
     Invoke-Adb @("logcat", "-d", "-v", "threadtime") | Set-Content -LiteralPath (Join-Path $script:evidence "logcat.txt") -Encoding utf8
     $fatal = Get-Content -LiteralPath (Join-Path $script:evidence "logcat.txt") | Select-String "FATAL EXCEPTION|AndroidRuntime: Process: $ApplicationId"
     if ($fatal) { throw "The verification run captured an application crash. See logcat.txt." }
