@@ -203,6 +203,7 @@
     <string name="hayai_enhanced_label_file">File</string>
     <string name="hayai_enhanced_label_file_size">File size</string>
     <string name="hayai_enhanced_label_id" translatable="false">ID</string>
+    <string name="hayai_enhanced_id_format" translatable="false">#%1$s</string>
     <string name="hayai_enhanced_label_japanese_title">Japanese title</string>
     <string name="hayai_enhanced_label_media_id">Media ID</string>
     <string name="hayai_enhanced_label_pages">Pages</string>

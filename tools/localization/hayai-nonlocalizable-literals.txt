@@ -2925,7 +2925,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"no
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"non-h", "non-hentai" -> R.string.hayai_source_type_non_h
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"western" -> Color.rgb(139, 195, 74)
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"western" -> R.string.hayai_source_type_western
-app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	setOnClickListener { onSearch("uploader:\"$value\"") }
+app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	private fun uploaderSearch(value: String) = "uploader:\"$value\""
 app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt	badges(source).takeIf { it.isNotEmpty() }?.joinToString(" · ") { context.getString(it.labelRes) }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	?: error("No unique page-preview provider is registered for source ${manga.source}")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	fun cacheIdentity(sourceId: Long): String = "$sourceId:$imageUrl:${crop ?: "full"}"
