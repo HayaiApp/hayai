@@ -1320,6 +1320,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelAssetReferences.kt	
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelAssetReferences.kt	private val ASSET_SCHEMES = setOf("hayai-novel-image", "novel-image")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelAssetReferences.kt	private val MARKDOWN_RESOURCE = Regex("!\\[[^]]*]\\(([^)\\s]+)(?:\\s+[^)]*)?\\)")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelAssetReferences.kt	return runCatching { URLDecoder.decode(encoded.replace("+", "%2B"), Charsets.UTF_8.name()) }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadDelegate.kt	override val baseUrl: String = "https://invalid.invalid"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	"Unable to create the novel download directory."
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	): String = sha256("$sourceId\n$chapterUrl".toByteArray(Charsets.UTF_8))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	check(canonicalTarget.parentFile == canonicalParent) { "Refusing to delete outside the novel download directory." }
