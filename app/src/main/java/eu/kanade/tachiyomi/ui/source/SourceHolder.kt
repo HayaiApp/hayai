@@ -3,9 +3,13 @@ package eu.kanade.tachiyomi.ui.source
 import android.content.res.ColorStateList
 import android.view.View
 import androidx.core.view.isVisible
+import coil.dispose
+import coil.load
+import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
 import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
 import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
 import eu.kanade.tachiyomi.databinding.SourceItemBinding
 import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.icon
@@ -66,8 +70,15 @@ class SourceHolder(
 
         // Set circle letter image.
         itemView.post {
+            binding.sourceImage.dispose()
+            binding.sourceImage.setImageDrawable(null)
             val icon = source.icon()
             when {
+                source is NovelPluginSource && source.iconUrl.isNotBlank() -> {
+                    binding.sourceImage.load(source.iconUrl) {
+                        target(CoverViewTarget(binding.sourceImage))
+                    }
+                }
                 icon != null -> binding.sourceImage.setImageDrawable(icon)
                 item.source.id == LocalSource.ID -> binding.sourceImage.setImageResource(R.mipmap.ic_local_source)
                 item.source.id == LocalNovelSource.ID -> binding.sourceImage.setImageResource(R.drawable.ic_local_novel_source)

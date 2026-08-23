@@ -50,7 +50,10 @@ internal object NovelExtensionManifest {
         metadataVersion: Any?,
     ): Double? =
         when (metadataVersion) {
-            is Number -> metadataVersion.toDouble().takeUnless { it == 0.0 }
+            // Android manifest decimal values are exposed as Float. Convert through their
+            // canonical decimal form so 1.6 does not become 1.600000023841858 and fail the
+            // loader's upper-bound check.
+            is Number -> metadataVersion.toString().toDoubleOrNull()?.takeUnless { it == 0.0 }
             is String -> metadataVersion.trim().toDoubleOrNull()?.takeUnless { it == 0.0 }
             else -> null
         } ?: versionName.substringBeforeLast('.').toDoubleOrNull()

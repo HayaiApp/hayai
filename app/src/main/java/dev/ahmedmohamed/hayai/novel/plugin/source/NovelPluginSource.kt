@@ -196,7 +196,7 @@ class NovelPluginSource(
             .orEmpty()
             .ifBlank { plugin.site }
             .ifBlank { "https://example.com" }
-    val iconUrl: String = plugin.iconUrl
+    val iconUrl: String = plugin.resolvedIconUrl(installedPlugin.repositoryUrl).orEmpty()
     val version: String = plugin.version
 
     /** Initializes the runtime and snapshots synchronous UI schemas on a worker thread. */

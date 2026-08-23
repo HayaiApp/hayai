@@ -7,13 +7,17 @@ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionFilter
 import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionKey
 import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionProjector
 import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionState
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.ExtensionInstallerJob
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
+import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
+import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.ui.migration.BaseMigrationPresenter
+import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.isOnline
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +35,7 @@ typealias ExtensionIntallInfo = Pair<InstallStep, PackageInstaller.SessionInfo?>
 /** J2K migration presenter with one Hayai-owned projection for APK and JS extensions. */
 class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() {
     private val pluginManager: NovelPluginManager = Injekt.get()
-    private var extensions = emptyList<ExtensionItem>()
+    private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
     private var currentDownloads = hashMapOf<String, ExtensionIntallInfo>()
     private var pluginOperations = emptySet<String>()
     private var firstLoad = true
@@ -59,7 +63,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
                     rebuildExtensions()
                     return@collect
                 }
-                val item = extensions.firstOrNull { row ->
+                val item = extensions.values.flatten().firstOrNull { row ->
                     (row.extension.key as? ManagedExtensionKey.Apk)?.packageName == event.first
                 } ?: return@collect
                 val pkgName = (item.extension.key as ManagedExtensionKey.Apk).packageName
@@ -92,14 +96,20 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
                 showNsfwSources = preferences.showNsfwSources().get(),
             ),
         )
-        extensions = toItems(projected)
+        val rebuilt = ContentKind.entries.associateWith { kind -> toItems(projected, kind) }
+        extensions = rebuilt
         withContext(NonCancellable + Dispatchers.Main) {
-            view?.setExtensions(extensions, projected.notices, updateController)
+            ContentKind.entries.forEachIndexed { index, kind ->
+                view?.setExtensions(kind, rebuilt.getValue(kind), projected.notices, updateController && index == 0)
+            }
         }
     }
 
     @Synchronized
-    private fun toItems(state: ManagedExtensionState): List<ExtensionItem> {
+    private fun toItems(
+        state: ManagedExtensionState,
+        contentKind: ContentKind,
+    ): List<ExtensionItem> {
         val context = view?.context ?: return emptyList()
         if (firstLoad) {
             state.entries.forEach { entry ->
@@ -108,33 +118,80 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
             }
             firstLoad = false
         }
+        val updates = state.updates.filter { contentKind in it.contentKinds }
+        val installed = state.installed.filter { contentKind in it.contentKinds }
+        val available = state.available.filter { contentKind in it.contentKinds }
+        val sortOrder = InstalledExtensionsOrder.fromPreference(preferences)
+        val installedSorted =
+            installed.sortedWith(
+                compareBy(
+                    { entry ->
+                        val apk = entry.apkInstalled()
+                        apk?.isObsolete != true
+                    },
+                    { entry ->
+                        val apk = entry.apkInstalled()
+                        when (sortOrder) {
+                            InstalledExtensionsOrder.Name -> entry.name
+                            InstalledExtensionsOrder.RecentlyUpdated ->
+                                apk?.let { Long.MAX_VALUE - ExtensionLoader.extensionUpdateDate(context, it) } ?: Long.MAX_VALUE
+                            InstalledExtensionsOrder.RecentlyInstalled ->
+                                apk?.let { Long.MAX_VALUE - ExtensionLoader.extensionInstallDate(context, it) } ?: Long.MAX_VALUE
+                            InstalledExtensionsOrder.Language -> entry.language
+                        }
+                    },
+                    ManagedExtensionEntry::name,
+                ),
+            )
         return buildList {
-            if (state.updates.isNotEmpty()) {
+            if (updates.isNotEmpty()) {
                 val header = ExtensionGroupItem(
-                    context.resources.getQuantityString(R.plurals._updates_pending, state.updates.size, state.updates.size),
-                    state.updates.size,
-                    canUpdate = true,
+                    context.resources.getQuantityString(R.plurals._updates_pending, updates.size, updates.size),
+                    updates.size,
+                    canUpdate = updates.any { entry ->
+                        val item = entry.toItem(null)
+                        item.installStep == null || item.installStep == InstallStep.Error
+                    },
                 )
-                addAll(state.updates.map { it.toItem(header) })
+                addAll(updates.sortedBy(ManagedExtensionEntry::name).map { it.toItem(header) })
             }
-            if (state.installed.isNotEmpty()) {
-                val header = ExtensionGroupItem(context.getString(R.string.installed), state.installed.size)
-                addAll(state.installed.map { it.toItem(header) })
+            if (installedSorted.isNotEmpty()) {
+                val header = ExtensionGroupItem(
+                    context.getString(R.string.installed),
+                    installedSorted.size,
+                    installedSorting = preferences.installedExtensionsOrder().get(),
+                )
+                addAll(installedSorted.map { it.toItem(header) })
             }
-            if (state.available.isNotEmpty()) {
-                val header = ExtensionGroupItem(context.getString(R.string.hayai_extension_available), state.available.size)
-                addAll(state.available.map { it.toItem(header) })
-            }
+            available
+                .sortedBy(ManagedExtensionEntry::name)
+                .groupBy { entry -> LocaleHelper.getSourceDisplayName(entry.language.orEmpty(), context) }
+                .toSortedMap()
+                .forEach { (language, entries) ->
+                    val header = ExtensionGroupItem(language, entries.size)
+                    addAll(entries.map { it.toItem(header) })
+                }
         }
     }
 
-    private fun ManagedExtensionEntry.toItem(header: ExtensionGroupItem): ExtensionItem {
-        val apkInfo = (key as? ManagedExtensionKey.Apk)?.packageName?.let(currentDownloads::get)
-        val pluginStep = (key as? ManagedExtensionKey.Js)?.pluginId?.takeIf(pluginOperations::contains)?.let { InstallStep.Loading }
-        return ExtensionItem(this, header, pluginStep ?: apkInfo?.first, apkInfo?.second)
+    private fun ManagedExtensionEntry.apkInstalled(): Extension.Installed? {
+        val pkgName = (key as? ManagedExtensionKey.Apk)?.packageName ?: return null
+        return extensionManager.installedExtensionsFlow.value.firstOrNull { it.pkgName == pkgName }
     }
 
-    fun getExtensionUpdateCount(): Int = extensions.count { it.extension.hasUpdate }
+    private fun ManagedExtensionEntry.toItem(header: ExtensionGroupItem?): ExtensionItem {
+        val apkInfo = (key as? ManagedExtensionKey.Apk)?.packageName?.let(currentDownloads::get)
+        val pluginStep = (key as? ManagedExtensionKey.Js)?.pluginId?.takeIf(pluginOperations::contains)?.let { InstallStep.Loading }
+        return ExtensionItem(
+            extension = this,
+            header = header,
+            installStep = pluginStep ?: apkInfo?.first,
+            session = apkInfo?.second,
+            apkInstalled = apkInstalled(),
+        )
+    }
+
+    fun getExtensionUpdateCount(): Int = extensions.values.flatten().distinctBy { it.extension.key }.count { it.extension.hasUpdate }
 
     @Synchronized
     private fun updateInstallStep(
@@ -142,11 +199,18 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
         state: InstallStep?,
         session: PackageInstaller.SessionInfo?,
     ): ExtensionItem? {
-        val position = extensions.indexOfFirst { it.extension.key == extension.key }
-        if (position == -1) return null
-        val item = extensions[position].copy(installStep = state, session = session)
-        extensions = extensions.toMutableList().also { it[position] = item }
-        return item
+        var firstUpdated: ExtensionItem? = null
+        ContentKind.entries.filter { it in extension.contentKinds }.forEach { kind ->
+            val items = extensions.getValue(kind).toMutableList()
+            val position = items.indexOfFirst { it.extension.key == extension.key }
+            if (position != -1) {
+                val item = items[position].copy(installStep = state, session = session)
+                items[position] = item
+                extensions = extensions + (kind to items)
+                firstUpdated = firstUpdated ?: item
+            }
+        }
+        return firstUpdated
     }
 
     fun cancelExtensionInstall(item: ExtensionItem) {
@@ -180,7 +244,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
                     InstallStep.Installed, InstallStep.Error -> currentDownloads.remove(pkgName)
                     else -> currentDownloads[pkgName] = info
                 }
-                extensions.firstOrNull { it.extension.key == ManagedExtensionKey.Apk(pkgName) }?.extension?.let { entry ->
+                extensions.values.flatten().firstOrNull { it.extension.key == ManagedExtensionKey.Apk(pkgName) }?.extension?.let { entry ->
                     updateInstallStep(entry, info.first, info.second)?.let { item ->
                         withContext(NonCancellable + Dispatchers.Main) { view?.downloadUpdate(item) }
                     }
@@ -189,10 +253,11 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
         }
     }
 
-    fun updateAllPendingExtensions() {
-        val apkUpdates = extensionManager.installedExtensionsFlow.value.filter(Extension.Installed::hasUpdate)
+    fun updateAllPendingExtensions(contentKind: ContentKind) {
+        val apkUpdates = extensionManager.installedExtensionsFlow.value.filter { contentKind.accepts(it) && it.hasUpdate }
         updateExtensions(apkUpdates)
-        extensions.mapNotNull { (it.extension.key as? ManagedExtensionKey.Js)?.pluginId?.takeIf { _ -> it.extension.hasUpdate } }
+        extensions.getValue(contentKind)
+            .mapNotNull { (it.extension.key as? ManagedExtensionKey.Js)?.pluginId?.takeIf { _ -> it.extension.hasUpdate } }
             .forEach { id -> pluginAction(id) { pluginManager.update(id) } }
     }
 
@@ -201,7 +266,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
         val context = view?.context ?: return
         extensions.forEach { extension ->
             currentDownloads[extension.pkgName] = InstallStep.Pending to null
-            this.extensions.firstOrNull { it.extension.key == ManagedExtensionKey.Apk(extension.pkgName) }?.extension?.let { entry ->
+            this.extensions.values.flatten().firstOrNull { it.extension.key == ManagedExtensionKey.Apk(extension.pkgName) }?.extension?.let { entry ->
                 updateInstallStep(entry, InstallStep.Pending, null)?.let { view?.downloadUpdate(it) }
             }
         }

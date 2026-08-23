@@ -1,8 +1,11 @@
 package eu.kanade.tachiyomi.ui.source.browse.repos
 
+import dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryKind
 import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.api.ExtensionApi
+import eu.kanade.tachiyomi.extension.model.RepoMetadata
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -20,6 +24,7 @@ class RepoPresenter(
     private val controller: RepoController,
     private val preferences: PreferencesHelper = Injekt.get(),
     private val novelRepositories: NovelApkRepositoryRegistry = Injekt.get(),
+    private val pluginManager: NovelPluginManager = Injekt.get(),
 ) : BaseCoroutinePresenter<RepoController>() {
     private var scope = CoroutineScope(Job() + Dispatchers.Default)
 
@@ -28,14 +33,31 @@ class RepoPresenter(
      * repo.json pointer resolved to) - no filename or path pattern is assumed.
      */
     private val repos: Set<String>
-        get() = preferences.extensionRepos().get().sorted().toSet()
+        get() =
+            when (controller.repositoryKind) {
+                ExtensionRepositoryKind.Apk -> preferences.extensionRepos().get()
+                ExtensionRepositoryKind.JavaScript -> pluginManager.catalog.value.repositories.map { it.url }.toSet()
+            }.sorted().toSet()
 
     private suspend fun addRepo(url: String) {
-        novelRepositories.addGlobal(url)
+        when (controller.repositoryKind) {
+            ExtensionRepositoryKind.Apk -> novelRepositories.addGlobal(url)
+            ExtensionRepositoryKind.JavaScript -> {
+                pluginManager.addRepository(repositoryName(url), url)
+                val catalog = pluginManager.refresh()
+                catalog.repositoryErrors[url]?.let { failure ->
+                    pluginManager.removeRepository(url)
+                    throw failure
+                }
+            }
+        }
     }
 
     private suspend fun removeRepo(url: String) {
-        novelRepositories.removeGlobal(url)
+        when (controller.repositoryKind) {
+            ExtensionRepositoryKind.Apk -> novelRepositories.removeGlobal(url)
+            ExtensionRepositoryKind.JavaScript -> pluginManager.removeRepository(url)
+        }
     }
 
     /**
@@ -64,6 +86,10 @@ class RepoPresenter(
      * after it already showed the bare URL.
      */
     private suspend fun refreshRepoMetadata(reposToRefresh: Set<String>) {
+        if (controller.repositoryKind == ExtensionRepositoryKind.JavaScript) {
+            pluginManager.refresh()
+            return
+        }
         for (repo in reposToRefresh) {
             try {
                 val resolvedUrl = ExtensionApi().validateRepo(repo)
@@ -79,13 +105,21 @@ class RepoPresenter(
     }
 
     fun getReposWithCreate(): List<RepoItem> {
-        val metadataByUrl = preferences.extensionRepoMetadata().get()
+        val metadataByUrl =
+            when (controller.repositoryKind) {
+                ExtensionRepositoryKind.Apk -> preferences.extensionRepoMetadata().get()
+                ExtensionRepositoryKind.JavaScript ->
+                    pluginManager.catalog.value.repositories.associate { repository ->
+                        repository.url to RepoMetadata(repository.name, repository.url)
+                    }
+            }
         return (listOf(CREATE_REPO_ITEM) + repos).map { repo ->
             RepoItem(repo, if (repo == CREATE_REPO_ITEM) null else metadataByUrl[repo])
         }
     }
 
     fun getRepoUrl(repo: String): String {
+        if (controller.repositoryKind == ExtensionRepositoryKind.JavaScript) return repo
         val website = preferences.extensionRepoMetadata().get()[repo]?.website
         if (!website.isNullOrBlank()) return website
 
@@ -97,7 +131,8 @@ class RepoPresenter(
             } ?: repo
     }
 
-    fun getDiscordUrl(repo: String): String? = preferences.extensionRepoMetadata().get()[repo]?.discordUrl
+    fun getDiscordUrl(repo: String): String? =
+        if (controller.repositoryKind == ExtensionRepositoryKind.JavaScript) null else preferences.extensionRepoMetadata().get()[repo]?.discordUrl
 
     /**
      * Returns true if the URL is at least shaped like a URL. Deliberately doesn't require any
@@ -173,6 +208,7 @@ class RepoPresenter(
     }
 
     private fun removeMetadataIfUnreferenced(repo: String) {
+        if (controller.repositoryKind == ExtensionRepositoryKind.JavaScript) return
         if (preferences.extensionRepos().get().none { it.equals(repo, true) }) {
             preferences.extensionRepoMetadata().set(preferences.extensionRepoMetadata().get() - repo)
         }
@@ -182,6 +218,16 @@ class RepoPresenter(
      * Returns true if a repo with the given name already exists.
      */
     private fun repoExists(name: String): Boolean = repos.any { it.equals(name, true) }
+
+    private fun repositoryName(url: String): String {
+        val uri = URI(url)
+        val segments = uri.path.orEmpty().split('/').filter(String::isNotBlank)
+        return if (uri.host.equals("raw.githubusercontent.com", true) && segments.size >= 2) {
+            "${segments[0]}/${segments[1]}"
+        } else {
+            uri.host
+        }
+    }
 
     companion object {
         private val repoRegex = """^https://\S+$""".toRegex()

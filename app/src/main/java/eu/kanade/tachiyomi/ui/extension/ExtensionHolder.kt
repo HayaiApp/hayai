@@ -3,6 +3,10 @@ package eu.kanade.tachiyomi.ui.extension
 import android.content.res.ColorStateList
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.text.buildSpannedString
+import androidx.core.text.color
+import androidx.core.text.scale
+import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import coil.dispose
@@ -14,9 +18,12 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
 import eu.kanade.tachiyomi.databinding.ExtensionCardItemBinding
 import eu.kanade.tachiyomi.extension.model.InstallStep
+import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
+import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.getResourceColor
+import eu.kanade.tachiyomi.util.system.timeSpanFromNow
 import eu.kanade.tachiyomi.util.view.applyStyle
 import eu.kanade.tachiyomi.util.view.applyStyleFromAttr
 import eu.kanade.tachiyomi.util.view.makeContainerShape
@@ -36,29 +43,51 @@ class ExtensionHolder(
 
     fun bind(item: ExtensionItem) {
         val extension = item.extension
+        val infoText = mutableListOf(extension.installedVersion ?: extension.availableVersion.orEmpty())
         binding.date.isVisible = false
         binding.extDivider.isVisible = extension.hasUpdate
-        binding.extTitle.text = extension.name
-        binding.version.text = buildList {
-            add(extension.installedVersion ?: extension.availableVersion.orEmpty())
-            add(
-                itemView.context.getString(
-                    if (extension.backend == ManagedExtensionBackend.JavaScript) {
-                        R.string.hayai_extension_javascript
-                    } else {
-                        R.string.hayai_extension_apk
-                    },
-                ),
-            )
-        }.filter(String::isNotBlank).joinToString(" • ")
-        binding.lang.isVisible = extension.language != null && extension.installation != ManagedInstallation.Untrusted
+        item.apkInstalled?.takeIf { !it.hasUpdate }?.let { installed ->
+            when (InstalledExtensionsOrder.fromValue(adapter.installedSortOrder)) {
+                InstalledExtensionsOrder.RecentlyUpdated -> {
+                    ExtensionLoader.extensionUpdateDate(itemView.context, installed).takeUnless { it == 0L }?.let {
+                        binding.date.isVisible = true
+                        binding.date.text = itemView.context.timeSpanFromNow(R.string.updated_, it)
+                        infoText.add("")
+                    }
+                }
+                InstalledExtensionsOrder.RecentlyInstalled -> {
+                    ExtensionLoader.extensionInstallDate(itemView.context, installed).takeUnless { it == 0L }?.let {
+                        binding.date.isVisible = true
+                        binding.date.text = itemView.context.timeSpanFromNow(
+                            if (installed.isShared) R.string.installed_ else R.string.added_,
+                            it,
+                        )
+                        infoText.add("")
+                    }
+                }
+                else -> Unit
+            }
+        }
+        binding.lang.isVisible = binding.date.isGone && extension.installation != ManagedInstallation.Untrusted
         binding.lang.text = extension.language?.let(LocaleHelper::getDisplayName).orEmpty()
+        binding.extTitle.text =
+            if (infoText.size > 1) {
+                buildSpannedString {
+                    append(extension.name + " ")
+                    color(binding.extTitle.context.getResourceColor(android.R.attr.textColorSecondary)) {
+                        scale(0.75f) { append(extension.language?.let(LocaleHelper::getDisplayName).orEmpty()) }
+                    }
+                }
+            } else {
+                extension.name
+            }
+        binding.version.text = infoText.joinToString(" • ")
         binding.warning.text =
             when {
+                item.apkInstalled?.isObsolete == true -> itemView.context.getString(R.string.orphaned)
                 extension.health is ManagedHealth.LoadFailed -> itemView.context.getString(R.string.hayai_extension_load_failed)
                 extension.installation == ManagedInstallation.Untrusted -> itemView.context.getString(R.string.untrusted)
                 extension.isNsfw -> itemView.context.getString(R.string.nsfw_short)
-                extension.backend == ManagedExtensionBackend.JavaScript -> itemView.context.getString(R.string.hayai_extension_javascript)
                 else -> ""
             }.uppercase(Locale.ROOT)
         binding.installProgress.progress = item.sessionProgress ?: 0

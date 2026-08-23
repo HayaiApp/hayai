@@ -7,6 +7,7 @@ import androidx.core.net.toUri
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
+import dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryKind
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.databinding.CategoriesControllerBinding
@@ -35,6 +36,14 @@ class RepoController(
         },
     )
 
+    constructor(kind: ExtensionRepositoryKind) : this(
+        Bundle().apply {
+            putString(REPO_KIND, kind.name)
+        },
+    )
+
+    internal val repositoryKind = ExtensionRepositoryKind.from(bundle?.getString(REPO_KIND))
+
     /**
      * URL to prefill into the "create repo" row once the list is first shown, awaiting the
      * user's confirmation rather than being added automatically.
@@ -59,7 +68,10 @@ class RepoController(
     /**
      * Returns the toolbar title to show when this controller is attached.
      */
-    override fun getTitle(): String? = resources?.getString(R.string.extension_repos)
+    override fun getTitle(): String? =
+        resources?.getString(
+            if (repositoryKind == ExtensionRepositoryKind.JavaScript) R.string.hayai_novel_plugins else R.string.extension_repos,
+        )
 
     override fun createBinding(inflater: LayoutInflater) = CategoriesControllerBinding.inflate(inflater)
 
@@ -259,5 +271,6 @@ class RepoController(
 
     companion object {
         const val REPO_URL = "repo_url"
+        private const val REPO_KIND = "repo_kind"
     }
 }
