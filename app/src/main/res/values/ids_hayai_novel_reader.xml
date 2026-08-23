@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="hayai_novel_selection_save_quote" type="id" />
+    <item name="hayai_novel_selection_define" type="id" />
+    <item name="hayai_novel_selection_google_translate" type="id" />
+    <item name="hayai_novel_selection_search_web" type="id" />
+</resources>
