@@ -5,13 +5,12 @@ import dev.ahmedmohamed.hayai.novel.error.NovelFailure
 import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import dev.ahmedmohamed.hayai.novel.reader.NovelReaderSession
-import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.SourceManager
-import kotlinx.coroutines.CancellationException
 import java.io.File
 
 class NovelOfflineManager(
@@ -32,31 +31,20 @@ class NovelOfflineManager(
             .mapNotNull(Chapter::id)
             .toSet()
 
-    suspend fun download(
+    fun isDownloaded(
         manga: Manga,
-        chapters: Collection<Chapter>,
-        onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> },
-    ): NovelOfflineBatchResult {
-        val selected = chapters.distinctBy(Chapter::id)
-        val failures = mutableListOf<NovelOfflineFailure>()
-        var saved = 0
-        var unavailableAssets = 0
-        selected.forEachIndexed { index, chapter ->
-            try {
-                val session = NovelReaderSession(context, database, sourceManager, store, network)
-                val loaded = session.initialize(requireNotNull(manga.id), requireNotNull(chapter.id), recordHistory = false)
-                val result = session.saveOffline(loaded)
-                novelRequire(store.contains(manga.source, chapter.url), NovelFailure.Code.OfflineSavedVerify)
-                saved++
-                unavailableAssets += result.unavailableAssetCount
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                failures += NovelOfflineFailure(chapter.id, chapter.name, context.novelFailureMessage(error, R.string.hayai_failure_offline_download))
-            }
-            onProgress(index + 1, selected.size)
-        }
-        return NovelOfflineBatchResult(saved, unavailableAssets, failures)
+        chapter: Chapter,
+    ): Boolean = store.contains(manga.source, chapter.url)
+
+    suspend fun saveChapter(
+        manga: Manga,
+        chapter: Chapter,
+    ): NovelDownloadResult {
+        val session = NovelReaderSession(context, database, sourceManager, store, network)
+        val loaded = session.initialize(requireNotNull(manga.id), requireNotNull(chapter.id), recordHistory = false)
+        val result = session.saveOffline(loaded)
+        novelRequire(store.contains(manga.source, chapter.url), NovelFailure.Code.OfflineSavedVerify)
+        return result
     }
 
     fun remove(
