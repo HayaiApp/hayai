@@ -292,6 +292,14 @@ try {
     $readerWindow = Dump-Window "02-novel-reader-actions"
     [void](Find-Node $readerWindow "Verification Novel")
     [void](Find-Node $readerWindow "Read aloud")
+    $toolbarNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.'resource-id' -match ':(id/)?toolbar$' } | Select-Object -First 1
+    $contentNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.class -in @('android.widget.EditText', 'android.webkit.WebView') } | Select-Object -First 1
+    if ($null -eq $toolbarNode -or $null -eq $contentNode) { throw "Reader chrome or novel content was missing from the hierarchy." }
+    if ($toolbarNode.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "Reader toolbar bounds were invalid." }
+    $toolbarBottom = [int]$Matches[4]
+    if ($contentNode.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "Novel content bounds were invalid." }
+    $contentTop = [int]$Matches[2]
+    if ($contentTop -lt $toolbarBottom) { throw "Novel content starts at y=$contentTop beneath toolbar bottom y=$toolbarBottom." }
     $mangaProgressLabels = $readerWindow.SelectNodes("//node") | Where-Object {
         $_.'resource-id' -match ':(id/)?(left_page_text|right_page_text)$'
     }
@@ -389,7 +397,6 @@ try {
     [void](Find-Node $browseWindow "^Manga$")
     [void](Find-Node $browseWindow "^Novels$")
     [void](Find-Node $browseWindow "^E-Hentai$")
-    [void](Find-Node $browseWindow "^Extensions$")
     [void](Find-Node $browseWindow "^Migration$")
     Capture "16-browse"
 

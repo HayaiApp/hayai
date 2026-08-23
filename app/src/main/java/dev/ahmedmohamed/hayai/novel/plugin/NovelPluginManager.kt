@@ -72,7 +72,7 @@ class NovelPluginManager(
         if (!bootstrap.getBoolean(DEFAULT_REPOSITORY_SEEDED, false)) {
             val url = ExtensionRepositoryDefaults.LNREADER_NOVELS
             if (store.repositories().none { it.url == url }) {
-                store.saveRepository(NovelPluginRepository("LNReader", url, enabled = true))
+                store.addRepositoryIfAbsent(NovelPluginRepository("LNReader", url, enabled = true))
                 trustStore.trustUnsigned(url)
             }
             bootstrap.edit().putBoolean(DEFAULT_REPOSITORY_SEEDED, true).commit()

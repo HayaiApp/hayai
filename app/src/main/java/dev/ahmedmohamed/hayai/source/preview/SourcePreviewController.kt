@@ -47,13 +47,12 @@ class SourcePreviewController(
     private val adapter = PreviewAdapter(::openPage)
     private lateinit var loading: LoadingIndicator
     private lateinit var emptyView: EmptyView
-    private var page = 1
-    private var totalPages: Int? = null
+    private var navigation = SourcePreviewNavigation()
     private var loadGeneration = 0
 
     constructor(mangaId: Long) : this(Bundle().apply { putLong(MANGA_ID, mangaId) })
 
-    override fun getTitle(): String? = resources?.getString(R.string.hayai_page_previews)
+    override fun getTitle(): String? = resources?.getString(navigation.titleResource, *navigation.titleArguments)
 
     override fun createBinding(inflater: LayoutInflater) = SubDebugControllerBinding.inflate(inflater)
 
@@ -75,7 +74,7 @@ class SourcePreviewController(
         if (manga == null) {
             emptyView.show(R.drawable.ic_search_off_24dp, R.string.no_results_found)
         } else {
-            load(page)
+            load(navigation.page)
         }
     }
 
@@ -87,16 +86,34 @@ class SourcePreviewController(
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        if ((totalPages ?: 0) > 1) {
-            menu.add(Menu.NONE, MENU_GO_TO, Menu.NONE, R.string.hayai_go_to_preview_page)
+        if (navigation.previousPage != null) {
+            menu.add(Menu.NONE, MENU_PREVIOUS, 0, R.string.previous_page)
+                .setIcon(R.drawable.ic_arrow_back_24dp)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        if (navigation.canChoosePage) {
+            menu.add(Menu.NONE, MENU_GO_TO, 1, R.string.hayai_go_to_preview_page)
                 .setIcon(R.drawable.ic_page_next_outline_24dp)
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        }
+        if (navigation.nextPage != null) {
+            menu.add(Menu.NONE, MENU_NEXT, 2, R.string.next_page)
+                .setIcon(R.drawable.ic_arrow_forward_24dp)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         }
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
+        MENU_PREVIOUS -> {
+            navigation.previousPage?.let(::load)
+            true
+        }
         MENU_GO_TO -> {
             showGoToDialog()
+            true
+        }
+        MENU_NEXT -> {
+            navigation.nextPage?.let(::load)
             true
         }
         else -> super.onOptionsItemSelected(item)
@@ -104,7 +121,7 @@ class SourcePreviewController(
 
     private fun load(targetPage: Int, forceRefresh: Boolean = false) {
         val manga = manga ?: return
-        val knownTotal = totalPages
+        val knownTotal = navigation.totalPages
         if (targetPage < 1 || knownTotal != null && targetPage > knownTotal) return
         val generation = ++loadGeneration
         loading.isVisible = true
@@ -118,14 +135,14 @@ class SourcePreviewController(
                 if (generation != loadGeneration || !isBindingInitialized) return@withUIContext
                 loading.isVisible = false
                 result.onSuccess { loaded ->
-                    page = loaded.page
-                    totalPages = loaded.totalPages
+                    navigation = SourcePreviewNavigation(loaded.page, loaded.totalPages, loaded.hasNextPage)
                     adapter.submit(manga, loaded.previews)
                     binding.recycler.scrollToPosition(0)
                     binding.recycler.isVisible = loaded.previews.isNotEmpty()
                     if (loaded.previews.isEmpty()) {
                         emptyView.show(R.drawable.ic_search_off_24dp, R.string.hayai_no_page_previews)
                     }
+                    setTitle()
                     activity?.invalidateOptionsMenu()
                 }.onFailure { error ->
                     adapter.clear()
@@ -150,19 +167,19 @@ class SourcePreviewController(
     }
 
     private fun showGoToDialog() {
-        val lastPage = totalPages?.takeIf { it > 1 } ?: return
+        val lastPage = navigation.totalPages?.takeIf { it > 1 } ?: return
         val context = activity ?: return
         val row = LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), 0, dp(16), 0)
         }
-        val current = TextView(context).apply { text = page.toString() }
+        val current = TextView(context).apply { text = navigation.page.toString() }
         val end = TextView(context).apply { text = lastPage.toString() }
         val slider = Slider(context).apply {
             valueFrom = 1f
             valueTo = lastPage.toFloat()
             stepSize = 1f
-            value = page.toFloat()
+            value = navigation.page.toFloat()
             addOnChangeListener { _, value, _ -> current.text = value.roundToInt().toString() }
         }
         row.addView(current)
@@ -277,6 +294,8 @@ class SourcePreviewController(
 
     private companion object {
         const val MANGA_ID = "manga_id"
-        const val MENU_GO_TO = 1
+        const val MENU_PREVIOUS = 1
+        const val MENU_GO_TO = 2
+        const val MENU_NEXT = 3
     }
 }

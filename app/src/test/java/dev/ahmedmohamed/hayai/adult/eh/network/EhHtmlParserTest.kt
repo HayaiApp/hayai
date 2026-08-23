@@ -71,6 +71,31 @@ class EhHtmlParserTest {
     }
 
     @Test
+    fun `page previews prefer the sprite over the nested blank placeholder`() {
+        val html = """
+            <html><body><div id="gdt">
+              <div class="gdtm">
+                <div title="Page 7" style="width:120px;height:180px;background:transparent url(https://ehgt.org/live-sprite.webp) -240px -180px no-repeat">
+                  <a href="https://e-hentai.org/s/live/123-7"><img alt="7" src="https://ehgt.org/g/blank.gif"></a>
+                </div>
+              </div>
+            </div></body></html>
+        """.trimIndent()
+
+        val preview = EhHtmlParser.parsePreviews(
+            html,
+            "https://e-hentai.org/g/123/token/?p=0",
+            EhSite.EHentai,
+        ).single()
+
+        assertEquals("https://ehgt.org/live-sprite.webp", preview.imageUrl)
+        assertEquals(240, preview.crop?.x)
+        assertEquals(180, preview.crop?.y)
+        assertEquals(120, preview.crop?.width)
+        assertEquals(180, preview.crop?.height)
+    }
+
+    @Test
     fun `preview page rejects an oversized response instead of silently truncating it`() {
         val cells = (1..3).joinToString("") { index ->
             "<div class='gdtl'><a href='https://e-hentai.org/s/hash/100-$index'><img alt='$index' src='https://ehgt.org/$index.jpg'></a></div>"

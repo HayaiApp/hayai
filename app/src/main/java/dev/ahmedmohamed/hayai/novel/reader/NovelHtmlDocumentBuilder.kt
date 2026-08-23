@@ -123,10 +123,28 @@ internal object NovelHtmlDocumentBuilder {
             return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
           };
           let scheduled = false;
-          let lastSelection = '';
-          document.addEventListener('selectionchange', () => {
-            const selected = (getSelection() ? getSelection().toString() : '').trim();
-            if (selected) lastSelection = selected;
+            const selectionAnchor = () => {
+              const selection = getSelection();
+              if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+              const range = selection.getRangeAt(0);
+              const ancestor = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+                ? range.commonAncestorContainer
+                : range.commonAncestorContainer.parentElement;
+              const main = ancestor && ancestor.closest ? ancestor.closest('.hayai-chapter-block') : null;
+              if (!main) return null;
+              const before = document.createRange(); before.selectNodeContents(main); before.setEnd(range.startContainer, range.startOffset);
+              const after = document.createRange(); after.selectNodeContents(main); after.setStart(range.endContainer, range.endOffset);
+              const exact = range.toString().replace(/\s+/g,' ').trim();
+              if (!exact) return null;
+              const prefix = before.toString().replace(/\s+/g,' ').trim();
+              const suffix = after.toString().replace(/\s+/g,' ').trim();
+              const prior = prefix.split(exact).length - 1;
+              return {documentText:main.innerText, selectedText:exact, prefix:prefix.slice(-64), suffix:suffix.slice(0,64), occurrence:prior};
+            };
+            let lastSelection = null;
+            document.addEventListener('selectionchange', () => {
+              const anchor = selectionAnchor();
+              if (anchor) lastSelection = anchor;
           });
           addEventListener('scroll', () => {
             if (scheduled) return;
@@ -190,25 +208,16 @@ internal object NovelHtmlDocumentBuilder {
             documentText() { const root=activeBlock(); return root ? root.innerText : ''; },
             showTranslation(text) { const root=activeBlock(); if(!root)return; if(!root.dataset.originalHtml)root.dataset.originalHtml=root.innerHTML; root.replaceChildren(...text.split(/\n{2,}/).filter(Boolean).map(value=>{const p=document.createElement('p');p.textContent=value;return p;})); },
             showOriginal() { const root=activeBlock(); if(root&&root.dataset.originalHtml){root.innerHTML=root.dataset.originalHtml;delete root.dataset.originalHtml;} },
-            takeSelection() {
-              const selected = (getSelection() ? getSelection().toString() : '').trim() || lastSelection;
-              lastSelection = '';
-              return selected;
-            },
-            takeSelectionAnchor() {
-              const selection = getSelection();
-              if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
-              const range = selection.getRangeAt(0);
-              const main = activeBlock();
-              if (!main || !main.contains(range.commonAncestorContainer)) return null;
-              const before = document.createRange(); before.selectNodeContents(main); before.setEnd(range.startContainer, range.startOffset);
-              const after = document.createRange(); after.selectNodeContents(main); after.setStart(range.endContainer, range.endOffset);
-              const exact = range.toString().replace(/\s+/g,' ').trim();
-              const prefix = before.toString().replace(/\s+/g,' ').trim();
-              const suffix = after.toString().replace(/\s+/g,' ').trim();
-              const prior = exact ? prefix.split(exact).length - 1 : 0;
-              return {documentText:main.innerText, selectedText:exact, prefix:prefix.slice(-64), suffix:suffix.slice(0,64), occurrence:prior};
-            },
+              takeSelection() {
+                const selected = (getSelection() ? getSelection().toString() : '').trim() || (lastSelection ? lastSelection.selectedText : '');
+                lastSelection = null;
+                return selected;
+              },
+              takeSelectionAnchor() {
+                const anchor = selectionAnchor() || lastSelection;
+                lastSelection = null;
+                return anchor;
+              },
             applyPersistentHighlights(items) {
               const root = activeBlock(); if (!root) return;
               root.querySelectorAll('mark.hayai-persistent-highlight').forEach(mark => mark.replaceWith(...mark.childNodes));

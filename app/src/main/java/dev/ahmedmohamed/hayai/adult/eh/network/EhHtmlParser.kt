@@ -56,22 +56,26 @@ object EhHtmlParser {
                 val link = linkElement?.absUrl("href").orEmpty()
                 if (!link.startsWith("https://")) return@mapNotNull null
                 val index = previewIndex(cell, link) ?: return@mapNotNull null
-                val image = cell.selectFirst("img[src], img[data-src]")
-                val direct = image?.absUrl(if (image.hasAttr("data-src")) "data-src" else "src").orEmpty()
-                if (direct.startsWith("https://")) {
-                    return@mapNotNull runCatching { EhPagePreview(index, link, direct) }.getOrNull()
-                }
                 val sprite = cell.select("div[style]").firstOrNull { it.attr("style").contains("url(", ignoreCase = true) }
-                    ?: return@mapNotNull null
-                val style = sprite.attr("style")
-                val imageUrl = STYLE_URL.find(style)?.groupValues?.get(1)?.trim('\'', '"')?.let { sprite.absUrlFromStyle(it) }
-                    ?: return@mapNotNull null
-                val width = STYLE_WIDTH.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
-                val height = STYLE_HEIGHT.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
-                val position = STYLE_POSITION.find(style)
-                val x = position?.groupValues?.get(1)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
-                val y = position?.groupValues?.get(2)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
-                runCatching { EhPagePreview(index, link, imageUrl, EhPreviewCrop(x, y, width, height)) }.getOrNull()
+                if (sprite != null) {
+                    val style = sprite.attr("style")
+                    val imageUrl = STYLE_URL.find(style)?.groupValues?.get(1)?.trim('\'', '"')?.let { sprite.absUrlFromStyle(it) }
+                    val width = STYLE_WIDTH.find(style)?.groupValues?.get(1)?.toIntOrNull()
+                    val height = STYLE_HEIGHT.find(style)?.groupValues?.get(1)?.toIntOrNull()
+                    if (imageUrl != null && width != null && height != null) {
+                        val position = STYLE_POSITION.find(style)
+                        val x = position?.groupValues?.get(1)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
+                        val y = position?.groupValues?.get(2)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
+                        return@mapNotNull runCatching {
+                            EhPagePreview(index, link, imageUrl, EhPreviewCrop(x, y, width, height))
+                        }.getOrNull()
+                    }
+                }
+                val image = cell.selectFirst("img[data-src], img[src]")
+                val direct = image?.absUrl(if (image.hasAttr("data-src")) "data-src" else "src").orEmpty()
+                direct
+                    .takeIf { it.startsWith("https://") && !it.endsWith("/g/blank.gif", ignoreCase = true) }
+                    ?.let { runCatching { EhPagePreview(index, link, it) }.getOrNull() }
             }
         val navigation = document.select("table.ptt td")
         val totalPages = navigation.mapNotNull { it.text().trim().toIntOrNull() }.maxOrNull()

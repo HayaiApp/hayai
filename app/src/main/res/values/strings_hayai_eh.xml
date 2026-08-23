@@ -155,7 +155,8 @@
     <string name="hayai_eh_filter_past_month">Past month</string>
     <string name="hayai_eh_filter_yesterday">Yesterday</string>
     <string name="hayai_eh_filter_watched_list">Watched list</string>
-    <string name="hayai_eh_filter_categories_exclude">Categories to exclude</string>
+    <string name="hayai_eh_filter_categories_exclude">Genres to exclude</string>
+    <string name="hayai_eh_filter_advanced_options">Advanced options</string>
     <string name="hayai_eh_filter_tags">Tags (supports namespace, -, ~, and OR)</string>
     <string name="hayai_eh_filter_expunged">Browse expunged galleries</string>
     <string name="hayai_eh_filter_torrent">Require gallery torrent</string>

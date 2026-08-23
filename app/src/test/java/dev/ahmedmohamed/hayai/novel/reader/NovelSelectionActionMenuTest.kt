@@ -1,7 +1,9 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
+import eu.kanade.tachiyomi.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NovelSelectionActionMenuTest {
@@ -22,11 +24,25 @@ class NovelSelectionActionMenuTest {
     }
 
     @Test
-    fun `web search stays in overflow`() {
+    fun `reader actions stay visible and web search stays in overflow`() {
         val entry = NovelSelectionActionMenu.entries.single { it.action == NovelSelectionAction.SearchWeb }
         assertEquals(NovelSelectionMenuPlacement.Overflow, entry.placement)
         NovelSelectionActionMenu.entries
             .filterNot { it.action == NovelSelectionAction.SearchWeb }
-            .forEach { assertEquals(NovelSelectionMenuPlacement.IfRoom, it.placement) }
+            .forEach { assertEquals(NovelSelectionMenuPlacement.Always, it.placement) }
+    }
+
+    @Test
+    fun `every reader selection action has a semantic icon`() {
+        NovelSelectionActionMenu.entries.forEach { entry ->
+            assertTrue(entry.iconRes != 0)
+        }
+    }
+
+    @Test
+    fun `quote uses the compact floating-toolbar label`() {
+        val quote = NovelSelectionActionMenu.entries.single { it.action == NovelSelectionAction.SaveQuote }
+
+        assertEquals(R.string.hayai_novel_reader_quote, quote.titleRes)
     }
 }

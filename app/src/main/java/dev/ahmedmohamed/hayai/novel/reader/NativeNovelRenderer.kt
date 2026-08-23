@@ -2,10 +2,12 @@ package dev.ahmedmohamed.hayai.novel.reader
 
 import android.content.Context
 import android.graphics.Typeface
+import android.os.Build
 import android.text.Editable
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.TextWatcher
+import android.text.method.ArrowKeyMovementMethod
 import android.text.style.BackgroundColorSpan
 import android.text.style.UnderlineSpan
 import android.view.ActionMode
@@ -19,6 +21,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.view.textclassifier.TextClassifier
 import androidx.core.text.HtmlCompat
 import androidx.core.widget.NestedScrollView
 import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
@@ -200,10 +203,7 @@ internal class NativeNovelRenderer(
     override fun setEditMode(enabled: Boolean) {
         editMode = enabled
         blocks.values.forEach { block ->
-            block.textView?.showSoftInputOnFocus = enabled
-            block.textView?.setTextIsSelectable(!enabled)
-            block.textView?.isFocusableInTouchMode = enabled
-            if (!enabled) block.textView?.clearFocus()
+            block.textView?.configureInteraction(enabled, block.style?.textSelectable == true)
         }
         if (enabled) activeBlock()?.textView?.requestFocus()
     }
@@ -268,13 +268,12 @@ internal class NativeNovelRenderer(
             background = null
             gravity = Gravity.TOP or Gravity.START
             setPadding(0, 0, 0, 0)
-            setTextIsSelectable(request.style.textSelectable && !editMode)
-            showSoftInputOnFocus = editMode
-            isFocusableInTouchMode = editMode
+            configureInteraction(editMode, request.style.textSelectable)
             val selectionTextView = this
             customSelectionActionModeCallback =
                 NovelSelectionActionModes.wrap(
                     context = context,
+                    readOnly = { !editMode },
                     onAction = { action, mode -> dispatchSelectionAction(selectionTextView, action, mode) },
                     onSelectionModeChanged = callbacks::onSelectionModeChanged,
                 )
@@ -367,7 +366,17 @@ internal class NativeNovelRenderer(
     private fun centeredParams() = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
     private val density get() = scroll.resources.displayMetrics.density
     private val Int.dp get() = (this * density).toInt()
-    private fun TextView.hasSelection() = selectionStart >= 0 && selectionEnd >= 0 && selectionStart != selectionEnd
+    private fun EditText.configureInteraction(editing: Boolean, selectable: Boolean) {
+        showSoftInputOnFocus = editing
+        setTextIsSelectable(selectable && !editing)
+        movementMethod = if (editing || selectable) ArrowKeyMovementMethod.getInstance() else null
+        linksClickable = false
+        isFocusable = editing || selectable
+        isFocusableInTouchMode = editing || selectable
+        isLongClickable = selectable && !editing
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
+        if (!editing) clearFocus()
+    }
     private fun occurrenceBefore(document: String, exact: String, end: Int): Int {
         var count = 0
         var cursor = 0

@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.reader
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Build
 import android.view.ActionMode
 import android.view.MotionEvent
 import android.view.View
@@ -10,6 +11,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.view.textclassifier.TextClassifier
 import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import eu.kanade.tachiyomi.R
@@ -30,7 +32,7 @@ internal class WebNovelRenderer(
     enableDevTools: Boolean,
     fontStore: NovelFontStore,
 ) : NovelRenderer {
-    private val context = context.applicationContext
+    private val context = context
     override val mode = NovelRenderingMode.WebView
     private val json = Json { ignoreUnknownKeys = true }
     private var requestedProgress = 0
@@ -42,6 +44,7 @@ internal class WebNovelRenderer(
                     NovelSelectionActionModes.wrap(
                         context = this@WebNovelRenderer.context,
                         delegate = it,
+                        readOnly = { !editMode },
                         onAction = ::dispatchSelectionAction,
                         onSelectionModeChanged = callbacks::onSelectionModeChanged,
                     )
@@ -49,6 +52,9 @@ internal class WebNovelRenderer(
             return super.startActionMode(wrapped, type)
         }
     }.apply {
+        isFocusable = true
+        isFocusableInTouchMode = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
         WebView.setWebContentsDebuggingEnabled(enableDevTools)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = false

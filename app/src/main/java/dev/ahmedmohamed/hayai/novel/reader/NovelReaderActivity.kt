@@ -29,7 +29,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.setPadding
 import androidx.core.view.isVisible
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat.Type.displayCutout
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updateLayoutParams
@@ -72,7 +71,6 @@ import eu.kanade.tachiyomi.ui.reader.ReaderSlider
 import eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterSheet
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.toast
-import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
 import eu.kanade.tachiyomi.ui.main.SearchActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -115,6 +113,7 @@ class NovelReaderActivity :
     private val dictionarySettings by lazy { NovelDictionarySettingsStore(this) }
     private val lookupLauncher by lazy { NovelLookupLauncher(this, ::showLookupSheet) }
     private lateinit var viewerContainer: FrameLayout
+    private lateinit var readerChrome: J2kNovelReaderChrome
     private lateinit var appBar: View
     private lateinit var toolbar: Toolbar
     private lateinit var statusView: TextView
@@ -292,6 +291,7 @@ class NovelReaderActivity :
 
         val options = contentOptions()
         val style = readerStyle(options)
+        viewerContainer.setBackgroundColor(style.backgroundColor)
         renderJob?.cancel()
         renderJob =
             lifecycleScope.launch {
@@ -1125,38 +1125,7 @@ class NovelReaderActivity :
     }
 
     private fun bindReaderInsets() {
-        val readerLayout = findViewById<View>(R.id.reader_layout)
-        val navigation = findViewById<View>(R.id.nav_layout)
-        readerLayout.doOnApplyWindowInsetsCompat { _, insets, _ ->
-            val systemInsets = insets.getInsetsIgnoringVisibility(systemBars())
-            val cutoutInsets = insets.getInsetsIgnoringVisibility(displayCutout())
-            val contentInsets = insets.getInsetsIgnoringVisibility(systemBars() or displayCutout())
-            appBar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-                leftMargin = systemInsets.left
-                rightMargin = systemInsets.right
-            }
-            toolbar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-                topMargin = systemInsets.top
-                leftMargin = cutoutInsets.left
-                rightMargin = cutoutInsets.right
-            }
-            viewerContainer.updateLayoutParams<androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams> {
-                leftMargin = cutoutInsets.left
-                rightMargin = cutoutInsets.right
-                val systemTop = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else contentInsets.top
-                val readerChrome = systemInsets.top + toolbar.layoutParams.height.coerceAtLeast(0)
-                topMargin = if (controlsVisible) readerChrome else systemTop
-                bottomMargin = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else contentInsets.bottom
-            }
-            navigation.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-                leftMargin = 12.dp + contentInsets.left
-                rightMargin = 12.dp + contentInsets.right
-            }
-            statusView.updateLayoutParams<androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams> {
-                bottomMargin = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else systemInsets.bottom
-            }
-            viewerContainer.requestLayout()
-        }
+        readerChrome.bindInsets(statusView) { preferences.novelFullscreen.get() }
     }
 
     private fun showError(message: String) {
@@ -1166,11 +1135,12 @@ class NovelReaderActivity :
     }
 
     private fun bindReaderShell() {
-        viewerContainer = findViewById(R.id.viewer_container)
-        appBar = findViewById(R.id.app_bar)
-        toolbar = findViewById(R.id.toolbar)
+        readerChrome = J2kNovelReaderChrome(this)
+        viewerContainer = readerChrome.viewerContainer
+        appBar = readerChrome.appBar
+        toolbar = readerChrome.toolbar
         loading = findViewById(R.id.please_wait)
-        chapterSheet = findViewById(R.id.chapters_sheet)
+        chapterSheet = readerChrome.chapterSheet
         chapterSheetBehavior = BottomSheetBehavior.from(chapterSheet)
         progressSlider = findViewById(R.id.page_seekbar)
         progressSlider.valueFrom = 0f
@@ -1178,13 +1148,13 @@ class NovelReaderActivity :
         progressSlider.stepSize = 1f
         progressSlider.setLabelFormatter { getString(R.string.hayai_novel_reader_percent_value, it.toInt()) }
         verticalProgressSlider = NovelVerticalProgressView(this).apply { max = 100 }
-        findViewById<ViewGroup>(R.id.reader_layout).addView(verticalProgressSlider)
+        readerChrome.readerLayout.addView(verticalProgressSlider)
         progressText = findViewById(R.id.left_page_text)
         alternateStatusView = findViewById(R.id.right_page_text)
         previousButton = findViewById(R.id.left_chapter)
         nextButton = findViewById(R.id.right_chapter)
         viewerContainer.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-        findViewById<View>(R.id.touch_view).visibility = View.GONE
+        readerChrome.touchView.visibility = View.GONE
         bindStatusView()
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -1361,7 +1331,7 @@ class NovelReaderActivity :
             NovelBottomAction.TtsNextParagraph -> bindReaderSheetButton(button, R.drawable.ic_skip_next_24, getString(R.string.hayai_novel_reader_next_paragraph), ttsController::nextParagraph)
             NovelBottomAction.Orientation -> bindReaderSheetButton(button, R.drawable.ic_screen_rotation_24dp, getString(R.string.hayai_novel_reader_change_orientation)) { dispatch(NovelReaderAction.ToggleOrientation) }
             NovelBottomAction.Edit -> bindReaderSheetButton(button, R.drawable.ic_edit_24dp, getString(R.string.hayai_novel_reader_edit_chapter)) { dispatch(NovelReaderAction.ToggleEditMode) }
-            NovelBottomAction.Quotes -> bindReaderSheetButton(button, R.drawable.ic_format_list_numbered_24dp, getString(R.string.hayai_novel_reader_quotes)) { dispatch(NovelReaderAction.ShowQuotes) }
+            NovelBottomAction.Quotes -> bindReaderSheetButton(button, R.drawable.ic_format_quote_24dp, getString(R.string.hayai_novel_reader_quotes)) { dispatch(NovelReaderAction.ShowQuotes) }
             NovelBottomAction.PreviousChapter,
             NovelBottomAction.NextChapter,
             NovelBottomAction.Settings,
@@ -1520,11 +1490,8 @@ class NovelReaderActivity :
 
     private fun setChromeVisible(visible: Boolean) {
         controlsVisible = visible
-        appBar.visibility = if (visible) View.VISIBLE else View.GONE
-        findViewById<View>(R.id.nav_layout).isVisible = visible && chapterSheetBehavior.state != BottomSheetBehavior.STATE_EXPANDED
-        chapterSheetBehavior.state = if (visible) BottomSheetBehavior.STATE_COLLAPSED else BottomSheetBehavior.STATE_HIDDEN
+        readerChrome.setVisible(visible, chapterSheetBehavior)
         configureProgressControls()
-        findViewById<View>(R.id.reader_layout).requestApplyInsets()
     }
 
     private fun setEditMode(enabled: Boolean) {
