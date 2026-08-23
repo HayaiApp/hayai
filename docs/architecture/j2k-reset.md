@@ -1,6 +1,6 @@
 # Hayai on TachiyomiJ2K
 
-Hayai is rooted directly at TachiyomiJ2K commit `cdae5f2d77d63529c974d97c4a37c0c8ac188397`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the new baseline.
+Hayai is rooted directly at TachiyomiJ2K commit `7eea215da1a32b7198aabfc3e94ecd71d76f4df7`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the current baseline.
 
 ## Boundaries
 
