@@ -5,9 +5,9 @@ import org.junit.Test
 
 class J2kNovelReaderChromeTest {
     @Test
-    fun `fullscreen overlay reserves the status bar and toolbar`() {
+    fun `fullscreen chrome overlays content without pushing the viewer`() {
         assertEquals(
-            168,
+            0,
             novelViewerTopPadding(
                 overlaysSystemBars = true,
                 systemBarTop = 48,
@@ -17,9 +17,9 @@ class J2kNovelReaderChromeTest {
     }
 
     @Test
-    fun `non fullscreen layout does not reserve the status bar twice`() {
+    fun `non fullscreen chrome overlays content without pushing the viewer`() {
         assertEquals(
-            120,
+            0,
             novelViewerTopPadding(
                 overlaysSystemBars = false,
                 systemBarTop = 48,
