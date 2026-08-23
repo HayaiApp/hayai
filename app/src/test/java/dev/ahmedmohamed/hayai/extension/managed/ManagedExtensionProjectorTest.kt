@@ -56,6 +56,23 @@ class ManagedExtensionProjectorTest {
     }
 
     @Test
+    fun `failed apk update overlays the installed row instead of being discarded`() {
+        val state = ManagedExtensionProjector.project(
+            apk = ApkExtensionSnapshot(
+                installed = listOf(installedApk("broken-update.apk")),
+                untrusted = emptyList(),
+                available = listOf(availableApk("broken-update.apk", 2)),
+                failures = listOf(ApkLoadFailure("broken-update.apk", reason = ApkLoadFailure.Reason.SourceConstruction)),
+            ),
+            js = NovelPluginCatalog(),
+            filter = filter,
+        )
+
+        assertEquals(1, state.entries.size)
+        assertTrue(state.entries.single().health is ManagedHealth.LoadFailed)
+    }
+
+    @Test
     fun `updates are projected without hiding the installed record`() {
         val apk = installedApk("update.apk").copy(hasUpdate = true)
         val installedJs = InstalledNovelPlugin(plugin("update-js", "1.0.0"), REPO, 1L, "c".repeat(64))

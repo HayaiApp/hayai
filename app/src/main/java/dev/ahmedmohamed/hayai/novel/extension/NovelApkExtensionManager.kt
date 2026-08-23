@@ -7,8 +7,9 @@ interface NovelApkRepositoryRegistry {
     suspend fun repositories(): Set<String>
     fun repositoriesNow(): Set<String>
     fun novelOnlyRepositoriesNow(): Set<String>
-    suspend fun addMangaOwnership(indexUrl: String)
-    suspend fun removeMangaOwnership(indexUrl: String)
+    suspend fun addGlobal(indexUrl: String)
+    suspend fun removeGlobal(indexUrl: String)
+    suspend fun replaceGlobal(oldUrl: String, newUrl: String)
     suspend fun add(indexUrl: String)
     suspend fun remove(indexUrl: String)
     fun migrate(
@@ -23,7 +24,7 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
     override fun repositoriesNow(): Set<String> = tags.getStringSet(KEY, emptySet()).orEmpty().toSet()
     override fun novelOnlyRepositoriesNow(): Set<String> = tags.getStringSet(OWNED_KEY, emptySet()).orEmpty().toSet()
 
-    override suspend fun addMangaOwnership(indexUrl: String) {
+    override suspend fun addGlobal(indexUrl: String) {
         val global = preferences.extensionRepos().get()
         val novelOnly = novelOnlyRepositoriesNow()
         if (indexUrl in novelOnly) {
@@ -32,13 +33,20 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
         if (indexUrl !in global) preferences.extensionRepos().set(global + indexUrl)
     }
 
-    override suspend fun removeMangaOwnership(indexUrl: String) {
-        val global = preferences.extensionRepos().get()
-        if (indexUrl in repositoriesNow()) {
-            check(tags.edit().putStringSet(OWNED_KEY, novelOnlyRepositoriesNow() + indexUrl).commit())
-        } else if (indexUrl in global) {
-            preferences.extensionRepos().set(global - indexUrl)
-        }
+    override suspend fun removeGlobal(indexUrl: String) {
+        preferences.extensionRepos().set(preferences.extensionRepos().get() - indexUrl)
+        check(
+            tags.edit()
+                .putStringSet(KEY, repositoriesNow() - indexUrl)
+                .putStringSet(OWNED_KEY, novelOnlyRepositoriesNow() - indexUrl)
+                .commit(),
+        )
+    }
+
+    override suspend fun replaceGlobal(oldUrl: String, newUrl: String) {
+        if (oldUrl == newUrl) return
+        preferences.extensionRepos().set(preferences.extensionRepos().get() - oldUrl + newUrl)
+        migrate(oldUrl, newUrl)
     }
 
     override suspend fun add(indexUrl: String) {
