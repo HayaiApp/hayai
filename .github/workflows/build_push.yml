@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release tag, for example v1.8.1'
+        description: 'Draft release tag, for example v1.15.0'
         required: true
         type: string
 

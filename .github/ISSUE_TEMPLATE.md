@@ -1,16 +1,6 @@
-**PLEASE READ THIS**
+Please use one of Hayai's structured issue forms:
 
-I acknowledge that:
+- [Report a bug](https://github.com/HayaiApp/hayai/issues/new?template=issue_report.yml)
+- [Request a feature](https://github.com/HayaiApp/hayai/issues/new?template=feature_request.yml)
 
-- If this is a bug or a feature, I will not use this issue template and instead use one of the options on the previous page
-- I have tried the troubleshooting guide: https://mihon.app/docs/guides/troubleshooting/
-- I have updated to the latest version of the app (latest J2K is v1.8.1)
-- I will not repeat an issue already requested
-- If this is an request for an extension/source, that I should be checking https://mihon.app/docs/faq/browse/extensions instead
-
-**DELETE THIS SECTION IF YOU HAVE READ AND ACKNOWLEDGED IT**
-
----
-
-### Why/User Benefit/User Problem
-(explain what this issue is about)
+Before filing, search existing issues and check the [Hayai wiki](https://github.com/HayaiApp/hayai/wiki). Include the Hayai version and channel, Android version, reproduction steps, expected behavior, actual behavior, and relevant logs. Keep unrelated problems in separate issues.

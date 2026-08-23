@@ -1,11 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: ⚠️ Extension/source issue
-    url: https://mihon.app/docs/faq/browse/extensions
-    about: For extension-related questions/issues
-  - name: 📘 Main Mihon issue
-    url: https://github.com/mihonapp/mihon/issues/new/choose
-    about: Issues that exist on both this fork AND Mihon should be opened in the Mihon repository instead
-  - name: 🖥️ Mihon website
-    url: https://mihon.app/
-    about: Guides, troubleshooting, and answers to common questions
+  - name: Documentation and troubleshooting
+    url: https://github.com/HayaiApp/hayai/wiki
+    about: Installation, migration, extensions, readers, and troubleshooting
+  - name: Existing Hayai issues
+    url: https://github.com/HayaiApp/hayai/issues
+    about: Search current and closed reports before opening a new one

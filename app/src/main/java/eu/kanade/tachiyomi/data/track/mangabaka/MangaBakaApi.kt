@@ -54,7 +54,7 @@ class MangaBakaApi(
                     .header(
                         "User-Agent",
                         "Tachiyomi J2K/${BuildConfig.VERSION_NAME} (${BuildConfig.APPLICATION_ID}) " +
-                            "(Android) (https://github.com/Jays2Kings/tachiyomiJ2K)",
+                            "(Android) (https://github.com/HayaiApp/hayai)",
                     ).build()
                     .let(it::proceed)
             }.build()

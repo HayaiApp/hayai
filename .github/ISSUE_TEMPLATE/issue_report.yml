@@ -1,5 +1,5 @@
 name: 🐞 Issue report
-description: Report an issue or bug in TachiyomiJ2K
+description: Report an issue or bug in Hayai
 labels: [bug]
 body:
 
@@ -48,12 +48,12 @@ body:
         You can paste the crash logs in pure text or upload it as an attachment.
 
   - type: input
-    id: tachiyomi-version
+    id: hayai-version
     attributes:
-      label: TachiyomiJ2K version
-      description: You can find your TachiyomiJ2K version in **More → About**.
+      label: Hayai version and channel
+      description: Copy the version from **More → About** and say whether this is stable, nightly, or debug.
       placeholder: |
-        Example: "1.5.8"
+        Example: "1.15.0-r6661 nightly"
     validations:
       required: true
 
@@ -94,16 +94,11 @@ body:
           required: true
         - label: I have written a short but informative title.
           required: true
-        - label: If this is an issue with an extension, I should be checking the [extensions FAQ](https://mihon.app/docs/faq/browse/extensions) instead.
+        - label: I have tried the relevant steps in the [Hayai wiki](https://github.com/HayaiApp/hayai/wiki).
           required: true
-        - label: I am reporting an issue exclusive to this fork. I have also checked that is not an issue on [Mihon](https://github.com/mihonapp/mihon)
-          required: true
-        - label: I have tried the [troubleshooting guide](https://mihon.app/docs/guides/troubleshooting/).
-          required: true
-        - label: I have updated the app to version **[1.8.1](https://github.com/Jays2Kings/tachiyomiJ2K/releases/latest)**.
+        - label: I have reproduced this on the latest available [Hayai nightly](https://github.com/HayaiApp/hayai-nightly/releases/latest), or explained why I cannot.
           required: true
         - label: I have updated all installed extensions.
           required: true
-        - label: I have admitted that I am a clown by having checked this box, as I have not read these acknowledgements.
         - label: I have filled out all of the requested information in this form.
           required: true

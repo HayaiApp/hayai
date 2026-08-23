@@ -3016,3 +3016,15 @@ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	return apk
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	STABLE("HayaiApp/hayai"),
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	val apkLinks = downloadLinks.filter { it.substringAfterLast('/').endsWith(".apk", ignoreCase = true) }
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	val match = Regex("^v?(\\d+(?:\\.\\d+)*)(?:-[A-Za-z]+(\\d+))?$").matchEntire(value) ?: return null
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)(?:px)?\\s+(-?\\d+)(?:px)?", RegexOption.IGNORE_CASE)
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val cells = document.select("#gdt .gdtm, #gdt .gdtl, #gdt > a[href]")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = linkElement?.absUrl("href").orEmpty()
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val linkElement = cell.takeIf { it.`is`("a[href]") } ?: cell.selectFirst("a[href]")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	genre = tags.map { "${it.namespace}: ${it.name}" }
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "apk:$packageName"
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "js:$pluginId"
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt	js.repositoryErrors.forEach { (url, error) -> add(ManagedExtensionNotice("js-repository:$url", error.message ?: error::class.java.simpleName)) }
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt	key = "hayai.plugin.repository.${repository.url.hashCode()}"
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v2"
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")

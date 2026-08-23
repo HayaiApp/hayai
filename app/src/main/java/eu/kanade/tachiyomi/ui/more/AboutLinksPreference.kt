@@ -36,31 +36,11 @@ class AboutLinksPreference
             }
             holder.findViewById(R.id.btn_website).apply {
                 tooltipText = contentDescription
-                setOnClickListener { context.openInBrowser("https://mihon.app") }
-            }
-            holder.findViewById(R.id.btn_discord).apply {
-                tooltipText = contentDescription
-                setOnClickListener { context.openInBrowser("https://discord.gg/mihon") }
-            }
-            holder.findViewById(R.id.btn_x).apply {
-                tooltipText = contentDescription
-                setOnClickListener { context.openInBrowser("https://x.com/mihonapp") }
-            }
-            holder.findViewById(R.id.btn_facebook).apply {
-                tooltipText = contentDescription
-                setOnClickListener { context.openInBrowser("https://facebook.com/mihonapp") }
-            }
-            holder.findViewById(R.id.btn_reddit).apply {
-                tooltipText = contentDescription
-                setOnClickListener { context.openInBrowser("https://www.reddit.com/r/mihonapp") }
+                setOnClickListener { context.openInBrowser("https://github.com/HayaiApp/hayai/wiki") }
             }
             holder.findViewById(R.id.btn_github).apply {
                 tooltipText = contentDescription
-                setOnClickListener { context.openInBrowser("https://github.com/Jays2Kings/tachiyomiJ2K") }
-            }
-            holder.findViewById(R.id.btn_mihon).apply {
-                tooltipText = contentDescription
-                setOnClickListener { context.openInBrowser("https://github.com/mihonapp") }
+                setOnClickListener { context.openInBrowser("https://github.com/HayaiApp/hayai") }
             }
         }
     }
