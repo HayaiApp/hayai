@@ -5,6 +5,7 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
 import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import dev.ahmedmohamed.hayai.novel.repository.NovelRepositoryHubController
 import eu.kanade.tachiyomi.BuildConfig
@@ -25,6 +26,7 @@ import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import uy.kohesive.injekt.injectLazy
 
 class SettingsBrowseController : SettingsController() {
+    private val novelRepositories: NovelApkRepositoryRegistry by injectLazy()
     val sourceManager: SourceManager by injectLazy()
     var updatedExtNotifPref: SwitchPreferenceCompat? = null
 
