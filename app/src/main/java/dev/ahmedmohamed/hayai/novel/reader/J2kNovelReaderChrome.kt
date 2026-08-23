@@ -64,8 +64,7 @@ internal class J2kNovelReaderChrome(
                     viewerContainer.paddingBottom,
                 )
             }
-            // J2K overlays reader chrome over the viewer. Novel text keeps one stable safe
-            // inset beneath that overlay so showing or hiding chrome never reflows content.
+            // Match J2K exactly. Reader chrome overlays the viewer and never reflows its content.
             navigation.updateLayoutParams<ViewGroup.MarginLayoutParams> {
                 leftMargin = 12.dp + contentInsets.left
                 rightMargin = 12.dp + contentInsets.right
@@ -96,4 +95,4 @@ internal fun novelViewerTopPadding(
     overlaysSystemBars: Boolean,
     systemBarTop: Int,
     toolbarHeight: Int,
-): Int = toolbarHeight + if (overlaysSystemBars) systemBarTop else 0
+): Int = 0

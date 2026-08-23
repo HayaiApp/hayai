@@ -61,6 +61,7 @@ import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationWarning
 import dev.ahmedmohamed.hayai.novel.tracker.J2kNovelChapterTrackSync
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
+import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -91,6 +92,7 @@ class NovelReaderActivity :
     NovelRenderer.Callbacks {
     private val preferences by lazy { HayaiPreferences(Injekt.get<PreferenceStore>()) }
     private val j2kPreferences by lazy { Injekt.get<PreferencesHelper>() }
+    private val downloadManager by lazy { Injekt.get<DownloadManager>() }
     private val session by lazy {
         val database = Injekt.get<DatabaseHelper>()
         NovelReaderSession(
@@ -275,7 +277,7 @@ class NovelReaderActivity :
                 chapter.manga.title,
                 chapter.chapter.name,
             )
-            currentProgress = chapter.chapter.last_page_read.coerceIn(0, 100)
+            currentProgress = NovelProgress.opening(chapter.chapter)
             autoAppendArmed = true
             autoPrependArmed = true
         }
@@ -303,12 +305,7 @@ class NovelReaderActivity :
                             content = processed,
                             chapterTitle = displayedChapterTitle,
                             style = style,
-                            initialProgress =
-                                if (chapter.chapter.read && chapter.chapter.last_page_read >= 100) {
-                                    0
-                                } else {
-                                    chapter.chapter.last_page_read.coerceIn(0, 100)
-                                },
+                            initialProgress = NovelProgress.opening(chapter.chapter),
                             appendJavaScript = customization.enabledJs(runOnAppend = true),
                         )
                     }
@@ -576,20 +573,10 @@ class NovelReaderActivity :
     private fun onDocumentReady() {
         loading.visibility = View.GONE
         val chapter = loaded ?: return
-        val openingProgress = if (chapter.chapter.read && chapter.chapter.last_page_read >= 100) 0 else currentProgress
-        renderer?.seek(openingProgress)
+        renderer?.seek(currentProgress)
         extractTtsParagraphs(autoStart = ttsAutoStartPending)
         restorePersistentHighlights(chapter)
         ttsAutoStartPending = false
-        if (preferences.novelMarkShortChapterAsRead.get()) {
-            renderer?.isShort { short ->
-                if (short) {
-                    currentProgress = 100
-                    saveProgress()
-                    updateProgressSlider(100)
-                }
-            }
-        }
     }
 
     private fun extractTtsParagraphs(autoStart: Boolean = false) = extractTtsParagraphs(0, autoStart)
@@ -975,36 +962,29 @@ class NovelReaderActivity :
     private fun toggleOfflineCopy() {
         val chapter = loaded ?: return
         if (loadJob?.isActive == true) return
+        if (!chapter.isDownloaded) {
+            saveProgress()
+            downloadManager.downloadChapters(chapter.manga, listOf(chapter.chapter))
+            toast(R.string.hayai_novel_reader_offline_queued)
+            return
+        }
         val progress = currentProgress
         loadJob =
             lifecycleScope.launch {
-                val removing = chapter.isDownloaded
                 val result =
                     withContext(Dispatchers.IO) {
                         runCatching {
                             session.saveProgress(chapter.chapter, progress, preferences.novelMarkAsReadThreshold.get())
-                            val download =
-                                if (removing) {
-                                    session.removeOffline(chapter)
-                                    null
-                                } else {
-                                    session.saveOffline(chapter)
-                                }
+                            session.removeOffline(chapter)
                             val refreshed = session.reload()
-                            check(refreshed.isDownloaded != removing) { getString(R.string.hayai_novel_reader_offline_verify_error) }
-                            download to refreshed
+                            check(!refreshed.isDownloaded) { getString(R.string.hayai_novel_reader_offline_verify_error) }
+                            refreshed
                         }
                     }
                 result.fold(
-                    onSuccess = { (download, refreshed) ->
+                    onSuccess = { refreshed ->
                         showChapter(refreshed)
-                        when {
-                            removing -> toast(R.string.hayai_novel_reader_offline_removed)
-                            download == null -> Unit
-                            download.unavailableAssetCount > 0 ->
-                                toast(getString(R.string.hayai_novel_reader_offline_partial, download.unavailableAssetCount))
-                            else -> toast(R.string.hayai_novel_reader_offline_saved)
-                        }
+                        toast(R.string.hayai_novel_reader_offline_removed)
                     },
                     onFailure = { toast(novelFailureMessage(it, R.string.hayai_novel_reader_offline_error)) },
                 )
@@ -1205,9 +1185,8 @@ class NovelReaderActivity :
     }
 
     private fun configureProgressControls() {
-        val enabled = preferences.novelShowProgressSlider.get()
-        val vertical = enabled && preferences.novelVerticalScrollbar.get()
-        progressSlider.visibility = if (enabled && !vertical) View.VISIBLE else View.GONE
+        val vertical = preferences.novelVerticalScrollbar.get()
+        progressSlider.visibility = if (!vertical) View.VISIBLE else View.GONE
         progressText.visibility = View.GONE
         alternateStatusView.visibility = View.GONE
         verticalProgressSlider.visibility = if (vertical && controlsVisible) View.VISIBLE else View.GONE

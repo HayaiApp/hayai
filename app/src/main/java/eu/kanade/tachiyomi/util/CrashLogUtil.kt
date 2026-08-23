@@ -25,7 +25,7 @@ class CrashLogUtil(
 ) {
     private val notificationBuilder =
         context.notificationBuilder(Notifications.CHANNEL_CRASH_LOGS) {
-            setSmallIcon(R.drawable.ic_tachij2k_notification)
+            setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
         }
 
     fun dumpLogs(stackTrace: String? = null) {

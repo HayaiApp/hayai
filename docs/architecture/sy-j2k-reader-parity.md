@@ -12,7 +12,7 @@ The selected arena design preserves the existing typed provider and renderer con
 - `EhFilters` exposes SY's group hierarchy but recursively reduces into the existing `EhSearchSpec`; URLs and pagination stay in `EhRequestBuilder`.
 - `MangaDetailsController` remains a lifecycle adapter and delegates Hayai loading, rendering, generation guards, and bitmap cleanup to `SourceDetailsHost`. Phone and tablet layouts provide independent metadata-before-description and preview-after-description anchors.
 - `SourcePreviewController` owns one-based page navigation and delegates selected image opening to `ReaderLauncher`.
-- `NovelReaderActivity` uses the concrete `J2kNovelReaderChrome` adapter for J2K's existing view IDs, insets, and overlay visibility. Viewer bounds remain J2K-owned while novel content gets one visibility-independent toolbar safe inset.
+- `NovelReaderActivity` uses the concrete `J2kNovelReaderChrome` adapter for J2K's existing view IDs, insets, and overlay visibility. Viewer bounds remain J2K-owned and novel content receives no toolbar-only padding, matching J2K's overlay contract.
 - Native and Web renderers share `NovelSelectionActionModes`; each renderer is responsible only for producing a stable `NovelSelection`.
 - `NovelLookupLauncher` owns external Google Translate and signed-in Custom Tab effects. `NovelQuoteStore` remains the quote authority.
 

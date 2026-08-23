@@ -1,6 +1,5 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
-import android.view.Menu
 import eu.kanade.tachiyomi.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -51,7 +50,7 @@ class NovelSelectionActionMenuTest {
     fun `reader actions use the selected alternative category ahead of platform actions`() {
         NovelSelectionActionMenu.entries.indices.forEach { index ->
             assertEquals(
-                Menu.CATEGORY_ALTERNATIVE + index,
+                index,
                 NovelSelectionActionMenu.orderFor(index),
             )
         }

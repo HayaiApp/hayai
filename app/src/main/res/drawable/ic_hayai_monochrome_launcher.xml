@@ -5,6 +5,7 @@
     android:viewportWidth="2201"
     android:viewportHeight="2201">
     <group
+        android:name="hayai_logo"
         android:scaleX="0.72"
         android:scaleY="0.72"
         android:pivotX="1100.5"

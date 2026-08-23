@@ -196,7 +196,7 @@ internal class AppUpdateNotifier(
         with(NotificationCompat.Builder(context, Notifications.CHANNEL_UPDATED)) {
             setContentTitle(context.getString(R.string.update_completed))
             setContentText(context.getString(R.string.updated_to_, BuildConfig.VERSION_NAME))
-            setSmallIcon(R.drawable.ic_tachij2k_notification)
+            setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
             setAutoCancel(true)
             setOngoing(false)
             setProgress(0, 0, false)

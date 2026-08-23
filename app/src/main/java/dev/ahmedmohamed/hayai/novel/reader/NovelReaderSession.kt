@@ -273,6 +273,10 @@ internal class NovelReaderSession(
 }
 
 internal object NovelProgress {
+    /** Restores partial progress, but never reopens a chapter at its completed endpoint. */
+    fun opening(chapter: Chapter): Int =
+        chapter.last_page_read.coerceIn(0, 100).takeIf { it < 100 } ?: 0
+
     fun apply(
         chapter: Chapter,
         progress: Int,

@@ -9,8 +9,10 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageInstaller.SessionParams
 import android.content.pm.PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.R
@@ -151,13 +153,49 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
 class ExtensionInstallActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            if (PACKAGE_INSTALLED_ACTION == intent.action) {
-                packageInstallStep(this, intent)
-                finish()
-                return
-            }
+        if (PACKAGE_INSTALLED_ACTION == intent.action) {
+            packageInstallStep(this, intent)
+            finish()
+            return
+        }
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            startActivityForResult(
+                Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName"),
+                ),
+                UNKNOWN_SOURCES_REQUEST_CODE,
+            )
+            return
+        }
+
+        installDownloadedExtension()
+    }
+
+    @Deprecated("Deprecated in Android")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?,
+    ) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != UNKNOWN_SOURCES_REQUEST_CODE) return
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            packageManager.canRequestPackageInstalls()
+        ) {
+            installDownloadedExtension()
+        } else {
+            installationFailed()
+            finish()
+        }
+    }
+
+    private fun installDownloadedExtension() {
+        try {
             val downloadId = intent.extras!!.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID)
             val packageInstaller = packageManager.packageInstaller
             val data = UniFile.fromUri(this, intent.data).openInputStream()
@@ -207,5 +245,15 @@ class ExtensionInstallActivity : Activity() {
             toast(error.message)
         }
         finish()
+    }
+
+    private fun installationFailed() {
+        val downloadId = intent.extras?.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID) ?: return
+        val extensionManager: ExtensionManager by injectLazy()
+        extensionManager.setInstallationResult(downloadId, false)
+    }
+
+    companion object {
+        private const val UNKNOWN_SOURCES_REQUEST_CODE = 501
     }
 }

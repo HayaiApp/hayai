@@ -2136,7 +2136,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsNe
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsPreviousParagraph("tts_prev_paragraph"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsViewport("tts_viewport"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	WebView("webview"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 1) "left" else "right")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.hayai_novel_reader_app to "app", R.string.hayai_novel_reader_light to "light", R.string.dark to "dark", R.string.hayai_novel_reader_sepia to "sepia", R.string.black to "black", R.string.hayai_novel_reader_grey to "grey", R.string.hayai_novel_reader_custom to "custom"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.none to "NONE", R.string.hayai_novel_reader_horizontal to "HORIZONTAL", R.string.vertical_viewer to "VERTICAL", R.string.hayai_novel_reader_both to "BOTH"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_alignment, preferences.novelTextAlign, listOf(R.string.left to "left", R.string.hayai_novel_reader_justified to "justify", R.string.center to "center", R.string.right to "right"), onStyleChanged)
@@ -2147,7 +2147,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_size, preferences.novelStatusBarSize, listOf(R.string.hayai_novel_reader_small to "small", R.string.hayai_novel_reader_medium to "medium"), onChromeChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelTheme.set("custom")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelVerticalScrollbarPosition.get() == "left" -> 1
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val values = listOf("") + voices.map { it.name }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt	val appendJavaScript: String = "",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"black" -> 0xFF000000.toInt() to 0xFFECECEC.toInt()
@@ -2193,7 +2193,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evalua
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("window.hayaiReader.retainBlocks(${json.encodeToString(chapterIds.map { it.toString() })})")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (focus) evaluate("window.hayaiReader.focusBlock(${json.encodeToString(block.chapterId.toString())},${request.initialProgress})")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (selected != "true") callbacks.onTap(event.x / view.width.coerceAtLeast(1), event.y / view.height.coerceAtLeast(1))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (selected != "true") {
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (value.startsWith("hayai-novel-image://") || value.startsWith("novel-image://")) {
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	listOf("src", "poster", "href").forEach { attribute ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun clearSpokenHighlight() = evaluate("window.hayaiReader.clearHighlight()")
