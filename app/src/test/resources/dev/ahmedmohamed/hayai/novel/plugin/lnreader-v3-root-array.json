@@ -1,0 +1,21 @@
+[
+  {
+    "id": "arnovel",
+    "name": "ArNovel",
+    "site": "https://ar-no.com/",
+    "lang": "‎العربية",
+    "version": "2.2.0",
+    "url": "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/arabic/ArNovel[madara].js",
+    "iconUrl": "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/public/static/multisrc/madara/arnovel/icon.png",
+    "futureMetadata": { "ignored": true }
+  },
+  {
+    "id": "komga",
+    "name": "Komga",
+    "site": "url",
+    "lang": "Multi",
+    "version": "1.0.2",
+    "url": "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/multi/komga.js",
+    "iconUrl": "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/public/static/src/multi/komga/icon.png"
+  }
+]
