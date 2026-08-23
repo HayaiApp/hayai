@@ -9,6 +9,7 @@ import com.fredporciuncula.flow.preferences.FlowSharedPreferences
 import com.fredporciuncula.flow.preferences.Preference
 import com.fredporciuncula.flow.preferences.Serializer
 import com.google.android.material.color.DynamicColors
+import dev.ahmedmohamed.hayai.preferences.getCompatibleEnum
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Manga
@@ -131,9 +132,9 @@ class PreferencesHelper(
 
     private val supportsDynamic = DynamicColors.isDynamicColorAvailable()
 
-    fun lightTheme() = flowPrefs.getEnum(Keys.lightTheme, if (supportsDynamic) Themes.MONET else Themes.DEFAULT)
+    fun lightTheme() = flowPrefs.getCompatibleEnum(Keys.lightTheme, if (supportsDynamic) Themes.MONET else Themes.DEFAULT)
 
-    fun darkTheme() = flowPrefs.getEnum(Keys.darkTheme, if (supportsDynamic) Themes.MONET else Themes.DEFAULT)
+    fun darkTheme() = flowPrefs.getCompatibleEnum(Keys.darkTheme, if (supportsDynamic) Themes.MONET else Themes.DEFAULT)
 
     fun pageTransitions() = flowPrefs.getBoolean(Keys.enableTransitions, true)
 
@@ -195,9 +196,9 @@ class PreferencesHelper(
 
     fun navigationModeWebtoon() = flowPrefs.getInt(Keys.navigationModeWebtoon, 0)
 
-    fun pagerNavInverted() = flowPrefs.getEnum(Keys.pagerNavInverted, ViewerNavigation.TappingInvertMode.NONE)
+    fun pagerNavInverted() = flowPrefs.getCompatibleEnum(Keys.pagerNavInverted, ViewerNavigation.TappingInvertMode.NONE)
 
-    fun webtoonNavInverted() = flowPrefs.getEnum(Keys.webtoonNavInverted, ViewerNavigation.TappingInvertMode.NONE)
+    fun webtoonNavInverted() = flowPrefs.getCompatibleEnum(Keys.webtoonNavInverted, ViewerNavigation.TappingInvertMode.NONE)
 
     fun pageLayout() = flowPrefs.getInt(Keys.pageLayout, PageLayout.AUTOMATIC.value)
 
@@ -207,7 +208,8 @@ class PreferencesHelper(
 
     fun webtoonPageLayout() = flowPrefs.getInt(Keys.webtoonPageLayout, PageLayout.SINGLE_PAGE.value)
 
-    fun webtoonReaderHideThreshold() = flowPrefs.getEnum("reader_hide_threshold", Values.ReaderHideThreshold.LOW)
+    fun webtoonReaderHideThreshold() =
+        flowPrefs.getCompatibleEnum("reader_hide_threshold", Values.ReaderHideThreshold.LOW)
 
     fun webtoonInvertDoublePages() = flowPrefs.getBoolean(Keys.webtoonInvertDoublePages, false)
 
@@ -404,7 +406,7 @@ class PreferencesHelper(
 
     fun lastUnlock() = flowPrefs.getLong(Keys.lastUnlock, 0)
 
-    fun secureScreen() = flowPrefs.getEnum("secure_screen_v2", Values.SecureScreenMode.INCOGNITO)
+    fun secureScreen() = flowPrefs.getCompatibleEnum("secure_screen_v2", Values.SecureScreenMode.INCOGNITO)
 
     fun hideNotificationContent() = prefs.getBoolean(Keys.hideNotificationContent, false)
 
@@ -429,7 +431,8 @@ class PreferencesHelper(
 
     fun recentsViewType() = flowPrefs.getInt("recents_view_type", 0)
 
-    fun showRecentsDownloads() = flowPrefs.getEnum(Keys.showDLsInRecents, RecentMangaAdapter.ShowRecentsDLs.All)
+    fun showRecentsDownloads() =
+        flowPrefs.getCompatibleEnum(Keys.showDLsInRecents, RecentMangaAdapter.ShowRecentsDLs.All)
 
     fun showRecentsRemHistory() = flowPrefs.getBoolean(Keys.showRemHistoryInRecents, true)
 
@@ -441,7 +444,12 @@ class PreferencesHelper(
 
     fun collapseGroupedUpdates() = flowPrefs.getBoolean("group_chapters_updates", false)
 
-    fun groupChaptersHistory() = flowPrefs.getEnum("group_chapters_history_type", RecentsPresenter.GroupType.ByWeek)
+    fun groupChaptersHistory() =
+        flowPrefs.getCompatibleEnum(
+            "group_chapters_history_type",
+            RecentsPresenter.GroupType.ByWeek,
+            legacyAliases = mapOf("BySource" to RecentsPresenter.GroupType.BySeries),
+        )
 
     fun collapseGroupedHistory() = flowPrefs.getBoolean("collapse_group_history", true)
 
