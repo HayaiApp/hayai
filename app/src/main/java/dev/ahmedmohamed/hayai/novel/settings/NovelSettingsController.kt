@@ -14,7 +14,6 @@ import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.novel.error.NovelFailure
 import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
-import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerController
 import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsController
 import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
 import dev.ahmedmohamed.hayai.novel.reader.NovelColorPickerDialog
@@ -270,11 +269,6 @@ class NovelSettingsController : SettingsController() {
                 title = context.getString(R.string.hayai_novel_reader_source_builder)
                 summary = context.getString(R.string.hayai_novel_reader_source_builder_summary)
                 onClick { router.pushController(NovelCustomSourceBuilderController().withFadeTransaction()) }
-            }
-            preference {
-                title = context.getString(R.string.hayai_novel_reader_remote_extensions)
-                summary = context.getString(R.string.hayai_novel_reader_remote_extensions_summary)
-                onClick { router.pushController(NovelApkExtensionManagerController().withFadeTransaction()) }
             }
             preference {
                 title = context.getString(R.string.hayai_novel_reader_import_external)

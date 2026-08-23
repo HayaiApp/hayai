@@ -53,6 +53,7 @@ import java.util.concurrent.Executors
  * Executes LNReader-compatible plugins through NovelPluginDescriptorRuntime.
  */
 class NovelPluginSource(
+    context: Context,
     private val installedPlugin: InstalledNovelPlugin,
     private val jsCode: String,
     private val siteOverride: String? = null,
@@ -61,7 +62,7 @@ class NovelPluginSource(
     ConfigurableSource,
     AutoCloseable {
     private val plugin: NovelPluginDescriptor = installedPlugin.descriptor
-    private val context: Context = Injekt.get()
+    private val context = context.applicationContext
     private val networkHelper: NetworkHelper = Injekt.get()
     private val bridgeCache = context.getSharedPreferences("hayai_plugin_bridge_cache", Context.MODE_PRIVATE)
     private val bridgeCacheKey = "${plugin.id}:${installedPlugin.codeSha256}"
@@ -258,7 +259,7 @@ class NovelPluginSource(
                     }
                 if (existing != null) return@withLock existing
 
-                val runtime = NovelPluginRuntime(pluginId, baseUrl, jsDispatcher)
+                val runtime = NovelPluginRuntime(context, pluginId, baseUrl, jsDispatcher)
                 val newInstance =
                     try {
                         runtime.open(jsCode)
@@ -319,7 +320,7 @@ class NovelPluginSource(
 
     override fun close() = cleanup()
 
-    fun withSiteOverride(site: String?): NovelPluginSource = NovelPluginSource(installedPlugin, jsCode, site)
+    fun withSiteOverride(site: String?): NovelPluginSource = NovelPluginSource(context, installedPlugin, jsCode, site)
 
     /** True when this source was built from the same plugin version and code. */
     fun isSamePlugin(other: InstalledNovelPlugin): Boolean =

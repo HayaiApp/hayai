@@ -6,7 +6,6 @@ import android.provider.Settings
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
 import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import dev.ahmedmohamed.hayai.novel.repository.NovelRepositoryHubController
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
@@ -20,7 +19,6 @@ import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.migration.MigrationController
-import eu.kanade.tachiyomi.ui.source.browse.repos.RepoController
 import eu.kanade.tachiyomi.util.view.snack
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import uy.kohesive.injekt.injectLazy
@@ -61,15 +59,6 @@ class SettingsBrowseController : SettingsController() {
                 }
                 preference {
                     key = "pref_edit_extension_repos"
-
-                    val repoCount = (preferences.extensionRepos().get() - novelRepositories.novelOnlyRepositoriesNow()).count()
-                    titleRes = R.string.extension_repos
-                    if (repoCount > 0) summary = context.resources.getQuantityString(R.plurals.num_repos, repoCount, repoCount)
-
-                    onClick { router.pushController(RepoController(ContentKind.Manga).withFadeTransaction()) }
-                }
-                preference {
-                    key = "pref_edit_novel_extension_repos"
 
                     titleRes = R.string.hayai_novel_repository_management
                     summaryRes = R.string.hayai_novel_repository_management_summary
