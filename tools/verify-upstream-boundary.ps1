@@ -15,7 +15,11 @@ try {
         # Approved in docs/architecture/j2k-reset.md. Routes enum preferences through Hayai's legacy-safe decoder.
         "app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt"
+        # Approved in docs/architecture/j2k-reset.md. Exposes identified loader failures and one reconciled APK catalog.
+        "app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/extension/model/LoadResult.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
@@ -29,6 +33,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt"
@@ -45,6 +51,11 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsPresenter.kt"
+        # Approved in docs/architecture/j2k-reset.md. Hayai product links replace inherited project destinations.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutLinksPreference.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/data/track/bangumi/BangumiInterceptor.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/data/track/mangabaka/MangaBakaApi.kt"
         # Approved in docs/architecture/j2k-reset.md. Adds the source-header hide event to the existing Recents adapter delegate.
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaAdapter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt"

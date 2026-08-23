@@ -1,29 +1,9 @@
-1. **Before reporting a new issue, take a look at the [FAQ](https://mihon.app/docs/faq/general), the [changelog](https://mihon.app/changelogs/) and the already opened [issues](https://github.com/mihonapp/mihon/issues).**
-2. If you are unsure, ask here: [![Discord](https://img.shields.io/discord/349436576037732353.svg)](https://discord.gg/mihon)
-3. What is your type of issue?
-    * [Catalogue request](#catalogue-requests)
-    * [Bugs](#bugs)
-    * [Feature requests](#feature-requests)
-    * Translations: no link yet, coming later
-4. After following 1. and 3. you can [open your issue](https://github.com/mihonapp/mihon/issues/new)
+# Contributing to Hayai
 
-***
+Search [existing issues](https://github.com/HayaiApp/hayai/issues) and read the repository `AGENTS.md`, [architecture](../docs/architecture/j2k-reset.md), and [feature audit](../docs/architecture/upstream-feature-audit.md) before changing code.
 
-# Catalogue requests
+Hayai keeps TachiyomiJ2K as its architectural parent. TachiyomiSY and Tsundoku are behavior references, not merge parents. New application code belongs under `dev.ahmedmohamed.hayai`; changes to J2K files must stay limited to documented adapter seams.
 
-* Catalogue requests should be checked at https://mihon.app/docs/faq/browse/extensions, not here
+For bug reports, include the Hayai version and build channel, Android version, steps to reproduce, expected and actual behavior, and relevant logs. Extension and source reports are welcome when the failure is in Hayai's manager, compatibility layer, reader, or integration behavior.
 
-# Bugs
-* Include version (Setting > About > Version)
- * If not latest, try updating, it may have already been solved
- * Dev version is equal to the number of commits as seen in the main page
-* Include steps to reproduce (if not obvious from description)
-* Include screenshot (if needed)
-* If it could be device-dependent, try reproducing on another device (if possible)
-* For large logs use http://pastebin.com/ (or similar)
-* Don't group unrelated requests into one issue
-
-# Feature requests
-
-* Write a detailed issue, explaning what it should do or how. Avoid writing just "like X app does"
-* Include screenshot (if needed)
+For code changes, implement a complete vertical slice, add focused tests, keep interface strings localizable with `hayai_` keys, update the feature audit honestly, and run the validation commands listed in `AGENTS.md` before handoff.
