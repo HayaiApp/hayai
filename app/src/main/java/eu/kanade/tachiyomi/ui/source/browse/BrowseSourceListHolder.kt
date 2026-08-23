@@ -16,10 +16,8 @@ import eu.kanade.tachiyomi.databinding.MangaListItemBinding
 import eu.kanade.tachiyomi.util.view.makeContainerShape
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.util.view.setCards
-import android.graphics.drawable.GradientDrawable
 import android.view.ViewGroup
-import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataUi
-import dev.ahmedmohamed.hayai.source.presentation.SourceBrowsePresentation
+import dev.ahmedmohamed.hayai.source.presentation.SourceBrowseBadgeUi
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -39,7 +37,6 @@ class BrowseSourceListHolder(
     showOutline: Boolean,
 ) : BrowseSourceHolder(view, adapter) {
     private val binding = MangaListItemBinding.bind(view)
-    var sourcePresentation: SourceBrowsePresentation? = null
 
     init {
         setCards(showOutline, binding.card, binding.unreadDownloadBadge.badgeView)
@@ -85,16 +82,7 @@ class BrowseSourceListHolder(
         }
         if (presentation == null) return
 
-        binding.hayaiTypeBadge.isVisible = presentation.type != null
-        presentation.type?.let { type ->
-            val typeColor = SourceMetadataUi.typeColor(type.value)
-            binding.hayaiTypeBadge.text = SourceMetadataUi.typeLabel(view.context, type.value)
-            binding.hayaiTypeBadge.setTextColor(SourceMetadataUi.contrastingTextColor(typeColor))
-            binding.hayaiTypeBadge.background = GradientDrawable().apply {
-                cornerRadius = dp(6).toFloat()
-                setColor(typeColor)
-            }
-        }
+        SourceBrowseBadgeUi.bindType(binding.hayaiTypeBadge, presentation.type)
         binding.hayaiRating.rating = presentation.rating?.toFloat() ?: 0f
         binding.hayaiRating.isVisible = presentation.rating != null
         val pages = presentation.pageCount?.let {

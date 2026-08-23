@@ -1,6 +1,7 @@
 package dev.ahmedmohamed.hayai.source.preview
 
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -52,7 +53,7 @@ class SourcePreviewController(
 
     constructor(mangaId: Long) : this(Bundle().apply { putLong(MANGA_ID, mangaId) })
 
-    override fun getTitle(): String? = resources?.getString(navigation.titleResource, *navigation.titleArguments)
+    override fun getTitle(): String? = resources?.getString(R.string.hayai_page_previews)
 
     override fun createBinding(inflater: LayoutInflater) = SubDebugControllerBinding.inflate(inflater)
 
@@ -61,7 +62,13 @@ class SourcePreviewController(
         scrollViewWith(binding.recycler, padBottom = true)
         binding.recycler.layoutManager = GridLayoutManager(view.context, spanCount(view))
         binding.recycler.adapter = adapter
-        binding.recycler.setPadding(dp(8), dp(8), dp(8), dp(8))
+        binding.recycler.setPadding(
+            dp(SyPagePreviewLayout.OUTER_PADDING_DP),
+            dp(SyPagePreviewLayout.OUTER_PADDING_DP),
+            dp(SyPagePreviewLayout.OUTER_PADDING_DP),
+            dp(SyPagePreviewLayout.OUTER_PADDING_DP),
+        )
+        binding.recycler.addItemDecoration(SyPreviewSpacingDecoration())
 
         val root = binding.root as FrameLayout
         loading = LoadingIndicator(view.context).apply { isVisible = false }
@@ -86,34 +93,16 @@ class SourcePreviewController(
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        if (navigation.previousPage != null) {
-            menu.add(Menu.NONE, MENU_PREVIOUS, 0, R.string.previous_page)
-                .setIcon(R.drawable.ic_arrow_back_24dp)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        }
         if (navigation.canChoosePage) {
-            menu.add(Menu.NONE, MENU_GO_TO, 1, R.string.hayai_go_to_preview_page)
+            menu.add(Menu.NONE, MENU_GO_TO, 0, R.string.hayai_go_to_preview_page)
                 .setIcon(R.drawable.ic_page_next_outline_24dp)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-        }
-        if (navigation.nextPage != null) {
-            menu.add(Menu.NONE, MENU_NEXT, 2, R.string.next_page)
-                .setIcon(R.drawable.ic_arrow_forward_24dp)
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         }
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
-        MENU_PREVIOUS -> {
-            navigation.previousPage?.let(::load)
-            true
-        }
         MENU_GO_TO -> {
             showGoToDialog()
-            true
-        }
-        MENU_NEXT -> {
-            navigation.nextPage?.let(::load)
             true
         }
         else -> super.onOptionsItemSelected(item)
@@ -199,7 +188,8 @@ class SourcePreviewController(
         startActivity(ReaderLauncher.newIntent(requireNotNull(activity), manga, chapter, preview.index - 1))
     }
 
-    private fun spanCount(view: View): Int = (view.resources.displayMetrics.widthPixels / dp(120)).coerceAtLeast(2)
+    private fun spanCount(view: View): Int =
+        SyPagePreviewLayout.columns(view.resources.displayMetrics.widthPixels, view.resources.displayMetrics.density)
 
     private fun dp(value: Int): Int = ((activity?.resources ?: resources)?.displayMetrics?.density?.times(value) ?: value).toInt()
 
@@ -227,14 +217,17 @@ class SourcePreviewController(
             val column = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(dp(8), dp(4), dp(8), dp(8))
             }
             val previewFrame = FrameLayout(parent.context).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(120), dp(200))
+                layoutParams = LinearLayout.LayoutParams(
+                    dp(SyPagePreviewLayout.PREVIEW_WIDTH_DP),
+                    dp(SyPagePreviewLayout.PREVIEW_HEIGHT_DP),
+                )
+                background = context.getDrawable(R.drawable.hayai_page_preview_shape)
+                clipToOutline = true
             }
             val image = ImageView(parent.context).apply {
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                adjustViewBounds = true
+                scaleType = ImageView.ScaleType.CENTER_CROP
             }
             previewFrame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             val loading = LoadingIndicator(parent.context)
@@ -252,6 +245,18 @@ class SourcePreviewController(
         }
 
         override fun onViewRecycled(holder: PreviewHolder) = holder.recycle()
+    }
+
+    private inner class SyPreviewSpacingDecoration : RecyclerView.ItemDecoration() {
+        override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
+            val spanCount = (parent.layoutManager as? GridLayoutManager)?.spanCount ?: return
+            val position = parent.getChildAdapterPosition(view).takeIf { it != RecyclerView.NO_POSITION } ?: return
+            val spacing = dp(SyPagePreviewLayout.COLUMN_SPACING_DP)
+            val column = position % spanCount
+            outRect.left = column * spacing / spanCount
+            outRect.right = spacing - (column + 1) * spacing / spanCount
+            outRect.bottom = dp(SyPagePreviewLayout.ROW_SPACING_DP)
+        }
     }
 
     private inner class PreviewHolder(
@@ -294,8 +299,6 @@ class SourcePreviewController(
 
     private companion object {
         const val MANGA_ID = "manga_id"
-        const val MENU_PREVIOUS = 1
-        const val MENU_GO_TO = 2
-        const val MENU_NEXT = 3
+        const val MENU_GO_TO = 1
     }
 }

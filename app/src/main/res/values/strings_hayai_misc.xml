@@ -398,4 +398,5 @@
     <string name="hayai_translation_engine">Translation engine</string>
     <string name="hayai_available">Available</string>
     <string name="hayai_novel_data_progress">Progress: %1$d%%</string>
+    <string name="hayai_cloudflare_help">Tap here for help with Cloudflare</string>
 </resources>

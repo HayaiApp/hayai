@@ -18,7 +18,10 @@ class EhPreferences(
     val tagFilterThreshold: Preference<Int> = store.getInt("eh_tag_filtering_value", 0)
     val tagWatchingThreshold: Preference<Int> = store.getInt("eh_tag_watching_value", 0)
     val watchedListDefault: Preference<Boolean> = store.getBoolean("eh_watched_list_default_state", false)
-    val enhancedView: Preference<Boolean> = store.getBoolean("enhanced_e_hentai_view", true)
+    /** SY's enhanced E-Hentai browse list. */
+    val enhancedBrowseView: Preference<Boolean> = store.getBoolean("enhanced_e_hentai_view", true)
+    /** Hayai's details metadata and page-preview section. */
+    val enhancedGalleryDetails: Preference<Boolean> = store.getBoolean("hayai_eh_enhanced_gallery_details", true)
     val showSettingsUploadWarning: Preference<Boolean> = store.getBoolean("eh_showSettingsUploadWarning2", true)
     val favoritesReadOnly: Preference<Boolean> = store.getBoolean("eh_sync_read_only", false)
     val favoritesLenient: Preference<Boolean> = store.getBoolean("eh_lenient_sync", false)

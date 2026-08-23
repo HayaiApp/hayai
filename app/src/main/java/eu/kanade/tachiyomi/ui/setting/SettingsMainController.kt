@@ -9,6 +9,8 @@ import androidx.preference.PreferenceScreen
 import com.bluelinelabs.conductor.Controller
 import com.bluelinelabs.conductor.RouterTransaction
 import com.bluelinelabs.conductor.changehandler.SimpleSwapChangeHandler
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
 import eu.kanade.tachiyomi.ui.more.AboutController
@@ -18,10 +20,14 @@ import eu.kanade.tachiyomi.util.view.activityBinding
 import eu.kanade.tachiyomi.util.view.fadeTransactionHandler
 import eu.kanade.tachiyomi.util.view.openInBrowser
 import eu.kanade.tachiyomi.util.view.withFadeTransaction
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 class SettingsMainController :
     SettingsController(),
     FloatingSearchInterface {
+    private val hayaiPreferences by lazy { HayaiPreferences(Injekt.get()) }
+
     init {
         setHasOptionsMenu(true)
     }
@@ -85,6 +91,15 @@ class SettingsMainController :
                 iconTint = tintColor
                 titleRes = R.string.security
                 onClick { navigateTo(SettingsSecurityController()) }
+            }
+            if (hayaiPreferences.hentaiFeaturesEnabled.get()) {
+                preference {
+                    iconRes = R.mipmap.ic_ehentai_source
+                    iconTint = tintColor
+                    titleRes = R.string.hayai_eh_settings_title
+                    summaryRes = R.string.hayai_eh_settings_summary
+                    onClick { navigateTo(EhSettingsController()) }
+                }
             }
             preference {
                 iconRes = R.drawable.ic_code_24dp

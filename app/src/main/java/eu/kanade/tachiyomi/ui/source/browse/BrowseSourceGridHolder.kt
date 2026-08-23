@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.data.image.coil.MangaCoverFetcher
 import eu.kanade.tachiyomi.databinding.MangaGridItemBinding
 import eu.kanade.tachiyomi.ui.library.LibraryCategoryAdapter
 import eu.kanade.tachiyomi.util.view.setCards
+import dev.ahmedmohamed.hayai.source.presentation.SourceBrowseBadgeUi
 
 /**
  * Class used to hold the displayed data of a manga in the library, like the cover or the title.
@@ -53,6 +54,10 @@ class BrowseSourceGridHolder(
         // Update the title of the manga.
         binding.title.text = manga.title
         binding.compactTitle.text = binding.title.text
+        val presentation = sourcePresentation
+        binding.hayaiGridBadges.isVisible = presentation?.type != null || presentation?.language != null
+        SourceBrowseBadgeUi.bindType(binding.hayaiGridTypeBadge, presentation?.type)
+        SourceBrowseBadgeUi.bindLanguage(binding.hayaiGridLanguageBadge, presentation?.language)
         if (isDuplicateInLibrary) {
             binding.unreadDownloadBadge.root.setDuplicateInLibrary(true)
         } else {

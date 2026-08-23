@@ -7,7 +7,9 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceManager
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
 import dev.ahmedmohamed.hayai.novel.settings.NovelSettingsController
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.ui.setting.SettingsAdvancedController
 import eu.kanade.tachiyomi.ui.setting.SettingsAppearanceController
 import eu.kanade.tachiyomi.ui.setting.SettingsBackupController
@@ -23,6 +25,8 @@ import eu.kanade.tachiyomi.util.system.isLTR
 import eu.kanade.tachiyomi.util.system.launchNow
 import kotlin.reflect.KClass
 import kotlin.reflect.full.createInstance
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 object SettingsSearchHelper {
     private var prefSearchResultList: MutableList<SettingsSearchResult> = mutableListOf()
@@ -30,20 +34,27 @@ object SettingsSearchHelper {
     /**
      * All subclasses of `SettingsController` should be listed here, in order to have their preferences searchable.
      */
-    private val settingControllersList: List<KClass<out SettingsController>> =
-        listOf(
-            SettingsAdvancedController::class,
-            SettingsBackupController::class,
-            SettingsBrowseController::class,
-            SettingsDownloadController::class,
-            SettingsGeneralController::class,
-            SettingsAppearanceController::class,
-            SettingsSecurityController::class,
-            SettingsLibraryController::class,
-            SettingsReaderController::class,
-            NovelSettingsController::class,
-            SettingsTrackingController::class,
-        )
+    private fun settingControllersList(): List<KClass<out SettingsController>> =
+        buildList {
+            addAll(
+                listOf(
+                    SettingsAdvancedController::class,
+                    SettingsBackupController::class,
+                    SettingsBrowseController::class,
+                    SettingsDownloadController::class,
+                    SettingsGeneralController::class,
+                    SettingsAppearanceController::class,
+                    SettingsSecurityController::class,
+                    SettingsLibraryController::class,
+                    SettingsReaderController::class,
+                    NovelSettingsController::class,
+                    SettingsTrackingController::class,
+                ),
+            )
+            if (HayaiPreferences(Injekt.get()).hentaiFeaturesEnabled.get()) {
+                add(EhSettingsController::class)
+            }
+        }
 
     /**
      * Must be called to populate `prefSearchResultList`
@@ -54,7 +65,7 @@ object SettingsSearchHelper {
         prefSearchResultList.clear()
 
         launchNow {
-            settingControllersList.forEach { kClass ->
+            settingControllersList().forEach { kClass ->
                 val ctrl = kClass.createInstance()
                 val settingsPrefScreen = ctrl.setupPreferenceScreen(preferenceManager.createPreferenceScreen(context))
                 val prefCount = settingsPrefScreen.preferenceCount

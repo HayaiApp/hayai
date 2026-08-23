@@ -20,6 +20,12 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
 import com.bluelinelabs.conductor.ControllerChangeType
 import com.google.android.material.behavior.HideViewOnScrollBehavior
 import com.google.android.material.snackbar.Snackbar
+import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.presentation.EhBrowseDisplayMode
+import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
+import dev.ahmedmohamed.hayai.source.presentation.SourceBrowseLayout
+import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
@@ -33,9 +39,6 @@ import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.pkgName
-import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
-import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
-import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
 import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
@@ -109,6 +112,7 @@ open class BrowseSourceController(
      * Preferences helper.
      */
     private val preferences: PreferencesHelper by injectLazy()
+    private val ehPreferences: EhPreferences by injectLazy()
 
     /**
      * Adapter containing the list of manga from the catalogue.
@@ -333,7 +337,7 @@ open class BrowseSourceController(
     ) {
         menu?.findItem(R.id.action_display_mode)?.apply {
             val icon =
-                if (isListMode ?: presenter.prefs.browseAsList().get()) {
+                if (isListMode ?: effectiveListMode()) {
                     R.drawable.ic_view_module_24dp
                 } else {
                     R.drawable.ic_view_list_24dp
@@ -733,7 +737,26 @@ open class BrowseSourceController(
         val view = view ?: return
         val adapter = adapter ?: return
 
-        val isListMode = !presenter.prefs.browseAsList().get()
+        val isEhentai = EhSite.entries.any { it.sourceId == presenter.source.id }
+        val mode = if (isEhentai) {
+            EhBrowseDisplayMode(
+                browseAsList = presenter.prefs.browseAsList().get(),
+                enhancedList = ehPreferences.enhancedBrowseView.get(),
+            ).toggled()
+        } else {
+            EhBrowseDisplayMode(
+                browseAsList = !presenter.prefs.browseAsList().get(),
+                enhancedList = false,
+            )
+        }
+        val isListMode = mode.isList
+        if (isEhentai) {
+            ehPreferences.enhancedBrowseView.set(mode.enhancedList)
+            val layout = if (isListMode) SourceBrowseLayout.DetailedList else SourceBrowseLayout.Default
+            (0 until adapter.itemCount).forEach { position ->
+                (adapter.getItem(position) as? BrowseSourceItem)?.updateSourceLayout(layout)
+            }
+        }
         presenter.prefs.browseAsList().set(isListMode)
         listOf(activityBinding?.toolbar?.menu, activityBinding?.searchToolbar?.menu).forEach {
             updateDisplayMenuItem(it, isListMode)
@@ -748,6 +771,16 @@ open class BrowseSourceController(
             presenter.initializeMangas(mangas)
         }
     }
+
+    private fun effectiveListMode(): Boolean =
+        if (EhSite.entries.any { it.sourceId == presenter.source.id }) {
+            EhBrowseDisplayMode(
+                browseAsList = presenter.prefs.browseAsList().get(),
+                enhancedList = ehPreferences.enhancedBrowseView.get(),
+            ).isList
+        } else {
+            presenter.prefs.browseAsList().get()
+        }
 
     private fun resetPager() {
         val adapter = adapter ?: return
