@@ -23,9 +23,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import okhttp3.OkHttpClient
 import java.io.ByteArrayOutputStream
 
@@ -261,15 +258,9 @@ class NovelPluginManager(
 
     private suspend fun fetchRepository(repository: NovelPluginRepository): List<NovelPluginDescriptor> {
         val bytes = download(repository.url, MAX_REPOSITORY_BYTES)
-        val root = json.parseToJsonElement(bytes.toString(Charsets.UTF_8))
-        val array =
-            when (root) {
-                is JsonArray -> root
-                is JsonObject -> root["plugins"] as? JsonArray ?: root["sources"] as? JsonArray ?: novelFailure(NovelFailure.Code.PluginRepositoryArray)
-                else -> novelFailure(NovelFailure.Code.PluginRepositoryDocument)
-            }
-        novelRequire(array.size <= MAX_REPOSITORY_PLUGINS, NovelFailure.Code.PluginRepositoryTooMany)
-        val descriptors = array.map { json.decodeFromJsonElement<NovelPluginDescriptor>(it).validate(repository.url) }
+        val document = NovelPluginRepositoryDocument.decode(json, bytes.toString(Charsets.UTF_8))
+        novelRequire(document.plugins.size <= MAX_REPOSITORY_PLUGINS, NovelFailure.Code.PluginRepositoryTooMany)
+        val descriptors = document.plugins.map { it.validate(repository.url) }
         val signingKeys = descriptors.mapNotNull(NovelPluginDescriptor::signingKey).distinct()
         novelRequire(signingKeys.size <= 1, NovelFailure.Code.PluginRepositoryMixedKeys)
         signingKeys.singleOrNull()?.let { trustStore.observeSigningKey(repository.url, it) }
