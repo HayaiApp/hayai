@@ -645,7 +645,10 @@ class BrowseController :
                 val searchView = searchItem.actionView as SearchView
                 searchView.clearFocus()
             }
-            (activity as? MainActivity)?.showTabBar(false)
+            val destination = router.backstack.lastOrNull()?.controller
+            if (destination !is TabbedInterface) {
+                (activity as? MainActivity)?.showTabBar(false)
+            }
         } else {
             setupContentTabs(true)
             binding.bottomSheet.root.presenter
@@ -660,7 +663,8 @@ class BrowseController :
         type: ControllerChangeType,
     ) {
         super.onChangeEnded(handler, type)
-        if (type.isEnter) {
+        if (type.isEnter && isControllerVisible) {
+            setupContentTabs(false)
             binding.bottomSheet.root.canExpand = true
             setBottomPadding()
             updateTitleAndMenu()

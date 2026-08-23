@@ -68,9 +68,10 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
 | Capability | Hayai boundary | Status |
 |---|---|---|
 | Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
+| Group History by source | Legacy `BySource` is decoded safely and projected to J2K `BySeries` without rewriting the stored value | audit; exact source sections, source headers, and source actions remain |
 | Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, and isolated nightly publishing | implemented unverified; hosted nightly run pending |
 | Localized Hayai interface | `hayai_` Android resources, typed presentation failures, a reviewed nonlocalizable-literal inventory, per-locale coverage, and deterministic SY translation imports | implemented; static gate verified; translation coverage remains incomplete and is reported per locale |
-| Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | implemented unverified; compile and emulator navigation pending |
+| Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
 
 ## Completion rules
 

@@ -12,6 +12,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
+        # Approved in docs/architecture/j2k-reset.md. Routes enum preferences through Hayai's legacy-safe decoder.
+        "app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
@@ -89,6 +91,10 @@ try {
     $protectedChanges = $changed | Where-Object { $_ -in $protectedFiles -and $_ -notin $approvedProtectedFiles }
     if ($violations -or $protectedChanges) {
         Write-Error ((@("Hayai upstream boundary expanded without review:") + $violations + $protectedChanges) -join [Environment]::NewLine)
+    }
+    $preferencesHelper = Get-Content -Raw "app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt"
+    if ($preferencesHelper -match 'flowPrefs\.getEnum\s*\(') {
+        Write-Error "PreferencesHelper reintroduced FlowPreferences' throwing enum decoder. Use getCompatibleEnum."
     }
     Write-Host "Hayai boundary verified: $($allowedUpstreamKotlin.Count) J2K adapter files allowed; one documented ReaderActivity initial-page adapter approved."
 }
