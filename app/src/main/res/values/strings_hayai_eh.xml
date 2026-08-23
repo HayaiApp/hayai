@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="hayai_eh_settings_title">E-Hentai and ExHentai</string>
+    <string name="hayai_eh_settings_summary">Account, browsing, gallery previews, favorites sync, and updater</string>
     <string name="hayai_eh_login_title">E-Hentai login</string>
     <string name="hayai_eh_login_cloudflare_interrupted">Cloudflare interrupted login. Reopen login and complete the challenge.</string>
     <string name="hayai_eh_login_invalid_credentials">The credentials were invalid or do not have ExHentai access.</string>
@@ -20,6 +21,8 @@
     <string name="hayai_eh_browsing_and_details">Browsing and details</string>
     <string name="hayai_eh_open_on_watched_list">Open on watched list</string>
     <string name="hayai_eh_open_on_watched_list_summary">Enable the Watched list filter by default on a fresh filter sheet.</string>
+    <string name="hayai_eh_enhanced_browse_view">Enhanced E-Hentai browse list</string>
+    <string name="hayai_eh_enhanced_browse_view_summary">Use TachiyomiSY\'s detailed list with uploader, rating, type, language, pages, and date. Turn this off to use the normal manga list or grid.</string>
     <string name="hayai_eh_enhanced_gallery_details">Enhanced gallery details</string>
     <string name="hayai_eh_enhanced_gallery_details_summary">Load tappable gallery page previews in manga details.</string>
     <string name="hayai_eh_manage_watched_tags">Manage watched tags</string>

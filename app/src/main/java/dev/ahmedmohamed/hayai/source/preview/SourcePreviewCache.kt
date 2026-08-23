@@ -86,7 +86,10 @@ class SourcePreviewCache(private val context: Context) {
         .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        const val LISTING_SCHEMA = "v3"
+        // v3 could contain the first preview listing under later page keys from the
+        // incomplete pre-SY pagination port. Keep those entries from masking the
+        // page-aware E-Hentai loader.
+        const val LISTING_SCHEMA = "v4"
         const val MAX_IMAGE_BYTES = 12 * 1024 * 1024
         const val MAX_CACHE_BYTES = 75L * 1024L * 1024L
     }

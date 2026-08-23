@@ -70,6 +70,47 @@
                     app:layout_constraintVertical_bias="0.0"
                     tools:src="@mipmap/ic_launcher" />
 
+                <LinearLayout
+                    android:id="@+id/hayai_grid_badges"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginEnd="6dp"
+                    android:elevation="4dp"
+                    android:gravity="end"
+                    android:orientation="horizontal"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="@id/cover_thumbnail"
+                    app:layout_constraintTop_toTopOf="@id/cover_thumbnail"
+                    tools:visibility="visible">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/hayai_grid_type_badge"
+                        style="?textAppearanceLabelSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxLines="1"
+                        android:paddingStart="6dp"
+                        android:paddingTop="3dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="3dp"
+                        tools:text="Doujinshi" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/hayai_grid_language_badge"
+                        style="?textAppearanceLabelSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:maxLines="1"
+                        android:paddingStart="6dp"
+                        android:paddingTop="3dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="3dp"
+                        tools:text="EN" />
+
+                </LinearLayout>
+
                 <View
                     android:id="@+id/gradient"
                     android:layout_width="0dp"

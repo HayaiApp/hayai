@@ -20,6 +20,9 @@ object EhRequestBuilder {
             .absoluteUrl(site)
             .toHttpUrl()
             .newBuilder()
+            // `nw=always` is a one-shot warning bypass. E-Hentai redirects a
+            // paginated gallery request carrying it back to preview page zero.
+            .removeAllQueryParameters("nw")
             .addQueryParameter("p", page.toString())
             .build()
     }

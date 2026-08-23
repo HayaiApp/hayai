@@ -12,6 +12,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.addCallback
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
+import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.SourceManager
@@ -40,6 +41,7 @@ open class WebViewActivity : BaseWebViewActivity() {
         const val SOURCE_KEY = "source_key"
         const val URL_KEY = "url_key"
         const val TITLE_KEY = "title_key"
+        private const val CLOUDFLARE_HELP_URL = "https://mihon.app/docs/guides/troubleshooting/#cloudflare"
 
         fun newIntent(
             context: Context,
@@ -61,6 +63,9 @@ open class WebViewActivity : BaseWebViewActivity() {
         title = intent.extras?.getString(TITLE_KEY)
 
         binding.swipeRefresh.isEnabled = false
+        binding.cloudflareHelp.setOnClickListener {
+            openInBrowser(CLOUDFLARE_HELP_URL, forceBrowser = true, fullBrowser = true)
+        }
 
         backPressedCallback = onBackPressedDispatcher.addCallback { backCallback() }
         binding.toolbar.setNavigationOnClickListener {
@@ -104,6 +109,11 @@ open class WebViewActivity : BaseWebViewActivity() {
                         invalidateOptionsMenu()
                         binding.swipeRefresh.isEnabled = true
                         binding.swipeRefresh.isRefreshing = false
+                        val finishedUrl = url
+                        view?.evaluateJavascript(CloudflareHelpDetector.javascript) { result ->
+                            binding.cloudflareHelp.isVisible =
+                                binding.webview.url == finishedUrl && CloudflareHelpDetector.isChallengeResult(result)
+                        }
                     }
 
                     override fun onPageStarted(
@@ -112,6 +122,7 @@ open class WebViewActivity : BaseWebViewActivity() {
                         favicon: Bitmap?,
                     ) {
                         super.onPageStarted(view, url, favicon)
+                        binding.cloudflareHelp.isVisible = false
                         binding.progressBar.isIndeterminate = true
                         binding.progressBar.isVisible = true
                         invalidateOptionsMenu()

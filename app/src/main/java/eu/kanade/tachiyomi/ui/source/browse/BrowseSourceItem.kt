@@ -19,6 +19,7 @@ import eu.kanade.tachiyomi.ui.library.LibraryItem
 import eu.kanade.tachiyomi.ui.library.setBGAndFG
 import eu.kanade.tachiyomi.widget.AutofitRecyclerView
 import dev.ahmedmohamed.hayai.source.presentation.SourceBrowsePresentation
+import dev.ahmedmohamed.hayai.source.presentation.SourceBrowseLayout
 
 class BrowseSourceItem(
     val manga: Manga,
@@ -26,10 +27,14 @@ class BrowseSourceItem(
     private val catalogueListType: Preference<Int>,
     private val outlineOnCovers: Preference<Boolean>,
     private val isDuplicateInLibrary: Boolean = false,
-    private val sourcePresentation: SourceBrowsePresentation? = null,
+    private var sourcePresentation: SourceBrowsePresentation? = null,
 ) : AbstractFlexibleItem<BrowseSourceHolder>() {
+    fun updateSourceLayout(layout: SourceBrowseLayout) {
+        sourcePresentation = sourcePresentation?.copy(layout = layout)
+    }
+
     override fun getLayoutRes(): Int =
-        if (catalogueAsList.get() || sourcePresentation != null) {
+        if (catalogueAsList.get() || sourcePresentation?.layout == SourceBrowseLayout.DetailedList) {
             R.layout.manga_list_item
         } else {
             R.layout.manga_grid_item
@@ -40,7 +45,11 @@ class BrowseSourceItem(
         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
     ): BrowseSourceHolder {
         val parent = adapter.recyclerView
-        return if (parent is AutofitRecyclerView && !catalogueAsList.get() && sourcePresentation == null) {
+        return if (
+            parent is AutofitRecyclerView &&
+            !catalogueAsList.get() &&
+            sourcePresentation?.layout != SourceBrowseLayout.DetailedList
+        ) {
             val listType = catalogueListType.get()
             view.apply {
                 val binding = MangaGridItemBinding.bind(this)
@@ -81,7 +90,7 @@ class BrowseSourceItem(
         payloads: MutableList<Any?>?,
     ) {
         holder.isDuplicateInLibrary = isDuplicateInLibrary
-        (holder as? BrowseSourceListHolder)?.sourcePresentation = sourcePresentation
+        holder.sourcePresentation = sourcePresentation
         holder.onSetValues(manga)
     }
 

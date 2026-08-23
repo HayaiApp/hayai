@@ -28,6 +28,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
+        # Approved in docs/architecture/j2k-reset.md. Updates only the default HTTP/WebView user-agent identity.
+        "app/src/main/java/eu/kanade/tachiyomi/network/NetworkHelper.kt"
         # Approved in docs/architecture/j2k-reset.md. Tracks Mihon's pinned Cloudflare challenge detector and early exit.
         "app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
@@ -75,10 +77,12 @@ try {
         # Approved in docs/architecture/j2k-reset.md. Reads one typed initial-page extra only.
         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Projects the conditional Hayai E-Hentai settings destination.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt"
-        # Approved in docs/architecture/j2k-reset.md. Registers the Hayai novel settings screen for J2K search.
+        # Approved in docs/architecture/j2k-reset.md. Registers Hayai novel and conditional E-Hentai settings for J2K search.
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/search/SettingsSearchHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsTrackingController.kt"
@@ -88,6 +92,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt"
         # Approved in docs/architecture/j2k-reset.md. Optional typed rich-result and tag-filter presentation only.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceGridHolder.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceListHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourcePresenter.kt"
@@ -95,6 +101,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt"
+        # Approved in docs/architecture/j2k-reset.md. Hosts Mihon's challenge-help banner over J2K's WebView.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/webview/WebViewActivity.kt"
         "app/src/main/java/eu/kanade/tachiyomi/util/manga/MangaShortcutManager.kt"
         # Approved branding-only seams. Product identity notifications use the existing Hayai vector.
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupNotifier.kt"

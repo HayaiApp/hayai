@@ -157,7 +157,7 @@ class EhentaiSource(
         )
 
     private fun EhGalleryMetadata.toPresentedSManga(): SManga = toSManga().also { manga ->
-        browsePresentations.put(manga.url, EhBrowsePresentation.from(this))
+        browsePresentations.put(manga.url, EhBrowsePresentation.from(this, preferences.enhancedBrowseView.get()))
     }
 
     private fun EhGalleryMetadata.toSManga(): SManga = SManga.create().apply {
