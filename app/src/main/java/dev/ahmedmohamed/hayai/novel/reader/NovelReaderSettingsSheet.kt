@@ -111,7 +111,6 @@ internal class NovelReaderSettingsSheet(
         page.toggle(R.string.hayai_novel_reader_infinite_scroll, preferences.novelInfiniteScroll, onStyleChanged)
         page.slider(R.string.hayai_novel_reader_load_next_at, preferences.novelAutoLoadNextChapterAt, 50, 100, R.string.hayai_novel_reader_percent_value, onStyleChanged)
         page.slider(R.string.hayai_novel_reader_mark_read_at, preferences.novelMarkAsReadThreshold, 50, 100, R.string.hayai_novel_reader_percent_value)
-        page.toggle(R.string.hayai_novel_reader_mark_short_read, preferences.novelMarkShortChapterAsRead)
         page.toggle(R.string.hayai_novel_reader_split_blocks, preferences.novelAutoSplitText, onStyleChanged)
         page.slider(R.string.hayai_novel_reader_split_after_words, preferences.novelAutoSplitWordCount, 20, 200, R.string.hayai_novel_reader_word_value, onStyleChanged)
     }
@@ -188,13 +187,12 @@ internal class NovelReaderSettingsSheet(
     }
 
     private fun progressMode(page: LinearLayout) {
-        val values = listOf(R.string.none, R.string.hayai_novel_reader_horizontal, R.string.hayai_novel_reader_vertical_left, R.string.hayai_novel_reader_vertical_right)
+        val values = listOf(R.string.hayai_novel_reader_horizontal, R.string.hayai_novel_reader_vertical_left, R.string.hayai_novel_reader_vertical_right)
         val current =
             when {
-                !preferences.novelShowProgressSlider.get() -> 0
-                !preferences.novelVerticalScrollbar.get() -> 1
-                preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
-                else -> 3
+                !preferences.novelVerticalScrollbar.get() -> 0
+                preferences.novelVerticalScrollbarPosition.get() == "left" -> 1
+                else -> 2
             }
         page.addView(TextView(context).apply { setText(R.string.hayai_novel_reader_progress_mode); setPadding(0, 12.dp, 0, 4.dp) })
         val buttons = MaterialButtonToggleGroup(context).apply {
@@ -209,11 +207,9 @@ internal class NovelReaderSettingsSheet(
                     isChecked = selection == current
                     addOnCheckedChangeListener { _, checked ->
                         if (!checked) return@addOnCheckedChangeListener
-                        val enabled = selection != 0
-                        val vertical = selection >= 2
-                        if (preferences.novelShowProgressSlider.get() != enabled) preferences.novelShowProgressSlider.set(enabled)
+                        val vertical = selection >= 1
                         if (preferences.novelVerticalScrollbar.get() != vertical) preferences.novelVerticalScrollbar.set(vertical)
-                        if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
+                        if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 1) "left" else "right")
                         onChromeChanged()
                     }
                 },

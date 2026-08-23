@@ -24,6 +24,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/model/LoadResult.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt"
+        # Approved in docs/architecture/j2k-reset.md. Defers J2K's install session until unknown-source permission exists.
+        "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
         # Approved in docs/architecture/j2k-reset.md. Tracks Mihon's pinned Cloudflare challenge detector and early exit.
@@ -94,6 +96,11 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/util/manga/MangaShortcutManager.kt"
+        # Approved branding-only seams. Product identity notifications use the existing Hayai vector.
+        "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupNotifier.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateNotifier.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt"
     )
     $violations = $changed | Where-Object {
         $_ -like "app/src/main/java/*.kt" -and

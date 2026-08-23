@@ -65,7 +65,7 @@ internal object NovelSelectionActionMenu {
         entries.forEachIndexed { order, entry ->
             if (menu.findItem(entry.itemId) == null) {
                 menu
-                    .add(Menu.NONE, entry.itemId, CUSTOM_ITEM_ORDER + order, context.getString(entry.titleRes))
+                    .add(Menu.NONE, entry.itemId, orderFor(order), context.getString(entry.titleRes))
                     .setIcon(entry.iconRes)
                     .setShowAsAction(
                         when (entry.placement) {
@@ -79,7 +79,7 @@ internal object NovelSelectionActionMenu {
         return changed
     }
 
-    private const val CUSTOM_ITEM_ORDER = 100
+    fun orderFor(index: Int): Int = index
 }
 
 internal object NovelSelectionActionModes {

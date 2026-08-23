@@ -128,7 +128,6 @@ class NovelSettingsController : SettingsController() {
             }
             sliderPreference { bindTo(novel.novelAutoLoadNextChapterAt); title = context.getString(R.string.hayai_novel_reader_load_next_at); entryValues = (50..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
             sliderPreference { bindTo(novel.novelMarkAsReadThreshold); title = context.getString(R.string.hayai_novel_reader_mark_as_read_at); entryValues = (50..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
-            switchPreference { bindTo(novel.novelMarkShortChapterAsRead); title = context.getString(R.string.hayai_novel_reader_mark_short_as_read) }
             switchPreference { bindTo(novel.novelHideChapterTitle); title = context.getString(R.string.hayai_novel_reader_hide_chapter_title) }
             intListPreference(activity) {
                 bindTo(novel.novelChapterTitleDisplay)
@@ -143,7 +142,6 @@ class NovelSettingsController : SettingsController() {
 
         preferenceCategory {
             title = context.getString(R.string.hayai_novel_reader_navigation_progress)
-            switchPreference { bindTo(novel.novelShowProgressSlider); title = context.getString(R.string.hayai_novel_reader_show_progress_control) }
             switchPreference { bindTo(novel.novelVerticalScrollbar); title = context.getString(R.string.hayai_novel_reader_use_vertical_progress) }
             listPreference(activity) {
                 bindTo(novel.novelVerticalScrollbarPosition)

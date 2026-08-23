@@ -338,7 +338,6 @@ class Downloader(
         val source = sourceManager.get(manga.source) ?: return@launchIO
         val queueSource = NovelDownloadQueueSource.from(source) ?: return@launchIO
         val novelStorage = novelDownloads.handles(source)
-        val wasEmpty = queue.isEmpty()
         // Called in background thread, the operation can be slow with SAF.
         val chaptersWithoutDir =
             async {
@@ -369,7 +368,7 @@ class Downloader(
             queue.addAll(chaptersToQueue)
 
             // Start downloader if needed
-            if (autoStart && wasEmpty) {
+            if (DownloadQueueStartPolicy.shouldStart(autoStart, isRunning)) {
                 val queuedDownloads = queue.count { it.source !is UnmeteredSource }
                 val maxDownloadsFromSource =
                     queue
@@ -851,4 +850,11 @@ class Downloader(
         // Arbitrary minimum required space to start a download: 200 MB
         const val MIN_DISK_SPACE = 200 * 1024 * 1024
     }
+}
+
+internal object DownloadQueueStartPolicy {
+    fun shouldStart(
+        autoStart: Boolean,
+        downloaderRunning: Boolean,
+    ): Boolean = autoStart && !downloaderRunning
 }

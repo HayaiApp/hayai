@@ -324,6 +324,7 @@
     <string name="hayai_novel_reader_offline_removed">Offline copy removed</string>
     <string name="hayai_novel_reader_offline_partial">Chapter saved; %1$d source assets were unavailable</string>
     <string name="hayai_novel_reader_offline_saved">Chapter saved for offline reading</string>
+    <string name="hayai_novel_reader_offline_queued">Chapter added to the download queue</string>
     <string name="hayai_novel_reader_offline_error">The offline copy could not be changed</string>
     <string name="hayai_novel_reader_offline_verify_error">The offline copy could not be verified.</string>
     <string name="hayai_novel_reader_chapter_count">%1$d / %2$d</string>

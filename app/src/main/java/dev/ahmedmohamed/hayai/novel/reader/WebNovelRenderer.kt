@@ -15,6 +15,7 @@ import android.view.textclassifier.TextClassifier
 import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -74,12 +75,26 @@ internal class WebNovelRenderer(
                     return true
                 }
             }
-        setOnTouchListener { view, event ->
-            if (event.action == MotionEvent.ACTION_UP) {
-                evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
-                    if (selected != "true") callbacks.onTap(event.x / view.width.coerceAtLeast(1), event.y / view.height.coerceAtLeast(1))
-                }
-            }
+        val gestureDetector =
+            GestureDetectorWithLongTap(
+                context,
+                object : GestureDetectorWithLongTap.Listener() {
+                    override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+                        val view = this@apply
+                        evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
+                            if (selected != "true") {
+                                callbacks.onTap(
+                                    event.x / view.width.coerceAtLeast(1),
+                                    event.y / view.height.coerceAtLeast(1),
+                                )
+                            }
+                        }
+                        return true
+                    }
+                },
+            )
+        setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
             false
         }
     }

@@ -121,7 +121,7 @@ class LibraryUpdateNotifier(
                         ),
                     )
                     setContentIntent(pendingIntent)
-                    setSmallIcon(R.drawable.ic_tachij2k_notification)
+                    setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
                     addAction(
                         R.drawable.ic_file_open_24dp,
                         context.getString(R.string.open_log),
@@ -159,7 +159,7 @@ class LibraryUpdateNotifier(
                         ),
                     )
                     setContentIntent(NotificationHandler.openUrl(context, HELP_SKIPPED_URL))
-                    setSmallIcon(R.drawable.ic_tachij2k_notification)
+                    setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
                     addAction(
                         R.drawable.ic_file_open_24dp,
                         context.getString(R.string.open_log),
@@ -195,7 +195,7 @@ class LibraryUpdateNotifier(
                     notifications.add(
                         Pair(
                             context.notification(Notifications.CHANNEL_NEW_CHAPTERS) {
-                                setSmallIcon(R.drawable.ic_tachij2k_notification)
+                                setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
                                 try {
                                     val request =
                                         ImageRequest
@@ -277,7 +277,7 @@ class LibraryUpdateNotifier(
                 notify(
                     Notifications.ID_NEW_CHAPTERS,
                     context.notification(Notifications.CHANNEL_NEW_CHAPTERS) {
-                        setSmallIcon(R.drawable.ic_tachij2k_notification)
+                        setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
                         setLargeIcon(notificationBitmap)
                         setContentTitle(context.getString(R.string.new_chapters_found))
                         color = ContextCompat.getColor(context, R.color.primaryTachiyomi)
