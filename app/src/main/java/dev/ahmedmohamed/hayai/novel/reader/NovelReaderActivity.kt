@@ -44,6 +44,13 @@ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightAnchor
 import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlight
 import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightStore
+import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupAction
+import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupLauncher
+import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupRequest
+import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupWebSheet
+import dev.ahmedmohamed.hayai.novel.lookup.NovelSelectionQuery
+import dev.ahmedmohamed.hayai.novel.lookup.NovelSelectionQueryException
+import dev.ahmedmohamed.hayai.novel.lookup.NovelSelectionQueryFailure
 import dev.ahmedmohamed.hayai.novel.quote.NovelQuote
 import dev.ahmedmohamed.hayai.novel.quote.NovelQuoteStore
 import dev.ahmedmohamed.hayai.novel.quote.QuoteAddResult
@@ -106,6 +113,7 @@ class NovelReaderActivity :
     private val translationService by lazy { NovelTranslationService(Injekt.get<NetworkHelper>(), NovelTranslationCache(this)) }
     private val dictionary by lazy { NovelDictionaryLauncher(this) }
     private val dictionarySettings by lazy { NovelDictionarySettingsStore(this) }
+    private val lookupLauncher by lazy { NovelLookupLauncher(this, ::showLookupSheet) }
     private lateinit var viewerContainer: FrameLayout
     private lateinit var appBar: View
     private lateinit var toolbar: Toolbar
@@ -137,6 +145,9 @@ class NovelReaderActivity :
     private var ttsAutoStartPending = false
     private var autoScroll = false
     private var autoScrollRunnable: Runnable? = null
+    private var autoScrollResumePending = false
+    private var selectionModeActive = false
+    private var lookupSheet: NovelLookupWebSheet? = null
     private var statusRunnable: Runnable? = null
     private var controlsVisible = true
     private var editMode = false
@@ -201,7 +212,13 @@ class NovelReaderActivity :
             }
     }
 
+    override fun onResume() {
+        super.onResume()
+        resumeInterruptedAutoScroll()
+    }
+
     override fun onPause() {
+        pauseAutoScrollForInterruption()
         saveProgressBlocking()
         if (!preferences.novelTtsBackgroundPlayback.get()) ttsController.pause()
         super.onPause()
@@ -211,8 +228,11 @@ class NovelReaderActivity :
         loadJob?.cancel()
         renderJob?.cancel()
         prefetchJob?.cancel()
+        autoScrollResumePending = false
         stopAutoScroll()
         stopStatusUpdates()
+        lookupSheet?.dismiss()
+        lookupSheet = null
         ttsController.destroy()
         renderer?.destroy()
         super.onDestroy()
@@ -993,6 +1013,10 @@ class NovelReaderActivity :
 
     private fun startAutoScroll() {
         if (autoScroll) return
+        if (selectionModeActive || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            autoScrollResumePending = true
+            return
+        }
         autoScroll = true
         if (::autoScrollButton.isInitialized) configureChapterSheetActions()
         val delay = (110L - preferences.novelAutoScrollSpeed.get().coerceIn(1, 20) * 5L).coerceAtLeast(10L)
@@ -1011,6 +1035,18 @@ class NovelReaderActivity :
         autoScrollRunnable?.let { renderer?.view?.removeCallbacks(it) }
         autoScrollRunnable = null
         if (::autoScrollButton.isInitialized) configureChapterSheetActions()
+    }
+
+    private fun pauseAutoScrollForInterruption() {
+        if (!autoScroll) return
+        autoScrollResumePending = true
+        stopAutoScroll()
+    }
+
+    private fun resumeInterruptedAutoScroll() {
+        if (!autoScrollResumePending || selectionModeActive || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
+        autoScrollResumePending = false
+        startAutoScroll()
     }
 
     private fun stepReader(direction: Int) {
@@ -1423,7 +1459,16 @@ class NovelReaderActivity :
             NovelReaderAction.SaveQuote -> captureSelectedQuote()
             NovelReaderAction.ToggleEditMode -> setEditMode(!editMode)
             NovelReaderAction.ToggleBookmark -> toggleBookmark()
-            NovelReaderAction.ToggleAutoScroll -> if (autoScroll) stopAutoScroll() else startAutoScroll()
+            NovelReaderAction.ToggleAutoScroll -> {
+                autoScrollResumePending = false
+                if (autoScroll) {
+                    stopAutoScroll()
+                } else if (selectionModeActive) {
+                    autoScrollResumePending = true
+                } else {
+                    startAutoScroll()
+                }
+            }
             NovelReaderAction.ToggleOrientation -> cycleOrientation()
             NovelReaderAction.TranslateSelection -> translateSelection()
             NovelReaderAction.TranslateChapter -> translateChapter()
@@ -1620,6 +1665,66 @@ class NovelReaderActivity :
 
     override fun runOnUiThread(action: () -> Unit) {
         super.runOnUiThread(action)
+    }
+
+    override fun onSelectionAction(action: NovelSelectionAction, selection: NovelSelection) {
+        if (action == NovelSelectionAction.SaveQuote) {
+            loaded?.let { showCreateQuote(it, selection.selectedText) }
+            return
+        }
+        val query =
+            NovelSelectionQuery.parse(selection.selectedText).getOrElse { error ->
+                val message =
+                    when ((error as? NovelSelectionQueryException)?.failure) {
+                        NovelSelectionQueryFailure.TooLong -> R.string.hayai_novel_lookup_query_too_long
+                        else -> R.string.hayai_novel_lookup_query_blank
+                    }
+                toast(message)
+                return
+            }
+        val settings = translationSettings.get()
+        lookupLauncher.launch(
+            NovelLookupRequest(
+                action =
+                    when (action) {
+                        NovelSelectionAction.Define -> NovelLookupAction.Define
+                        NovelSelectionAction.GoogleTranslate -> NovelLookupAction.GoogleTranslate
+                        NovelSelectionAction.SearchWeb -> NovelLookupAction.SearchWeb
+                        NovelSelectionAction.SaveQuote -> return
+                    },
+                query = query,
+                sourceLanguage = settings.sourceLanguage,
+                targetLanguage = settings.targetLanguage,
+            ),
+        )
+    }
+
+    override fun onSelectionModeChanged(active: Boolean) {
+        selectionModeActive = active
+        if (active) pauseAutoScrollForInterruption() else resumeInterruptedAutoScroll()
+    }
+
+    private fun showLookupSheet(uri: Uri, query: String): Boolean {
+        if (isFinishing || isDestroyed) return false
+        return try {
+            lookupSheet?.dismiss()
+            pauseAutoScrollForInterruption()
+            lateinit var sheet: NovelLookupWebSheet
+            sheet =
+                NovelLookupWebSheet(this, uri, query) {
+                    if (lookupSheet === sheet) {
+                        lookupSheet = null
+                        resumeInterruptedAutoScroll()
+                    }
+                }
+            lookupSheet = sheet
+            sheet.show()
+            true
+        } catch (_: RuntimeException) {
+            lookupSheet = null
+            resumeInterruptedAutoScroll()
+            false
+        }
     }
 
     override fun onReady(progress: Int) = onDocumentReady()
