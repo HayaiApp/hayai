@@ -7,12 +7,12 @@ This audit compares the read-only `legacy/hayai-pre-j2k` preference accessors wi
 - Legacy accessors inspected: 186.
 - Current accessors inspected: 197.
 - Removed or structurally changed legacy accessors: 25.
-- Same-key enum incompatibilities capable of throwing during a read: theme values and `group_chapters_history_type=BySource`.
+- Same-key enum incompatibilities capable of throwing during a read: theme values and older builds that lacked `group_chapters_history_type=BySource`.
 - Other current enum preferences retain the legacy member names used by reader navigation inversion, reader chrome hiding, secure-screen behavior, and Recents download badges.
 
 All eight enum-backed accessors in `PreferencesHelper` now use the Hayai-owned compatible decoder. It resolves current names first, then a declared legacy alias, then the accessor's normal default. It never calls `Enum.valueOf`, and it does not rewrite unknown stored data.
 
-`BySource` maps to `BySeries` until the full source-header and source-section behavior is rebuilt against current J2K Recents. Removed legacy themes (`DOKI`, `SAKURA`, `PINK_ROMANCE`, `SUMI_E`, `KIMONO`, `WAGASHI`, `NORDIC`, and `ROSE`) safely resolve to the current light or dark theme default. This is a compatibility fallback, not a claim that those visual themes were ported.
+`BySource` is a live History grouping mode again. Legacy saved values now decode to the restored enum member, then render source sections through current J2K Recents rows. Removed legacy themes (`DOKI`, `SAKURA`, `PINK_ROMANCE`, `SUMI_E`, `KIMONO`, `WAGASHI`, `NORDIC`, and `ROSE`) safely resolve to the current light or dark theme default. This is a compatibility fallback, not a claim that those visual themes were ported.
 
 ## Dormant removed keys
 

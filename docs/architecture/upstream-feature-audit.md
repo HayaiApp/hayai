@@ -45,7 +45,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
 | Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | exact J2K shell and native renderer verified on emulator; WebView, prepend, and incognito emulator flows pending |
 | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
 | Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership and separate management entry points | implemented unverified; compile and emulator install flows pending |
-| LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
+| LNReader JavaScript repository sources | Hayai manager, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
 | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
 | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
 | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
@@ -68,7 +68,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
 | Capability | Hayai boundary | Status |
 |---|---|---|
 | Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
-| Group History by source | Legacy `BySource` is decoded safely and projected to J2K `BySeries` without rewriting the stored value | audit; exact source sections, source headers, and source actions remain |
+| Group History by source | Restored `BySource` enum mode with J2K Recents rows, source headers, source icons, per-section hide action, and legacy preference compatibility | port |
 | Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, and isolated nightly publishing | implemented unverified; hosted nightly run pending |
 | Localized Hayai interface | `hayai_` Android resources, typed presentation failures, a reviewed nonlocalizable-literal inventory, per-locale coverage, and deterministic SY translation imports | implemented; static gate verified; translation coverage remains incomplete and is reported per locale |
 | Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
