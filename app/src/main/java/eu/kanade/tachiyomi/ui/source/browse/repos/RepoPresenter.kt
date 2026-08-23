@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.ui.source.browse.repos
 
 import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.api.ExtensionApi
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
@@ -19,7 +18,6 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 class RepoPresenter(
     private val controller: RepoController,
-    private val contentKind: ContentKind,
     private val preferences: PreferencesHelper = Injekt.get(),
     private val novelRepositories: NovelApkRepositoryRegistry = Injekt.get(),
 ) : BaseCoroutinePresenter<RepoController>() {
@@ -30,34 +28,14 @@ class RepoPresenter(
      * repo.json pointer resolved to) - no filename or path pattern is assumed.
      */
     private val repos: Set<String>
-        get() =
-            preferences
-                .extensionRepos()
-                .get()
-                .let { all ->
-                    if (contentKind == ContentKind.Novel) {
-                        all.intersect(novelRepositories.repositoriesNow())
-                    } else {
-                        all - novelRepositories.novelOnlyRepositoriesNow()
-                    }
-                }
-                .sorted()
-                .toSet()
+        get() = preferences.extensionRepos().get().sorted().toSet()
 
     private suspend fun addRepo(url: String) {
-        if (contentKind == ContentKind.Novel) {
-            novelRepositories.add(url)
-        } else {
-            novelRepositories.addMangaOwnership(url)
-        }
+        novelRepositories.addGlobal(url)
     }
 
     private suspend fun removeRepo(url: String) {
-        if (contentKind == ContentKind.Novel) {
-            novelRepositories.remove(url)
-        } else {
-            novelRepositories.removeMangaOwnership(url)
-        }
+        novelRepositories.removeGlobal(url)
     }
 
     /**
@@ -90,8 +68,7 @@ class RepoPresenter(
             try {
                 val resolvedUrl = ExtensionApi().validateRepo(repo)
                 if (resolvedUrl != repo) {
-                    removeRepo(repo)
-                    addRepo(resolvedUrl)
+                    novelRepositories.replaceGlobal(repo, resolvedUrl)
                 }
             } catch (e: CancellationException) {
                 throw e
