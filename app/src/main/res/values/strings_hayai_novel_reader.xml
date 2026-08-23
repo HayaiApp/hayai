@@ -153,6 +153,12 @@
     <string name="hayai_novel_selection_define">Define</string>
     <string name="hayai_novel_selection_google_translate">Google Translate</string>
     <string name="hayai_novel_selection_search_web">Search web</string>
+    <string name="hayai_novel_lookup_query_blank">Select text to look up</string>
+    <string name="hayai_novel_lookup_query_too_long">The selection is too long for a web lookup</string>
+    <string name="hayai_novel_lookup_load_failed">The lookup page could not be loaded.</string>
+    <string name="hayai_novel_lookup_browser_unavailable">No browser can open this page.</string>
+    <string name="hayai_novel_lookup_blocked_navigation">Only secure web pages can open in the lookup sheet.</string>
+    <string name="hayai_novel_lookup_renderer_failed">The lookup page closed after its web process stopped.</string>
     <string name="hayai_novel_reader_translate_chapter">Translate chapter</string>
     <string name="hayai_novel_reader_chapter_statistics">Chapter statistics</string>
     <string name="hayai_novel_reader_toggle_offline">Save or remove offline copy</string>
