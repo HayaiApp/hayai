@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.plugin
 
 import android.content.Context
 import android.content.SharedPreferences
+import dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryDefaults
 import dev.ahmedmohamed.hayai.novel.error.NovelFailure
 import dev.ahmedmohamed.hayai.novel.error.novelFailure
 import dev.ahmedmohamed.hayai.novel.error.novelRequire
@@ -59,11 +60,24 @@ class NovelPluginManager(
             .build()
     private val mutex = Mutex()
     private val sourceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val _catalog = MutableStateFlow(NovelPluginCatalog(repositories = store.repositories(), installed = store.installed()))
+    private val _catalog = MutableStateFlow(NovelPluginCatalog(repositories = repositoriesWithFirstRunDefault(), installed = store.installed()))
     val catalog: StateFlow<NovelPluginCatalog> = _catalog.asStateFlow()
 
     init {
         rebuildAndPublish(_catalog.value)
+    }
+
+    private fun repositoriesWithFirstRunDefault(): List<NovelPluginRepository> {
+        val bootstrap = appContext.getSharedPreferences(BOOTSTRAP_PREFERENCES, Context.MODE_PRIVATE)
+        if (!bootstrap.getBoolean(DEFAULT_REPOSITORY_SEEDED, false)) {
+            val url = ExtensionRepositoryDefaults.LNREADER_NOVELS
+            if (store.repositories().none { it.url == url }) {
+                store.saveRepository(NovelPluginRepository("LNReader", url, enabled = true))
+                trustStore.trustUnsigned(url)
+            }
+            bootstrap.edit().putBoolean(DEFAULT_REPOSITORY_SEEDED, true).commit()
+        }
+        return store.repositories()
     }
 
     suspend fun refresh(): NovelPluginCatalog =
@@ -340,5 +354,7 @@ class NovelPluginManager(
     companion object {
         private const val MAX_REPOSITORY_BYTES = 4L * 1024 * 1024
         private const val MAX_REPOSITORY_PLUGINS = 10_000
+        private const val BOOTSTRAP_PREFERENCES = "hayai_novel_plugin_bootstrap"
+        private const val DEFAULT_REPOSITORY_SEEDED = "default_lnreader_repository_seeded"
     }
 }

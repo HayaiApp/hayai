@@ -9,6 +9,7 @@ import eu.davidea.flexibleadapter.items.AbstractSectionableItem
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.model.InstallStep
+import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.source.CatalogueSource
 
 /**
@@ -22,6 +23,7 @@ data class ExtensionItem(
     val header: ExtensionGroupItem? = null,
     val installStep: InstallStep? = null,
     val session: PackageInstaller.SessionInfo? = null,
+    val apkInstalled: Extension.Installed? = null,
 ) : AbstractSectionableItem<ExtensionHolder, ExtensionGroupItem>(header) {
     val sessionProgress: Int?
         get() = (session?.progress?.times(100)?.toInt())

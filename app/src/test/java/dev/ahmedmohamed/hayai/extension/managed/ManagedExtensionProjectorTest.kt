@@ -4,6 +4,7 @@ import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
 import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.extension.model.Extension
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -21,6 +22,8 @@ class ManagedExtensionProjectorTest {
         )
 
         assertEquals(setOf("apk:same", "js:same"), state.available.map { it.key.stableValue }.toSet())
+        assertEquals(setOf(ContentKind.Manga), state.available.single { it.key.stableValue == "apk:same" }.contentKinds)
+        assertEquals(setOf(ContentKind.Novel), state.available.single { it.key.stableValue == "js:same" }.contentKinds)
     }
 
     @Test
@@ -35,6 +38,10 @@ class ManagedExtensionProjectorTest {
         )
 
         assertEquals(setOf("apk:adult.apk", "js:offline-js"), state.installed.map { it.key.stableValue }.toSet())
+        assertEquals(
+            setOf(ContentKind.Manga),
+            state.installed.single { it.key.stableValue == "apk:adult.apk" }.contentKinds,
+        )
     }
 
     @Test
