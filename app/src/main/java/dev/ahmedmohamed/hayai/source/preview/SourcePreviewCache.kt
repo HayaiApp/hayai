@@ -86,7 +86,7 @@ class SourcePreviewCache(private val context: Context) {
         .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        const val LISTING_SCHEMA = "v2"
+        const val LISTING_SCHEMA = "v3"
         const val MAX_IMAGE_BYTES = 12 * 1024 * 1024
         const val MAX_CACHE_BYTES = 75L * 1024L * 1024L
     }

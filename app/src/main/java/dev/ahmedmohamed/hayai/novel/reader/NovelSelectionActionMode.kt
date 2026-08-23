@@ -7,11 +7,12 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.annotation.IdRes
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import eu.kanade.tachiyomi.R
 
 internal enum class NovelSelectionMenuPlacement {
-    IfRoom,
+    Always,
     Overflow,
 }
 
@@ -19,6 +20,7 @@ internal data class NovelSelectionMenuEntry(
     val action: NovelSelectionAction,
     @IdRes val itemId: Int,
     @StringRes val titleRes: Int,
+    @DrawableRes val iconRes: Int,
     val placement: NovelSelectionMenuPlacement,
 )
 
@@ -28,25 +30,29 @@ internal object NovelSelectionActionMenu {
             NovelSelectionMenuEntry(
                 NovelSelectionAction.SaveQuote,
                 R.id.hayai_novel_selection_save_quote,
-                R.string.hayai_novel_reader_save_selected_quote,
-                NovelSelectionMenuPlacement.IfRoom,
+                R.string.hayai_novel_reader_quote,
+                R.drawable.ic_format_quote_24dp,
+                NovelSelectionMenuPlacement.Always,
             ),
             NovelSelectionMenuEntry(
                 NovelSelectionAction.Define,
                 R.id.hayai_novel_selection_define,
                 R.string.hayai_novel_selection_define,
-                NovelSelectionMenuPlacement.IfRoom,
+                R.drawable.ic_search_24dp,
+                NovelSelectionMenuPlacement.Always,
             ),
             NovelSelectionMenuEntry(
                 NovelSelectionAction.GoogleTranslate,
                 R.id.hayai_novel_selection_google_translate,
                 R.string.hayai_novel_selection_google_translate,
-                NovelSelectionMenuPlacement.IfRoom,
+                R.drawable.ic_translate_24dp,
+                NovelSelectionMenuPlacement.Always,
             ),
             NovelSelectionMenuEntry(
                 NovelSelectionAction.SearchWeb,
                 R.id.hayai_novel_selection_search_web,
                 R.string.hayai_novel_selection_search_web,
+                R.drawable.ic_search_24dp,
                 NovelSelectionMenuPlacement.Overflow,
             ),
         )
@@ -60,9 +66,10 @@ internal object NovelSelectionActionMenu {
             if (menu.findItem(entry.itemId) == null) {
                 menu
                     .add(Menu.NONE, entry.itemId, CUSTOM_ITEM_ORDER + order, context.getString(entry.titleRes))
+                    .setIcon(entry.iconRes)
                     .setShowAsAction(
                         when (entry.placement) {
-                            NovelSelectionMenuPlacement.IfRoom -> MenuItem.SHOW_AS_ACTION_IF_ROOM
+                            NovelSelectionMenuPlacement.Always -> MenuItem.SHOW_AS_ACTION_ALWAYS
                             NovelSelectionMenuPlacement.Overflow -> MenuItem.SHOW_AS_ACTION_NEVER
                         },
                     )
@@ -79,10 +86,11 @@ internal object NovelSelectionActionModes {
     fun wrap(
         context: Context,
         delegate: ActionMode.Callback? = null,
+        readOnly: () -> Boolean = { true },
         onAction: (NovelSelectionAction, ActionMode) -> Unit,
         onSelectionModeChanged: (Boolean) -> Unit,
     ): ActionMode.Callback {
-        val state = CallbackState(context, delegate, onAction, onSelectionModeChanged)
+        val state = CallbackState(context, delegate, readOnly, onAction, onSelectionModeChanged)
         val delegateCallback2 = delegate as? ActionMode.Callback2
         return if (delegateCallback2 != null) {
             object : ActionMode.Callback2() {
@@ -121,6 +129,7 @@ internal object NovelSelectionActionModes {
     private class CallbackState(
         private val context: Context,
         private val delegate: ActionMode.Callback?,
+        private val readOnly: () -> Boolean,
         private val onAction: (NovelSelectionAction, ActionMode) -> Unit,
         private val onSelectionModeChanged: (Boolean) -> Unit,
     ) {
@@ -129,6 +138,7 @@ internal object NovelSelectionActionModes {
         fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
             val created = delegate?.onCreateActionMode(mode, menu) ?: true
             if (!created) return false
+            removeEditingActions(menu)
             NovelSelectionActionMenu.addMissing(context, menu)
             if (!selectionModeActive) {
                 selectionModeActive = true
@@ -139,7 +149,15 @@ internal object NovelSelectionActionModes {
 
         fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
             val delegateChanged = delegate?.onPrepareActionMode(mode, menu) == true
+            removeEditingActions(menu)
             return NovelSelectionActionMenu.addMissing(context, menu) || delegateChanged
+        }
+
+        private fun removeEditingActions(menu: Menu) {
+            if (!readOnly()) return
+            menu.removeItem(android.R.id.cut)
+            menu.removeItem(android.R.id.paste)
+            menu.removeItem(android.R.id.pasteAsPlainText)
         }
 
         fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {

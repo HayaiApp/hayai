@@ -30,6 +30,20 @@ internal class EhCategoriesFilter(context: Context, excluded: Set<EhCategory>) :
         context.getString(R.string.hayai_eh_filter_categories_exclude),
         EhCategory.entries.map { EhCategoryFilter(context, it, it in excluded) },
     )
+internal class EhAdvancedFilter(context: Context) :
+    Filter.Group<Filter<*>>(
+        context.getString(R.string.hayai_eh_filter_advanced_options),
+        listOf(
+            EhExpungedFilter(context),
+            EhTorrentFilter(context),
+            EhRatingFilter(context),
+            EhMinimumPagesFilter(context),
+            EhMaximumPagesFilter(context),
+            EhDisableLanguageFilter(context),
+            EhDisableUploaderFilter(context),
+            EhDisableTagFilter(context),
+        ),
+    )
 internal class EhTagFilter(context: Context) :
     Filter.Text(context.getString(R.string.hayai_eh_filter_tags)),
     SourceTagCompletionFilter {
@@ -64,23 +78,27 @@ internal class EhJumpFilter(context: Context) : Filter.Text(context.getString(R.
 internal fun ehFilterList(context: Context, preferences: EhPreferences): FilterList = FilterList(
     Filter.Header(context.getString(R.string.hayai_eh_filter_toplist_warning)),
     EhToplistFilter(context),
+    Filter.Separator(),
+    EhTagFilter(context),
     EhWatchedFilter(context, preferences.watchedListDefault.get()),
     EhCategoriesFilter(context, preferences.excludedCategories()),
-    EhTagFilter(context),
-    EhExpungedFilter(context),
-    EhTorrentFilter(context),
-    EhRatingFilter(context),
-    EhMinimumPagesFilter(context),
-    EhMaximumPagesFilter(context),
-    EhDisableLanguageFilter(context),
-    EhDisableUploaderFilter(context),
-    EhDisableTagFilter(context),
+    EhAdvancedFilter(context),
     EhReverseFilter(context),
     EhJumpFilter(context),
 )
 
+internal fun Iterable<Filter<*>>.flattenEhFilterTree(): Sequence<Filter<*>> = sequence {
+    this@flattenEhFilterTree.forEach { filter ->
+        yield(filter)
+        if (filter is Filter.Group<*>) {
+            @Suppress("UNCHECKED_CAST")
+            yieldAll(filter.state.filterIsInstance<Filter<*>>().flattenEhFilterTree())
+        }
+    }
+}
+
 internal fun FilterList.toEhSpec(query: String, context: Context): EhSearchSpec {
-    fun <T : Filter<*>> one(type: Class<T>): T? = firstOrNull { type.isInstance(it) }?.let(type::cast)
+    fun <T : Filter<*>> one(type: Class<T>): T? = flattenEhFilterTree().firstOrNull(type::isInstance)?.let(type::cast)
     val toplist = EhToplist.entries.getOrElse(one(EhToplistFilter::class.java)?.state ?: 0) { EhToplist.None }
     if (toplist != EhToplist.None) return EhSearchSpec(toplist = toplist)
     require(query.length <= 1_024) { context.getString(R.string.hayai_eh_filter_query_too_long) }

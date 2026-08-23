@@ -37,37 +37,25 @@ internal class NovelPluginStore(
             }
 
     fun saveRepository(repository: NovelPluginRepository) {
-        val values =
-            ContentValues(3).apply {
-                put("base_url", repository.url)
-                put("name", repository.name)
-                put("enabled", repository.enabled)
-            }
-        val exists =
-            database
-                .lowLevel()
-                .rawQuery(
-                    RawQuery
-                        .builder()
-                        .query("SELECT 1 FROM hayai_novel_repos WHERE base_url = ?")
-                        .args(repository.url)
-                        .build(),
-                ).use { it.moveToFirst() }
-        if (exists) {
-            check(
-                database.lowLevel().update(
-                    UpdateQuery
-                        .builder()
-                        .table("hayai_novel_repos")
-                        .where("base_url = ?")
-                        .whereArgs(repository.url)
-                        .build(),
-                    values,
-                ) > 0,
-            )
-        } else {
-            check(database.lowLevel().insert(InsertQuery.builder().table("hayai_novel_repos").build(), values) >= 0)
-        }
+        database.lowLevel().executeSQL(
+            RawQuery
+                .builder()
+                .query("INSERT OR REPLACE INTO hayai_novel_repos(base_url, name, enabled) VALUES (?, ?, ?)")
+                .args(repository.url, repository.name, repository.enabled)
+                .build(),
+        )
+    }
+
+    fun addRepositoryIfAbsent(repository: NovelPluginRepository) {
+        // First-run defaults can race migration/bootstrap work. Let the existing row win so
+        // its user/imported name and enabled state are never replaced by synthetic defaults.
+        database.lowLevel().executeSQL(
+            RawQuery
+                .builder()
+                .query("INSERT OR IGNORE INTO hayai_novel_repos(base_url, name, enabled) VALUES (?, ?, ?)")
+                .args(repository.url, repository.name, repository.enabled)
+                .build(),
+        )
     }
 
     fun removeRepository(url: String) {

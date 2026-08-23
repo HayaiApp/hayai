@@ -35,6 +35,14 @@ Legacy `search_metadata`, `search_tags`, and `search_titles` are promoted once t
 - Favorites mutations are journaled before remote writes, remotely confirmed, then applied to J2K state in one local transaction.
 - Background work uses unique WorkManager jobs, bounded retries, and ordinary network/charging constraints without manual wake or Wi-Fi locks.
 
+## SY presentation and preview parity
+
+The source filter materializes SY's recognizable hierarchy—toplists, tag completion, watched list, collapsible Genres to exclude, collapsible Advanced options, reverse, and jump/seek—then recursively reduces that tree into Hayai's single validated `EhSearchSpec`. Grouping does not create another search model or alter the stored category/default-filter preferences.
+
+Page-preview parsing follows the sprite-first order at SY commit `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`: an inner CSS background sprite and crop win over a nested placeholder image, direct HTTPS images are fallback assets, and `blank.gif` is never cached as a gallery page. The standalone J2K-hosted controller exposes previous, next, and direct-page movement with one-based UI pages and zero-based E-Hentai request parameters. Preview cache schema `v3` invalidates listings created by the old blank-placeholder precedence.
+
+The normal J2K manga-details screen owns the enclosing lifecycle. Its small adapter delegates metadata and preview jobs, stale-generation rejection, rendering, and bitmap cleanup to the Hayai-owned `SourceDetailsHost`. Hayai supplies two independent anchors in both phone and tablet-land layouts: the typed SY metadata summary appears before the generic description, and preview rows appear after the description/tags. A failure in either provider hides only that surface.
+
 ## Completion gate
 
 The port is complete only when browse, search filters, details, revisions, pages, URL import, login/logout, remote configuration, metadata backup, batch import, favorites synchronization, and gallery updates work end to end. Pure fixtures cover compact and extended result layouts, malformed/challenge pages, revision cycles, page quota, filter encoding, cookies, metadata promotion, backup compatibility, sync conflicts, interruption, and retry. The final boundary check must leave `App.kt` and `MainActivity.kt` unchanged. The only approved `ReaderActivity` change is the documented initial-page extra read owned by `ReaderLauncher`.
