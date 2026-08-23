@@ -38,8 +38,9 @@ class SourceHolder(
         val showLanguage = source.includeLangInName(adapter.enabledLanguages, adapter.extensionManager)
         val sourceName = if (showLanguage && (underPinnedSection || underLastUsedSection)) source.toString() else source.name
         binding.title.text = sourceName
-        binding.sourceBadge.text = SourcePresentation.badgeText(itemView.context, source)
-        binding.sourceBadge.isVisible = binding.sourceBadge.text != null
+        val badgeText = SourcePresentation.badgeText(itemView.context, source)
+        binding.sourceBadge.text = badgeText
+        binding.sourceBadge.isVisible = !badgeText.isNullOrBlank()
 
         binding.sourcePin.apply {
             iconTint =
