@@ -140,6 +140,8 @@ class RecentMangaAdapter(
 
         fun onRemoveHistoryClicked(position: Int)
 
+        fun onHideSourceClicked(sourceId: Long)
+
         fun onSubChapterClicked(
             position: Int,
             chapter: Chapter,

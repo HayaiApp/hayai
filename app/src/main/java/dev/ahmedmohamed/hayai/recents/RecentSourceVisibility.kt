@@ -53,6 +53,14 @@ class RecentSourceVisibility(
         }
     }
 
+    fun hideSource(
+        surface: RecentSurface,
+        sourceId: Long,
+    ) {
+        require(surface != RecentSurface.Mixed)
+        replaceHiddenSources(surface, hiddenSourceIds(surface) + sourceId)
+    }
+
     fun changes(): Flow<Unit> =
         combine(hiddenInHistory.changes(), hiddenInUpdates.changes()) { _, _ -> Unit }
 

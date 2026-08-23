@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.recents
 
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.recents.RecentSourceGrouper
 import dev.ahmedmohamed.hayai.recents.RecentSourceVisibility
 import dev.ahmedmohamed.hayai.recents.RecentSurface
 import eu.kanade.tachiyomi.R
@@ -66,6 +67,7 @@ class RecentsPresenter(
     private val newChaptersHeader = RecentMangaHeaderItem(RecentMangaHeaderItem.NEW_CHAPTERS)
     private val continueReadingHeader =
         RecentMangaHeaderItem(RecentMangaHeaderItem.CONTINUE_READING)
+    private val sourceHeaders = mutableMapOf<Long, RecentMangaHeaderItem>()
     var finished = false
     private var shouldMoveToTop = false
     var viewType: RecentsViewType = RecentsViewType.valueOf(preferences.recentsViewType().get())
@@ -80,6 +82,7 @@ class RecentsPresenter(
         shouldMoveToTop = true
         pageOffset = 0
         expandedSectionsMap.clear()
+        sourceHeaders.clear()
     }
 
     private var pageOffset = 0
@@ -297,7 +300,39 @@ class RecentsPresenter(
                                 }
                             }
                     } else {
-                        items.executeOnIO()
+                        val historyItems = items.executeOnIO()
+                        if (groupChaptersHistory.isBySource) {
+                            historyItems
+                                .groupBy { it.manga.id to it.manga.source }
+                                .mapNotNull { (key, mchs) ->
+                                    val manga = mchs.first().manga
+                                    val chapters =
+                                        mchs
+                                            .map { mch ->
+                                                ChapterHistory(mch.chapter, mch.history)
+                                            }.filterChaptersByScanlators(manga)
+                                    extraCount += mchs.size - chapters.size
+                                    if (chapters.isEmpty()) return@mapNotNull null
+                                    val existingItem =
+                                        recentItems
+                                            .takeLast(ENDLESS_LIMIT)
+                                            .find { key == (it.manga_id to it.mch.manga.source) }
+                                            ?.takeIf { updatePageCount }
+                                    val sort =
+                                        Comparator<ChapterHistory> { c1, c2 ->
+                                            c2.history!!.last_read.compareTo(c1.history!!.last_read)
+                                        }
+                                    val (sortedChapters, firstChapter, subCount) =
+                                        setupExtraChapters(existingItem, chapters, sort)
+                                    extraCount += subCount
+                                    if (firstChapter == null) return@mapNotNull null
+                                    mchs.find { firstChapter.id == it.chapter.id }?.also {
+                                        it.extraChapters = sortedChapters
+                                    }
+                                }
+                        } else {
+                            historyItems
+                        }
                     }
                 }
                 RecentsViewType.Updates -> {
@@ -468,7 +503,9 @@ class RecentsPresenter(
                             ?.last_read ?: 0L
                     }.flatten()
             } else {
-                if (viewType.isUpdates) {
+                if (viewType.isHistory && groupChaptersHistory.isBySource) {
+                    pairs.map { RecentMangaItem(it.first, it.second, sourceHeaderFor(it.first.manga.source)) }
+                } else if (viewType.isUpdates) {
                     val map =
                         TreeMap<Date, MutableList<Pair<MangaChapterHistory, Chapter>>> { d1, d2 ->
                             d2.compareTo(d1)
@@ -487,11 +524,25 @@ class RecentsPresenter(
                     pairs.map { RecentMangaItem(it.first, it.second, null) }
                 }
             }
-        recentItems =
+        val accumulatedItems =
             if (isOnFirstPage || !updatePageCount) {
                 newItems
             } else {
                 recentItems + newItems
+            }
+        recentItems =
+            if (viewType.isHistory && groupChaptersHistory.isBySource) {
+                RecentSourceGrouper
+                    .sections(
+                        rows = accumulatedItems,
+                        sourceId = { it.mch.manga.source },
+                        recency = { it.mch.history.last_read },
+                    ).flatMap { section ->
+                        val header = sourceHeaderFor(section.sourceId)
+                        section.rows.onEach { it.header = header }
+                    }
+            } else {
+                accumulatedItems
             }
         val newCount =
             itemCount +
@@ -564,6 +615,15 @@ class RecentsPresenter(
         }
         return Triple(sortedChapters, firstChapter, extraCount)
     }
+
+    private fun sourceHeaderFor(sourceId: Long): RecentMangaHeaderItem =
+        sourceHeaders.getOrPut(sourceId) {
+            RecentMangaHeaderItem(
+                recentsType = RecentMangaHeaderItem.SOURCE,
+                sourceId = sourceId,
+                sourceName = Injekt.get<SourceManager>().getOrStub(sourceId).name,
+            )
+        }
 
     private fun getNextChapter(
         manga: Manga,
@@ -828,14 +888,27 @@ class RecentsPresenter(
         }
     }
 
+    fun hideSource(sourceId: Long): Boolean {
+        val surface =
+            when (viewType) {
+                RecentsViewType.History -> RecentSurface.History
+                RecentsViewType.Updates -> RecentSurface.Updates
+                RecentsViewType.GroupedAll, RecentsViewType.UngroupedAll -> return false
+        }
+        sourceVisibility.hideSource(surface, sourceId)
+        return true
+    }
+
     enum class GroupType {
         BySeries,
         ByWeek,
         ByDay,
+        BySource,
         Never,
         ;
 
         val isByTime get() = this == ByWeek || this == ByDay
+        val isBySource get() = this == BySource
     }
 
     companion object {

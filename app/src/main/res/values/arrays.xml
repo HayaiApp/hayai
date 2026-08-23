@@ -94,6 +94,7 @@
         <item>@string/by_series</item>
         <item>@string/by_week</item>
         <item>@string/by_day</item>
+        <item>@string/hayai_by_source</item>
         <item>@string/never</item>
     </string-array>
 
