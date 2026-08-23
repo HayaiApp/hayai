@@ -16,12 +16,18 @@ data class SourceBrowsePresentation(
     val language: String? = null,
     val pageCount: Int? = null,
     val postedAtMillis: Long? = null,
+    val layout: SourceBrowseLayout = SourceBrowseLayout.Default,
 ) {
     init {
         require(rating == null || rating in 0.0..5.0)
         require(pageCount == null || pageCount > 0)
         require(postedAtMillis == null || postedAtMillis >= 0)
     }
+}
+
+enum class SourceBrowseLayout {
+    Default,
+    DetailedList,
 }
 
 interface SourceBrowsePresentationProvider {

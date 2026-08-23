@@ -284,6 +284,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.Network("E-Hentai request failed", failure)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", (page - 1).toString())
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.removeAllQueryParameters("nw")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("tl", requireNotNull(toplist.requestValue).toString())
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_apply", "Apply Filter")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_cats", spec.excludedCategories.sumOf { it.exclusionBit }.toString())
@@ -484,6 +485,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistence
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt	val exists = query("SELECT 1 FROM $table WHERE $where LIMIT 1", *whereArgs).use(Cursor::moveToFirst)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt	where = "slot = ?",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt	where = "source_id = ? AND manga_url = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	.firstOrNull { it.namespace.equals("language", ignoreCase = true) }
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"chinese" to "zh",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"dutch" to "nl",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"english" to "en",
@@ -499,6 +501,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentat
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"spanish" to "es",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"thai" to "th",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	"vietnamese" to "vi",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	metadata.title.any { it in '\u3040'..'\u30ff' } -> "ja"
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	metadata.title.any { it in '\u3400'..'\u9fff' } -> "zh"
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/presentation/EhBrowsePresentation.kt	metadata.title.any { it in '\uac00'..'\ud7af' } -> "ko"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhCookieStore.kt	const val EH_ORIGIN = "https://e-hentai.org"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhCookieStore.kt	const val EXH_ORIGIN = "https://exhentai.org"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhCookieStore.kt	const val FORUMS_ORIGIN = "https://forums.e-hentai.org"
@@ -578,7 +583,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	priv
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	private val exhAppliedFingerprint = store.getString("hayai_eh_remote_settings_fingerprint_exh", "")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	private val settingsLanguages = store.getString("eh_settings_languages", DEFAULT_LANGUAGES)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	val DEFAULT_LANGUAGES = List(EhLanguage.entries.size) { "false*false*false" }.joinToString("\n")
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	val enhancedView: Preference<Boolean> = store.getBoolean("enhanced_e_hentai_view", true)
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	val enhancedBrowseView: Preference<Boolean> = store.getBoolean("enhanced_e_hentai_view", true)
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	val enhancedGalleryDetails: Preference<Boolean> = store.getBoolean("hayai_eh_enhanced_gallery_details", true)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	val favoritesConflictPolicy: Preference<String> = store.getString("hayai_eh_favorites_conflict_policy", "stop")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	val favoritesLenient: Preference<Boolean> = store.getBoolean("eh_lenient_sync", false)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt	val favoritesReadOnly: Preference<Boolean> = store.getBoolean("eh_sync_read_only", false)
@@ -1127,6 +1133,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlan.kt	TableCopy
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlan.kt	TableCopyPlan("novel_repos", "hayai_novel_repos", columns("base_url", "name")),
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt	const val KEY_REQUESTED = "retry_requested"
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt	const val PREFERENCES_NAME = "hayai_legacy_migration"
+app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	"""
+app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	""".trimIndent()
+app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	fun isChallengeResult(result: String?): Boolean = result == "true"
+app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	private val markers = listOf("window._cf_chl_opt", "Ray ID is")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.associateBy { it.attr("id") }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.filter { it.normalName() == "li" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.filter { it.normalName() == "navpoint" }
@@ -2954,7 +2964,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecod
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	.joinToString("") { "%02x".format(it) }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v3"
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v4"
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val images = File(root, "images").apply { mkdirs() }

@@ -1,6 +1,7 @@
 package dev.ahmedmohamed.hayai.adult.eh.ui
 
 import android.content.Intent
+import android.content.Context
 import android.text.InputType
 import android.widget.EditText
 import androidx.annotation.StringRes
@@ -32,6 +33,7 @@ import dev.ahmedmohamed.hayai.adult.eh.presentation.localizedEhMessage
 import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdatePolicy
 import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateStateStore
 import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateWorker
+import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddController
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.setting.SettingsController
@@ -43,6 +45,7 @@ import eu.kanade.tachiyomi.ui.setting.switchPreference
 import eu.kanade.tachiyomi.ui.setting.titleRes
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
+import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import uy.kohesive.injekt.injectLazy
@@ -56,7 +59,8 @@ class EhSettingsController : SettingsController() {
     private val favoritesSync by injectLazy<EhFavoritesSyncService>()
     private val ehPersistence by injectLazy<HayaiEhPersistenceStore>()
     private val verifier by lazy { EhSessionVerifier(network.client) }
-    private val galleryUpdateStore by lazy { EhGalleryUpdateStateStore(requireNotNull(activity), ehPersistence) }
+    private lateinit var settingsContext: Context
+    private lateinit var galleryUpdateStore: EhGalleryUpdateStateStore
 
     private lateinit var status: Preference
     private lateinit var recheck: Preference
@@ -79,6 +83,8 @@ class EhSettingsController : SettingsController() {
     private var retrySites = emptySet<EhSite>()
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
+        settingsContext = context
+        galleryUpdateStore = EhGalleryUpdateStateStore(context.applicationContext, ehPersistence)
         titleRes = R.string.hayai_eh_settings_title
         preferenceCategory {
             status = preference {
@@ -187,11 +193,18 @@ class EhSettingsController : SettingsController() {
                 onChange { ehPreferences.watchedListDefault.set(it as Boolean); true }
             }
             switchPreference {
+                title = getString(R.string.hayai_eh_enhanced_browse_view)
+                summary = getString(R.string.hayai_eh_enhanced_browse_view_summary)
+                isPersistent = false
+                isChecked = ehPreferences.enhancedBrowseView.get()
+                onChange { ehPreferences.enhancedBrowseView.set(it as Boolean); true }
+            }
+            switchPreference {
                 title = getString(R.string.hayai_eh_enhanced_gallery_details)
                 summary = getString(R.string.hayai_eh_enhanced_gallery_details_summary)
                 isPersistent = false
-                isChecked = ehPreferences.enhancedView.get()
-                onChange { ehPreferences.enhancedView.set(it as Boolean); true }
+                isChecked = ehPreferences.enhancedGalleryDetails.get()
+                onChange { ehPreferences.enhancedGalleryDetails.set(it as Boolean); true }
             }
             watchedTags = preference {
                 title = getString(R.string.hayai_eh_manage_watched_tags)
@@ -205,6 +218,11 @@ class EhSettingsController : SettingsController() {
                         ),
                     )
                 }
+            }
+            preference {
+                title = getString(R.string.hayai_enhanced_batch_settings_title)
+                summary = getString(R.string.hayai_enhanced_batch_settings_summary)
+                onClick { router.pushController(EnhancedBatchAddController().withFadeTransaction()) }
             }
         }
 
@@ -770,7 +788,7 @@ class EhSettingsController : SettingsController() {
 
     private fun dialog() = requireNotNull(activity).materialAlertDialog()
 
-    private fun getString(@StringRes id: Int, vararg args: Any): String = requireNotNull(resources).getString(id, *args)
+    private fun getString(@StringRes id: Int, vararg args: Any): String = settingsContext.resources.getString(id, *args)
 
     companion object {
         private const val LOGIN_REQUEST = 4101

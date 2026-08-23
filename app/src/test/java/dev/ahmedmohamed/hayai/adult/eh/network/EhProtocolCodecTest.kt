@@ -17,7 +17,7 @@ import org.junit.Test
 
 class EhProtocolCodecTest {
     @Test
-    fun `preview page number is encoded as a gallery query parameter`() {
+    fun `preview page omits the one-shot warning bypass that resets pagination`() {
         val url =
             EhRequestBuilder.previews(
                 EhSite.EHentai,
@@ -25,7 +25,7 @@ class EhProtocolCodecTest {
                 page = 2,
             )
 
-        assertEquals("https://e-hentai.org/g/123/token/?nw=always&p=2", url.toString())
+        assertEquals("https://e-hentai.org/g/123/token/?p=2", url.toString())
     }
 
     @Test

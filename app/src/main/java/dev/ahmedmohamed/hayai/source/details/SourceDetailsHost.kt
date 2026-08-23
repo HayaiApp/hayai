@@ -16,6 +16,7 @@ import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataUi
 import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
 import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
 import dev.ahmedmohamed.hayai.source.preview.SourcePreviewBitmapDecoder
+import dev.ahmedmohamed.hayai.source.preview.SyPagePreviewLayout
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.util.system.launchIO
@@ -220,10 +221,17 @@ class SourceDetailsHost(
             setOnClickListener { actions.onPreview(preview) }
         }
         val image = ImageView(parent.context).apply {
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = context.getDrawable(R.drawable.hayai_page_preview_shape)
+            clipToOutline = true
         }
-        cell.addView(image, LinearLayout.LayoutParams((120 * density).toInt(), (200 * density).toInt()))
+        cell.addView(
+            image,
+            LinearLayout.LayoutParams(
+                (SyPagePreviewLayout.PREVIEW_WIDTH_DP * density).toInt(),
+                (SyPagePreviewLayout.PREVIEW_HEIGHT_DP * density).toInt(),
+            ),
+        )
         cell.addView(TextView(parent.context).apply { text = preview.index.toString() })
         val expected = identity
         imageJobs += scope.launchIO {
@@ -243,10 +251,7 @@ class SourceDetailsHost(
     private fun previewColumns(container: View): Int {
         val width = container.width.takeIf { it > 0 } ?: container.resources.displayMetrics.widthPixels
         val density = container.resources.displayMetrics.density
-        val horizontalPadding = (16 * density).toInt()
-        val minimumCell = (120 * density).toInt()
-        val spacing = (16 * density).toInt()
-        return ((width - horizontalPadding + spacing) / (minimumCell + spacing)).coerceAtLeast(1)
+        return SyPagePreviewLayout.columns(width, density)
     }
 
     private fun releaseImages() {

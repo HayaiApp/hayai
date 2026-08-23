@@ -30,7 +30,7 @@ class EhDetailsPreviewLoader(
     private val text = EhTextResolver(context)
     override fun owns(manga: Manga): Boolean =
         preferences.hentaiFeaturesEnabled.get() &&
-            ehPreferences.enhancedView.get() &&
+            ehPreferences.enhancedGalleryDetails.get() &&
             EhSite.entries.any { it.sourceId == manga.source }
 
     override suspend fun load(manga: Manga, page: Int, cacheControl: CacheControl?): SourcePreviewPage {

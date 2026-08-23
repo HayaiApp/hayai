@@ -6,6 +6,7 @@ import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
+import dev.ahmedmohamed.hayai.source.presentation.SourceBrowsePresentation
 
 /**
  * Generic class used to hold the displayed data of a manga in the catalogue.
@@ -19,6 +20,7 @@ abstract class BrowseSourceHolder(
 ) : BaseFlexibleViewHolder(view, adapter) {
     /** Whether this entry duplicates one already in the library from another source. */
     var isDuplicateInLibrary = false
+    var sourcePresentation: SourceBrowsePresentation? = null
 
     /**
      * Method called from [CatalogueAdapter.onBindViewHolder]. It updates the data for this

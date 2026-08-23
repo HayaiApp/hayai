@@ -27,6 +27,21 @@
             app:navigationIcon="@drawable/ic_close_24dp"
             app:layout_scrollFlags="scroll|enterAlways" />
 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/cloudflare_help"
+            style="?textAppearanceBodyMedium"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="8dp"
+            android:background="@drawable/hayai_cloudflare_warning_shape"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:padding="16dp"
+            android:text="@string/hayai_cloudflare_help"
+            android:textColor="?attr/colorOnError"
+            android:visibility="gone" />
+
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
