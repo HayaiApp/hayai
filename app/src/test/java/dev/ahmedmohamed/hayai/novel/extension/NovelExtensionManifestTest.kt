@@ -60,6 +60,11 @@ class NovelExtensionManifestTest {
     }
 
     @Test
+    fun `android float metadata is normalized before extension compatibility checks`() {
+        assertEquals(1.6, NovelExtensionManifest.libraryVersion("1.6.9", 1.6f)!!, 0.0)
+    }
+
+    @Test
     fun `class candidates support relative and migrated Tsundoku namespaces`() {
         assertEquals(
             listOf("org.example.extension.Source"),

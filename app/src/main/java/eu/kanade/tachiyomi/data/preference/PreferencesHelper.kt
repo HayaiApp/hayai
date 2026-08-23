@@ -350,7 +350,11 @@ class PreferencesHelper(
 
     fun automaticExtUpdates() = flowPrefs.getBoolean(Keys.automaticExtUpdates, true)
 
-    fun extensionRepos() = flowPrefs.getStringSet("extension_repos", emptySet())
+    fun extensionRepos() =
+        flowPrefs.getStringSet(
+            "extension_repos",
+            dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryDefaults.manga,
+        )
 
     /**
      * Cached display metadata (proper name, website, discord) for extension repos, keyed by

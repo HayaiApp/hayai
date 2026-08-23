@@ -338,7 +338,7 @@ class BrowseController :
     }
 
     private fun updateSheetMenu() {
-        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition == 0
+        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition < 2
         binding.bottomSheet.sheetToolbar.title =
             if (!onExtensionTab) {
                 binding.bottomSheet.root.currentSourceTitle
@@ -522,6 +522,9 @@ class BrowseController :
         binding.bottomSheet.root.sheetBehavior
             ?.peekHeight = 56.spToPx + padding
         binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            bottomMargin = -pad.toInt()
+        }
+        binding.bottomSheet.root.novelExtensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
             bottomMargin = -pad.toInt()
         }
         binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {

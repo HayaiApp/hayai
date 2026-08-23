@@ -42,6 +42,9 @@ internal object ExtensionLoader {
 
     const val LIB_VERSION_MIN = 1.3
     const val LIB_VERSION_MAX = 1.6
+    private const val METADATA_SOURCE_CLASS = "tachiyomi.extension.class"
+    private const val METADATA_SOURCE_FACTORY = "tachiyomi.extension.factory"
+    private const val METADATA_NSFW = "tachiyomi.extension.nsfw"
     private const val NOVEL_EXTENSION_PACKAGE_PREFIX = "eu.kanade.tachiyomi.novelextension"
 
     @Suppress("DEPRECATION")
@@ -323,12 +326,24 @@ internal object ExtensionLoader {
         val pkgName = pkgInfo.packageName
         val metadata = appInfo.metaData
 
+        val requiredFeatures = pkgInfo.reqFeatures.orEmpty().mapNotNull { it.name }.toSet()
+        val manifest = NovelExtensionManifest.resolve(requiredFeatures, metadata?.keySet().orEmpty())
+        if (manifest == null) {
+            Timber.w("Missing supported extension feature for $pkgName")
+            return LoadResult.Error(ApkLoadFailure(pkgName, reason = ApkLoadFailure.Reason.UnsupportedManifest))
+        }
+
         val extName =
-            NovelExtensionManifest
-                .displayName(
-                    applicationLabel = pkgManager.getApplicationLabel(appInfo).toString(),
-                    metadataName = metadata?.getString(NovelExtensionManifest.DISPLAY_NAME_KEY),
-                ).ifBlank { pkgName }
+            if (manifest.isNovel) {
+                NovelExtensionManifest
+                    .displayName(
+                        applicationLabel = pkgManager.getApplicationLabel(appInfo).toString(),
+                        metadataName = metadata?.getString(NovelExtensionManifest.DISPLAY_NAME_KEY),
+                    ).ifBlank { pkgName }
+            } else {
+                // Keep standard APK identity exactly on J2K's path.
+                pkgManager.getApplicationLabel(appInfo).toString().substringAfter("Tachiyomi: ")
+            }
         val versionName = pkgInfo.versionName
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
         fun failure(reason: ApkLoadFailure.Reason) =
@@ -340,23 +355,22 @@ internal object ExtensionLoader {
         }
 
         // Validate lib version
-        val manifestLibVersion =
-            metadata
-                ?.takeIf { it.containsKey(NovelExtensionManifest.EXTENSION_LIB_KEY) }
-                ?.getFloat(NovelExtensionManifest.EXTENSION_LIB_KEY)
-        val libVersion = NovelExtensionManifest.libraryVersion(versionName, manifestLibVersion)
+        val libVersion =
+            if (manifest.isNovel) {
+                val manifestLibVersion =
+                    metadata
+                        ?.takeIf { it.containsKey(NovelExtensionManifest.EXTENSION_LIB_KEY) }
+                        ?.getFloat(NovelExtensionManifest.EXTENSION_LIB_KEY)
+                NovelExtensionManifest.libraryVersion(versionName, manifestLibVersion)
+            } else {
+                // This is J2K's authoritative decoding rule for manga APK extensions.
+                versionName.substringBeforeLast('.').toDoubleOrNull()
+            }
         if (libVersion == null || libVersion < LIB_VERSION_MIN || libVersion > LIB_VERSION_MAX) {
             Timber.w(
                 "Lib version is $libVersion, while only versions $LIB_VERSION_MIN to $LIB_VERSION_MAX are allowed",
             )
             return failure(ApkLoadFailure.Reason.UnsupportedLibrary)
-        }
-
-        val requiredFeatures = pkgInfo.reqFeatures.orEmpty().mapNotNull { it.name }.toSet()
-        val manifest = NovelExtensionManifest.resolve(requiredFeatures, metadata?.keySet().orEmpty())
-        if (manifest == null) {
-            Timber.w("Missing supported extension feature for $extName ($pkgName)")
-            return failure(ApkLoadFailure.Reason.UnsupportedManifest)
         }
 
         val signatures = getSignatures(pkgInfo)
@@ -383,8 +397,12 @@ internal object ExtensionLoader {
         }
 
         val isNsfw =
-            (metadata?.getInt(NovelExtensionManifest.CONTENT_WARNING_KEY) ?: 0) > 0 ||
-                (metadata?.getInt(manifest.nsfwKey) ?: 0) == 1
+            if (manifest.isNovel) {
+                (metadata?.getInt(NovelExtensionManifest.CONTENT_WARNING_KEY) ?: 0) > 0 ||
+                    (metadata?.getInt(manifest.nsfwKey) ?: 0) == 1
+            } else {
+                metadata?.getInt(METADATA_NSFW) == 1
+            }
         if (!loadNsfwSource && isNsfw) {
             Timber.w("NSFW extension $pkgName not allowed")
             return failure(ApkLoadFailure.Reason.AdultSourcesDisabled)
@@ -398,9 +416,10 @@ internal object ExtensionLoader {
                 return failure(ApkLoadFailure.Reason.ClassLoader)
             }
 
-        val declaredClasses = metadata?.getString(manifest.classKey)
+        val classMetadataKey = if (manifest.isNovel) manifest.classKey else METADATA_SOURCE_CLASS
+        val declaredClasses = metadata?.getString(classMetadataKey)
         if (declaredClasses.isNullOrBlank()) {
-            Timber.w("Missing ${manifest.classKey} for extension $extName ($pkgName)")
+            Timber.w("Missing $classMetadataKey for extension $extName ($pkgName)")
             return failure(ApkLoadFailure.Reason.ClassMetadata)
         }
 
@@ -410,8 +429,14 @@ internal object ExtensionLoader {
                 .map(String::trim)
                 .filter(String::isNotEmpty)
                 .flatMap { declaredClass ->
+                    val candidates =
+                        if (manifest.isNovel) {
+                            NovelExtensionManifest.classCandidates(declaredClass, pkgInfo.packageName)
+                        } else {
+                            listOf(if (declaredClass.startsWith('.')) pkgInfo.packageName + declaredClass else declaredClass)
+                        }
                     var lastClassError: ClassNotFoundException? = null
-                    for (className in NovelExtensionManifest.classCandidates(declaredClass, pkgInfo.packageName)) {
+                    for (className in candidates) {
                         try {
                             val obj = Class.forName(className, false, classLoader).getDeclaredConstructor().newInstance()
                             return@flatMap when (obj) {
@@ -431,7 +456,7 @@ internal object ExtensionLoader {
                     return failure(ApkLoadFailure.Reason.SourceConstruction)
                 }
 
-        if (sources.isEmpty()) {
+        if (manifest.isNovel && sources.isEmpty()) {
             Timber.w("Extension $extName ($pkgName) did not declare any source classes")
             return failure(ApkLoadFailure.Reason.EmptySources)
         }
@@ -463,7 +488,7 @@ internal object ExtensionLoader {
                 isNsfw = isNsfw,
                 isNovel = manifest.isNovel,
                 sources = sources,
-                pkgFactory = metadata.getString(manifest.factoryKey),
+                pkgFactory = metadata?.getString(if (manifest.isNovel) manifest.factoryKey else METADATA_SOURCE_FACTORY),
                 icon = appInfo.loadIcon(pkgManager),
                 isShared = extensionInfo.isShared,
             )

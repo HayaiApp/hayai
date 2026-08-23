@@ -191,7 +191,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	privat
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val RATING_TEXT = Regex("(?:rating[: ]+)?([0-5](?:\\.[0-9]+)?)", RegexOption.IGNORE_CASE)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val RETRY_TOKEN = Regex("['\"]([A-Za-z0-9_-]{1,128})['\"]")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_HEIGHT = Regex("height\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)px\\s+(-?\\d+)px", RegexOption.IGNORE_CASE)
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)(?:px)?\\s+(-?\\d+)(?:px)?", RegexOption.IGNORE_CASE)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_URL = Regex("url\\(([^)]+)\\)", RegexOption.IGNORE_CASE)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_WIDTH = Regex("width\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	ratingCount = document.selectFirst("#rating_count")?.text()?.trim()?.toIntOrNull(),
@@ -227,7 +227,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	title.
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	title.contains("sad panda") || document.selectFirst("img[src*=sadpanda]") != null ->
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	translated = languageText?.endsWith("TR", ignoreCase = true),
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	uploader = document.selectFirst("#gdn")?.text()?.trim()?.takeIf(String::isNotEmpty),
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val cells = document.select("#gdt .gdtm, #gdt .gdtl")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val cells = document.select("#gdt .gdtm, #gdt .gdtl, #gdt > a[href]")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val compactInfo = row.selectFirst(".gl2c")?.select("div div")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val current = location.queryParameter("p")?.toIntOrNull() ?: 0
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val direct = image?.absUrl(if (image.hasAttr("data-src")) "data-src" else "src").orEmpty()
@@ -244,8 +244,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val in
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val info = row.selectFirst(".gl3e")?.select("div")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val key = parseGalleryKey(link.attr("href"))
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val languageText = fields["language"]?.text()?.trim()?.takeIf(String::isNotEmpty)
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = cell.selectFirst("a[href]")?.absUrl("href").orEmpty()
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = linkElement?.absUrl("href").orEmpty()
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = row.selectFirst(".gl3c > a[href*=/g/], .gl2e > div > a[href*=/g/], a[href*=/g/]")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val linkElement = cell.takeIf { it.`is`("a[href]") } ?: cell.selectFirst("a[href]")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val linkText = if (reverse) "prev" else "next"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val listingPage = runCatching { URI(location).query.orEmpty().split('&').firstOrNull { it.startsWith("p=") }?.substringAfter('=')?.toInt() }.getOrNull() ?: 0
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val namespace = rowNamespace ?: titled.substringBefore(':', "").trim().lowercase().takeIf(String::isNotEmpty)
@@ -281,8 +282,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	it.he
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.AuthenticationRequired("Sign in and verify ExHentai access in Hayai settings")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.Network("E-Hentai image request failed", failure)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.Network("E-Hentai request failed", failure)
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	val url = site.baseUrl + key.normalizedPath + "&p=$page"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", (page - 1).toString())
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("tl", requireNotNull(toplist.requestValue).toString())
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_apply", "Apply Filter")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_cats", spec.excludedCategories.sumOf { it.exclusionBit }.toString())
@@ -605,13 +606,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt	S
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt	Size2400("ovrs_2400", "5"),
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt	Size780("low", "1"),
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt	Size980("med", "2"),
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	}.joinToString("\n")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	}.onFailure { Timber.w(it, "Unable to persist E-Hentai metadata for source %d", id) }
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	add("\n${context.getString(R.string.hayai_eh_description_tags)}\n" + metadata.tags.groupBy { it.namespace }.entries.joinToString("\n") { (namespace, tags) ->
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	add(context.getString(R.string.hayai_eh_description_rating, "%.2f".format(rating), votes))
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	addAll(tags.map { "${it.namespace}: ${it.name}" })
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	genre = tags.map { "${it.namespace}: ${it.name}" }
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	if (!query.contains("/g/")) return null
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	if (metadata.translated == true) context.getString(R.string.hayai_eh_description_translated) else "",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	metadata.averageRating?.let { put("averageRating", it) }
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	metadata.category?.let { put("category", it) }
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	metadata.favoriteCount?.let { put("favoriteCount", it) }
@@ -952,6 +949,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	where = "s
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	where = "source_id = ? AND manga_url = ?",
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt	"hayai-quote-v1",
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt	).joinToString("\u0000")
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	"https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json"
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	const val CURSED_MANGA = "https://raw.githubusercontent.com/mojuru/cursed-manga-repo/repo/index.pb"
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	const val KEIYOUSHI_MANGA = "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb"
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "apk:$packageName"
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "js:$pluginId"
+app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt	js.repositoryErrors.forEach { (url, error) -> add(ManagedExtensionNotice("js-repository:$url", error.message ?: error::class.java.simpleName)) }
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt	.getInstance("SHA-256")
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt	.joinToString("") { byte -> "%02x".format(byte) }
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt	.plus("hayai_legacy_rows")
@@ -1376,12 +1379,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	zip.t
 app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	zip.text("OEBPS/content.opf", packageDocument(book, allAssets))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	zip.text("OEBPS/nav.xhtml", navigation(book))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	zip.text("OEBPS/toc.ncx", ncx(book))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	actual.startsWith(configured.substringBeforeLast('/').trimEnd('/') + "/")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	const val KEY = "urls_v1"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	const val OWNED_KEY = "owned_global_urls_v1"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	novelRequire(uri?.scheme == "https" && uri.host != null && uri.userInfo == null, NovelFailure.Code.ExtensionRepositoryHttps)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	private val tags = context.getSharedPreferences("hayai_novel_apk_repositories", Context.MODE_PRIVATE)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	val untrustedNovel = untrusted.filter { it.pkgName in fromNovelRepos.map(Extension.Available::pkgName) || it.pkgName.contains(".novel.") }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	.removePrefix("Tachiyomi: ")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	.removePrefix("Tsundoku: ")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	const val CONTENT_WARNING_KEY = "tachiyomix.contentWarning"
@@ -1507,6 +1507,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	@Su
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	@Suppress("SetJavaScriptEnabled")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	binding.webview.loadUrl("about:blank")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	private fun Uri.isAllowedWebUri() = scheme.equals("https", ignoreCase = true) && !host.isNullOrBlank()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	private const val BOOTSTRAP_PREFERENCES = "hayai_novel_plugin_bootstrap"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	private const val DEFAULT_REPOSITORY_SEEDED = "default_lnreader_repository_seeded"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	store.saveRepository(NovelPluginRepository("LNReader", url, enabled = true))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	?: "other"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"arabic" to "ar",
@@ -1990,10 +1993,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	val type = settingObj["type"]?.jsonPrimitive?.content ?: "Text"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	value.replace(Regex("/{2,}"), "/")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	when (obj["status"]?.jsonPrimitive?.content) {
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	append(descriptor.lang).append(" · ").append(descriptor.id)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	if (installed != null) append(" · ").append(context.getString(R.string.installed))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	key = "hayai.plugin.repository.${repository.url.hashCode()}"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	private var query = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	.observesTables("hayai_quotes")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	.query("SELECT $COLUMNS FROM hayai_quotes WHERE manga_id = ? ORDER BY timestamp DESC, quote_id")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	"quote_id, manga_id, novel_name, chapter_name, displayed_content, original_content, translated_content, language, timestamp"
@@ -2956,7 +2955,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecod
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	.joinToString("") { "%02x".format(it) }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v2"
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val images = File(root, "images").apply { mkdirs() }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val listings = File(root, "listings").apply { mkdirs() }
@@ -3016,15 +3016,3 @@ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	return apk
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	STABLE("HayaiApp/hayai"),
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	val apkLinks = downloadLinks.filter { it.substringAfterLast('/').endsWith(".apk", ignoreCase = true) }
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	val match = Regex("^v?(\\d+(?:\\.\\d+)*)(?:-[A-Za-z]+(\\d+))?$").matchEntire(value) ?: return null
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)(?:px)?\\s+(-?\\d+)(?:px)?", RegexOption.IGNORE_CASE)
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val cells = document.select("#gdt .gdtm, #gdt .gdtl, #gdt > a[href]")
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = linkElement?.absUrl("href").orEmpty()
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val linkElement = cell.takeIf { it.`is`("a[href]") } ?: cell.selectFirst("a[href]")
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	genre = tags.map { "${it.namespace}: ${it.name}" }
-app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "apk:$packageName"
-app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "js:$pluginId"
-app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt	js.repositoryErrors.forEach { (url, error) -> add(ManagedExtensionNotice("js-repository:$url", error.message ?: error::class.java.simpleName)) }
-app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt	key = "hayai.plugin.repository.${repository.url.hashCode()}"
-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v2"
-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
