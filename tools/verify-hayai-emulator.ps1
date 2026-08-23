@@ -128,6 +128,15 @@ function Dismiss-CompatibilityWarning {
         Tap-Node "Don't Show Again" "00-compatibility-warning-dismiss"
     }
 }
+function Dismiss-ImmersiveModePrompt {
+    try {
+        $window = Dump-Window "00-immersive-mode-prompt"
+        $button = Find-NodeOptional $window "^Got it$"
+        if ($button) { Tap-WindowNode $button "Got it" }
+    } catch {
+        Write-Warning "Immersive-mode prompt inspection was unavailable; continuing with reader readiness checks. $($_.Exception.Message)"
+    }
+}
 function Capture([string] $Name) {
     $remote = "/sdcard/$Name.png"
     Invoke-Adb @("shell", "screencap", "-p", $remote) | Out-Null
@@ -278,6 +287,7 @@ try {
     Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
     Start-Sleep -Seconds 2
     Dismiss-CompatibilityWarning
+    Dismiss-ImmersiveModePrompt
     Start-Sleep -Seconds 1
     $readerWindow = Dump-Window "02-novel-reader-actions"
     [void](Find-Node $readerWindow "Verification Novel")
@@ -323,7 +333,7 @@ try {
     $advancedWindow = Dump-Window "07-reader-advanced"
     [void](Find-Node $advancedWindow "Content")
     [void](Find-Node $advancedWindow "Use EPUB styles")
-    [void](Find-Node $advancedWindow "Move Previous chapter down")
+    [void](Find-Node $advancedWindow "^Previous chapter$")
     Capture "07-reader-settings-advanced"
     Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
     Start-Sleep -Seconds 3
@@ -331,16 +341,20 @@ try {
     Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
     Start-Sleep -Seconds 2
     Dismiss-CompatibilityWarning
+    Dismiss-ImmersiveModePrompt
     Start-Sleep -Seconds 1
     Assert-Node "Offline" "09-offline-after-restart"
     Capture "09-offline-after-restart"
 
-    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity") | Out-Null
-    Start-Sleep -Seconds 1
-    Dismiss-CompatibilityWarning
-    Start-Sleep -Seconds 1
+    Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
+    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity") | Out-Null
+    Start-Sleep -Seconds 2
+    Tap-Node "^More$" "07-eh-more"
+    Tap-Node "^Settings$" "07-eh-settings"
+    Tap-NodeAfterSwiping "^Advanced$" "07-eh-advanced"
+    Tap-NodeAfterSwiping "^E-Hentai and ExHentai$" "07-eh-account"
     if ($SkipAuthenticatedEh) {
-        Assert-Node "E-Hentai|ExHentai|Log in|credentials" "10-eh-logged-out"
+        Assert-Node "Logged out|credentials" "10-eh-logged-out"
         Capture "10-eh-logged-out"
     } else {
         Tap-Node "Recheck current credentials" "07-eh-recheck"
@@ -375,6 +389,8 @@ try {
     [void](Find-Node $browseWindow "^Manga$")
     [void](Find-Node $browseWindow "^Novels$")
     [void](Find-Node $browseWindow "^E-Hentai$")
+    [void](Find-Node $browseWindow "^Extensions$")
+    [void](Find-Node $browseWindow "^Migration$")
     Capture "16-browse"
 
     Database-Report "17-final"

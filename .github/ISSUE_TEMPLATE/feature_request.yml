@@ -1,13 +1,13 @@
 name: 🌟 Feature request
-description: Suggest a feature to improve TachiyomiJ2K
-labels: [feature]
+description: Suggest a feature to improve Hayai
+labels: [enhancement]
 body:
 
   - type: textarea
     id: feature-description
     attributes:
       label: Describe your suggested feature
-      description: How can TachiyomiJ2K be improved?
+      description: What problem should Hayai solve, and how should it behave?
       placeholder: |
         Example:
           "It should work like this..."
@@ -31,14 +31,9 @@ body:
           required: true
         - label: I have written a short but informative title.
           required: true
-        - label: If this is an request for a feature in the original Tachiyomi, I am opening because multiple versions of TachiyomiJ2K have been released without this feature.
-          required: true
-        - label: If this is an issue with an extension, or a request for an extension, I should be checking the [extensions FAQ](https://mihon.app/docs/faq/browse/extensions) instead.
-          required: true
-        - label: I have updated the app to version **[1.8.1](https://github.com/Jays2Kings/tachiyomiJ2K/releases/latest)**.
+        - label: I have checked the [Hayai wiki](https://github.com/HayaiApp/hayai/wiki) and current feature audit.
           required: true
         - label: I have checked through the app settings for my feature.
           required: true
-        - label: I have admitted that I am a clown by having checked this box, as I have not read these acknowledgements.
         - label: I will fill out all of the requested information in this form.
           required: true
