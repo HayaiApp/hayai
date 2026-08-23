@@ -86,6 +86,18 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
 
+      - name: Verify signed minified APK startup on Android 12
+        uses: ReactiveCircus/android-emulator-runner@c9c93e6ba9c4194322e114c40970d5983d9a07cc # v2.38.0
+        with:
+          api-level: 31
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: >-
+            pwsh -File tools/verify-apk-startup.ps1
+            -Apk app/build/outputs/apk/standard/nightly/app-standard-x86_64-nightly-unsigned-signed.apk
+            -PackageId dev.ahmedmohamed.hayai.nightly
+
       - name: Prepare release assets
         shell: bash
         run: |
