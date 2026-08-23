@@ -25,7 +25,7 @@ internal data class NovelRenderBlock(
 
 internal enum class NovelBlockPlacement { ReplaceAll, Before, After }
 
-internal data class NovelSelection(
+data class NovelSelection(
     val documentText: String,
     val selectedText: String,
     val prefix: String,
@@ -33,7 +33,7 @@ internal data class NovelSelection(
     val occurrence: Int,
 )
 
-internal enum class NovelSelectionAction {
+enum class NovelSelectionAction {
     SaveQuote,
     Define,
     GoogleTranslate,
