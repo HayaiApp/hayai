@@ -845,6 +845,14 @@ class RecentsController(
         onItemLongClick(position)
     }
 
+    override fun onHideSourceClicked(sourceId: Long) {
+        if (presenter.hideSource(sourceId)) {
+            view?.snack(R.string.source_hidden, Snackbar.LENGTH_SHORT) {
+                anchorView = activityBinding?.bottomNav
+            }
+        }
+    }
+
     override fun onSubChapterClicked(
         position: Int,
         chapter: Chapter,

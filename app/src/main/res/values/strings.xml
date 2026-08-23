@@ -312,6 +312,7 @@
     <string name="by_series">By series</string>
     <string name="by_week">By week</string>
     <string name="by_day">By day</string>
+    <string name="hayai_by_source">By source</string>
     <string name="uniform_covers">Uniform covers</string>
     <string name="affects_library_grid">Affects library grid covers</string>
     <string name="only_unread">Only unread</string>

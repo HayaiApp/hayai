@@ -42,9 +42,22 @@ class RecentSourceVisibilityTest {
         assertEquals(setOf("3", "1"), updates.get())
     }
 
+    @Test
+    fun `hiding one source appends it to the selected surface only`() {
+        visibility.hideSource(RecentSurface.History, 9)
+
+        assertEquals(setOf("1", "-2", "9"), history.get())
+        assertEquals(setOf("3", "1"), updates.get())
+    }
+
     @Test(expected = IllegalStateException::class)
     fun `mixed view cannot be edited independently`() {
         visibility.replaceHiddenSources(RecentSurface.Mixed, setOf(1))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `mixed view cannot hide a source independently`() {
+        visibility.hideSource(RecentSurface.Mixed, 1)
     }
 }
 

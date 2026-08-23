@@ -45,7 +45,11 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsPresenter.kt"
+        # Approved in docs/architecture/j2k-reset.md. Adds the source-header hide event to the existing Recents adapter delegate.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaAdapter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Reuses J2K's existing Recents header for source sections.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaHeaderItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt"

@@ -448,7 +448,6 @@ class PreferencesHelper(
         flowPrefs.getCompatibleEnum(
             "group_chapters_history_type",
             RecentsPresenter.GroupType.ByWeek,
-            legacyAliases = mapOf("BySource" to RecentsPresenter.GroupType.BySeries),
         )
 
     fun collapseGroupedHistory() = flowPrefs.getBoolean("collapse_group_history", true)
