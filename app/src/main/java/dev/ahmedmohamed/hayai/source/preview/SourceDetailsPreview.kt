@@ -72,7 +72,9 @@ class SourceDetailsPreviewRegistry(
         val chapterIds = database.getChapters(manga).executeAsBlocking().mapNotNull { it.id }
         val key = cache.listingKey(manga, chapterIds, page)
         if (cacheControl != CacheControl.FORCE_NETWORK) cache.readListing(key)?.let { return it }
-        return provider(manga).load(manga, page, cacheControl).also { cache.writeListing(key, it) }
+        return provider(manga).load(manga, page, cacheControl).also {
+            runCatching { cache.writeListing(key, it) }
+        }
     }
 
     override suspend fun loadImage(
@@ -82,7 +84,9 @@ class SourceDetailsPreviewRegistry(
     ): ByteArray {
         val key = preview.cacheIdentity(manga.source)
         if (cacheControl != CacheControl.FORCE_NETWORK) cache.readImage(key)?.let { return it }
-        return provider(manga).loadImage(manga, preview, cacheControl).also { cache.writeImage(key, it) }
+        return provider(manga).loadImage(manga, preview, cacheControl).also {
+            runCatching { cache.writeImage(key, it) }
+        }
     }
 
     fun clearCache(): Int = cache.clear()

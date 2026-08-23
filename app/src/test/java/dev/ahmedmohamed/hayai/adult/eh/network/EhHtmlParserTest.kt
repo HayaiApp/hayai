@@ -47,6 +47,30 @@ class EhHtmlParserTest {
     }
 
     @Test
+    fun `page previews parse current direct anchor sprite layout`() {
+        val html = """
+            <html><body><div id="gdt">
+              <a href="https://e-hentai.org/s/live/123-20">
+                <div title="Page 20" style="width:120px;height:180px;background:transparent url(https://ehgt.org/live.webp) -0px 0 no-repeat"></div>
+              </a>
+            </div></body></html>
+        """.trimIndent()
+
+        val preview = EhHtmlParser.parsePreviews(
+            html,
+            "https://e-hentai.org/g/123/token/?p=0",
+            EhSite.EHentai,
+        ).single()
+
+        assertEquals(20, preview.index)
+        assertEquals("https://ehgt.org/live.webp", preview.imageUrl)
+        assertEquals(0, preview.crop?.x)
+        assertEquals(0, preview.crop?.y)
+        assertEquals(120, preview.crop?.width)
+        assertEquals(180, preview.crop?.height)
+    }
+
+    @Test
     fun `preview page rejects an oversized response instead of silently truncating it`() {
         val cells = (1..3).joinToString("") { index ->
             "<div class='gdtl'><a href='https://e-hentai.org/s/hash/100-$index'><img alt='$index' src='https://ehgt.org/$index.jpg'></a></div>"

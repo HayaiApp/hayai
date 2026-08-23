@@ -5,10 +5,25 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchCursor
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchSpec
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhToplist
+import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 object EhRequestBuilder {
+    fun previews(
+        site: EhSite,
+        key: GalleryKey,
+        page: Int,
+    ): HttpUrl {
+        require(page in 0..199)
+        return key
+            .absoluteUrl(site)
+            .toHttpUrl()
+            .newBuilder()
+            .addQueryParameter("p", page.toString())
+            .build()
+    }
+
     fun latest(site: EhSite, cursor: EhSearchCursor.Gallery? = null): HttpUrl =
         site.baseUrl.toHttpUrl().newBuilder().apply {
             cursor?.let { addQueryParameter("next", it.id.value) }
