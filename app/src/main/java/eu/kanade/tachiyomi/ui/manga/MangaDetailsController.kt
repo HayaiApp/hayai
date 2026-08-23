@@ -868,6 +868,9 @@ class MangaDetailsController :
 
     //region Recycler methods
     fun updateChapterDownload(download: Download) {
+        if (download.status == Download.State.DOWNLOADED && novelIntegration.isNovel(download.manga)) {
+            adapter?.setNovelOfflineChapter(download.chapter.id, isOffline = true)
+        }
         getHolder(download.chapter)?.notifyStatus(
             download.status,
             presenter.isLockedFromSearch,
@@ -1621,10 +1624,6 @@ class MangaDetailsController :
 
     private fun downloadChapters(chapters: List<ChapterItem>) {
         val view = view ?: return
-        if (novelIntegration.isNovel(presenter.manga)) {
-            downloadNovelChapters(chapters)
-            return
-        }
         presenter.downloadChapters(chapters)
         val text =
             view.context.getString(
@@ -1660,36 +1659,14 @@ class MangaDetailsController :
         }
     }
 
-    private fun downloadNovelChapters(chapters: List<ChapterItem>) {
-        if (chapters.isEmpty()) return
-        val manga = presenter.manga
-        viewScope.launchIO {
-            val result = novelOfflineManager.download(manga, chapters.map(ChapterItem::chapter))
-            val downloaded = novelOfflineManager.downloadedChapterIds(manga, presenter.chapters.map(ChapterItem::chapter))
-            withUIContext {
-                adapter?.setNovelOfflineChapterIds(downloaded)
-                val message =
-                    when {
-                        result.failures.isNotEmpty() -> "Saved ${result.completed}; ${result.failures.size} failed"
-                        result.unavailableAssets > 0 -> "Saved ${result.completed}; ${result.unavailableAssets} embedded assets were unavailable"
-                        else -> "Saved ${result.completed} novel chapter${if (result.completed == 1) "" else "s"} offline"
-                    }
-                view?.context?.toast(message)
-            }
-        }
-    }
-
     private fun removeNovelChapters(chapters: List<ChapterItem>) {
         if (chapters.isEmpty()) return
         val manga = presenter.manga
         viewScope.launchIO {
-            val result = novelOfflineManager.remove(manga, chapters.map(ChapterItem::chapter))
+            novelOfflineManager.remove(manga, chapters.map(ChapterItem::chapter))
             val downloaded = novelOfflineManager.downloadedChapterIds(manga, presenter.chapters.map(ChapterItem::chapter))
             withUIContext {
                 adapter?.setNovelOfflineChapterIds(downloaded)
-                view?.context?.toast(
-                    if (result.failures.isEmpty()) "Removed ${result.completed} offline novel chapter${if (result.completed == 1) "" else "s"}" else "Removed ${result.completed}; ${result.failures.size} failed",
-                )
             }
         }
     }
@@ -1750,8 +1727,8 @@ class MangaDetailsController :
             onItemClick(null, position)
             return
         }
-        if (novelIntegration.isNovel(presenter.manga)) {
-            if (adapter?.isNovelOffline(chapter.chapter.id) == true) removeNovelChapters(listOf(chapter)) else downloadNovelChapters(listOf(chapter))
+        if (novelIntegration.isNovel(presenter.manga) && adapter?.isNovelOffline(chapter.chapter.id) == true) {
+            removeNovelChapters(listOf(chapter))
             return
         }
         if (chapter.status != Download.State.NOT_DOWNLOADED && chapter.status != Download.State.ERROR) {

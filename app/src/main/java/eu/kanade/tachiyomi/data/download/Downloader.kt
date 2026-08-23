@@ -9,6 +9,8 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.core.net.toUri
 import com.hippo.unifile.UniFile
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadDelegate
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadQueueSource
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.database.models.Chapter
@@ -85,6 +87,7 @@ class Downloader(
 ) {
     private val preferences: PreferencesHelper by injectLazy()
     private val chapterCache: ChapterCache by injectLazy()
+    private val novelDownloads by lazy { NovelDownloadDelegate(context, sourceManager) }
 
     /**
      * Store for persisting downloads across restarts.
@@ -124,7 +127,15 @@ class Downloader(
 
     init {
         launchNow {
-            val chapters = async { store.restore() }
+            val chapters =
+                async {
+                    store
+                        .restore()
+                        .filterNot { download ->
+                            novelDownloads.handles(download.source) &&
+                                novelDownloads.isDownloaded(download.manga, download.chapter)
+                        }
+                }
             queue.addAll(chapters.await())
             DownloadJob.callListeners()
         }
@@ -324,14 +335,22 @@ class Downloader(
             return@launchIO
         }
 
-        val source = sourceManager.get(manga.source) as? HttpSource ?: return@launchIO
+        val source = sourceManager.get(manga.source) ?: return@launchIO
+        val queueSource = NovelDownloadQueueSource.from(source) ?: return@launchIO
+        val novelStorage = novelDownloads.handles(source)
         val wasEmpty = queue.isEmpty()
         // Called in background thread, the operation can be slow with SAF.
         val chaptersWithoutDir =
             async {
                 chapters
                     // Filter out those already downloaded.
-                    .filter { provider.findChapterDir(it, manga, source) == null }
+                    .filter { chapter ->
+                        if (novelStorage) {
+                            !novelDownloads.isDownloaded(manga, chapter)
+                        } else {
+                            provider.findChapterDir(chapter, manga, source) == null
+                        }
+                    }
                     // Add chapters to queue from the start.
                     .sortedByDescending { it.source_order }
             }
@@ -343,7 +362,7 @@ class Downloader(
                 // Filter out those already enqueued.
                 .filter { chapter -> queue.none { it.chapter.id == chapter.id } }
                 // Create a download for each one.
-                .map { Download(source, manga, it) }
+                .map { Download(queueSource, manga, it) }
 
         if (chaptersToQueue.isNotEmpty()) {
             // Adding to the queue is enough - a running job re-picks off its state
@@ -382,6 +401,11 @@ class Downloader(
      * @param download the chapter to be downloaded.
      */
     private suspend fun downloadChapter(download: Download) {
+        if (novelDownloads.handles(download.source)) {
+            downloadNovelChapter(download)
+            return
+        }
+
         val mangaDir = provider.getMangaDir(download.manga, download.source)
 
         val availSpace = DiskUtil.getAvailableStorageSpace(mangaDir)
@@ -473,6 +497,30 @@ class Downloader(
             if (error is CancellationException) throw error
             // If the page list threw, it will resume here
             Timber.e(error)
+            download.status = Download.State.ERROR
+            notifier.onError(error.message, chapName, download.manga.title)
+        }
+    }
+
+    private suspend fun downloadNovelChapter(download: Download) {
+        val page = download.pages?.singleOrNull() ?: Page(0, download.chapter.url)
+        page.progress = 0
+        page.status = Page.State.DOWNLOAD_IMAGE
+        download.pages = listOf(page)
+        download.status = Download.State.DOWNLOADING
+
+        val chapName = download.chapter.preferredChapterName(context, download.manga, preferences)
+        try {
+            novelDownloads.save(download.manga, download.chapter)
+            page.progress = 100
+            page.status = Page.State.READY
+            notifier.onProgressChange(download)
+            download.status = Download.State.DOWNLOADED
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            Timber.e(error)
+            page.progress = 0
+            page.status = Page.State.ERROR
             download.status = Download.State.ERROR
             notifier.onError(error.message, chapName, download.manga.title)
         }

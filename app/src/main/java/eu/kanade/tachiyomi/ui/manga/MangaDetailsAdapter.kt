@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.TextView
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.ItemTouchHelper
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadPresentationState
 import dev.ahmedmohamed.hayai.novel.integration.NovelChapterPresentation
 import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import eu.davidea.flexibleadapter.items.IFlexible
@@ -74,9 +75,27 @@ class MangaDetailsAdapter(
     fun setNovelOfflineChapterIds(chapterIds: Set<Long>) {
         novelOfflineChapterIds = chapterIds
         items.forEach { item ->
-            item.status = if (item.chapter.id in chapterIds) eu.kanade.tachiyomi.data.download.model.Download.State.DOWNLOADED else eu.kanade.tachiyomi.data.download.model.Download.State.NOT_DOWNLOADED
+            val isOffline = item.chapter.id in chapterIds
+            if (isOffline || item.download?.status == eu.kanade.tachiyomi.data.download.model.Download.State.DOWNLOADED) {
+                item.download = null
+            }
+            item.status = NovelDownloadPresentationState.merge(item.status, isOffline)
         }
         notifyDataSetChanged()
+    }
+
+    fun setNovelOfflineChapter(
+        chapterId: Long?,
+        isOffline: Boolean,
+    ) {
+        if (chapterId == null) return
+        val updated =
+            if (isOffline) {
+                novelOfflineChapterIds + chapterId
+            } else {
+                novelOfflineChapterIds - chapterId
+            }
+        if (updated != novelOfflineChapterIds) setNovelOfflineChapterIds(updated)
     }
 
     fun indexOf(item: ChapterItem): Int = items.indexOf(item)
