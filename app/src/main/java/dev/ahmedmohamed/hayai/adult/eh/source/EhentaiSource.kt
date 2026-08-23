@@ -1,7 +1,6 @@
 package dev.ahmedmohamed.hayai.adult.eh.source
 
 import android.content.Context
-import android.text.format.Formatter
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhBrowseGallery
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryMetadata
@@ -172,44 +171,15 @@ class EhentaiSource(
         val groups = tags.filter { it.namespace == "group" }.map { it.name }
         artist = artists.takeIf(List<String>::isNotEmpty)?.joinToString()
         author = (artists + groups).distinct().takeIf(List<String>::isNotEmpty)?.joinToString()
-        description = buildDescription(this@toSManga)
-        genre = buildList {
-            category?.let(::add)
-            language?.let(::add)
-            addAll(tags.map { "${it.namespace}: ${it.name}" })
-        }.distinct().joinToString().takeIf(String::isNotBlank)
+        description = null
+        genre = tags.map { "${it.namespace}: ${it.name}" }
+            .distinct()
+            .joinToString()
+            .takeIf(String::isNotBlank)
         status = SManga.UNKNOWN
         thumbnail_url = this@toSManga.thumbnailUrl
         initialized = true
     }
-
-    private fun buildDescription(metadata: EhGalleryMetadata): String = buildList {
-        metadata.title.takeIf { it != metadata.alternateTitle }?.let { add(context.getString(R.string.hayai_eh_description_original_title, it)) }
-        metadata.uploader?.let { add(context.getString(R.string.hayai_eh_description_uploader, it)) }
-        metadata.category?.let { add(context.getString(R.string.hayai_eh_description_category, it)) }
-        metadata.language?.let {
-            add(
-                context.getString(
-                    R.string.hayai_eh_description_language,
-                    it,
-                    if (metadata.translated == true) context.getString(R.string.hayai_eh_description_translated) else "",
-                ),
-            )
-        }
-        metadata.pageCount?.let { add(context.getString(R.string.hayai_eh_description_pages, it)) }
-        metadata.sizeBytes?.let { add(context.getString(R.string.hayai_eh_description_size, Formatter.formatShortFileSize(context, it))) }
-        metadata.averageRating?.let { rating ->
-            val votes = metadata.ratingCount?.let { context.resources.getQuantityString(R.plurals.hayai_eh_description_votes, it, it) }.orEmpty()
-            add(context.getString(R.string.hayai_eh_description_rating, "%.2f".format(rating), votes))
-        }
-        metadata.favoriteCount?.let { add(context.getString(R.string.hayai_eh_description_favorites, it)) }
-        metadata.visible?.let { add(context.getString(R.string.hayai_eh_description_visibility, it)) }
-        if (metadata.tags.isNotEmpty()) {
-            add("\n${context.getString(R.string.hayai_eh_description_tags)}\n" + metadata.tags.groupBy { it.namespace }.entries.joinToString("\n") { (namespace, tags) ->
-                context.getString(R.string.hayai_eh_description_tag_group, namespace, tags.joinToString { it.name })
-            })
-        }
-    }.joinToString("\n")
 
     private fun persistMetadata(metadata: EhGalleryMetadata) {
         val payload = buildJsonObject {

@@ -85,9 +85,8 @@ class EhHttpGateway(
         key: GalleryKey,
         page: Int = 0,
     ): EhPreviewPage {
-        require(page in 0..199)
-        val url = site.baseUrl + key.normalizedPath + "&p=$page"
-        return getDocument(site, url) { html, location -> EhHtmlParser.parsePreviewPage(html, location, site) }
+        val url = EhRequestBuilder.previews(site, key, page)
+        return getDocument(site, url.toString()) { html, location -> EhHtmlParser.parsePreviewPage(html, location, site) }
     }
 
     fun imageRequest(site: EhSite, imageUrl: String): Request = request(site, imageUrl)
