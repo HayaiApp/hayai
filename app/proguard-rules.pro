@@ -2,6 +2,7 @@
 
 -keep class eu.kanade.tachiyomi.source.** { public protected *; } # Avoid access modification
 -keep,allowoptimization class eu.kanade.** { public protected *; }
+-keep,allowoptimization class dev.ahmedmohamed.hayai.** { public protected *; }
 -keep,allowoptimization class tachiyomi.** { public protected *; }
 
 # Keep common dependencies used in extensions
@@ -16,6 +17,8 @@
 -keep,allowoptimization class com.google.gson.** { public protected *; }
 -keep,allowoptimization class com.dokar.quickjs.** { public protected *; }
 -keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
+-keepattributes Signature
+-keep,allowoptimization class * extends uy.kohesive.injekt.api.TypeReference
 -keep,allowoptimization class eu.davidea.flexibleadapter.** { public protected *; }
 -keep class io.requery.android.database.** { public protected *; }
 -keep,allowoptimization class com.squareup.zstd.** { public protected *; }
@@ -79,10 +82,17 @@
 }
 
 -keep,includedescriptorclasses class eu.kanade.**$$serializer { *; }
+-keep,includedescriptorclasses class dev.ahmedmohamed.hayai.**$$serializer { *; }
 -keepclassmembers class eu.kanade.** {
     *** Companion;
 }
+-keepclassmembers class dev.ahmedmohamed.hayai.** {
+    *** Companion;
+}
 -keepclasseswithmembers class eu.kanade.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keepclasseswithmembers class dev.ahmedmohamed.hayai.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 
