@@ -26,6 +26,7 @@ import androidx.core.text.HtmlCompat
 import androidx.core.widget.NestedScrollView
 import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
 import org.jsoup.Jsoup
 
 internal class NativeNovelRenderer(
@@ -44,13 +45,26 @@ internal class NativeNovelRenderer(
     private var activeChapterId: Long? = null
     private var editMode = false
     private var applyingText = false
+    private val gestureDetector =
+        GestureDetectorWithLongTap(
+            context,
+            object : GestureDetectorWithLongTap.Listener() {
+                override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+                    if (activeBlock()?.textView?.hasSelection() != true) {
+                        callbacks.onTap(
+                            event.x / scroll.width.coerceAtLeast(1),
+                            event.y / scroll.height.coerceAtLeast(1),
+                        )
+                    }
+                    return true
+                }
+            },
+        )
 
     init {
         scroll.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { _, _, _, _, _ -> reportVisibleBlock() })
-        scroll.setOnTouchListener { touched, event ->
-            if (event.action == MotionEvent.ACTION_UP && activeBlock()?.textView?.hasSelection() != true) {
-                callbacks.onTap(event.x / touched.width.coerceAtLeast(1), event.y / touched.height.coerceAtLeast(1))
-            }
+        scroll.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
             false
         }
     }
@@ -277,6 +291,10 @@ internal class NativeNovelRenderer(
                     onAction = { action, mode -> dispatchSelectionAction(selectionTextView, action, mode) },
                     onSelectionModeChanged = callbacks::onSelectionModeChanged,
                 )
+            setOnTouchListener { _, event ->
+                gestureDetector.onTouchEvent(event)
+                false
+            }
         }
         block.textView = textView
         block.style = request.style
