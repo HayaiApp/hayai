@@ -42,6 +42,35 @@ class NovelProgressTest {
         assertEquals(100, chapter.pages_left)
     }
 
+    @Test
+    fun `opening an unread chapter never restores completed progress`() {
+        val chapter =
+            chapter().apply {
+                read = false
+                last_page_read = 100
+                pages_left = 0
+            }
+
+        assertEquals(0, NovelProgress.opening(chapter))
+        assertFalse(chapter.read)
+        assertEquals(100, chapter.last_page_read)
+    }
+
+    @Test
+    fun `opening a partially read chapter restores its progress without mutation`() {
+        val chapter =
+            chapter().apply {
+                read = false
+                last_page_read = 37
+                pages_left = 63
+            }
+
+        assertEquals(37, NovelProgress.opening(chapter))
+        assertFalse(chapter.read)
+        assertEquals(37, chapter.last_page_read)
+        assertEquals(63, chapter.pages_left)
+    }
+
     private fun chapter() =
         Chapter.create().apply {
             url = "chapter"
