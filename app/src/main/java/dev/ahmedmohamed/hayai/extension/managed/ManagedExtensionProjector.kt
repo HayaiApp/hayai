@@ -13,12 +13,14 @@ object ManagedExtensionProjector {
         filter: ManagedExtensionFilter,
     ): ManagedExtensionState {
         val apkAvailable = apk.available.associateBy(Extension.Available::pkgName)
+        val apkFailures = apk.failures.associateBy { it.packageName }
         val jsAvailable = js.available.associateBy { it.id }
         val jsInstalled = js.installed.associateBy { it.descriptor.id }
 
         val entries = buildList {
             apk.installed.forEach { installed ->
                 val available = apkAvailable[installed.pkgName]
+                val failure = apkFailures[installed.pkgName]
                 add(
                     ManagedExtensionEntry(
                         key = ManagedExtensionKey.Apk(installed.pkgName),
@@ -29,7 +31,7 @@ object ManagedExtensionProjector {
                         availableVersion = available?.versionName,
                         installation = ManagedInstallation.Installed,
                         update = if (installed.hasUpdate) ManagedUpdate.Available else ManagedUpdate.None,
-                        health = ManagedHealth.Ready,
+                        health = failure?.let { ManagedHealth.LoadFailed(it.reason.name) } ?: ManagedHealth.Ready,
                         contentKinds = installed.contentKinds(),
                         isNsfw = installed.isNsfw,
                         installedIcon = installed.icon,
@@ -54,25 +56,29 @@ object ManagedExtensionProjector {
                     ),
                 )
             }
-            apk.failures.forEach { failure ->
-                val available = apkAvailable[failure.packageName]
-                add(
-                    ManagedExtensionEntry(
-                        key = ManagedExtensionKey.Apk(failure.packageName),
-                        backend = ManagedExtensionBackend.Apk,
-                        name = failure.displayName,
-                        language = available?.lang,
-                        installedVersion = failure.versionName,
-                        availableVersion = available?.versionName,
-                        installation = ManagedInstallation.Installed,
-                        update = ManagedUpdate.None,
-                        health = ManagedHealth.LoadFailed(failure.reason.name),
-                        contentKinds = setOf(if (available?.isNovel == true) ContentKind.Novel else ContentKind.Manga),
-                        isNsfw = available?.isNsfw == true,
-                        iconUrl = available?.iconUrl,
-                    ),
-                )
-            }
+            apk.failures
+                .filterNot { failure ->
+                    apk.installed.any { it.pkgName == failure.packageName } ||
+                        apk.untrusted.any { it.pkgName == failure.packageName }
+                }.forEach { failure ->
+                    val available = apkAvailable[failure.packageName]
+                    add(
+                        ManagedExtensionEntry(
+                            key = ManagedExtensionKey.Apk(failure.packageName),
+                            backend = ManagedExtensionBackend.Apk,
+                            name = failure.displayName,
+                            language = available?.lang,
+                            installedVersion = failure.versionName,
+                            availableVersion = available?.versionName,
+                            installation = ManagedInstallation.Installed,
+                            update = ManagedUpdate.None,
+                            health = ManagedHealth.LoadFailed(failure.reason.name),
+                            contentKinds = setOf(if (available?.isNovel == true) ContentKind.Novel else ContentKind.Manga),
+                            isNsfw = available?.isNsfw == true,
+                            iconUrl = available?.iconUrl,
+                        ),
+                    )
+                }
             apk.available
                 .filterNot { extension ->
                     apk.installed.any { it.pkgName == extension.pkgName } ||

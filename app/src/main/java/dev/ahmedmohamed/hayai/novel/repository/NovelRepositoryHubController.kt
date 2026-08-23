@@ -3,7 +3,6 @@ package dev.ahmedmohamed.hayai.novel.repository
 import androidx.annotation.StringRes
 import androidx.preference.PreferenceScreen
 import com.bluelinelabs.conductor.Controller
-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import dev.ahmedmohamed.hayai.extension.managed.ui.NovelPluginRepositoryController
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.setting.SettingsController
@@ -19,7 +18,7 @@ internal enum class NovelRepositoryKind(
     @StringRes val summaryRes: Int,
 ) {
     ApkExtensions(
-        titleRes = R.string.hayai_novel_extension_repos,
+        titleRes = R.string.extension_repos,
         summaryRes = R.string.hayai_novel_extension_repository_warning,
     ),
     LnReaderPlugins(
@@ -29,7 +28,7 @@ internal enum class NovelRepositoryKind(
     ;
 
     fun destination(): Controller = when (this) {
-        ApkExtensions -> RepoController(ContentKind.Novel)
+        ApkExtensions -> RepoController()
         LnReaderPlugins -> NovelPluginRepositoryController()
     }
 }
