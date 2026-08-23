@@ -5,8 +5,8 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
-import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
 import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+import dev.ahmedmohamed.hayai.novel.repository.NovelRepositoryHubController
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -26,7 +26,6 @@ import uy.kohesive.injekt.injectLazy
 
 class SettingsBrowseController : SettingsController() {
     val sourceManager: SourceManager by injectLazy()
-    private val novelRepositories: NovelApkRepositoryRegistry by injectLazy()
     var updatedExtNotifPref: SwitchPreferenceCompat? = null
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) =
@@ -70,11 +69,10 @@ class SettingsBrowseController : SettingsController() {
                 preference {
                     key = "pref_edit_novel_extension_repos"
 
-                    val repoCount = novelRepositories.repositoriesNow().count()
-                    titleRes = R.string.hayai_novel_extension_repos
-                    if (repoCount > 0) summary = context.resources.getQuantityString(R.plurals.num_repos, repoCount, repoCount)
+                    titleRes = R.string.hayai_novel_repository_management
+                    summaryRes = R.string.hayai_novel_repository_management_summary
 
-                    onClick { router.pushController(RepoController(ContentKind.Novel).withFadeTransaction()) }
+                    onClick { router.pushController(NovelRepositoryHubController().withFadeTransaction()) }
                 }
                 if (ExtensionManager.canAutoInstallUpdates()) {
                     val intPref =

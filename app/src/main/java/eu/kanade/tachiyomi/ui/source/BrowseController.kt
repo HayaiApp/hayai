@@ -25,6 +25,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+import dev.ahmedmohamed.hayai.novel.repository.NovelRepositoryHubController
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
@@ -429,7 +430,13 @@ class BrowseController :
                 }
                 R.id.action_ext_repos -> {
                     val kind = ContentKind.fromPosition(binding.bottomSheet.tabs.selectedTabPosition)
-                    router.pushController(RepoController(kind).withFadeTransaction())
+                    val destination =
+                        if (kind == ContentKind.Novel) {
+                            NovelRepositoryHubController()
+                        } else {
+                            RepoController(kind)
+                        }
+                    router.pushController(destination.withFadeTransaction())
                 }
             }
             return@setOnMenuItemClickListener true
