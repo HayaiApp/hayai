@@ -150,6 +150,9 @@
     <string name="hayai_novel_reader_save_selected_quote">Save selected quote</string>
     <string name="hayai_novel_reader_highlights">Highlights</string>
     <string name="hayai_novel_reader_dictionary_lookup">Dictionary lookup</string>
+    <string name="hayai_novel_selection_define">Define</string>
+    <string name="hayai_novel_selection_google_translate">Google Translate</string>
+    <string name="hayai_novel_selection_search_web">Search web</string>
     <string name="hayai_novel_reader_translate_chapter">Translate chapter</string>
     <string name="hayai_novel_reader_chapter_statistics">Chapter statistics</string>
     <string name="hayai_novel_reader_toggle_offline">Save or remove offline copy</string>

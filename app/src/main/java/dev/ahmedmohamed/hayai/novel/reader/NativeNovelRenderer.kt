@@ -8,6 +8,7 @@ import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.text.style.BackgroundColorSpan
 import android.text.style.UnderlineSpan
+import android.view.ActionMode
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -111,22 +112,24 @@ internal class NativeNovelRenderer(
 
     override fun selection(callback: (NovelSelection?) -> Unit) {
         val textView = activeBlock()?.textView ?: return callback(null)
-        val start = textView.selectionStart.coerceAtLeast(0)
-        val end = textView.selectionEnd.coerceAtLeast(0)
-        if (start == end) return callback(null)
+        callback(textView.novelSelection())
+    }
+
+    private fun TextView.novelSelection(): NovelSelection? {
+        val start = selectionStart.coerceAtLeast(0)
+        val end = selectionEnd.coerceAtLeast(0)
+        if (start == end) return null
         val from = minOf(start, end)
         val to = maxOf(start, end)
-        val document = textView.text.toString()
+        val document = text.toString()
         val exact = document.substring(from, to).trim()
-        if (exact.isBlank()) return callback(null)
-        callback(
-            NovelSelection(
-                document,
-                exact,
-                document.substring(maxOf(0, from - 64), from),
-                document.substring(to, minOf(document.length, to + 64)),
-                occurrenceBefore(document, exact, from),
-            ),
+        if (exact.isBlank()) return null
+        return NovelSelection(
+            document,
+            exact,
+            document.substring(maxOf(0, from - 64), from),
+            document.substring(to, minOf(document.length, to + 64)),
+            occurrenceBefore(document, exact, from),
         )
     }
 
@@ -268,6 +271,13 @@ internal class NativeNovelRenderer(
             setTextIsSelectable(request.style.textSelectable && !editMode)
             showSoftInputOnFocus = editMode
             isFocusableInTouchMode = editMode
+            val selectionTextView = this
+            customSelectionActionModeCallback =
+                NovelSelectionActionModes.wrap(
+                    context = context,
+                    onAction = { action, mode -> dispatchSelectionAction(selectionTextView, action, mode) },
+                    onSelectionModeChanged = callbacks::onSelectionModeChanged,
+                )
         }
         block.textView = textView
         block.style = request.style
@@ -310,6 +320,16 @@ internal class NativeNovelRenderer(
         applyingText = true
         block.textView?.setText(text, TextView.BufferType.SPANNABLE)
         applyingText = false
+    }
+
+    private fun dispatchSelectionAction(
+        textView: TextView,
+        action: NovelSelectionAction,
+        mode: ActionMode,
+    ) {
+        val selection = textView.novelSelection()
+        mode.finish()
+        selection?.let { callbacks.onSelectionAction(action, it) }
     }
 
     private fun focusBlock(id: Long, progress: Int) {

@@ -33,6 +33,13 @@ internal data class NovelSelection(
     val occurrence: Int,
 )
 
+internal enum class NovelSelectionAction {
+    SaveQuote,
+    Define,
+    GoogleTranslate,
+    SearchWeb,
+}
+
 internal data class NovelPersistentHighlight(
     val id: String,
     val exact: String,
@@ -71,6 +78,8 @@ internal interface NovelRenderer {
         fun onVisibleChapter(chapterId: Long, progress: Int)
         fun onRetryChapter(chapterId: Long)
         fun onTap(xFraction: Float, yFraction: Float)
+        fun onSelectionAction(action: NovelSelectionAction, selection: NovelSelection) = Unit
+        fun onSelectionModeChanged(active: Boolean) = Unit
         fun onContentEdited(content: String)
         fun onRendererError(message: String)
     }

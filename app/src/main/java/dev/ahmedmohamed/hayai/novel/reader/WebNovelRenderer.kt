@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.reader
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.view.ActionMode
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.ConsoleMessage
@@ -34,7 +35,20 @@ internal class WebNovelRenderer(
     private val json = Json { ignoreUnknownKeys = true }
     private var requestedProgress = 0
     private var editMode = false
-    private val webView = WebView(context).apply {
+    private val webView = object : WebView(context) {
+        override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? {
+            val wrapped =
+                callback?.let {
+                    NovelSelectionActionModes.wrap(
+                        context = this@WebNovelRenderer.context,
+                        delegate = it,
+                        onAction = ::dispatchSelectionAction,
+                        onSelectionModeChanged = callbacks::onSelectionModeChanged,
+                    )
+                }
+            return super.startActionMode(wrapped, type)
+        }
+    }.apply {
         WebView.setWebContentsDebuggingEnabled(enableDevTools)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = false
@@ -114,7 +128,18 @@ internal class WebNovelRenderer(
     override fun selection(callback: (NovelSelection?) -> Unit) {
         webView.evaluateJavascript("JSON.stringify(window.hayaiReader.takeSelectionAnchor())") { encoded ->
             val payload = decodeJsString(encoded) ?: return@evaluateJavascript callback(null)
-            callback(runCatching { json.decodeFromString<SelectionPayload>(payload).asSelection() }.getOrNull())
+            callback(
+                runCatching { json.decodeFromString<SelectionPayload>(payload).asSelection() }
+                    .getOrNull()
+                    ?.takeIf { it.selectedText.isNotBlank() },
+            )
+        }
+    }
+
+    private fun dispatchSelectionAction(action: NovelSelectionAction, mode: ActionMode) {
+        selection { selection ->
+            mode.finish()
+            selection?.let { callbacks.onSelectionAction(action, it) }
         }
     }
 
