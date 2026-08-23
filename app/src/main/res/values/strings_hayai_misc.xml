@@ -2,6 +2,8 @@
 <resources>
     <!-- Novel APK extensions -->
     <string name="hayai_novel_extensions_title">Novel extensions</string>
+    <string name="hayai_novel_repository_management">Novel repositories</string>
+    <string name="hayai_novel_repository_management_summary">Manage APK extension and LNReader plugin repositories</string>
     <string name="hayai_add_repository">Add repository</string>
     <string name="hayai_cancel_installation">Cancel installation</string>
     <string name="hayai_refreshing">Refreshing…</string>
