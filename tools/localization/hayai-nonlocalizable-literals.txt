@@ -1491,7 +1491,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"SELECT COUNT(*), COALESCE(SUM(s.word_count), 0), " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"WHERE c.manga_id IN ($placeholders)",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	val placeholders = ids.joinToString(",") { "?" }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	is JsonObject -> root["plugins"] as? JsonArray ?: root["sources"] as? JsonArray ?: novelFailure(NovelFailure.Code.PluginRepositoryArray)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	?: "other"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"arabic" to "ar",
@@ -1524,6 +1523,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"ไ�
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"한국어" to "ko",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"中文" to "zh",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"日本語" to "ja",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	character == '[' -> append("%5B")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	character == ']' -> append("%5D")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	internal fun sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	novelRequire(scheme == "https" || (allowLocalHttp && scheme == "http" && local), NovelFailure.Code.PluginHttpsOnly)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	novelRequire(uri.scheme.equals("https", true) || uri.scheme.equals("http", true), NovelFailure.Code.PluginWebsiteScheme)
@@ -1536,7 +1537,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val c
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val digest = MessageDigest.getInstance("SHA-256").digest("hayai-novel-plugin:$id".toByteArray())
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val iconUrl: String = "",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val local = uri.host.equals("localhost", true) || uri.host == "127.0.0.1" || uri.host == "::1"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val schemeEnd = indexOf("://")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val site: String = "",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	?: root["sources"] as? JsonArray
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	(uri.scheme.equals("https", true) || uri.scheme.equals("http", true))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	return if (valid) this else copy(site = "")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	root["plugins"] as? JsonArray
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.listFiles { file -> file.isFile && file.extension == "js" && file.name.startsWith("$pluginId-") }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("DELETE FROM hayai_novel_repos WHERE base_url = ?")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("SELECT 1 FROM hayai_novel_plugin_sources WHERE plugin_id = ?")
@@ -2118,7 +2124,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsNe
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsPreviousParagraph("tts_prev_paragraph"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsViewport("tts_viewport"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	WebView("webview"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	fun update(value: Float) { valueText.text = context.getString(R.string.hayai_novel_reader_multiplier_value, "%.1f".format(value)) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.hayai_novel_reader_app to "app", R.string.hayai_novel_reader_light to "light", R.string.dark to "dark", R.string.hayai_novel_reader_sepia to "sepia", R.string.black to "black", R.string.hayai_novel_reader_grey to "grey", R.string.hayai_novel_reader_custom to "custom"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.none to "NONE", R.string.hayai_novel_reader_horizontal to "HORIZONTAL", R.string.vertical_viewer to "VERTICAL", R.string.hayai_novel_reader_both to "BOTH"),
@@ -2131,8 +2136,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelTheme.set("custom")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val marker = "hayai-bottom-actions"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val marker = "hayai-status-actions"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val values = listOf("") + voices.map { it.name }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt	val appendJavaScript: String = "",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"black" -> 0xFF000000.toInt() to 0xFFECECEC.toInt()

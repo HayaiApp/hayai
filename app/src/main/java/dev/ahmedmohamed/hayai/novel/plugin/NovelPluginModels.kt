@@ -44,10 +44,12 @@ data class NovelPluginDescriptor(
         return (0..7).fold(0L) { value, index -> (value shl 8) or (digest[index].toLong() and 0xff) } and Long.MAX_VALUE
     }
 
-    fun normalizedLanguage(): String =
-        LANGUAGE_ALIASES[lang.trim().lowercase()]
-            ?: lang.trim().lowercase().takeIf { ISO_LANGUAGE.matches(it) }
+    fun normalizedLanguage(): String {
+        val normalized = lang.normalizedLanguageValue()
+        return LANGUAGE_ALIASES[normalized]
+            ?: normalized.takeIf { ISO_LANGUAGE.matches(it) }
             ?: "other"
+    }
 
     fun resolvedCodeUrl(repositoryUrl: String): String = resolvePluginUrl(repositoryUrl, url)
 
@@ -114,7 +116,7 @@ internal fun requireSafeUrl(
     allowLocalHttp: Boolean,
 ) {
     novelRequire(value.length in 1..8_192, NovelFailure.Code.PluginUrlLength)
-    val uri = runCatching { URI(value) }.getOrNull()
+    val uri = runCatching { URI(value.encodeNonAuthorityBrackets()) }.getOrNull()
     novelRequire(uri?.isAbsolute == true && uri.host != null && uri.userInfo == null, NovelFailure.Code.PluginAbsoluteUrl)
     val scheme = uri.scheme.lowercase()
     val local = uri.host.equals("localhost", true) || uri.host == "127.0.0.1" || uri.host == "::1"
@@ -134,14 +136,43 @@ internal fun resolvePluginUrl(
 ): String {
     requireSafeUrl(repositoryUrl, allowLocalHttp = true)
     novelRequire(value.length in 1..8_192, NovelFailure.Code.PluginUrlLength)
-    val base = URI(repositoryUrl)
-    val resolved = base.resolve(value)
+    val base = URI(repositoryUrl.encodeNonAuthorityBrackets())
+    val resolved = base.resolve(value.encodeNonAuthorityBrackets())
     val result = resolved.toASCIIString()
     requireSafeUrl(result, allowLocalHttp = true)
     return result
 }
 
 internal fun sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+private fun String.normalizedLanguageValue(): String =
+    filterNot { Character.getType(it) == Character.FORMAT.toInt() }
+        .trim()
+        .lowercase()
+
+/** Encode repository path brackets while preserving the brackets around an IPv6 authority. */
+private fun String.encodeNonAuthorityBrackets(): String {
+    val schemeEnd = indexOf("://")
+    val authority =
+        if (schemeEnd >= 0) {
+            val start = schemeEnd + 3
+            val end = indexOfAny(charArrayOf('/', '?', '#'), start).takeIf { it >= 0 } ?: length
+            start until end
+        } else {
+            IntRange.EMPTY
+        }
+    if (indexOf('[') < 0 && indexOf(']') < 0) return this
+    return buildString(length) {
+        this@encodeNonAuthorityBrackets.forEachIndexed { index, character ->
+            when {
+                index in authority -> append(character)
+                character == '[' -> append("%5B")
+                character == ']' -> append("%5D")
+                else -> append(character)
+            }
+        }
+    }
+}
 
 internal object NovelPluginVersions {
     fun compare(
