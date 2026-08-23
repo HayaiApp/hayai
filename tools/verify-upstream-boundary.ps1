@@ -12,6 +12,10 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
+        # Approved in docs/architecture/j2k-reset.md. Routes novel storage through J2K's authoritative download queue.
+        "app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt"
+        # Approved in docs/architecture/j2k-reset.md. Restores novel queue items through the same queue-only source adapter.
+        "app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadStore.kt"
         # Approved in docs/architecture/j2k-reset.md. Routes enum preferences through Hayai's legacy-safe decoder.
         "app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt"
@@ -22,6 +26,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
+        # Approved in docs/architecture/j2k-reset.md. Tracks Mihon's pinned Cloudflare challenge detector and early exit.
+        "app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/track/TrackManager.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
