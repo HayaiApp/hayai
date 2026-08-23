@@ -73,11 +73,14 @@ class NovelPluginManager(
             val url = ExtensionRepositoryDefaults.LNREADER_NOVELS
             if (store.repositories().none { it.url == url }) {
                 store.addRepositoryIfAbsent(NovelPluginRepository("LNReader", url, enabled = true))
-                trustStore.trustUnsigned(url)
             }
             bootstrap.edit().putBoolean(DEFAULT_REPOSITORY_SEEDED, true).commit()
         }
-        return store.repositories()
+        val repositories = store.repositories()
+        NovelRepositoryTrustBootstrap
+            .missingTrust(repositories) { trustStore.isTrusted(it.url) }
+            .forEach { trustStore.trustUnsigned(it.url) }
+        return repositories
     }
 
     suspend fun refresh(): NovelPluginCatalog =

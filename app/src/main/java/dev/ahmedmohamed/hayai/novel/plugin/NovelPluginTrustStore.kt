@@ -51,6 +51,8 @@ internal class NovelPluginTrustStore(context: Context) {
         return NovelRepositoryTrust(repositoryUrl, publicKey, fingerprint, timestamp)
     }
 
+    fun isTrusted(repositoryUrl: String): Boolean = preferences.contains(key(repositoryUrl))
+
     fun verify(repositoryUrl: String, descriptor: NovelPluginDescriptor, code: ByteArray) {
         val value = preferences.getString(key(repositoryUrl), null) ?: novelFailure(NovelFailure.Code.PluginRepositoryUntrusted)
         if (descriptor.signingKey == null) {
@@ -97,4 +99,11 @@ internal class NovelPluginTrustStore(context: Context) {
             0x00,
         )
     }
+}
+
+internal object NovelRepositoryTrustBootstrap {
+    fun missingTrust(
+        repositories: List<NovelPluginRepository>,
+        isTrusted: (NovelPluginRepository) -> Boolean,
+    ): List<NovelPluginRepository> = repositories.filterNot(isTrusted)
 }
