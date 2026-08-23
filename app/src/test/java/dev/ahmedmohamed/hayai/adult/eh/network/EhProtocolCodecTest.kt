@@ -10,11 +10,24 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagMode
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhToplist
 import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryId
+import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class EhProtocolCodecTest {
+    @Test
+    fun `preview page number is encoded as a gallery query parameter`() {
+        val url =
+            EhRequestBuilder.previews(
+                EhSite.EHentai,
+                GalleryKey.parse("/g/123/token/"),
+                page = 2,
+            )
+
+        assertEquals("https://e-hentai.org/g/123/token/?nw=always&p=2", url.toString())
+    }
+
     @Test
     fun `text tag grammar supports namespaces phrases exclusion and OR`() {
         val terms = EhTagQueryCodec.parse("female:\"big breasts\" -male:yaoi ~artist:someone misc")

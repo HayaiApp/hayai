@@ -48,11 +48,12 @@ object EhHtmlParser {
         validateLocation(location, site)
         guard(document)
         val listingPage = runCatching { URI(location).query.orEmpty().split('&').firstOrNull { it.startsWith("p=") }?.substringAfter('=')?.toInt() }.getOrNull() ?: 0
-        val cells = document.select("#gdt .gdtm, #gdt .gdtl")
+        val cells = document.select("#gdt .gdtm, #gdt .gdtl, #gdt > a[href]")
         if (cells.size > maxItems) throw EhFailure.BoundsExceeded("E-Hentai preview page exceeds $maxItems entries")
         val previews = cells
             .mapNotNull { cell ->
-                val link = cell.selectFirst("a[href]")?.absUrl("href").orEmpty()
+                val linkElement = cell.takeIf { it.`is`("a[href]") } ?: cell.selectFirst("a[href]")
+                val link = linkElement?.absUrl("href").orEmpty()
                 if (!link.startsWith("https://")) return@mapNotNull null
                 val index = previewIndex(cell, link) ?: return@mapNotNull null
                 val image = cell.selectFirst("img[src], img[data-src]")
@@ -93,7 +94,7 @@ object EhHtmlParser {
     private val STYLE_URL = Regex("url\\(([^)]+)\\)", RegexOption.IGNORE_CASE)
     private val STYLE_WIDTH = Regex("width\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
     private val STYLE_HEIGHT = Regex("height\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
-    private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)px\\s+(-?\\d+)px", RegexOption.IGNORE_CASE)
+    private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)(?:px)?\\s+(-?\\d+)(?:px)?", RegexOption.IGNORE_CASE)
     private val PAGE_URL_INDEX = Regex("-(\\d+)(?:[/?#]|$)")
 
     fun parseBrowse(

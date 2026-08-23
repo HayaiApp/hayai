@@ -17,7 +17,7 @@ class SourcePreviewCache(private val context: Context) {
         get() = Formatter.formatFileSize(context, root.walkTopDown().filter(File::isFile).sumOf(File::length))
 
     fun listingKey(manga: Manga, chapterIds: List<Long>, page: Int): String =
-        digest("${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
+        digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
 
     @Synchronized
     fun readListing(key: String): SourcePreviewPage? = read(listings, key)?.let {
@@ -35,7 +35,7 @@ class SourcePreviewCache(private val context: Context) {
 
     @Synchronized
     fun writeImage(key: String, bytes: ByteArray) {
-        require(bytes.size <= MAX_IMAGE_BYTES)
+        if (bytes.size > MAX_IMAGE_BYTES) return
         write(images, digest(key), bytes)
         trim()
     }
@@ -86,7 +86,8 @@ class SourcePreviewCache(private val context: Context) {
         .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        const val MAX_IMAGE_BYTES = 4 * 1024 * 1024
+        const val LISTING_SCHEMA = "v2"
+        const val MAX_IMAGE_BYTES = 12 * 1024 * 1024
         const val MAX_CACHE_BYTES = 75L * 1024L * 1024L
     }
 }
