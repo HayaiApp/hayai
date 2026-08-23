@@ -2,11 +2,11 @@ package eu.kanade.tachiyomi.data.download
 
 import android.content.Context
 import androidx.core.content.edit
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadQueueSource
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.source.SourceManager
-import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -91,7 +91,7 @@ class DownloadStore(
                     cachedManga.getOrPut(mangaId) {
                         db.getManga(mangaId).executeAsBlocking()
                     } ?: continue
-                val source = sourceManager.get(manga.source) as? HttpSource ?: continue
+                val source = sourceManager.get(manga.source)?.let(NovelDownloadQueueSource::from) ?: continue
                 val chapter = db.getChapter(chapterId).executeAsBlocking() ?: continue
                 downloads.add(Download(source, manga, chapter))
             }
