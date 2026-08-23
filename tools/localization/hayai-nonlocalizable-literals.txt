@@ -1491,6 +1491,22 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"SELECT COUNT(*), COALESCE(SUM(s.word_count), 0), " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"WHERE c.manga_id IN ($placeholders)",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	val placeholders = ids.joinToString(",") { "?" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	.setType("text/plain")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	@Suppress("DEPRECATION")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	const val GOOGLE_TRANSLATE_PACKAGE = "com.google.android.apps.translate"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	.addQueryParameter("op", "translate")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	.addQueryParameter("sl", request.sourceLanguage.validLanguage("auto"))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	.addQueryParameter("text", request.query.value)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	.addQueryParameter("tl", request.targetLanguage.validLanguage("en").takeUnless { it == "auto" } ?: "en")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	NovelLookupAction.Define -> NovelLookupRoute.Web(searchUrl("define ${request.query.value}"))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	private fun searchUrl(query: String) = googleSearch.newBuilder().addQueryParameter("q", query).build()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	private val googleSearch = "https://www.google.com/search".toHttpUrl()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	private val googleTranslate = "https://translate.google.com/".toHttpUrl()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt	private val language = Regex("auto|[a-z]{2,3}(?:-[A-Z]{2})?")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	@Suppress("DEPRECATION")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	@Suppress("SetJavaScriptEnabled")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	binding.webview.loadUrl("about:blank")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	private fun Uri.isAllowedWebUri() = scheme.equals("https", ignoreCase = true) && !host.isNullOrBlank()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	?: "other"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"arabic" to "ar",
