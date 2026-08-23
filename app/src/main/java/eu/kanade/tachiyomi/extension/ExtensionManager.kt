@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.extension
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.extension.ExtensionCatalogReconciler
+import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Parcelable
@@ -108,6 +110,9 @@ class ExtensionManager(
     private val _untrustedExtensionsFlow = MutableStateFlow(emptyList<Extension.Untrusted>())
     val untrustedExtensionsFlow = _untrustedExtensionsFlow.asStateFlow()
 
+    private val _failedExtensionsFlow = MutableStateFlow(emptyList<ApkLoadFailure>())
+    val failedExtensionsFlow = _failedExtensionsFlow.asStateFlow()
+
     init {
         initExtensions()
         ExtensionInstallReceiver(InstallationListener()).register(context)
@@ -128,6 +133,11 @@ class ExtensionManager(
             extensions
                 .filterIsInstance<LoadResult.Untrusted>()
                 .map { it.extension }
+
+        _failedExtensionsFlow.value =
+            extensions
+                .filterIsInstance<LoadResult.Error>()
+                .map { it.failure }
     }
 
     fun isInstalledByApp(extension: Extension.Available): Boolean = ExtensionLoader.isExtensionInstalledByApp(context, extension.pkgName)
@@ -142,17 +152,14 @@ class ExtensionManager(
             } catch (e: Exception) {
                 Timber.e(e, context.getString(R.string.extension_api_error))
                 withUIContext { context.toast(R.string.extension_api_error) }
-                emptyList()
+                emitToInstaller("Finished/Available/Error", (InstallStep.Error to null))
+                return
             }
         // Dedupe by pkgName so extensions served by multiple repos can't produce duplicate
         // entries downstream (e.g. duplicate RecyclerView stable IDs). The newest copy wins, and
         // every consumer below is handed the same list: picking a different duplicate for the
         // update check than for the download leaves an update that can never install.
-        val availableExtensions =
-            extensions
-                .groupBy { it.pkgName }
-                .values
-                .map { duplicates -> duplicates.maxBy(Extension.Available::versionCode) }
+        val availableExtensions = ExtensionCatalogReconciler.newestCopies(extensions)
 
         enableAdditionalSubLanguages(availableExtensions)
 
@@ -368,8 +375,16 @@ class ExtensionManager(
             nowTrustedExtensions
                 .map { extension ->
                     async { ExtensionLoader.loadExtensionFromPkgName(context, extension.pkgName) }.await()
-                }.filterIsInstance<LoadResult.Success>()
-                .forEach { registerNewExtension(it.extension) }
+                }.forEach { result ->
+                    when (result) {
+                        is LoadResult.Success -> registerNewExtension(result.extension)
+                        is LoadResult.Error -> {
+                            _failedExtensionsFlow.value =
+                                failedExtensionsFlow.value.filterNot { it.packageName == result.failure.packageName } + result.failure
+                        }
+                        is LoadResult.Untrusted -> _untrustedExtensionsFlow.value += result.extension
+                    }
+                }
         }
     }
 
@@ -379,6 +394,7 @@ class ExtensionManager(
      * @param extension The extension to be registered.
      */
     private fun registerNewExtension(extension: Extension.Installed) {
+        _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == extension.pkgName }
         _installedExtensionsFlow.value += extension
         emitToInstaller(
             "Finished/${extension.pkgName}",
@@ -393,6 +409,7 @@ class ExtensionManager(
      * @param extension The extension to be registered.
      */
     private fun registerUpdatedExtension(extension: Extension.Installed) {
+        _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == extension.pkgName }
         val mutInstalledExtensions = _installedExtensionsFlow.value.toMutableList()
         val oldExtension = mutInstalledExtensions.find { it.pkgName == extension.pkgName }
         if (oldExtension != null) {
@@ -418,6 +435,7 @@ class ExtensionManager(
      * @param pkgName The package name of the uninstalled application.
      */
     private fun unregisterExtension(pkgName: String) {
+        _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == pkgName }
         val installedExtension = installedExtensionsFlow.value.find { it.pkgName == pkgName }
         if (installedExtension != null) {
             _installedExtensionsFlow.value -= installedExtension
@@ -444,12 +462,18 @@ class ExtensionManager(
         }
 
         override fun onExtensionUntrusted(extension: Extension.Untrusted) {
+            _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == extension.pkgName }
             val installedExtension =
                 _installedExtensionsFlow.value
                     .find { it.pkgName == extension.pkgName }
                     ?: return
             _installedExtensionsFlow.value -= installedExtension
             _untrustedExtensionsFlow.value += extension
+        }
+
+        override fun onExtensionLoadFailed(failure: ApkLoadFailure) {
+            _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == failure.packageName } + failure
+            emitToInstaller("Finished/${failure.packageName}/Error", ExtensionIntallInfo(InstallStep.Error, null))
         }
 
         override fun onPackageUninstalled(pkgName: String) {
@@ -468,7 +492,7 @@ class ExtensionManager(
             availableExtension ?: availableExtensionsFlow.value.find { it.pkgName == pkgName }
                 ?: return false
 
-        return (availableExt.versionCode > versionCode || availableExt.libVersion > libVersion)
+        return ExtensionCatalogReconciler.hasUpdate(this, availableExt)
     }
 
     @kotlinx.serialization.Serializable

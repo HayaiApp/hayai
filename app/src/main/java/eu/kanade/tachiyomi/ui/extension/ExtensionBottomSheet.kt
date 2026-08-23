@@ -12,14 +12,18 @@ import androidx.core.view.updatePaddingRelative
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.tabs.TabLayout
-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionBackend
+import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionEntry
+import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionKey
+import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionNotice
+import dev.ahmedmohamed.hayai.extension.managed.ManagedHealth
+import dev.ahmedmohamed.hayai.extension.managed.ManagedInstallation
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.ExtensionsBottomSheetBinding
 import eu.kanade.tachiyomi.databinding.RecyclerWithScrollerBinding
-import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
 import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
@@ -33,9 +37,10 @@ import eu.kanade.tachiyomi.ui.migration.SourceItem
 import eu.kanade.tachiyomi.ui.migration.manga.design.PreMigrationController
 import eu.kanade.tachiyomi.ui.source.BrowseController
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
-import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
+import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
+import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.view.activityBinding
 import eu.kanade.tachiyomi.util.view.collapse
 import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
@@ -65,17 +70,17 @@ class ExtensionBottomSheet
         /**
          * Adapter containing the list of extensions
          */
-        private var mangaExtAdapter: ExtensionAdapter? = null
-        private var novelExtAdapter: ExtensionAdapter? = null
+        private var extAdapter: ExtensionAdapter? = null
         private var migAdapter: FlexibleAdapter<IFlexible<*>>? = null
 
         val adapters
-            get() = listOf(mangaExtAdapter, novelExtAdapter, migAdapter)
+            get() = listOf(extAdapter, migAdapter)
 
         val presenter = ExtensionBottomPresenter()
         var currentSourceTitle: String? = null
 
-        private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
+        private var extensions = emptyList<ExtensionItem>()
+        private var notices = emptyList<ManagedExtensionNotice>()
         var canExpand = false
         private lateinit var binding: ExtensionsBottomSheetBinding
 
@@ -84,10 +89,8 @@ class ExtensionBottomSheet
 
         val extensionFrameLayout: RecyclerWithScrollerView?
             get() = binding.pager.findViewWithTag("TabbedRecycler0") as? RecyclerWithScrollerView
-        val novelExtensionFrameLayout: RecyclerWithScrollerView?
-            get() = binding.pager.findViewWithTag("TabbedRecycler1") as? RecyclerWithScrollerView
         val migrationFrameLayout: RecyclerWithScrollerView?
-            get() = binding.pager.findViewWithTag("TabbedRecycler2") as? RecyclerWithScrollerView
+            get() = binding.pager.findViewWithTag("TabbedRecycler1") as? RecyclerWithScrollerView
 
         var isExpanding = false
 
@@ -99,11 +102,8 @@ class ExtensionBottomSheet
         fun onCreate(controller: BrowseController) {
             // Initialize adapter, scroll listener and recycler views
             presenter.attachView(this)
-            mangaExtAdapter = ExtensionAdapter(this)
-            novelExtAdapter = ExtensionAdapter(this)
-            listOf(mangaExtAdapter, novelExtAdapter).forEach {
-                it?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
-            }
+            extAdapter = ExtensionAdapter(this)
+            extAdapter?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
             if (migAdapter == null) {
                 migAdapter = SourceAdapter(this)
             }
@@ -118,7 +118,6 @@ class ExtensionBottomSheet
                 val bottomBar = controller.activityBinding?.bottomNav
                 val bottomH = bottomBar?.height ?: insets.getInsets(systemBars()).bottom
                 extensionFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
-                novelExtensionFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
                 migrationFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
             }
             binding.tabs.addOnTabSelectedListener(
@@ -131,12 +130,10 @@ class ExtensionBottomSheet
                         this@ExtensionBottomSheet.controller.updateTitleAndMenu()
                         when (tab?.position) {
                             0 -> extensionFrameLayout
-                            1 -> novelExtensionFrameLayout
                             else -> migrationFrameLayout
                         }?.binding?.recycler?.isNestedScrollingEnabled = true
                         when (tab?.position) {
                             0 -> extensionFrameLayout
-                            1 -> novelExtensionFrameLayout
                             else -> migrationFrameLayout
                         }?.binding?.recycler?.requestLayout()
                         sheetBehavior?.isDraggable = true
@@ -146,10 +143,9 @@ class ExtensionBottomSheet
                     override fun onTabUnselected(tab: TabLayout.Tab?) {
                         when (tab?.position) {
                             0 -> extensionFrameLayout
-                            1 -> novelExtensionFrameLayout
                             else -> migrationFrameLayout
                         }?.binding?.recycler?.isNestedScrollingEnabled = false
-                        if (tab?.position == 2) {
+                        if (tab?.position == 1) {
                             presenter.deselectSource()
                         }
                     }
@@ -159,14 +155,12 @@ class ExtensionBottomSheet
                         this@ExtensionBottomSheet.sheetBehavior?.expand()
                         when (tab?.position) {
                             0 -> extensionFrameLayout
-                            1 -> novelExtensionFrameLayout
                             else -> migrationFrameLayout
                         }?.binding?.recycler?.isNestedScrollingEnabled = true
                         sheetBehavior?.isDraggable = true
                         if (!isExpanding) {
                             when (tab?.position) {
                                 0 -> extensionFrameLayout
-                                1 -> novelExtensionFrameLayout
                                 else -> migrationFrameLayout
                             }?.binding?.recycler?.smoothScrollToTop()
                         }
@@ -190,7 +184,7 @@ class ExtensionBottomSheet
         fun isOnView(view: View): Boolean = "TabbedRecycler${binding.pager.currentItem}" == view.tag
 
         fun updatedNestedRecyclers() {
-            listOf(extensionFrameLayout, novelExtensionFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
+            listOf(extensionFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
                 recyclerWithScrollerBinding?.binding?.recycler?.isNestedScrollingEnabled = binding.pager.currentItem == index
             }
         }
@@ -203,39 +197,36 @@ class ExtensionBottomSheet
         }
 
         fun updateAllPendingExtensions() {
-            presenter.updateAllPendingExtensions(selectedContentKind() ?: ContentKind.Manga)
+            presenter.updateAllPendingExtensions()
         }
 
         fun updateExtTitle() {
-            ContentKind.entries.forEachIndexed { index, kind ->
-                val extCount = extensions.getValue(kind).count { (it.extension as? Extension.Installed)?.hasUpdate == true }
-                if (extCount > 0) binding.tabs.getTabAt(index)?.orCreateBadge?.number = extCount else binding.tabs.getTabAt(index)?.removeBadge()
-            }
+            val extCount = extensions.count { it.extension.hasUpdate }
+            if (extCount > 0) binding.tabs.getTabAt(0)?.orCreateBadge?.number = extCount else binding.tabs.getTabAt(0)?.removeBadge()
         }
 
         override fun onButtonClick(position: Int) {
             val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
-            when (extension) {
-                is Extension.Installed -> {
-                    if (!extension.hasUpdate) {
-                        openDetails(extension)
-                    } else {
-                        presenter.updateExtension(extension)
-                    }
-                }
-                is Extension.Available -> {
-                    presenter.installExtension(extension)
-                }
-                is Extension.Untrusted -> {
-                    openTrustDialog(extension)
-                }
+            when {
+                extension.installation == ManagedInstallation.Untrusted -> openTrustDialog(extension)
+                extension.health is ManagedHealth.LoadFailed && extension.availableVersion != null -> presenter.install(extension)
+                extension.hasUpdate -> presenter.update(extension)
+                extension.installation == ManagedInstallation.Available -> confirmInstall(extension)
+                else -> openDetails(extension)
             }
         }
 
         override fun onWebViewClick(position: Int) {
-            val extension =
-                (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension as? Extension.Available ?: return
-            val source = extension.sources.firstOrNull { it.baseUrl.isNotBlank() } ?: return
+            val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
+            val website = extension.websiteUrl ?: return
+            if (extension.backend == ManagedExtensionBackend.JavaScript) {
+                context.openInBrowser(website)
+                return
+            }
+            val pkgName = (extension.key as? ManagedExtensionKey.Apk)?.packageName ?: return
+            val source = presenter.availableExtension(pkgName)
+                ?.sources
+                ?.firstOrNull { it.baseUrl.isNotBlank() } ?: return
             val activity = controller.activity ?: return
             activity.startActivity(
                 WebViewActivity.newIntent(activity, source.baseUrl, source.id, source.name),
@@ -281,24 +272,7 @@ class ExtensionBottomSheet
         }
 
         private fun updateAllExtensions(position: Int) {
-            val adapter = selectedExtensionAdapter() ?: return
-            val header = (adapter.getSectionHeader(position)) as? ExtensionGroupItem ?: return
-            val items = adapter.getSectionItemPositions(header)
-            val extensions =
-                items
-                    ?.mapNotNull {
-                        val extItem = (adapter.getItem(it) as? ExtensionItem) ?: return
-                        val extension = (adapter.getItem(it) as? ExtensionItem)?.extension ?: return
-                        if ((extItem.installStep == null || extItem.installStep == InstallStep.Error) &&
-                            extension is Extension.Installed &&
-                            extension.hasUpdate
-                        ) {
-                            extension
-                        } else {
-                            null
-                        }
-                    }.orEmpty()
-            presenter.updateExtensions(extensions)
+            presenter.updateAllPendingExtensions()
         }
 
         override fun onItemClick(
@@ -306,13 +280,13 @@ class ExtensionBottomSheet
             position: Int,
         ): Boolean {
             when (binding.tabs.selectedTabPosition) {
-                0, 1 -> {
+                0 -> {
                     val extension =
                         (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return false
-                    if (extension is Extension.Installed) {
-                        openDetails(extension)
-                    } else if (extension is Extension.Untrusted) {
+                    if (extension.installation == ManagedInstallation.Untrusted) {
                         openTrustDialog(extension)
+                    } else if (extension.installation == ManagedInstallation.Installed) {
+                        openDetails(extension)
                     }
                 }
                 else -> {
@@ -333,10 +307,10 @@ class ExtensionBottomSheet
         }
 
         override fun onItemLongClick(position: Int) {
-            if (binding.tabs.selectedTabPosition < 2) {
+            if (binding.tabs.selectedTabPosition == 0) {
                 val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
-                if (extension is Extension.Installed || extension is Extension.Untrusted) {
-                    uninstallExtension(extension.name, extension.pkgName)
+                if (extension.installation != ManagedInstallation.Available) {
+                    confirmUninstall(extension)
                 }
             }
         }
@@ -354,30 +328,75 @@ class ExtensionBottomSheet
             )
         }
 
-        private fun openDetails(extension: Extension.Installed) {
-            val controller = ExtensionDetailsController(extension.pkgName)
-            this.controller.router.pushController(controller.withFadeTransaction())
+        private fun openDetails(extension: ManagedExtensionEntry) {
+            val apk = extension.key as? ManagedExtensionKey.Apk
+            if (apk != null && extension.health !is ManagedHealth.LoadFailed) {
+                val controller = ExtensionDetailsController(apk.packageName)
+                this.controller.router.pushController(controller.withFadeTransaction())
+                return
+            }
+            controller.activity?.materialAlertDialog()
+                ?.setTitle(extension.name)
+                ?.setMessage(
+                    buildString {
+                        append(extension.backend.name)
+                        extension.installedVersion?.let { append("\n").append(context.getString(R.string.version)).append(" ").append(it) }
+                        (extension.health as? ManagedHealth.LoadFailed)?.let { append("\n").append(it.diagnostic) }
+                    },
+                )
+                ?.setPositiveButton(android.R.string.ok, null)
+                ?.setNegativeButton(R.string.uninstall) { _, _ -> confirmUninstall(extension) }
+                ?.show()
         }
 
-        private fun openTrustDialog(extension: Extension.Untrusted) {
+        private fun openTrustDialog(extension: ManagedExtensionEntry) {
             val activity = controller.activity ?: return
+            val pkgName = (extension.key as? ManagedExtensionKey.Apk)?.packageName ?: return
+            val untrusted = presenter.untrustedExtension(pkgName) ?: return
             activity
                 .materialAlertDialog()
                 .setTitle(R.string.untrusted_extension)
                 .setMessage(R.string.untrusted_extension_message)
                 .setPositiveButton(R.string.trust) { _, _ ->
-                    trustExtension(extension.pkgName, extension.versionCode, extension.signatureHash)
+                    trustExtension(untrusted.pkgName, untrusted.versionCode, untrusted.signatureHash)
                 }.setNegativeButton(R.string.uninstall) { _, _ ->
-                    uninstallExtension(extension.pkgName)
+                    presenter.uninstall(extension)
                 }.show()
         }
 
+        private fun confirmInstall(extension: ManagedExtensionEntry) {
+            if (extension.backend == ManagedExtensionBackend.Apk) {
+                presenter.install(extension)
+                return
+            }
+            controller.activity?.materialAlertDialog()
+                ?.setTitle(extension.name)
+                ?.setMessage(R.string.hayai_novel_plugin_install_warning)
+                ?.setNegativeButton(android.R.string.cancel, null)
+                ?.setPositiveButton(R.string.install) { _, _ -> presenter.install(extension) }
+                ?.show()
+        }
+
+        private fun confirmUninstall(extension: ManagedExtensionEntry) {
+            controller.activity?.materialAlertDialog()
+                ?.setTitle(extension.name)
+                ?.setMessage(context.getString(R.string.hayai_extension_uninstall_confirmation, extension.name))
+                ?.setNegativeButton(android.R.string.cancel, null)
+                ?.setPositiveButton(R.string.uninstall) { _, _ -> presenter.uninstall(extension) }
+                ?.show()
+        }
+
         fun setExtensions(
-            contentKind: ContentKind,
             extensions: List<ExtensionItem>,
+            notices: List<ManagedExtensionNotice>,
             updateController: Boolean = true,
         ) {
-            this.extensions = this.extensions + (contentKind to extensions)
+            val newNotice = notices.firstOrNull { notice ->
+                this.notices.none { it.identity == notice.identity && it.diagnostic == notice.diagnostic }
+            }
+            this.extensions = extensions
+            this.notices = notices
+            newNotice?.let { context.toast(context.getString(R.string.hayai_extension_catalog_problem, it.diagnostic)) }
             if (updateController) {
                 controller.presenter.updateSources()
             }
@@ -412,22 +431,19 @@ class ExtensionBottomSheet
         }
 
         fun drawExtensions() {
-            ContentKind.entries.forEach { kind ->
-                val items = extensions.getValue(kind)
-                extensionAdapter(kind)?.updateDataSet(
-                    if (controller.extQuery.isBlank()) items else items.filter { it.extension.name.contains(controller.extQuery, ignoreCase = true) },
-                )
-            }
+            extAdapter?.updateDataSet(
+                if (controller.extQuery.isBlank()) extensions else extensions.filter { it.extension.name.contains(controller.extQuery, ignoreCase = true) },
+            )
             updateExtTitle()
             updateExtUpdateAllButton()
         }
 
         fun canStillGoBack(): Boolean =
-            (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) ||
-                (binding.tabs.selectedTabPosition < 2 && binding.sheetToolbar.hasExpandedActionView())
+            (binding.tabs.selectedTabPosition == 1 && migAdapter is MangaAdapter) ||
+                (binding.tabs.selectedTabPosition == 0 && binding.sheetToolbar.hasExpandedActionView())
 
         fun canGoBack(): Boolean =
-            if (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) {
+            if (binding.tabs.selectedTabPosition == 1 && migAdapter is MangaAdapter) {
                 presenter.deselectSource()
                 false
             } else if (binding.sheetToolbar.hasExpandedActionView()) {
@@ -438,9 +454,7 @@ class ExtensionBottomSheet
             }
 
         fun downloadUpdate(item: ExtensionItem) {
-            ContentKind.entries.filter { it.accepts(item.extension) }.forEach { kind ->
-                extensionAdapter(kind)?.updateItem(item, item.installStep)
-            }
+            extAdapter?.updateItem(item, item.installStep)
             updateExtUpdateAllButton()
         }
 
@@ -466,29 +480,8 @@ class ExtensionBottomSheet
             presenter.trustExtension(pkgName, versionCode, signatureHash)
         }
 
-        private fun uninstallExtension(pkgName: String) {
-            presenter.uninstallExtension(pkgName)
-        }
-
-        private fun uninstallExtension(
-            extName: String,
-            pkgName: String,
-        ) {
-            if (context.isPackageInstalled(pkgName)) {
-                presenter.uninstallExtension(pkgName)
-            } else {
-                controller.activity!!
-                    .materialAlertDialog()
-                    .setTitle(extName)
-                    .setPositiveButton(R.string.remove) { _, _ ->
-                        presenter.uninstallExtension(pkgName)
-                    }.setNegativeButton(android.R.string.cancel, null)
-                    .show()
-            }
-        }
-
         fun setCanInstallPrivately(installPrivately: Boolean) {
-            listOf(mangaExtAdapter, novelExtAdapter).forEach { it?.installPrivately = installPrivately }
+            extAdapter?.installPrivately = installPrivately
         }
 
         fun onDestroy() {
@@ -496,13 +489,12 @@ class ExtensionBottomSheet
         }
 
         private inner class TabbedSheetAdapter : RecyclerViewPagerAdapter() {
-            override fun getCount(): Int = 3
+            override fun getCount(): Int = 2
 
             override fun getPageTitle(position: Int): CharSequence =
                 context.getString(
                     when (position) {
-                        0 -> R.string.manga
-                        1 -> R.string.hayai_novels
+                        0 -> R.string.extensions
                         else -> R.string.migration
                     },
                 )
@@ -570,11 +562,5 @@ class ExtensionBottomSheet
             }
         }
 
-        private fun selectedContentKind(): ContentKind? =
-            binding.tabs.selectedTabPosition.takeIf { it in 0..1 }?.let(ContentKind::fromPosition)
-
-        private fun extensionAdapter(kind: ContentKind): ExtensionAdapter? =
-            if (kind == ContentKind.Manga) mangaExtAdapter else novelExtAdapter
-
-        private fun selectedExtensionAdapter(): ExtensionAdapter? = selectedContentKind()?.let(::extensionAdapter)
+        private fun selectedExtensionAdapter(): ExtensionAdapter? = extAdapter.takeIf { binding.tabs.selectedTabPosition == 0 }
     }

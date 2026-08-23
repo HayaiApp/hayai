@@ -42,12 +42,13 @@ import javax.crypto.spec.SecretKeySpec
  * - Browser polyfills (URL, URLSearchParams, etc.)
  */
 internal class NovelPluginLibrary(
+    context: Context,
     private val pluginId: String,
     private val siteUrl: String? = null,
 ) {
     private val networkHelper: NetworkHelper = Injekt.get()
     private val client = networkHelper.client
-    private val context: Context = Injekt.get()
+    private val context = context.applicationContext
 
     // Prefer the bundled LNReader-compatible Cheerio implementation. The Jsoup bridge remains
     // available as a fallback if the asset cannot be loaded or evaluated on a device.

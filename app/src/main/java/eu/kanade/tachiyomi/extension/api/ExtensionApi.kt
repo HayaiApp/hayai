@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.extension.api
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.extension.ExtensionCatalogReconciler
 import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.ExtensionManager
@@ -272,7 +273,7 @@ internal class ExtensionApi {
         prefetchedExtensions: List<Extension.Available>? = null,
     ): List<Extension.Available> =
         withIOContext {
-            val extensions = prefetchedExtensions ?: findExtensions()
+            val extensions = ExtensionCatalogReconciler.newestCopies(prefetchedExtensions ?: findExtensions())
 
             val extensionManager: ExtensionManager = Injekt.get()
             val installedExtensions =
