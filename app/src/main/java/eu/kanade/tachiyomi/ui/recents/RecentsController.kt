@@ -1106,7 +1106,7 @@ class RecentsController(
             }
         } else {
             val lastController = router.backstack.lastOrNull()?.controller
-            if (lastController !is DialogController) {
+            if (lastController !is DialogController && lastController !is TabbedInterface) {
                 (activity as? MainActivity)?.showTabBar(show = false, animate = lastController !is SmallToolbarInterface)
             }
             snack?.dismiss()
@@ -1123,6 +1123,7 @@ class RecentsController(
             setBottomPadding()
         }
         if (type.isEnter && isControllerVisible) {
+            setupTabs(false)
             updateTitleAndMenu()
         }
     }
