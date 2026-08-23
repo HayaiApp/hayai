@@ -1,5 +1,6 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
+import android.view.Menu
 import eu.kanade.tachiyomi.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -44,5 +45,15 @@ class NovelSelectionActionMenuTest {
         val quote = NovelSelectionActionMenu.entries.single { it.action == NovelSelectionAction.SaveQuote }
 
         assertEquals(R.string.hayai_novel_reader_quote, quote.titleRes)
+    }
+
+    @Test
+    fun `reader actions use the selected alternative category ahead of platform actions`() {
+        NovelSelectionActionMenu.entries.indices.forEach { index ->
+            assertEquals(
+                Menu.CATEGORY_ALTERNATIVE + index,
+                NovelSelectionActionMenu.orderFor(index),
+            )
+        }
     }
 }
