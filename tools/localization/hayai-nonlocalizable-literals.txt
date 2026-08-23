@@ -129,6 +129,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?: tit
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?.attr("href")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?.selectFirst("a")?.text()?.trim()?.takeIf(String::isNotEmpty)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	.lastOrNull { it.text().trim() == ">" }
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	.takeIf { it.startsWith("https://") && !it.endsWith("/g/blank.gif", ignoreCase = true) }
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	"${color[0]}${color[2]}${color[4]}"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	"B", "" -> 0
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	"GB" -> 3
@@ -155,7 +156,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (!u
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (batch.listingUrl in listingUrls) throw EhFailure.MalformedDocument("E-Hentai listing chain contains a cycle")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (candidates.size > maxPages) throw EhFailure.BoundsExceeded("E-Hentai listing exceeds $maxPages pages")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (cells.size > maxItems) throw EhFailure.BoundsExceeded("E-Hentai preview page exceeds $maxItems entries")
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (direct.startsWith("https://")) {
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (EhSite.fromHost(uri.host) == null) throw EhFailure.MalformedDocument("E-Hentai page URL uses an unsupported host")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (html.length > MAX_DOCUMENT_CHARS) throw EhFailure.BoundsExceeded("E-Hentai document is too large")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (imageUrl.isEmpty()) throw EhFailure.MalformedDocument("E-Hentai image URL is missing")
@@ -237,7 +237,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val fa
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val fields = document.select("#gdd tr").associate { row ->
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val genre = if (info != null) parseCategory(info.getOrNull(1)) else parseCategory(row.selectFirst(".gl1c div"))
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val hasNext = document.select(".searchnav a[href]").any { it.text().contains(linkText, ignoreCase = true) }
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val image = cell.selectFirst("img[src], img[data-src]")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val image = cell.selectFirst("img[data-src], img[src]")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val imageUrl = document.selectFirst("#img")?.attr("src")?.trim().orEmpty()
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val imageUrl = STYLE_URL.find(style)?.groupValues?.get(1)?.trim('\'', '"')?.let { sprite.absUrlFromStyle(it) }
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val index = link.selectFirst("img[alt]")?.attr("alt")?.toIntOrNull()
@@ -631,6 +631,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("Cg", context.getString(R.string.hayai_eh_category_cg))
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("ImageSet", context.getString(R.string.hayai_eh_category_image_set))
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("NonH", context.getString(R.string.hayai_eh_category_non_h))
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	@Suppress("UNCHECKED_CAST")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	arrayOf(context.getString(R.string.hayai_eh_filter_any), "2", "3", "4", "5"),
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	.map { tag -> prefix?.let { "$it$tag" } ?: tag }
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	const val ASSET_PATH = "hayai/eh_tags.txt"
@@ -1509,7 +1510,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	bin
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	private fun Uri.isAllowedWebUri() = scheme.equals("https", ignoreCase = true) && !host.isNullOrBlank()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	private const val BOOTSTRAP_PREFERENCES = "hayai_novel_plugin_bootstrap"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	private const val DEFAULT_REPOSITORY_SEEDED = "default_lnreader_repository_seeded"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	store.saveRepository(NovelPluginRepository("LNReader", url, enabled = true))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	store.addRepositoryIfAbsent(NovelPluginRepository("LNReader", url, enabled = true))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	?: "other"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"arabic" to "ar",
@@ -1564,26 +1565,21 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocum
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	root["plugins"] as? JsonArray
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.listFiles { file -> file.isFile && file.extension == "js" && file.name.startsWith("$pluginId-") }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("DELETE FROM hayai_novel_repos WHERE base_url = ?")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("INSERT OR IGNORE INTO hayai_novel_repos(base_url, name, enabled) VALUES (?, ?, ?)")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("INSERT OR REPLACE INTO hayai_novel_repos(base_url, name, enabled) VALUES (?, ?, ?)")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("SELECT 1 FROM hayai_novel_plugin_sources WHERE plugin_id = ?")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("SELECT 1 FROM hayai_novel_repos WHERE base_url = ?")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("SELECT name FROM hayai_novel_plugin_sources WHERE source_id = ?")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.table("hayai_novel_plugin_sources")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.table("hayai_novel_repos")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.where("base_url = ?")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.where("plugin_id = ?")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	"SELECT name, base_url, enabled FROM hayai_novel_repos ORDER BY name COLLATE NOCASE, base_url",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	atomicWrite(File(root, "${descriptor.id}.json"), json.encodeToString(installed).toByteArray())
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	check(database.lowLevel().insert(InsertQuery.builder().table("hayai_novel_plugin_sources").build(), values) >= 0)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	check(database.lowLevel().insert(InsertQuery.builder().table("hayai_novel_repos").build(), values) >= 0)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	file.isFile && file.extension == "js" && file.name.startsWith("${descriptor.id}-") && file.name != installed.codeFile
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	novelRequire(Regex("[A-Za-z0-9._-]{1,128}").matches(pluginId), NovelFailure.Code.PluginId)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	private val root = File(context.filesDir, "hayai/novel-plugins").apply { mkdirs() }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("base_url", repository.url)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("enabled", repository.enabled)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("lang", descriptor.normalizedLanguage())
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("last_seen", System.currentTimeMillis())
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("name", descriptor.name)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("name", repository.name)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("plugin_id", descriptor.id)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("source_id", descriptor.sourceId())
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	return checksum.matches(Regex("[a-f0-9]{64}")) && codeFile == "$pluginId-$checksum.js"
@@ -2756,6 +2752,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	choice.copy(label = "${choice.label} (${choice.sourceId})")
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	require(surface != RecentSurface.Mixed) { "Mixed visibility must be edited through History or Updates" }
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	val baseLabel = if (language == null) source.name else "${source.name} · $language"
+app/src/main/java/dev/ahmedmohamed/hayai/source/details/SourceDetailsHost.kt	identity = "${manga.source}:${manga.url}"
+app/src/main/java/dev/ahmedmohamed/hayai/source/details/SourceDetailsHost.kt	val expected = "${identity ?: return}:1"
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddController.kt	private var currentInput = ""
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddService.kt	EnhancedBatchFailure.Network(error.message ?: "Network request failed"),
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt	private val mutableInput = MutableStateFlow("")
@@ -2955,7 +2953,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecod
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	.joinToString("") { "%02x".format(it) }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v2"
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v3"
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val images = File(root, "images").apply { mkdirs() }

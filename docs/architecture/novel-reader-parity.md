@@ -4,7 +4,7 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 
 ## Ownership
 
-- `NovelReaderActivity` owns novel chapter focus, progress, and typed actions while inflating J2K's unmodified `reader_activity.xml` shell.
+- `NovelReaderActivity` owns novel chapter focus, progress, and typed actions while inflating J2K's unmodified `reader_activity.xml` shell. `J2kNovelReaderChrome` is the concrete adapter for that shell's IDs, insets, and visibility.
 - `NativeNovelRenderer` owns selectable native text blocks.
 - `WebNovelRenderer` owns isolated WebView chapter blocks.
 - `NovelChapterQueue` bounds retained chapter data. A prefetched chapter never becomes current until its block becomes visible.
@@ -25,6 +25,14 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
 | Progress controls | `NovelReaderAppBars.kt` | J2K's real `ReaderNavView` and `ReaderSlider`, without the manga page-number cells, plus `NovelVerticalProgressView` when explicitly selected |
 | TTS | `viewer/text/shared/TtsController.kt` | `NovelTtsController` and `NovelTtsPlaybackService`; active transport controls replace novel action slots inside J2K's reader sheet |
 | Quotes and highlights | the novel reader selection tools | `NovelQuoteStore`, `NovelHighlightStore`, and typed reader actions |
+
+## Reader chrome and selection contract
+
+The J2K toolbar and chapter controls overlay the viewer exactly as they do in the image reader. `J2kNovelReaderChrome` gives novel content one constant safe inset equal to J2K's ignored status-bar inset plus `actionBarSize`; that inset does not change when chrome is shown or hidden. The viewer therefore keeps J2K's overlay geometry without obscuring, pushing, or reflowing native or WebView text.
+
+Both renderers expose the same typed `NovelSelection`. Native text remains selectable, focusable in touch mode, long-clickable, and uses Android's arrow-key movement method whenever editing is off. Read-only selection removes the irrelevant EditText Cut/Paste actions and keeps compact Quote, Define, and Translate actions visible; edit mode retains Android's editing actions. The WebView is created with the Activity UI context, remains focusable, disables classifier-injected actions, and caches the complete selection anchor on `selectionchange`. If opening the floating toolbar collapses the live range, Quote, Define, Translate, and Search consume that cached anchor. The anchor resolves its chapter from the range ancestor rather than whichever retained chapter is currently marked active.
+
+The shared action registry assigns visible, localized, semantic entries to Quote, Define, and Google Translate; Search remains overflow. Quote enters the existing duplicate-safe quote dialog. Define opens a resizable Custom Tab so the selected Chrome provider's signed-in session is available. Translate tries Google Translate's process-text and send contracts before the same browser path. The secure WebView sheet is only a fallback and retains WebView cookies, not Chrome cookies.
 
 ## Continuous-flow rules
 

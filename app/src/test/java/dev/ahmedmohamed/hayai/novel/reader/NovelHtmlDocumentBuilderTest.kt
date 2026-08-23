@@ -28,6 +28,16 @@ class NovelHtmlDocumentBuilderTest {
         assertFalse(html.contains("<h1 class=\"hayai-chapter-title\""))
     }
 
+    @Test
+    fun `selection anchor is cached before the floating toolbar collapses it`() {
+        val html = NovelHtmlDocumentBuilder.build(ProcessedNovelContent("<p>Selectable body</p>", null), "Chapter", style())
+
+        assertTrue(html.contains("const selectionAnchor = () =>"))
+        assertTrue(html.contains("const anchor = selectionAnchor() || lastSelection"))
+        assertTrue(html.contains("lastSelection = null"))
+        assertTrue(html.contains("closest('.hayai-chapter-block')"))
+    }
+
     private fun style(
         fontFamily: String = "sans-serif",
         hideTitle: Boolean = false,
