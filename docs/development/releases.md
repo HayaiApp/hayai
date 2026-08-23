@@ -4,7 +4,7 @@
 
 Every push to `main` runs `.github/workflows/nightly.yml`. The workflow reads the latest release from `HayaiApp/hayai-nightly` and chooses the larger of the Git commit count or the latest `rN` value plus one. A canceled or retried run therefore cannot lower the published version.
 
-The workflow builds and tests `StandardNightly`, signs every ABI with the `build` environment, and publishes the APKs to `HayaiApp/hayai-nightly`. Nightly builds use `dev.ahmedmohamed.hayai.nightly`, so they can remain installed beside stable Hayai. The updater checks only the nightly repository.
+The workflow builds and tests `StandardNightly` and signs every ABI with the `build` environment. Before publication, it installs the exact signed/minified x86_64 APK on an Android 12 emulator and observes a cold launch for 20 seconds. `tools/verify-apk-startup.ps1` rejects fatal exceptions, the Hayai crash activity, a missing main activity, or a dead main process. Only a passing artifact is published to `HayaiApp/hayai-nightly`. Nightly builds use `dev.ahmedmohamed.hayai.nightly`, so they can remain installed beside stable Hayai. The updater checks only the nightly repository.
 
 The `build` environment must define `SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, and `KEY_PASSWORD`. The repository must define `NIGHTLY_PAT` with release access to `HayaiApp/hayai-nightly`.
 
