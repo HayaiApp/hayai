@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="hayai_extension_apk">APK</string>
+    <string name="hayai_extension_javascript">JavaScript</string>
+    <string name="hayai_extension_catalog_problem">Extension catalog: %1$s</string>
+    <string name="hayai_extension_load_failed">Load failed</string>
+    <string name="hayai_extension_uninstall_confirmation">Remove %1$s from Hayai?</string>
+    <string name="hayai_extension_available">Available</string>
     <!-- Novel APK extensions -->
     <string name="hayai_novel_extensions_title">Novel extensions</string>
     <string name="hayai_novel_repository_management">Novel repositories</string>

@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.LoadResult
+import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
 import eu.kanade.tachiyomi.util.system.launchNow
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +63,7 @@ internal class ExtensionInstallReceiver(
                         when (val result = getExtensionFromIntent(context, intent)) {
                             is LoadResult.Success -> listener.onExtensionInstalled(result.extension)
                             is LoadResult.Untrusted -> listener.onExtensionUntrusted(result.extension)
-                            else -> {}
+                            is LoadResult.Error -> listener.onExtensionLoadFailed(result.failure)
                         }
                     }
                 }
@@ -72,7 +73,7 @@ internal class ExtensionInstallReceiver(
                     when (val result = getExtensionFromIntent(context, intent)) {
                         is LoadResult.Success -> listener.onExtensionUpdated(result.extension)
                         is LoadResult.Untrusted -> listener.onExtensionUntrusted(result.extension)
-                        else -> {}
+                        is LoadResult.Error -> listener.onExtensionLoadFailed(result.failure)
                     }
                 }
             }
@@ -106,7 +107,7 @@ internal class ExtensionInstallReceiver(
     ): LoadResult {
         val pkgName =
             getPackageNameFromIntent(intent)
-                ?: return LoadResult.Error
+                ?: return LoadResult.Error(ApkLoadFailure("unknown", reason = ApkLoadFailure.Reason.PackageMissing))
         return GlobalScope
             .async(
                 Dispatchers.Default,
@@ -131,6 +132,8 @@ internal class ExtensionInstallReceiver(
         fun onExtensionUpdated(extension: Extension.Installed)
 
         fun onExtensionUntrusted(extension: Extension.Untrusted)
+
+        fun onExtensionLoadFailed(failure: ApkLoadFailure)
 
         fun onPackageUninstalled(pkgName: String)
     }

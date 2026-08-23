@@ -4,7 +4,7 @@ import androidx.annotation.StringRes
 import androidx.preference.PreferenceScreen
 import com.bluelinelabs.conductor.Controller
 import dev.ahmedmohamed.hayai.novel.integration.ContentKind
-import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerController
+import dev.ahmedmohamed.hayai.extension.managed.ui.NovelPluginRepositoryController
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.setting.SettingsController
 import eu.kanade.tachiyomi.ui.setting.onClick
@@ -30,7 +30,7 @@ internal enum class NovelRepositoryKind(
 
     fun destination(): Controller = when (this) {
         ApkExtensions -> RepoController(ContentKind.Novel)
-        LnReaderPlugins -> NovelPluginManagerController()
+        LnReaderPlugins -> NovelPluginRepositoryController()
     }
 }
 

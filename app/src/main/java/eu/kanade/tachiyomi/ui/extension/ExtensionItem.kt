@@ -3,11 +3,11 @@ package eu.kanade.tachiyomi.ui.extension
 import android.content.pm.PackageInstaller
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
+import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionEntry
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.AbstractSectionableItem
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.source.CatalogueSource
 
@@ -18,17 +18,11 @@ import eu.kanade.tachiyomi.source.CatalogueSource
  * @param header The header for this item.
  */
 data class ExtensionItem(
-    val extension: Extension,
+    val extension: ManagedExtensionEntry,
     val header: ExtensionGroupItem? = null,
     val installStep: InstallStep? = null,
     val session: PackageInstaller.SessionInfo? = null,
 ) : AbstractSectionableItem<ExtensionHolder, ExtensionGroupItem>(header) {
-    constructor(
-        extension: Extension,
-        header: ExtensionGroupItem? = null,
-        installInfo: ExtensionIntallInfo?,
-    ) : this(extension, header, installInfo?.first, installInfo?.second)
-
     val sessionProgress: Int?
         get() = (session?.progress?.times(100)?.toInt())
 
@@ -68,8 +62,8 @@ data class ExtensionItem(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
-        return extension.pkgName == (other as ExtensionItem).extension.pkgName
+        return extension.key == (other as ExtensionItem).extension.key
     }
 
-    override fun hashCode(): Int = extension.pkgName.hashCode()
+    override fun hashCode(): Int = extension.key.hashCode()
 }

@@ -31,7 +31,9 @@ data class NovelPluginCatalog(
     val available: List<NovelPluginDescriptor> = emptyList(),
     val installed: List<InstalledNovelPlugin> = emptyList(),
     val sources: List<NovelPluginSource> = emptyList(),
+    val availableOrigins: Map<String, String> = emptyMap(),
     val repositoryErrors: Map<String, Throwable> = emptyMap(),
+    val runtimeErrors: Map<String, Throwable> = emptyMap(),
     val refreshing: Boolean = false,
 )
 
@@ -57,7 +59,6 @@ class NovelPluginManager(
             .build()
     private val mutex = Mutex()
     private val sourceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var availableOrigins: Map<String, String> = emptyMap()
     private val _catalog = MutableStateFlow(loadLocal())
     val catalog: StateFlow<NovelPluginCatalog> = _catalog.asStateFlow()
 
@@ -85,12 +86,20 @@ class NovelPluginManager(
                         .map { (_, versions) ->
                             versions.maxWith { left, right -> NovelPluginVersions.compare(left.first.version, right.first.version) }
                         }
-                availableOrigins = availablePairs.associate { it.first.id to it.second }
+                val availableOrigins = availablePairs.associate { it.first.id to it.second }
                 val available =
                     availablePairs
                         .map { it.first }
                         .sortedWith(compareBy(NovelPluginDescriptor::normalizedLanguage, NovelPluginDescriptor::name))
-                _catalog.value = rebuild(_catalog.value.copy(available = available, repositoryErrors = errors, refreshing = false))
+                _catalog.value =
+                    rebuild(
+                        _catalog.value.copy(
+                            available = available,
+                            availableOrigins = availableOrigins,
+                            repositoryErrors = errors,
+                            refreshing = false,
+                        ),
+                    )
                 _catalog.value
             } finally {
                 if (_catalog.value.refreshing) _catalog.value = _catalog.value.copy(refreshing = false)
@@ -129,7 +138,7 @@ class NovelPluginManager(
     suspend fun install(pluginId: String): InstalledNovelPlugin =
         mutex.withLock {
             val descriptor = _catalog.value.available.firstOrNull { it.id == pluginId } ?: novelFailure(NovelFailure.Code.PluginUnavailable)
-            val repositoryUrl = availableOrigins[pluginId] ?: novelFailure(NovelFailure.Code.PluginRefreshRequired)
+            val repositoryUrl = _catalog.value.availableOrigins[pluginId] ?: novelFailure(NovelFailure.Code.PluginRefreshRequired)
             val bytes = download(descriptor.resolvedCodeUrl(repositoryUrl), NovelPluginStore.MAX_PLUGIN_BYTES)
             val installed = installValidated(descriptor, repositoryUrl, bytes, replacementPreferences = null)
             _catalog.value = rebuild(_catalog.value.copy(installed = store.installed()))
@@ -187,20 +196,23 @@ class NovelPluginManager(
 
     private fun rebuild(state: NovelPluginCatalog): NovelPluginCatalog {
         val oldById = state.sources.associateBy(NovelPluginSource::pluginId)
-        val sources =
-            state.installed.mapNotNull { installed ->
-                runCatching {
+        val results =
+            state.installed.map { installed ->
+                installed.descriptor.id to
+                    runCatching {
                     store.rememberSource(installed.descriptor)
                     oldById[installed.descriptor.id]?.takeIf { it.isSamePlugin(installed) }
-                        ?: NovelPluginSource(installed, store.readCode(installed)).also { source ->
+                        ?: NovelPluginSource(appContext, installed, store.readCode(installed)).also { source ->
                             sourceScope.launch {
                                 runCatching { source.warmUp() }
                             }
                         }
-                }.getOrNull()
+                    }
             }
+        val sources = results.mapNotNull { it.second.getOrNull() }
+        val runtimeErrors = results.mapNotNull { (id, result) -> result.exceptionOrNull()?.let { id to it } }.toMap()
         state.sources.filterNot { it in sources }.forEach(NovelPluginSource::close)
-        return state.copy(sources = sources)
+        return state.copy(sources = sources, runtimeErrors = runtimeErrors)
     }
 
     private suspend fun installValidated(
@@ -219,7 +231,7 @@ class NovelPluginManager(
         try {
             replacementPreferences?.let { novelRequire(replacePreferences(preferences, it), NovelFailure.Code.PluginRestoreSettings) }
             val candidate = InstalledNovelPlugin(descriptor, repositoryUrl, System.currentTimeMillis(), codeHash)
-            NovelPluginSource(candidate, code.toString(Charsets.UTF_8)).use { it.warmUp() }
+            NovelPluginSource(appContext, candidate, code.toString(Charsets.UTF_8)).use { it.warmUp() }
             return store.install(descriptor, repositoryUrl, code)
         } catch (error: Exception) {
             runCatching { novelRequire(restorePreferences(preferences, previousPreferences), NovelFailure.Code.PluginRollbackSettings) }

@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.extension.model
 
+import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
+
 sealed interface LoadResult {
     data class Success(
         val extension: Extension.Installed,
@@ -9,5 +11,7 @@ sealed interface LoadResult {
         val extension: Extension.Untrusted,
     ) : LoadResult
 
-    data object Error : LoadResult
+    data class Error(
+        val failure: ApkLoadFailure,
+    ) : LoadResult
 }

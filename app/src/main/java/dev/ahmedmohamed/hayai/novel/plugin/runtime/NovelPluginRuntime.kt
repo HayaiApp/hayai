@@ -1,5 +1,6 @@
 package dev.ahmedmohamed.hayai.novel.plugin.runtime
 
+import android.content.Context
 import dev.ahmedmohamed.hayai.novel.error.NovelFailure
 import dev.ahmedmohamed.hayai.novel.error.novelRequire
 import com.dokar.quickjs.QuickJs
@@ -7,11 +8,12 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withTimeout
 
 internal class NovelPluginRuntime(
+    context: Context,
     private val pluginId: String,
     private val siteUrl: String,
     private val dispatcher: CoroutineDispatcher,
 ) {
-    private val library = NovelPluginLibrary(pluginId, siteUrl)
+    private val library = NovelPluginLibrary(context, pluginId, siteUrl)
 
     suspend fun open(code: String): NovelPluginInstance {
         novelRequire(code.length in 1..MAX_CODE_CHARS, NovelFailure.Code.PluginCodeSize)

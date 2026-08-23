@@ -15,7 +15,6 @@ import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
-import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerController
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddController
@@ -106,12 +105,6 @@ class SettingsAdvancedController : SettingsController() {
                     summaryRes = R.string.hayai_hentai_features_summary
                     key = hayaiPreferences.hentaiFeaturesEnabled.key()
                     defaultValue = hayaiPreferences.hentaiFeaturesEnabled.defaultValue()
-                }
-
-                preference {
-                    titleRes = R.string.hayai_novel_plugins
-                    summaryRes = R.string.hayai_novel_plugins_summary
-                    onClick { router.pushController(NovelPluginManagerController().withFadeTransaction()) }
                 }
 
                 preference {

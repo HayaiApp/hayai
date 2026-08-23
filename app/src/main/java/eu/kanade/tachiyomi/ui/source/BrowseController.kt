@@ -47,7 +47,6 @@ import eu.kanade.tachiyomi.ui.main.TabbedInterface
 import eu.kanade.tachiyomi.ui.setting.SettingsBrowseController
 import eu.kanade.tachiyomi.ui.setting.SettingsSourcesController
 import eu.kanade.tachiyomi.ui.source.browse.BrowseSourceController
-import eu.kanade.tachiyomi.ui.source.browse.repos.RepoController
 import eu.kanade.tachiyomi.ui.source.globalsearch.GlobalSearchController
 import eu.kanade.tachiyomi.ui.source.searchhistory.FilterApplyResult
 import eu.kanade.tachiyomi.ui.source.searchhistory.SearchHistoryDelegate
@@ -365,7 +364,7 @@ class BrowseController :
     }
 
     private fun updateSheetMenu() {
-        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition < 2
+        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition == 0
         binding.bottomSheet.sheetToolbar.title =
             if (!onExtensionTab) {
                 binding.bottomSheet.root.currentSourceTitle
@@ -455,14 +454,7 @@ class BrowseController :
                     router.pushController(SettingsBrowseController().withFadeTransaction())
                 }
                 R.id.action_ext_repos -> {
-                    val kind = ContentKind.fromPosition(binding.bottomSheet.tabs.selectedTabPosition)
-                    val destination =
-                        if (kind == ContentKind.Novel) {
-                            NovelRepositoryHubController()
-                        } else {
-                            RepoController(kind)
-                        }
-                    router.pushController(destination.withFadeTransaction())
+                    router.pushController(NovelRepositoryHubController().withFadeTransaction())
                 }
             }
             return@setOnMenuItemClickListener true
@@ -556,9 +548,6 @@ class BrowseController :
         binding.bottomSheet.root.sheetBehavior
             ?.peekHeight = 56.spToPx + padding
         binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-            bottomMargin = -pad.toInt()
-        }
-        binding.bottomSheet.root.novelExtensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
             bottomMargin = -pad.toInt()
         }
         binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {

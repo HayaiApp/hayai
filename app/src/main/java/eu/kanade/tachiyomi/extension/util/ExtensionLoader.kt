@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.extension.util
 
 import android.annotation.SuppressLint
 import android.content.Context
+import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -202,7 +203,7 @@ internal object ExtensionLoader {
         val extensionPackage = getExtensionInfoFromPkgName(context, pkgName)
         if (extensionPackage == null) {
             Timber.e("Extension package is not found ($pkgName)")
-            return LoadResult.Error
+            return LoadResult.Error(ApkLoadFailure(pkgName, reason = ApkLoadFailure.Reason.PackageMissing))
         }
         return loadExtension(context, extensionPackage)
     }
@@ -330,10 +331,12 @@ internal object ExtensionLoader {
                 ).ifBlank { pkgName }
         val versionName = pkgInfo.versionName
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
+        fun failure(reason: ApkLoadFailure.Reason) =
+            LoadResult.Error(ApkLoadFailure(pkgName, extName, versionName, reason))
 
         if (versionName.isNullOrEmpty()) {
             Timber.w("Missing versionName for extension $extName")
-            return LoadResult.Error
+            return failure(ApkLoadFailure.Reason.VersionMissing)
         }
 
         // Validate lib version
@@ -346,20 +349,20 @@ internal object ExtensionLoader {
             Timber.w(
                 "Lib version is $libVersion, while only versions $LIB_VERSION_MIN to $LIB_VERSION_MAX are allowed",
             )
-            return LoadResult.Error
+            return failure(ApkLoadFailure.Reason.UnsupportedLibrary)
         }
 
         val requiredFeatures = pkgInfo.reqFeatures.orEmpty().mapNotNull { it.name }.toSet()
         val manifest = NovelExtensionManifest.resolve(requiredFeatures, metadata?.keySet().orEmpty())
         if (manifest == null) {
             Timber.w("Missing supported extension feature for $extName ($pkgName)")
-            return LoadResult.Error
+            return failure(ApkLoadFailure.Reason.UnsupportedManifest)
         }
 
         val signatures = getSignatures(pkgInfo)
         if (signatures.isNullOrEmpty()) {
             Timber.w("Package $pkgName isn't signed")
-            return LoadResult.Error
+            return failure(ApkLoadFailure.Reason.Unsigned)
         } else if (isExtensionInstalledByApp(context, pkgName)) {
             if (!trustSignatures.contains(signatures.last())) {
                 trustSignatures.add(signatures.last())
@@ -384,7 +387,7 @@ internal object ExtensionLoader {
                 (metadata?.getInt(manifest.nsfwKey) ?: 0) == 1
         if (!loadNsfwSource && isNsfw) {
             Timber.w("NSFW extension $pkgName not allowed")
-            return LoadResult.Error
+            return failure(ApkLoadFailure.Reason.AdultSourcesDisabled)
         }
 
         val classLoader =
@@ -392,13 +395,13 @@ internal object ExtensionLoader {
                 ChildFirstPathClassLoader(appInfo.sourceDir, null, context.classLoader)
             } catch (error: Exception) {
                 Timber.e(error, "Extension class loader error: $extName ($pkgName)")
-                return LoadResult.Error
+                return failure(ApkLoadFailure.Reason.ClassLoader)
             }
 
         val declaredClasses = metadata?.getString(manifest.classKey)
         if (declaredClasses.isNullOrBlank()) {
             Timber.w("Missing ${manifest.classKey} for extension $extName ($pkgName)")
-            return LoadResult.Error
+            return failure(ApkLoadFailure.Reason.ClassMetadata)
         }
 
         val sources =
@@ -420,21 +423,21 @@ internal object ExtensionLoader {
                             lastClassError = error
                         } catch (error: Throwable) {
                             Timber.e(error, "Extension load error: $extName ($className)")
-                            return LoadResult.Error
+                            return failure(ApkLoadFailure.Reason.SourceConstruction)
                         }
                     }
 
                     Timber.e(lastClassError, "Extension class not found: $extName ($declaredClass)")
-                    return LoadResult.Error
+                    return failure(ApkLoadFailure.Reason.SourceConstruction)
                 }
 
         if (sources.isEmpty()) {
             Timber.w("Extension $extName ($pkgName) did not declare any source classes")
-            return LoadResult.Error
+            return failure(ApkLoadFailure.Reason.EmptySources)
         }
         if (manifest.isNovel && sources.none { it.isNovelSource() }) {
             Timber.w("Novel extension $extName ($pkgName) did not expose a novel source")
-            return LoadResult.Error
+            return failure(ApkLoadFailure.Reason.NovelContract)
         }
 
         val langs =
