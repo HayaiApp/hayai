@@ -171,6 +171,48 @@ class NovelReaderActivity :
                 )
             }
         }
+    private val quoteImportLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isEmpty()) return@registerForActivityResult
+            lifecycleScope.launch {
+                val result =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val documents =
+                                uris.map { uri ->
+                                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                                        ?: error("Could not open $uri")
+                                }
+                            val current = requireNotNull(loaded).manga
+                            quoteStore.importLegacyJson(
+                                documents = documents,
+                                currentMangaId = requireNotNull(current.id),
+                                currentNovelName = current.title,
+                            )
+                        }
+                    }
+                result.fold(
+                    onSuccess = { imported ->
+                        val message =
+                            when {
+                                imported.invalidDocuments + imported.unmatchedDocuments > 0 ->
+                                    getString(
+                                        R.string.hayai_novel_reader_quote_import_partial,
+                                        imported.insertedQuotes,
+                                        imported.invalidDocuments,
+                                        imported.unmatchedDocuments,
+                                    )
+                                imported.insertedQuotes > 0 ->
+                                    getString(R.string.hayai_novel_reader_quote_imported, imported.insertedQuotes)
+                                else -> getString(R.string.hayai_novel_reader_quote_imported_existing)
+                            }
+                        toast(message)
+                        showSavedQuotes()
+                    },
+                    onFailure = { toast(R.string.hayai_novel_reader_quote_import_failed) },
+                )
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -875,15 +917,20 @@ class NovelReaderActivity :
         val mangaId = loaded?.manga?.id ?: return
         lifecycleScope.launch {
             val quotes = withContext(Dispatchers.IO) { quoteStore.forManga(mangaId) }
-            if (quotes.isEmpty()) {
-                toast(R.string.hayai_novel_reader_no_quotes)
-                return@launch
-            }
             val labels = quotes.map { quote -> getString(R.string.hayai_novel_reader_quote_list_item, quote.chapterName, quote.displayedContent.replace('\n', ' ').take(80)) }.toTypedArray()
-            AlertDialog
-                .Builder(this@NovelReaderActivity)
+            val builder =
+                AlertDialog
+                    .Builder(this@NovelReaderActivity)
                 .setTitle(R.string.hayai_novel_reader_saved_quotes)
-                .setItems(labels) { _, index -> showQuote(quotes[index]) }
+            if (quotes.isEmpty()) {
+                builder.setMessage(R.string.hayai_novel_reader_no_quotes)
+            } else {
+                builder.setItems(labels) { _, index -> showQuote(quotes[index]) }
+            }
+            builder
+                .setNeutralButton(R.string.hayai_novel_reader_import_quotes) { _, _ ->
+                    quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+                }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
         }

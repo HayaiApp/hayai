@@ -284,8 +284,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.Network("E-Hentai request failed", failure)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", (page - 1).toString())
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.removeAllQueryParameters("nw")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("tl", requireNotNull(toplist.requestValue).toString())
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.removeAllQueryParameters("nw")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_apply", "Apply Filter")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_cats", spec.excludedCategories.sumOf { it.exclusionBit }.toString())
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_search", listOf(spec.query.trim(), tags).filter(String::isNotBlank).joinToString(" "))
@@ -1133,6 +1133,42 @@ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlan.kt	TableCopy
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlan.kt	TableCopyPlan("novel_repos", "hayai_novel_repos", columns("base_url", "name")),
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt	const val KEY_REQUESTED = "retry_requested"
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt	const val PREFERENCES_NAME = "hayai_legacy_migration"
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	"DELETE FROM hayai_novel_import_runs WHERE plan_id IN (?, ?, ?)",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	"INSERT OR REPLACE INTO hayai_novel_import_runs(plan_id, status, completed_at) VALUES (?, 'complete', ?)",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	"Legacy quote recovery remains pending: %d archive row(s), %d JSON file(s), storage available=%s",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	"SELECT payload_json FROM hayai_legacy_rows WHERE table_name = 'series_quotes' ORDER BY legacy_key",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("chapter_name") val chapterName: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("content") val displayedContent: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("displayed_content") val displayedContent: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("manga_id") val mangaId: Long,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("novel_name") val novelName: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("original_content") val originalContent: String? = null,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("quote_id") val id: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("translated_content") val translatedContent: String? = null,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	arrayOf<Any?>("legacy-quote-json-v1", "legacy-quote-json-v2", "legacy-quote-recovery-v3"),
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	check(alreadyPresent) { "Failed to restore legacy quote ${quote.id}" }
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	const val LEGACY_ROOT_DIRECTORY = "Hayai"
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	const val LEGACY_STORAGE_PREFERENCE = "__APP_STATE_storage_dir"
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	const val PLAN_ID = "legacy-quote-recovery-v4"
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	const val QUOTES_DIRECTORY = "quotes"
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	db.query("SELECT 1 FROM hayai_novel_import_runs WHERE plan_id = ?", arrayOf(PLAN_ID)).use { cursor -> cursor.moveToFirst() }
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	db.query("SELECT 1 FROM hayai_quotes WHERE quote_id = ?", arrayOf(quote.id)).use { cursor -> cursor.moveToFirst() }
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	db.query("SELECT title FROM mangas WHERE _id = ?", arrayOf(legacyMangaId)).use { cursor ->
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("chapter_name", quote.chapterName)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("displayed_content", quote.displayedContent)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("language", quote.language)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("manga_id", quote.mangaId)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("novel_name", quote.novelName)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("original_content", quote.originalContent)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("quote_id", quote.id)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("timestamp", quote.timestamp)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("translated_content", quote.translatedContent)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	return db.query("SELECT _id FROM mangas WHERE title = ? COLLATE NOCASE ORDER BY _id", arrayOf(novelName)).use { cursor ->
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	Timber.e(error, "Could not read legacy quote file %s", file.name)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	Timber.e(it, "Could not recover archived quote %s", quote.id)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val FILE_NAME = Regex("novel_[0-9]+\\.json")
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val fileMangaId = file.name.removePrefix("novel_").removeSuffix(".json").toLongOrNull()
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val inserted = db.insert("hayai_quotes", SQLiteDatabase.CONFLICT_IGNORE, values)
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	"""
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	""".trimIndent()
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	fun isChallengeResult(result: String?): Boolean = result == "true"
@@ -2110,6 +2146,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val resolvedFontFamily = if (importedFontId != null) "'HayaiImported'" else fontFamily
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val selection = if (style.textSelectable) "text" else "none"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	?: error("Could not open $uri")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	.joinToString("\n\n"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"chapter:${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	).joinToString(" ").takeIf(String::isNotBlank)
@@ -2121,6 +2158,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	Nov
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	NovelReaderAction.ImportFont -> fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	private const val EXTRA_CHAPTER_ID = "hayai.chapter_id"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	private const val EXTRA_MANGA_ID = "hayai.manga_id"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	statusView.textSize = if (preferences.novelStatusBarSize.get() == "medium") 14f else 11f
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	type = "text/plain"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	val cacheKey = "${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}:${capture.selectedText.hashCode()}"
