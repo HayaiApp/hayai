@@ -94,10 +94,9 @@ class SettingsMainController :
             }
             if (hayaiPreferences.hentaiFeaturesEnabled.get()) {
                 preference {
-                    iconRes = R.mipmap.ic_ehentai_source
+                    iconRes = R.drawable.ic_ehentai_24dp
                     iconTint = tintColor
                     titleRes = R.string.hayai_eh_settings_title
-                    summaryRes = R.string.hayai_eh_settings_summary
                     onClick { navigateTo(EhSettingsController()) }
                 }
             }
