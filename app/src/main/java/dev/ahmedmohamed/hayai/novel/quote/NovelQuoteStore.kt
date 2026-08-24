@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.quote
 
 import android.content.ContentValues
 import android.database.Cursor
+import dev.ahmedmohamed.hayai.migration.LegacyQuoteJsonCodec
 import dev.ahmedmohamed.hayai.novel.error.NovelFailure
 import dev.ahmedmohamed.hayai.novel.error.novelFailure
 import dev.ahmedmohamed.hayai.novel.error.novelRequire
@@ -61,6 +62,57 @@ class NovelQuoteStore(
                     }
                 }
             }
+
+    fun importLegacyJson(
+        documents: List<String>,
+        currentMangaId: Long,
+        currentNovelName: String,
+    ): LegacyQuoteImportResult = synchronized(ADD_LOCK) {
+        var discoveredQuotes = 0
+        var insertedQuotes = 0
+        var invalidDocuments = 0
+        var unmatchedDocuments = 0
+        database.inTransactionReturn {
+            documents.forEach { value ->
+                val document = runCatching { LegacyQuoteJsonCodec.decode(value) }.getOrNull()
+                if (document == null) {
+                    invalidDocuments++
+                    return@forEach
+                }
+                if (document.quotes.isEmpty()) return@forEach
+                val mangaId =
+                    resolveMangaId(
+                        legacyMangaId = document.novelId,
+                        novelNames = document.quotes.map { quote -> quote.novelName },
+                        currentMangaId = currentMangaId,
+                        currentNovelName = currentNovelName,
+                    )
+                if (mangaId == null) {
+                    unmatchedDocuments++
+                    return@forEach
+                }
+                discoveredQuotes += document.quotes.size
+                document.quotes.forEach { row ->
+                    if (get(row.id) != null) return@forEach
+                    val quote =
+                        NovelQuote(
+                            id = row.id,
+                            mangaId = mangaId,
+                            novelName = row.novelName,
+                            chapterName = row.chapterName,
+                            displayedContent = row.displayedContent,
+                            originalContent = row.originalContent,
+                            translatedContent = row.translatedContent,
+                            language = row.language,
+                            timestamp = row.timestamp,
+                        )
+                    novelRequire(database.lowLevel().insert(INSERT_QUERY, quote.toContentValues()) >= 0, NovelFailure.Code.QuoteSave)
+                    insertedQuotes++
+                }
+            }
+        }
+        LegacyQuoteImportResult(discoveredQuotes, insertedQuotes, invalidDocuments, unmatchedDocuments)
+    }
 
     fun delete(quoteId: String): Boolean =
         database.lowLevel().delete(
@@ -135,6 +187,25 @@ class NovelQuoteStore(
                     .build(),
             ).use { cursor -> cursor.takeIf(Cursor::moveToFirst)?.toQuote() }
 
+    private fun resolveMangaId(
+        legacyMangaId: Long,
+        novelNames: List<String>,
+        currentMangaId: Long,
+        currentNovelName: String,
+    ): Long? {
+        val normalizedNames = novelNames.map(String::trim).filter(String::isNotEmpty).distinctBy(String::lowercase)
+        if (normalizedNames.size != 1) return null
+        val novelName = normalizedNames.single()
+        database.getManga(legacyMangaId).executeAsBlocking()?.takeIf { manga -> manga.title.equals(novelName, ignoreCase = true) }?.id?.let { return it }
+        if (novelName.equals(currentNovelName.trim(), ignoreCase = true)) return currentMangaId
+        return database
+            .getMangas()
+            .executeAsBlocking()
+            .filter { manga -> manga.title.equals(novelName, ignoreCase = true) }
+            .mapNotNull { manga -> manga.id }
+            .singleOrNull()
+    }
+
     private fun Cursor.toQuote() =
         NovelQuote(
             id = getString(0),
@@ -168,6 +239,13 @@ class NovelQuoteStore(
         val ADD_LOCK = Any()
     }
 }
+
+data class LegacyQuoteImportResult(
+    val discoveredQuotes: Int,
+    val insertedQuotes: Int,
+    val invalidDocuments: Int,
+    val unmatchedDocuments: Int,
+)
 
 data class NovelQuote(
     val id: String,

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="hayai_eh_settings_title">E-Hentai and ExHentai</string>
-    <string name="hayai_eh_settings_summary">Account, browsing, gallery previews, favorites sync, and updater</string>
     <string name="hayai_eh_login_title">E-Hentai login</string>
     <string name="hayai_eh_login_cloudflare_interrupted">Cloudflare interrupted login. Reopen login and complete the challenge.</string>
     <string name="hayai_eh_login_invalid_credentials">The credentials were invalid or do not have ExHentai access.</string>

@@ -307,6 +307,11 @@
     <string name="hayai_novel_reader_chapter_translation_failed">Chapter translation failed</string>
     <string name="hayai_novel_reader_no_quotes">No saved quotes for this novel</string>
     <string name="hayai_novel_reader_saved_quotes">Saved quotes</string>
+    <string name="hayai_novel_reader_import_quotes">Import old quote JSON</string>
+    <string name="hayai_novel_reader_quote_imported">Imported %1$d saved quotes</string>
+    <string name="hayai_novel_reader_quote_imported_existing">All selected quotes are already loaded</string>
+    <string name="hayai_novel_reader_quote_import_partial">Imported %1$d quotes; %2$d invalid files; %3$d unmatched novels</string>
+    <string name="hayai_novel_reader_quote_import_failed">Could not import the selected quote files</string>
     <string name="hayai_novel_reader_copy_attribution">Copy with attribution</string>
     <string name="hayai_novel_reader_move_earlier">Move earlier</string>
     <string name="hayai_novel_reader_move_later">Move later</string>
