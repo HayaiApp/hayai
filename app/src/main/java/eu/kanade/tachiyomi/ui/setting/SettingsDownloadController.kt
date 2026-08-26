@@ -9,12 +9,14 @@ import androidx.core.net.toUri
 import androidx.preference.PreferenceScreen
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.hippo.unifile.UniFile
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadSettingsController
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Category
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.preference.asImmediateFlowIn
 import eu.kanade.tachiyomi.util.system.withOriginalWidth
+import eu.kanade.tachiyomi.util.view.withFadeTransaction
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -66,6 +68,13 @@ class SettingsDownloadController : SettingsController() {
                 summaryRes = R.string.concurrent_page_downloads_summary
                 entryValues = (1..15).toList()
                 valueFormatter = { context.resources.getQuantityString(R.plurals.num_pages, it, it) }
+            }
+            preference {
+                titleRes = R.string.hayai_novel_download_pacing
+                summaryRes = R.string.hayai_novel_download_pacing_summary
+                onClick {
+                    router.pushController(NovelDownloadSettingsController().withFadeTransaction())
+                }
             }
 
             val dbCategories = db.getCategories().executeAsBlocking()

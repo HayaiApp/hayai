@@ -137,11 +137,6 @@
                 android:name="com.samsung.android.support.REMOTE_ACTION"
                 android:resource="@xml/s_pen_actions" />
         </activity>
-        <activity
-            android:name="dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity"
-            android:configChanges="screenLayout|smallestScreenSize|screenSize"
-            android:exported="false"
-            android:theme="@style/Theme.Tachiyomi" />
         <service
             android:name="dev.ahmedmohamed.hayai.novel.reader.NovelTtsPlaybackService"
             android:exported="false"

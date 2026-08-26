@@ -13,6 +13,9 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.database.DatabaseHelper
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.lang.ref.WeakReference
 import java.util.Locale
 
@@ -232,10 +235,13 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
 
     private fun contentIntent(): PendingIntent? {
         if (mangaId < 0 || chapterId < 0) return null
+        val database = Injekt.get<DatabaseHelper>()
+        val manga = database.getManga(mangaId).executeAsBlocking() ?: return null
+        val chapter = database.getChapter(chapterId).executeAsBlocking() ?: return null
         return PendingIntent.getActivity(
             this,
             0,
-            NovelReaderActivity.newIntent(this, mangaId, chapterId).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            ReaderLauncher.newIntent(this, manga, chapter).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }

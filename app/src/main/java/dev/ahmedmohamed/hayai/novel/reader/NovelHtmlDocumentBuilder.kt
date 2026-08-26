@@ -16,9 +16,10 @@ internal object NovelHtmlDocumentBuilder {
             }
         val heading = if (style.hideChapterTitle) "" else "<h1 class=\"hayai-chapter-title\">${escape(chapterTitle)}</h1>"
         val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
+        val writingDirection = style.writingDirection.value
         return """
             <!doctype html>
-            <html class="hayai-$renderingMode" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
+            <html class="hayai-$renderingMode" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
               $styleBlocks
@@ -54,7 +55,11 @@ internal object NovelHtmlDocumentBuilder {
               overflow-wrap:anywhere; -webkit-user-select:$selection; user-select:$selection;
             }
             html.hayai-paged, html.hayai-paged body { height:100%; overflow-y:hidden; }
-            html.hayai-paged body { column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:32px; overflow-x:auto; }
+            html.hayai-paged body { overflow-x:auto; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
+            html.hayai-paged #hayai-reader { height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:32px; column-fill:auto; }
+            html.hayai-paged .hayai-chapter-block { scroll-snap-align:start; }
+            html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; }
+            html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
             *, *::before, *::after { box-sizing:border-box; max-width:100%; }
             p { margin:${style.paragraphSpacing.coerceIn(0f, 5f)}em 0; text-indent:${style.paragraphIndent.coerceIn(0f, 10f)}em; }
             img, image, svg, video { height:auto; max-width:100%; }
@@ -109,6 +114,7 @@ internal object NovelHtmlDocumentBuilder {
     private const val BRIDGE_SCRIPT = """
         (() => {
           const paged = () => document.documentElement.classList.contains('hayai-paged');
+          const reversePages = () => document.documentElement.dataset.writingDirection === 'vertical-rl';
           const blocks = () => [...document.querySelectorAll('.hayai-chapter-block')];
           const visibleBlock = () => {
             const target = paged() ? innerWidth / 3 : innerHeight / 3;
@@ -119,8 +125,17 @@ internal object NovelHtmlDocumentBuilder {
           const progress = () => {
             const block = activeBlock(); if(!block)return 0;
             const max = paged() ? Math.max(1,block.scrollWidth-innerWidth) : Math.max(1,block.offsetHeight-innerHeight);
-            const current = paged() ? Math.max(0,scrollX-block.offsetLeft) : Math.max(0,scrollY-block.offsetTop);
+            const position = reversePages() ? Math.abs(scrollX) : scrollX;
+            const origin = reversePages() ? Math.abs(block.offsetLeft) : block.offsetLeft;
+            const current = paged() ? Math.max(0,position-origin) : Math.max(0,scrollY-block.offsetTop);
             return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
+          };
+          const pageLocation = () => {
+            const extent = Math.max(innerWidth, document.scrollingElement ? document.scrollingElement.scrollWidth : document.documentElement.scrollWidth);
+            const count = Math.max(1, Math.ceil(extent / Math.max(1, innerWidth)));
+            const position = Math.abs(scrollX);
+            const number = Math.max(1, Math.min(count, Math.round(position / Math.max(1, innerWidth)) + 1));
+            return {number, count};
           };
           let scheduled = false;
             const selectionAnchor = () => {
@@ -152,7 +167,10 @@ internal object NovelHtmlDocumentBuilder {
             requestAnimationFrame(() => {
               scheduled = false;
               const block=activate(visibleBlock()); const value=progress();
-              if (window.HayaiReader && block && block.dataset.state==='ready') HayaiReader.onChapterProgress(block.dataset.chapterId,value);
+              if (window.HayaiReader && block && block.dataset.state==='ready') {
+                if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(value,location.number,location.count); }
+                else HayaiReader.onChapterProgress(block.dataset.chapterId,value);
+              }
             });
           }, {passive:true});
           window.hayaiReader = {
@@ -178,18 +196,18 @@ internal object NovelHtmlDocumentBuilder {
               const ratio = Math.max(0, Math.min(100, value)) / 100;
               if (paged()) {
                 const max = Math.max(0, block.scrollWidth - innerWidth);
-                scrollTo({left:block.offsetLeft+max * ratio, top:0, behavior:'auto'});
+                scrollTo({left:(reversePages()?-1:1)*(block.offsetLeft+max * ratio), top:0, behavior:'auto'});
               } else {
                 const max = Math.max(0, block.offsetHeight - innerHeight);
                 scrollTo({top:block.offsetTop+max * ratio, left:0, behavior:'auto'});
               }
             },
             step(direction, fraction = .85) {
-              if (paged()) scrollBy({left:innerWidth * fraction * direction, behavior:'smooth'});
+              if (paged()) scrollBy({left:(reversePages()?-1:1)*innerWidth * fraction * direction, behavior:'smooth'});
               else scrollBy({top:innerHeight * fraction * direction, behavior:'smooth'});
             },
             stepPixels(pixels) {
-              if (paged()) scrollBy({left:pixels, behavior:'auto'});
+              if (paged()) scrollBy({left:(reversePages()?-1:1)*pixels, behavior:'auto'});
               else scrollBy({top:pixels, behavior:'auto'});
             },
             paragraphs() {
@@ -259,7 +277,16 @@ internal object NovelHtmlDocumentBuilder {
             },
             clearHighlight() { document.querySelectorAll('.hayai-tts-active').forEach(it => it.classList.remove('hayai-tts-active')); }
           };
-          addEventListener('load', () => { const block=activate(visibleBlock());if (window.HayaiReader&&block) HayaiReader.onReady(progress()); });
+          addEventListener('load', () => {
+            const block=activate(visibleBlock());
+            if (window.HayaiReader&&block) {
+              HayaiReader.onReady(progress());
+              if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(progress(),location.number,location.count); }
+            }
+            if (window.ResizeObserver) new ResizeObserver(() => {
+              if (window.HayaiReader&&paged()) { const location=pageLocation(); HayaiReader.onPageLocation(progress(),location.number,location.count); }
+            }).observe(document.querySelector('#hayai-reader'));
+          });
         })();
     """
 }
@@ -289,4 +316,5 @@ internal data class NovelReaderStyle(
     val ttsHighlightTextColor: Int,
     val ttsHighlightStyle: String,
     val keepTtsHighlightInView: Boolean,
+    val writingDirection: NovelWritingDirection = NovelWritingDirection.Horizontal,
 )

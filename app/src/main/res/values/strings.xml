@@ -330,6 +330,7 @@
     <string name="local_source">Local source</string>
     <string name="local_novel_source">Local novels</string>
     <string name="hayai_novels">Novels</string>
+    <string name="hayai_novel_migration_refused">Novel migration stopped because reading data could not be mapped safely</string>
     <string name="hayai_novel_extension_repos">Novel extension repositories</string>
     <string name="other">Other</string>
     <string name="global_search">Global search…</string>

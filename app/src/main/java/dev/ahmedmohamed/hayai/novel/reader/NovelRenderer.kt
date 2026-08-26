@@ -75,6 +75,7 @@ internal interface NovelRenderer {
     interface Callbacks {
         fun onReady(progress: Int)
         fun onProgress(progress: Int)
+        fun onPageLocation(progress: Int, pageNumber: Int, pageCount: Int) = onProgress(progress)
         fun onVisibleChapter(chapterId: Long, progress: Int)
         fun onRetryChapter(chapterId: Long)
         fun onTap(xFraction: Float, yFraction: Float)

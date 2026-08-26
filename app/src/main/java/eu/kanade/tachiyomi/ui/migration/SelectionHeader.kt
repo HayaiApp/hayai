@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.migration
 
 import android.view.View
+import androidx.annotation.StringRes
 import androidx.recyclerview.widget.RecyclerView
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.AbstractHeaderItem
@@ -12,7 +13,9 @@ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
 /**
  * Item that contains the selection header.
  */
-class SelectionHeader : AbstractHeaderItem<SelectionHeader.Holder>() {
+class SelectionHeader(
+    @StringRes val titleRes: Int = R.string.select_a_source_then_item_to_migrate,
+) : AbstractHeaderItem<SelectionHeader.Holder>() {
     /**
      * Returns the layout resource of this item.
      */
@@ -24,7 +27,7 @@ class SelectionHeader : AbstractHeaderItem<SelectionHeader.Holder>() {
     override fun createViewHolder(
         view: View,
         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
-    ): Holder = Holder(view, adapter)
+    ): Holder = Holder(view, adapter, titleRes)
 
     /**
      * Binds this item to the given view holder.
@@ -41,14 +44,15 @@ class SelectionHeader : AbstractHeaderItem<SelectionHeader.Holder>() {
     class Holder(
         view: View,
         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
+        @StringRes titleRes: Int,
     ) : BaseFlexibleViewHolder(view, adapter) {
         init {
             val binding = SourceHeaderItemBinding.bind(view)
-            binding.title.text = view.context.getString(R.string.select_a_source_then_item_to_migrate)
+            binding.title.setText(titleRes)
         }
     }
 
-    override fun equals(other: Any?): Boolean = other is SelectionHeader
+    override fun equals(other: Any?): Boolean = other is SelectionHeader && other.titleRes == titleRes
 
-    override fun hashCode(): Int = 0
+    override fun hashCode(): Int = titleRes
 }

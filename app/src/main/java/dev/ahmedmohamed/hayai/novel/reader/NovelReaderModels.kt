@@ -16,13 +16,95 @@ internal sealed interface NovelReaderState {
     data class Error(val message: String) : NovelReaderState
 }
 
-internal enum class NovelRenderingMode(val value: String) {
+internal enum class NovelRenderingBackend(val value: String) {
     Native("default"),
     WebView("webview"),
     ;
 
     companion object {
-        fun fromPreference(value: String): NovelRenderingMode = entries.firstOrNull { it.value == value } ?: Native
+        fun fromPreference(value: String): NovelRenderingBackend = entries.firstOrNull { it.value == value } ?: Native
+    }
+}
+
+internal typealias NovelRenderingMode = NovelRenderingBackend
+
+internal enum class NovelLayoutMode(val value: String) {
+    Continuous("continuous"),
+    Paged("paged"),
+    ;
+
+    companion object {
+        fun fromPreference(value: String): NovelLayoutMode = entries.firstOrNull { it.value == value } ?: Continuous
+    }
+}
+
+internal enum class NovelWritingDirection(val value: String) {
+    Horizontal("horizontal"),
+    VerticalRl("vertical-rl"),
+    ;
+
+    companion object {
+        fun fromPreference(value: String): NovelWritingDirection = entries.firstOrNull { it.value == value } ?: Horizontal
+    }
+}
+
+internal sealed interface NovelRenderPlan {
+    val backend: NovelRenderingBackend
+    val layout: NovelLayoutMode
+    val writingDirection: NovelWritingDirection
+
+    data class NativeContinuous(
+        override val writingDirection: NovelWritingDirection = NovelWritingDirection.Horizontal,
+    ) : NovelRenderPlan {
+        override val backend = NovelRenderingBackend.Native
+        override val layout = NovelLayoutMode.Continuous
+    }
+
+    data class Web(
+        override val layout: NovelLayoutMode,
+        override val writingDirection: NovelWritingDirection,
+    ) : NovelRenderPlan {
+        override val backend = NovelRenderingBackend.WebView
+    }
+
+    companion object {
+        fun resolve(
+            backend: NovelRenderingBackend,
+            layout: NovelLayoutMode,
+            writingDirection: NovelWritingDirection,
+        ): NovelRenderPlan =
+            if (backend == NovelRenderingBackend.Native && layout == NovelLayoutMode.Continuous && writingDirection == NovelWritingDirection.Horizontal) {
+                NativeContinuous()
+            } else {
+                Web(layout, writingDirection)
+            }
+    }
+}
+
+internal data class NovelPagePresentation(
+    val progressPercent: Int,
+    val pageNumber: Int? = null,
+    val pageCount: Int? = null,
+) {
+    val hasPageCount: Boolean
+        get() = pageNumber != null && pageCount != null && pageCount > 0
+}
+
+internal data class NovelProgressUpdate(
+    val position: Int,
+    val pagesLeft: Int,
+    val completed: Boolean,
+)
+
+internal object NovelReaderProgress {
+    fun update(progress: Int, markReadThreshold: Int): NovelProgressUpdate {
+        val position = progress.coerceIn(0, 100)
+        val completed = position >= markReadThreshold.coerceIn(1, 100)
+        return NovelProgressUpdate(
+            position = position,
+            pagesLeft = if (completed) 0 else 100 - position,
+            completed = completed,
+        )
     }
 }
 
@@ -114,6 +196,9 @@ internal object NovelBottomActions {
             NovelBottomActionState(NovelBottomAction.Translate, false),
             NovelBottomActionState(NovelBottomAction.AutoScroll, false),
             NovelBottomActionState(NovelBottomAction.Tts, true),
+            NovelBottomActionState(NovelBottomAction.TtsViewport, false),
+            NovelBottomActionState(NovelBottomAction.TtsPreviousParagraph, false),
+            NovelBottomActionState(NovelBottomAction.TtsNextParagraph, false),
             NovelBottomActionState(NovelBottomAction.Quotes, true),
             NovelBottomActionState(NovelBottomAction.Orientation, false),
             NovelBottomActionState(NovelBottomAction.Settings, true),

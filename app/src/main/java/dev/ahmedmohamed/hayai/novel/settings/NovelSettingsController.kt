@@ -99,17 +99,29 @@ class NovelSettingsController : SettingsController() {
 
         preferenceCategory {
             title = context.getString(R.string.page_layout)
-            sliderPreference { bindTo(novel.novelMarginLeft); title = context.getString(R.string.hayai_novel_reader_left_margin); entryValues = (0..64 step 2).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
-            sliderPreference { bindTo(novel.novelMarginRight); title = context.getString(R.string.hayai_novel_reader_right_margin); entryValues = (0..64 step 2).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
-            sliderPreference { bindTo(novel.novelMarginTop); title = context.getString(R.string.hayai_novel_reader_top_margin); entryValues = (0..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
-            sliderPreference { bindTo(novel.novelMarginBottom); title = context.getString(R.string.hayai_novel_reader_bottom_margin); entryValues = (0..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
+            sliderPreference { bindTo(novel.novelMarginLeft); title = context.getString(R.string.hayai_novel_reader_left_margin); entryValues = (0..64).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
+            sliderPreference { bindTo(novel.novelMarginRight); title = context.getString(R.string.hayai_novel_reader_right_margin); entryValues = (0..64).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
+            sliderPreference { bindTo(novel.novelMarginTop); title = context.getString(R.string.hayai_novel_reader_top_margin); entryValues = (0..100).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
+            sliderPreference { bindTo(novel.novelMarginBottom); title = context.getString(R.string.hayai_novel_reader_bottom_margin); entryValues = (0..100).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_dp_value, it) } }
             floatChoice(context.getString(R.string.hayai_novel_reader_paragraph_indent), novel.novelParagraphIndent, listOf(0f, 0.5f, 1f, 1.5f, 2f, 3f)) { context.getString(R.string.hayai_novel_reader_em_value, it) }
             floatChoice(context.getString(R.string.hayai_novel_reader_paragraph_spacing), novel.novelParagraphSpacing, listOf(0f, 0.25f, 0.5f, 0.75f, 1f, 1.5f)) { context.getString(R.string.hayai_novel_reader_em_value, it) }
             listPreference(activity) {
-                bindTo(novel.novelRenderingMode)
+                bindTo(novel.novelRenderingBackend)
                 title = context.getString(R.string.hayai_novel_reader_rendering_mode)
                 entries = listOf(R.string.hayai_novel_reader_native_text, R.string.hayai_novel_reader_webview).map(context::getString)
                 entryValues = listOf("default", "webview")
+            }
+            listPreference(activity) {
+                bindTo(novel.novelLayoutMode)
+                title = context.getString(R.string.hayai_novel_reader_layout_mode)
+                entries = listOf(R.string.hayai_novel_reader_continuous, R.string.hayai_novel_reader_paginated).map(context::getString)
+                entryValues = listOf("continuous", "paged")
+            }
+            listPreference(activity) {
+                bindTo(novel.novelWritingDirection)
+                title = context.getString(R.string.hayai_novel_reader_writing_direction)
+                entries = listOf(R.string.hayai_novel_reader_horizontal, R.string.hayai_novel_reader_vertical_japanese).map(context::getString)
+                entryValues = listOf("horizontal", "vertical-rl")
             }
         }
 

@@ -9,6 +9,7 @@ import androidx.appcompat.app.AlertDialog
 import com.bluelinelabs.conductor.Controller
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
+import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationException
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Category
@@ -343,18 +344,26 @@ private fun showAddDuplicateDialog(
         val enabled = titles.indices.map { listView.isItemChecked(it) }.toTypedArray()
         val flags = MigrationFlags.getFlagsFromPositions(enabled, libraryManga)
         val enhancedServices by lazy { Injekt.get<TrackManager>().services.filterIsInstance<EnhancedTrackService>() }
-        MigrationProcessAdapter.migrateMangaInternal(
-            flags,
-            db,
-            enhancedServices,
-            Injekt.get(),
-            Injekt.get(),
-            source,
-            sourceManager.getOrStub(newManga.source),
-            libraryManga,
-            newManga,
-            replace,
-        )
+        try {
+            db.inTransaction {
+                MigrationProcessAdapter.migrateMangaInternal(
+                    flags,
+                    db,
+                    enhancedServices,
+                    Injekt.get(),
+                    Injekt.get(),
+                    source,
+                    sourceManager.getOrStub(newManga.source),
+                    libraryManga,
+                    newManga,
+                    replace,
+                )
+            }
+        } catch (error: NovelMigrationException) {
+            Timber.e(error, "Novel migration data could not be mapped safely")
+            activity.toast(R.string.hayai_novel_migration_refused)
+            return
+        }
         migrateManga(libraryManga.source, !replace)
     }
 

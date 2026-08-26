@@ -1,7 +1,10 @@
 package eu.kanade.tachiyomi.ui.migration.manga.process
 
 import android.view.MenuItem
+import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationDataMover
+import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationException
 import eu.davidea.flexibleadapter.FlexibleAdapter
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.History
@@ -14,8 +17,10 @@ import eu.kanade.tachiyomi.data.track.EnhancedTrackService
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.ui.migration.MigrationFlags
 import eu.kanade.tachiyomi.util.system.launchUI
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
@@ -23,6 +28,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.util.Date
+import timber.log.Timber
 
 class MigrationProcessAdapter(
     val controller: MigrationListController,
@@ -77,32 +83,40 @@ class MigrationProcessAdapter(
 
     fun mangasSkipped() = (items.count { it.manga.migrationStatus == MigrationStatus.MANGA_NOT_FOUND })
 
-    suspend fun performMigrations(copy: Boolean) {
-        withContext(Dispatchers.IO) {
-            db.inTransaction {
-                currentItems.forEach { migratingManga ->
-                    val manga = migratingManga.manga
-                    if (manga.searchResult.initialized) {
-                        val toMangaObj =
-                            db
-                                .getManga(manga.searchResult.get() ?: return@forEach)
-                                .executeAsBlocking()
-                                ?: return@forEach
-                        val prevManga = manga.manga() ?: return@forEach
-                        val source = sourceManager.get(toMangaObj.source) ?: return@forEach
-                        val prevSource = sourceManager.get(prevManga.source)
-                        migrateMangaInternal(
-                            prevSource,
-                            source,
-                            prevManga,
-                            toMangaObj,
-                            !copy,
-                        )
+    suspend fun performMigrations(copy: Boolean): Boolean =
+        try {
+            withContext(Dispatchers.IO) {
+                db.inTransaction {
+                    currentItems.forEach { migratingManga ->
+                        val manga = migratingManga.manga
+                        if (manga.searchResult.initialized) {
+                            val toMangaObj =
+                                db
+                                    .getManga(manga.searchResult.get() ?: return@forEach)
+                                    .executeAsBlocking()
+                                    ?: return@forEach
+                            val prevManga = manga.manga() ?: return@forEach
+                            val source = sourceManager.get(toMangaObj.source) ?: return@forEach
+                            val prevSource = sourceManager.get(prevManga.source)
+                            migrateMangaInternal(
+                                prevSource,
+                                source,
+                                prevManga,
+                                toMangaObj,
+                                !copy,
+                            )
+                        }
                     }
                 }
             }
+            true
+        } catch (error: NovelMigrationException) {
+            Timber.e(error, "Novel migration data could not be mapped safely")
+            withContext(Dispatchers.Main) {
+                controller.activity?.toast(R.string.hayai_novel_migration_refused)
+            }
+            false
         }
-    }
 
     fun migrateManga(
         position: Int,
@@ -110,20 +124,26 @@ class MigrationProcessAdapter(
     ) {
         launchUI {
             val manga = getItem(position)?.manga ?: return@launchUI
-            db.inTransaction {
-                val toMangaObj =
-                    db.getManga(manga.searchResult.get() ?: return@launchUI).executeAsBlocking()
-                        ?: return@launchUI
-                val prevManga = manga.manga() ?: return@launchUI
-                val source = sourceManager.get(toMangaObj.source) ?: return@launchUI
-                val prevSource = sourceManager.get(prevManga.source)
-                migrateMangaInternal(
-                    prevSource,
-                    source,
-                    prevManga,
-                    toMangaObj,
-                    !copy,
-                )
+            try {
+                db.inTransaction {
+                    val toMangaObj =
+                        db.getManga(manga.searchResult.get() ?: return@launchUI).executeAsBlocking()
+                            ?: return@launchUI
+                    val prevManga = manga.manga() ?: return@launchUI
+                    val source = sourceManager.get(toMangaObj.source) ?: return@launchUI
+                    val prevSource = sourceManager.get(prevManga.source)
+                    migrateMangaInternal(
+                        prevSource,
+                        source,
+                        prevManga,
+                        toMangaObj,
+                        !copy,
+                    )
+                }
+            } catch (error: NovelMigrationException) {
+                Timber.e(error, "Novel migration data could not be mapped safely")
+                controller.activity?.toast(R.string.hayai_novel_migration_refused)
+                return@launchUI
             }
             removeManga(position)
         }
@@ -198,6 +218,14 @@ class MigrationProcessAdapter(
                 }
                 db.insertChapters(dbChapters).executeAsBlocking()
                 db.upsertHistoryLastRead(historyList).executeAsBlocking()
+            }
+            if (source.isNovelSource()) {
+                NovelMigrationDataMover(db).transfer(
+                    sourceManga = prevManga,
+                    targetManga = manga,
+                    replace = replace,
+                    migrateChapterState = MigrationFlags.hasChapters(flags),
+                )
             }
             // Update categories
             if (MigrationFlags.hasCategories(flags)) {

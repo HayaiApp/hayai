@@ -6,6 +6,11 @@
     <string name="hayai_novel_reader_reading_engine">Reading engine</string>
     <string name="hayai_novel_reader_native_text">Native text</string>
     <string name="hayai_novel_reader_webview">WebView</string>
+    <string name="hayai_novel_reader_layout_mode">Layout mode</string>
+    <string name="hayai_novel_reader_continuous">Continuous</string>
+    <string name="hayai_novel_reader_paginated">Paginated</string>
+    <string name="hayai_novel_reader_writing_direction">Writing direction</string>
+    <string name="hayai_novel_reader_vertical_japanese">Vertical Japanese</string>
     <string name="hayai_novel_reader_theme">Theme</string>
     <string name="hayai_novel_reader_follow_app">Follow app</string>
     <string name="hayai_novel_reader_app">App</string>

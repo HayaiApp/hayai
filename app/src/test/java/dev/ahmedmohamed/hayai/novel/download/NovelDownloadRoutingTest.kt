@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.download
 
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.source.UnmeteredSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -34,6 +35,11 @@ class NovelDownloadRoutingTest {
         val source = FakeHttpSource()
 
         assertSame(source, NovelDownloadQueueSource.from(source))
+    }
+
+    @Test
+    fun `unmetered novel sources keep their bypass marker in the J2K queue`() {
+        assertTrue(NovelDownloadQueueSource.from(FakeUnmeteredNovelSource()) is UnmeteredSource)
     }
 
     @Test
@@ -77,5 +83,11 @@ class NovelDownloadRoutingTest {
         override val lang: String = "en"
         override val supportsLatest: Boolean = false
         override val baseUrl: String = "https://example.com"
+    }
+
+    private class FakeUnmeteredNovelSource : Source, UnmeteredSource {
+        override val id: Long = 2L
+        override val name: String = "Local novel"
+        override val isNovelSource: Boolean = true
     }
 }

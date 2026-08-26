@@ -7,12 +7,12 @@ import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.AbstractFlexibleItem
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.SourceManager
-import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.parcelize.Parcelize
 
 class MigrationSourceItem(
-    val source: HttpSource,
+    val source: CatalogueSource,
     var sourceEnabled: Boolean,
 ) : AbstractFlexibleItem<MigrationSourceHolder>() {
     override fun getLayoutRes() = R.layout.migration_source_item
@@ -67,7 +67,7 @@ class MigrationSourceItem(
             sourceManager: SourceManager,
             si: ParcelableSI,
         ): MigrationSourceItem? {
-            val source = sourceManager.get(si.sourceId) as? HttpSource ?: return null
+            val source = sourceManager.get(si.sourceId) as? CatalogueSource ?: return null
 
             return MigrationSourceItem(
                 source,
