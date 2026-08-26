@@ -1,5 +1,8 @@
 package eu.kanade.tachiyomi.ui.migration
 
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.preference.PreferenceValues
@@ -22,6 +25,7 @@ abstract class BaseMigrationPresenter<T : BaseMigrationInterface>(
     protected val sourceManager: SourceManager = Injekt.get(),
     protected val db: DatabaseHelper = Injekt.get(),
     val preferences: PreferencesHelper = Injekt.get(),
+    private val novelMigrationPolicy: NovelMigrationPolicy = Injekt.get(),
 ) : BaseCoroutinePresenter<T>() {
     private var selectedSource: Pair<String, Long>? = null
     var sourceItems = emptyList<SourceItem>()
@@ -52,7 +56,6 @@ abstract class BaseMigrationPresenter<T : BaseMigrationInterface>(
     }
 
     private fun findSourcesWithManga(library: List<Manga>): List<SourceItem> {
-        val header = SelectionHeader()
         val sourceGroup = library.groupBy { it.source }
         val sortOrder = PreferenceValues.MigrationSourceOrder.fromPreference(preferences)
         val extensions = extensionManager.installedExtensionsFlow.value
@@ -63,30 +66,48 @@ abstract class BaseMigrationPresenter<T : BaseMigrationInterface>(
                 .flatten()
                 .map { it.id }
 
-        return sourceGroup
-            .mapNotNull { if (it.key != LocalSource.ID) sourceManager.getOrStub(it.key) to it.value.size else null }
-            .sortedWith(
-                compareBy(
-                    {
-                        when (sortOrder) {
-                            PreferenceValues.MigrationSourceOrder.Alphabetically -> it.first.name
-                            PreferenceValues.MigrationSourceOrder.MostEntries -> Long.MAX_VALUE - it.second
-                            PreferenceValues.MigrationSourceOrder.Obsolete ->
-                                it.first !is SourceManager.StubSource &&
-                                    it.first.id !in obsoleteSources
-                        }
-                    },
-                    { it.first.name },
-                ),
-            ).map {
-                SourceItem(
-                    it.first,
-                    header,
-                    it.second,
-                    it.first is SourceManager.StubSource,
-                    it.first.id in obsoleteSources,
+        val rows =
+            sourceGroup.mapNotNull { (sourceId, mangas) ->
+                if (sourceId == LocalSource.ID) return@mapNotNull null
+                MigrationSourceGroup(
+                    source = sourceManager.getOrStub(sourceId),
+                    count = mangas.size,
+                    contentKind = novelMigrationPolicy.contentKind(mangas.first()),
                 )
             }
+        val headers =
+            mapOf(
+                ContentKind.Manga to SelectionHeader(R.string.manga),
+                ContentKind.Novel to SelectionHeader(R.string.hayai_novels),
+            )
+        val comparator =
+            compareBy<MigrationSourceGroup>(
+                {
+                    when (sortOrder) {
+                        PreferenceValues.MigrationSourceOrder.Alphabetically -> it.source.name
+                        PreferenceValues.MigrationSourceOrder.MostEntries -> Long.MAX_VALUE - it.count
+                        PreferenceValues.MigrationSourceOrder.Obsolete ->
+                            it.source !is SourceManager.StubSource &&
+                                it.source.id !in obsoleteSources
+                    }
+                },
+                { it.source.name },
+            )
+
+        return ContentKind.entries.flatMap { kind ->
+            rows
+                .filter { it.contentKind == kind }
+                .sortedWith(comparator)
+                .map {
+                    SourceItem(
+                        it.source,
+                        headers.getValue(kind),
+                        it.count,
+                        it.source is SourceManager.StubSource,
+                        it.source.id in obsoleteSources,
+                    )
+                }
+        }
     }
 
     private fun libraryToMigrationItem(
@@ -134,6 +155,12 @@ abstract class BaseMigrationPresenter<T : BaseMigrationInterface>(
         }
     }
 }
+
+private data class MigrationSourceGroup(
+    val source: Source,
+    val count: Int,
+    val contentKind: ContentKind,
+)
 
 interface BaseMigrationInterface {
     fun setMigrationManga(

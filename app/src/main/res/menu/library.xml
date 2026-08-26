@@ -20,6 +20,12 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_content_scope"
+        android:icon="@drawable/ic_book_open_variant_24dp"
+        android:title="@string/hayai_library_scope"
+        app:showAsAction="always" />
+
+    <item
         android:id="@+id/action_more"
         android:icon="@drawable/ic_more_vert_24dp"
         android:title="@string/more"

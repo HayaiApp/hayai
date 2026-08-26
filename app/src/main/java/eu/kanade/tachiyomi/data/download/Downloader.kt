@@ -11,6 +11,7 @@ import androidx.core.net.toUri
 import com.hippo.unifile.UniFile
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadDelegate
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadQueueSource
+import dev.ahmedmohamed.hayai.novel.download.NovelDownloadThrottle
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.database.models.Chapter
@@ -502,6 +503,8 @@ class Downloader(
     }
 
     private suspend fun downloadNovelChapter(download: Download) {
+        NovelDownloadThrottle.awaitPermit(download.source)
+
         val page = download.pages?.singleOrNull() ?: Page(0, download.chapter.url)
         page.progress = 0
         page.status = Page.State.DOWNLOAD_IMAGE

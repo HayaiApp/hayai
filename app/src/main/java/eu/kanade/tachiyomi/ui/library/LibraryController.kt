@@ -59,6 +59,8 @@ import com.fredporciuncula.flow.preferences.Preference
 import com.github.florent37.viewtooltip.ViewTooltip
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.preferences.NovelLibraryFilter
 import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.SelectableAdapter
@@ -162,6 +164,8 @@ open class LibraryController(
     BottomSheetController,
     RootSearchInterface,
     FloatingSearchInterface {
+    private val hayaiPreferences = HayaiPreferences(Injekt.get())
+
     init {
         setHasOptionsMenu(true)
         retainViewMode = RetainViewMode.RETAIN_DETACH
@@ -630,6 +634,26 @@ open class LibraryController(
             displaySheet = TabbedLibraryDisplaySheet(this)
             displaySheet?.show()
         }
+    }
+
+    private fun showLibraryScope() {
+        val current = NovelLibraryFilter.fromPersistedValue(hayaiPreferences.novelLibraryFilter.get())
+        val items =
+            listOf(
+                MaterialMenuSheet.MenuSheetItem(NovelLibraryFilter.Disabled.persistedValue, R.drawable.ic_library_outline_24dp, R.string.all),
+                MaterialMenuSheet.MenuSheetItem(NovelLibraryFilter.MangaOnly.persistedValue, R.drawable.ic_book_24dp, R.string.manga),
+                MaterialMenuSheet.MenuSheetItem(NovelLibraryFilter.NovelsOnly.persistedValue, R.drawable.ic_book_open_variant_24dp, R.string.hayai_novels),
+            )
+        MaterialMenuSheet(
+            requireNotNull(activity),
+            items,
+            requireNotNull(activity).getString(R.string.hayai_library_scope),
+            current.persistedValue,
+        ) { _, selected ->
+            hayaiPreferences.novelLibraryFilter.set(selected)
+            presenter.getLibrary()
+            true
+        }.show()
     }
 
     internal fun closeTip() {
@@ -2361,6 +2385,7 @@ open class LibraryController(
                     showDisplayOptions()
                 }
             }
+            R.id.action_content_scope -> showLibraryScope()
             else -> return super.onOptionsItemSelected(item)
         }
         return true

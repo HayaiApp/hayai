@@ -452,15 +452,13 @@ class MigrationListController(
 
     fun migrateMangas() {
         launchUI {
-            adapter?.performMigrations(false)
-            navigateOut()
+            if (adapter?.performMigrations(false) == true) navigateOut()
         }
     }
 
     fun copyMangas() {
         launchUI {
-            adapter?.performMigrations(true)
-            navigateOut()
+            if (adapter?.performMigrations(true) == true) navigateOut()
         }
     }
 

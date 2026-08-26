@@ -4,6 +4,7 @@ import android.content.res.Resources
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.viewbinding.ViewBinding
+import dev.ahmedmohamed.hayai.theme.HayaiThemeSeedApplicator
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.ui.main.SearchActivity
 import eu.kanade.tachiyomi.ui.security.SecureActivityDelegate
@@ -23,6 +24,7 @@ abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
         setLocaleByAppCompat()
         updatedTheme = null
         setThemeByPref(preferences)
+        HayaiThemeSeedApplicator.apply(this)
         super.onCreate(savedInstanceState)
         SecureActivityDelegate.setSecure(this)
     }

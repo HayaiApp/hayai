@@ -81,6 +81,9 @@ import com.google.android.material.slider.SliderOrientation
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.transition.platform.MaterialContainerTransform
 import com.google.android.material.transition.platform.MaterialContainerTransformSharedElementCallback
+import dev.ahmedmohamed.hayai.novel.reader.NovelProgressPage
+import dev.ahmedmohamed.hayai.novel.reader.NovelReaderAttachment
+import dev.ahmedmohamed.hayai.novel.reader.NovelReaderIntegration
 import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
@@ -186,6 +189,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      */
     var viewer: BaseViewer? = null
         private set
+
+    private var novelReaderAttachment: NovelReaderAttachment? = null
 
     /**
      * Whether the menu is currently visible.
@@ -519,6 +524,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
      */
     override fun onDestroy() {
+        novelReaderAttachment?.close()
+        novelReaderAttachment = null
         super.onDestroy()
         viewer?.destroy()
         binding.chaptersSheet.chaptersBottomSheet.adapter = null
@@ -556,7 +563,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      * Called when the options menu of the binding.toolbar is being created. It adds our custom menu.
      */
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.reader, menu)
+        menu.clear()
+        novelReaderAttachment?.bindToolbarMenu(menu) ?: menuInflater.inflate(R.menu.reader, menu)
         return true
     }
 
@@ -800,6 +808,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     }
 
     private fun updateBottomShortcuts() {
+        novelReaderAttachment?.let {
+            it.bindBottomActions()
+            updateSums()
+            return
+        }
         val enabledButtons = preferences.readerBottomButtons().get()
         with(binding.chaptersSheet) {
             readingMode.isVisible = ReaderBottomButton.ReadingMode.isIn(enabledButtons)
@@ -851,6 +864,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      * entries.
      */
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        novelReaderAttachment?.let { attachment ->
+            if (attachment.onToolbarItem(item)) return true
+        }
         when (item.itemId) {
             R.id.action_shift_double_page -> {
                 shiftDoublePages()
@@ -1126,11 +1142,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             }
 
             displayOptions.setOnClickListener {
-                TabbedReaderSettingsSheet(this@ReaderActivity).show()
+                novelReaderAttachment?.showSettings() ?: TabbedReaderSettingsSheet(this@ReaderActivity).show()
             }
 
             displayOptions.setOnLongClickListener {
-                TabbedReaderSettingsSheet(this@ReaderActivity, true).show()
+                novelReaderAttachment?.showSettings() ?: TabbedReaderSettingsSheet(this@ReaderActivity, true).show()
                 true
             }
 
@@ -1256,6 +1272,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         }
 
         binding.readerNav.pageSeekbar.setLabelFormatter { value ->
+            if (novelReaderAttachment != null) {
+                return@setLabelFormatter getString(R.string.hayai_novel_reader_percent_value, value.roundToInt())
+            }
             val pageNumber = (value + 1).roundToInt()
             (viewer as? PagerViewer)?.let {
                 if (it.config.doublePages || it.config.splitPages) {
@@ -1297,7 +1316,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                 currentOrientation == Configuration.ORIENTATION_LANDSCAPE &&
                     (preferences.landscapeCutoutBehavior().get() == 1 || Build.VERSION.SDK_INT < Build.VERSION_CODES.P)
             val vis = insets.isVisible(statusBars())
-            val fullscreen = preferences.fullscreen().get()
+            val fullscreen = readerFullscreenEnabled()
             val systemCutoutInsets = insets.getInsetsIgnoringVisibility(systemBars() or displayCutout())
             val cutoutInsets = insets.getInsetsIgnoringVisibility(displayCutout())
             if (!firstPass && lastVis != vis && fullscreen && !isInMultiWindowMode) {
@@ -1397,7 +1416,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         }
         isScrollingThroughPagesOrChapters = true
         lifecycleScope.launch {
-            val getNextChapter = (viewer is R2LPagerViewer && !binding.readerNav.pageSeekbar.isVertical).xor(rightButton)
+            val getNextChapter = (isReverseReader() && !binding.readerNav.pageSeekbar.isVertical).xor(rightButton)
             val adjChapter = viewModel.adjacentChapter(getNextChapter)
             if (adjChapter != null) {
                 if (rightButton) {
@@ -1551,7 +1570,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     ?.collapse()
             }
         } else {
-            if (preferences.fullscreen().get() && !isInMultiWindowMode) {
+            if (readerFullscreenEnabled() && !isInMultiWindowMode) {
                 wic.hide(systemBars())
                 wic.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
             } else {
@@ -1584,18 +1603,26 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      */
     private fun setManga(manga: Manga) {
         val prevViewer = viewer
+        novelReaderAttachment?.close()
+        val nextNovelAttachment =
+            viewModel.source?.let { source ->
+                NovelReaderIntegration.attachOrNull(this, manga, source)
+            }
+        novelReaderAttachment = nextNovelAttachment
         val noDefault = manga.viewer_flags == -1
         val mangaViewer = viewModel.getMangaReadingMode()
         val newViewer =
-            when (mangaViewer) {
-                ReadingModeType.LEFT_TO_RIGHT.flagValue -> L2RPagerViewer(this)
-                ReadingModeType.VERTICAL.flagValue -> VerticalPagerViewer(this)
-                ReadingModeType.WEBTOON.flagValue -> WebtoonViewer(this)
-                ReadingModeType.CONTINUOUS_VERTICAL.flagValue -> WebtoonViewer(this, hasMargins = true)
-                else -> R2LPagerViewer(this)
-            }
+            nextNovelAttachment?.viewer
+                ?: when (mangaViewer) {
+                    ReadingModeType.LEFT_TO_RIGHT.flagValue -> L2RPagerViewer(this)
+                    ReadingModeType.VERTICAL.flagValue -> VerticalPagerViewer(this)
+                    ReadingModeType.WEBTOON.flagValue -> WebtoonViewer(this)
+                    ReadingModeType.CONTINUOUS_VERTICAL.flagValue -> WebtoonViewer(this, hasMargins = true)
+                    else -> R2LPagerViewer(this)
+                }
 
-        if (noDefault &&
+        if (nextNovelAttachment == null &&
+            noDefault &&
             viewModel.manga?.readingModeType!! > 0 &&
             viewModel.manga?.readingModeType!! != preferences.defaultReadingMode()
         ) {
@@ -1639,7 +1666,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         viewer = newViewer
         binding.viewerContainer.addView(newViewer.getView())
 
-        if (newViewer is R2LPagerViewer && !binding.readerNav.pageSeekbar.isVertical) {
+        if (isReverseReader(newViewer) && !binding.readerNav.pageSeekbar.isVertical) {
             binding.readerNav.leftChapter.tooltipText = getString(R.string.next_chapter)
             binding.readerNav.rightChapter.tooltipText = getString(R.string.previous_chapter)
         } else {
@@ -1655,7 +1682,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             lastShiftDoubleState?.let { newViewer.config.shiftDoublePage = it }
         }
 
-        binding.navigationOverlay.isLTR = viewer !is R2LPagerViewer
+        binding.navigationOverlay.isLTR = !isReverseReader(newViewer)
         binding.viewerContainer.setBackgroundColor(
             if (viewer is WebtoonViewer) {
                 Color.BLACK
@@ -1672,7 +1699,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     binding.navLayout.layoutParams as CoordinatorLayout.LayoutParams
                 params.anchorGravity == Gravity.TOP or Gravity.END
             } else {
-                newViewer is R2LPagerViewer
+                isReverseReader(newViewer)
             }
         reapplyVerticalSeekbarLayout()
 
@@ -1687,16 +1714,25 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     ?.readingModeType ?: 0,
             )
         binding.chaptersSheet.readingMode.setIconResource(viewerMode.iconRes)
+        nextNovelAttachment?.applyWindowPreferences()
         startPostponedEnterTransition()
     }
 
+    private fun isReverseReader(candidate: BaseViewer? = viewer): Boolean =
+        candidate is R2LPagerViewer ||
+            (candidate === novelReaderAttachment?.viewer && novelReaderAttachment?.viewer?.isRightToLeft == true)
+
+    private fun readerFullscreenEnabled(): Boolean = novelReaderAttachment?.isFullscreenEnabled ?: preferences.fullscreen().get()
+
     override fun onPause() {
+        novelReaderAttachment?.onPause()
         viewModel.saveCurrentChapterReadingProgress()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        novelReaderAttachment?.onResume()
         viewModel.setReadStartTime()
     }
 
@@ -1708,7 +1744,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         config?.setFullscreen()
         if (isInMultiWindowMode) {
             wic.show(systemBars())
-        } else if (!menuVisible && preferences.fullscreen().get()) {
+        } else if (!menuVisible && readerFullscreenEnabled()) {
             wic.hide(systemBars())
             wic.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
         }
@@ -1799,7 +1835,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         if (viewerChapters.nextChapter == null && viewerChapters.prevChapter == null) {
             binding.readerNav.startCell.isVisible = false
             binding.readerNav.endCell.isVisible = false
-        } else if (viewer is R2LPagerViewer && !binding.readerNav.pageSeekbar.isVertical) {
+        } else if (isReverseReader() && !binding.readerNav.pageSeekbar.isVertical) {
             binding.readerNav.leftChapter.alpha = if (viewerChapters.nextChapter != null) 1f else 0.5f
             binding.readerNav.rightChapter.alpha = if (viewerChapters.prevChapter != null) 1f else 0.5f
         } else {
@@ -1909,6 +1945,35 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         hasExtraPage: Boolean,
     ) {
         viewModel.onPageSelected(page, hasExtraPage)
+        if (page is NovelProgressPage) {
+            val presentation = page.presentation
+            val currentPage =
+                if (presentation.hasPageCount) {
+                    presentation.pageNumber.toString()
+                } else {
+                    getString(R.string.hayai_novel_reader_percent_value, presentation.progressPercent)
+                }
+            val totalPages = presentation.pageCount?.toString().orEmpty()
+            binding.pageNumber.text =
+                if (presentation.hasPageCount) {
+                    if (resources.isLTR) "$currentPage/$totalPages" else "$totalPages/$currentPage"
+                } else {
+                    currentPage
+                }
+            if (isReverseReader() && !binding.readerNav.pageSeekbar.isVertical) {
+                binding.readerNav.rightPageText.text = currentPage
+                binding.readerNav.leftPageText.text = totalPages
+            } else {
+                binding.readerNav.leftPageText.text = currentPage
+                binding.readerNav.rightPageText.text = totalPages
+            }
+            if (binding.chaptersSheet.chaptersBottomSheet.selectedChapterId != page.chapter.chapter.id) {
+                binding.chaptersSheet.chaptersBottomSheet.refreshList()
+            }
+            binding.readerNav.pageSeekbar.valueTo = NovelProgressPage.MAX_PROGRESS.toFloat()
+            binding.readerNav.pageSeekbar.value = presentation.progressPercent.toFloat()
+            return
+        }
         val pages = page.chapter.pages ?: return
 
         val currentPage =
@@ -1934,7 +1999,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             }
         }
         binding.pageNumber.text = if (resources.isLTR) "$currentPage/$totalPages" else "$totalPages/$currentPage"
-        if (viewer is R2LPagerViewer && !binding.readerNav.pageSeekbar.isVertical) {
+        if (isReverseReader() && !binding.readerNav.pageSeekbar.isVertical) {
             binding.readerNav.rightPageText.text = currentPage
             binding.readerNav.leftPageText.text = totalPages
         } else {
@@ -2253,7 +2318,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                         setMenuVisibility(false)
                     }
                 }
-            val fullscreen = preferences.fullscreen().get()
+            val fullscreen = readerFullscreenEnabled()
             if (sheetManageNavColor) {
                 binding.navBar.backgroundColor =
                     if (!fullscreen) {

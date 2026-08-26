@@ -5,8 +5,8 @@ import android.view.View
 import androidx.core.view.isVisible
 import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
 import eu.kanade.tachiyomi.databinding.MigrationSourceItemBinding
+import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.icon
-import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
 
 class MigrationSourceHolder(
@@ -20,7 +20,7 @@ class MigrationSourceHolder(
     }
 
     fun bind(
-        source: HttpSource,
+        source: CatalogueSource,
         sourceEnabled: Boolean,
     ) {
         binding.title.text = source.nameBasedOnEnabledLanguages(adapter.enabledLanguages, adapter.extensionManager)

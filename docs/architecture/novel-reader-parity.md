@@ -1,65 +1,64 @@
 # Novel reader parity reference
 
-This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279b517e14b7af422467`. Hayai keeps the J2K image `ReaderActivity` unchanged.
+This reference maps Hayai's text-reader behavior to Tsundoku commit `547ddea3ce3e2a4943a1279b517e14b7af422467` while keeping TachiyomiJ2K's real reader as the only reader shell and interaction owner.
 
 ## Ownership
 
-- `NovelReaderActivity` owns novel chapter focus, progress, and typed actions while inflating J2K's unmodified `reader_activity.xml` shell. `J2kNovelReaderChrome` is the concrete adapter for that shell's IDs, insets, and visibility.
-- `NativeNovelRenderer` owns selectable native text blocks.
-- `WebNovelRenderer` owns isolated WebView chapter blocks.
-- `NovelChapterQueue` bounds retained chapter data. A prefetched chapter never becomes current until its block becomes visible.
-- `NovelTtsPlaybackService` owns speech state and the media-playback notification.
-- `NovelFontStore` owns imported font files under `files/hayai/novel-fonts`.
-- J2K remains the source of truth for novels, chapters, bookmarks, progress, history, and tracking.
+- J2K `ReaderActivity`, `ReaderViewModel`, `ReaderChapter`, `ViewerChapters`, `ReaderChapterSheet`, `ReaderNavView`, toolbar, slider, gestures, lifecycle, history, tracking, and chapter transitions remain authoritative for both manga and novels.
+- `ReaderLauncher` always opens `ReaderActivity`. There is no Hayai reader activity, duplicate chapter adapter, or copied reader chrome.
+- `NovelChapterPageLoader` adapts a novel document to 101 ready `NovelProgressPage` values. Those pages are a normalized 0–100 persistence protocol for J2K; they never enter an image holder or image viewer.
+- `NovelReaderViewer` is a J2K `BaseViewer` that owns only the text viewport and translates renderer movement into the normalized J2K page protocol.
+- `NovelReaderAttachment` installs novel-only actions into J2K's existing toolbar and chapter-sheet buttons. It owns quotes, highlights, translation, TTS, offline actions, statistics, editing, and reader settings without owning chapter focus or progress persistence.
+- `NativeNovelRenderer` owns selectable native text. `WebNovelRenderer` owns isolated WebView text, paginated layout, and vertical Japanese writing.
+- `NovelTtsPlaybackService` owns speech state and its media notification. Notification taps return through `ReaderLauncher` to the same J2K reader.
+- J2K remains the sole source of truth for novels, chapters, bookmarks, progress, history, tracking, categories, and queued downloads.
 
 ## Upstream behavior map
 
 | Behavior | Tsundoku source | Hayai implementation |
 |---|---|---|
 | Reader preferences and stable keys | `ReaderPreferences.kt` | `HayaiPreferences.kt` |
-| Reading, Appearance, Controls, TTS, and Advanced tabs | `NovelPage.kt` | Tsundoku's option grouping hosted by J2K's `TabbedBottomSheetDialog`, with J2K filter/text buttons, subtitle labels, sliders, material dialogs, and draggable-card rows in `NovelReaderSettingsSheet.kt`; searchable counterparts in `NovelSettingsController.kt` |
-| Tap-zone mode IDs | `NovelConfig.kt` and `viewer/navigation/*` | `NovelTapZones` |
-| Continuous chapter loading | `NovelTextViewViewer.kt` and `NovelWebViewViewer.kt` | `NovelChapterQueue`, both renderers, and visible-block callbacks |
+| Reading, Appearance, Controls, TTS, and Advanced tabs | `NovelPage.kt` | `NovelReaderSettingsSheet.kt` inside J2K's existing reader settings entry point; searchable counterparts remain in `NovelSettingsController.kt` |
+| Tap-zone mode IDs | `NovelConfig.kt` and `viewer/navigation/*` | J2K `ViewerNavigation` implementations selected by the stored novel tap-zone preference |
+| Chapter loading and navigation | text viewers and reader app bars | J2K `ChapterLoader`, `ReaderViewModel`, `ViewerChapters`, chapter sheet, toolbar, adjacent-chapter buttons, and `ReaderActivity.loadChapter` |
 | Web styling and append snippets | `NovelWebViewStyler.kt` | `NovelHtmlDocumentBuilder`, `WebNovelRenderer`, and `NovelCustomizationStore` |
-| Reader app bars and chapter actions | `NovelReaderAppBars.kt` | the actual J2K `reader_activity.xml`, `reader_nav.xml`, collapsible `reader_chapters_sheet.xml`, and a Hayai-owned chapter adapter |
-| Progress controls | `NovelReaderAppBars.kt` | J2K's real `ReaderNavView` and `ReaderSlider`, without the manga page-number cells, plus `NovelVerticalProgressView` when explicitly selected |
-| TTS | `viewer/text/shared/TtsController.kt` | `NovelTtsController` and `NovelTtsPlaybackService`; active transport controls replace novel action slots inside J2K's reader sheet |
-| Quotes and highlights | the novel reader selection tools | `NovelQuoteStore`, `NovelHighlightStore`, and typed reader actions |
+| Progress controls | `NovelReaderAppBars.kt` | J2K's real `ReaderNavView`, `ReaderSlider`, page overlay, and chapter sheet driven by a 0–100 novel progress adapter |
+| TTS | `viewer/text/shared/TtsController.kt` | `NovelTtsController` and `NovelTtsPlaybackService`; transport replaces novel-only action slots in the J2K chapter sheet |
+| Quotes and highlights | novel-reader selection tools | `NovelQuoteStore`, `NovelHighlightStore`, and typed selection actions hosted by `NovelReaderAttachment` |
 
-## Reader chrome and selection contract
+## Reader interaction contract
 
-The J2K toolbar and chapter controls overlay the viewer exactly as they do in the image reader. `J2kNovelReaderChrome` adds no reader-specific top padding, and showing or hiding chrome never changes the viewport. Native and Web renderers use J2K's confirmed-single-tap gesture contract so scrolling does not summon the controls. Opening a chapter restores only partial progress, never marks it read, and never reopens a completed chapter at its endpoint; progress and read state change only after actual reader movement reaches the configured threshold.
+The J2K toolbar, chapter sheet, navigation overlay, page slider, key handling, adjacent-chapter actions, orientation lifecycle, progress saving, tracking, and back behavior are used directly. The novel viewer does not inflate `reader_activity.xml`, reimplement the sheet, maintain a private chapter index, or write chapter rows itself.
 
-Both renderers expose the same typed `NovelSelection`. Native text remains selectable, focusable in touch mode, long-clickable, and uses Android's arrow-key movement method whenever editing is off. Read-only selection removes the irrelevant EditText Cut/Paste actions and keeps compact Quote, Define, and Translate actions visible; edit mode retains Android's editing actions. The WebView is created with the Activity UI context, remains focusable, disables classifier-injected actions, and caches the complete selection anchor on `selectionchange`. If opening the floating toolbar collapses the live range, Quote, Define, Translate, and Search consume that cached anchor. The anchor resolves its chapter from the range ancestor rather than whichever retained chapter is currently marked active.
+`ReaderActivity` selects `NovelReaderViewer` only when the loaded source proves the novel capability. `ChapterLoader` selects `NovelChapterPageLoader` at the same boundary. Image sources continue through J2K's original loaders and pager/webtoon viewers unchanged. A `NovelProgressPage` carries the loaded document and a 0–100 position; `ReaderViewModel.onPageSelected` persists that position as `last_page_read`, derives `pages_left`, and applies the configured completion threshold before J2K performs its normal tracking and duplicate-chapter work.
 
-The shared action registry assigns the first floating-toolbar orders to visible, localized Quote, Define, and Google Translate entries; Search remains overflow. Quote enters the existing duplicate-safe quote dialog. Define opens a resizable Custom Tab so the selected Chrome provider's signed-in session is available. Translate tries Google Translate's process-text and send contracts before the same browser path. The secure WebView sheet is only a fallback and retains WebView cookies, not Chrome cookies.
+The page overlay and slider show a percentage for continuous text. Paginated Web rendering reports its real page number and page count while continuing to persist normalized progress. Chapter changes always pass through J2K's `ViewerChapters` and `loadChapter` paths.
 
-## Continuous-flow rules
+## Rendering modes
 
-- Every renderer block uses the J2K chapter ID as its stable ID.
-- Append and prepend reject duplicate IDs.
-- Automatic loading uses `focus=false`. Explicit chapter navigation uses `focus=true`.
-- Prepending preserves the visible block offset.
-- The queue retains at most the configured previous chapter, current chapter, next chapter, or both adjacent chapters.
-- A failed block keeps its place and exposes retry after a 15-second cooldown.
-- Crossing forward over a chapter writes 100 percent before the reader writes the new chapter progress.
-- `progressWriteMutex` serializes chapter progress writes.
-- Incognito mode updates chapter progress but does not add history rows.
+Backend, layout, and writing direction are independent preferences:
+
+- Native + continuous + horizontal uses `NativeNovelRenderer`.
+- Web supports continuous or paginated layout.
+- Vertical Japanese selects Web rendering with `writing-mode: vertical-rl` and `text-orientation: mixed`.
+- Paginated Web rendering uses horizontal columns, page-sized stepping, snap behavior, and reports real page counts through the renderer bridge.
+
+Unsupported Native combinations resolve to Web rather than pretending that Native implemented pagination or vertical writing. The existing backend preference key remains stable for restored installations; layout and writing direction use separate Hayai keys.
+
+## Selection and feature contract
+
+Both renderers expose the same typed `NovelSelection`. Native text remains selectable and retains Android editing behavior when edit mode is enabled. Read-only selection keeps Quote, Define, Translate, and Search actions. Web selection caches its complete anchor so an action remains usable after Android's floating toolbar changes the live selection.
+
+`NovelReaderAttachment` preserves the production feature paths previously coupled to the duplicate activity: saved quotes, persistent highlights, selection translation, full-chapter translation, dictionary/search handoff, TTS playback and paragraph highlighting, bookmark actions, offline save/remove, chapter statistics, edit mode, orientation, imported-font settings, presets, CSS/JavaScript snippets, and the full searchable settings page.
 
 ## Imported-font rules
 
 - The Storage Access Framework accepts local TTF and OTF files.
 - `NovelFontStore` rejects unsupported signatures, files smaller than 256 bytes, files larger than 20 MB, and more than 32 saved fonts.
 - The native renderer loads the stored file with `Typeface.createFromFile`.
-- The WebView renderer uses `@font-face` and the private `hayai-novel-font` scheme.
+- The Web renderer uses `@font-face` and the private `hayai-novel-font` scheme.
 - Deleting the selected font restores `sans-serif`.
 
 ## Verification state
 
-The reader settings sheet deliberately contains no second UI vocabulary. Progress mode uses J2K's filter button layout, actions use J2K's text button layout, numeric values use J2K subtitle styling so values such as 100 percent cannot collide with or split the title, and configurable action/status order uses J2K's draggable download-header card with `ItemTouchHelper`. Hayai owns only the preference mapping and callbacks.
-
-The installed-APK run captured in `artifacts/emulator-verification/reader-settings-refactor-reader-chrome.xml`, `reader-settings-refactor-options.png`, and `reader-settings-refactor-more.png` verifies the reader toolbar safe area, separate title and metadata rows, intact percentage subtitles, all five option tabs, and native drag-handle ordering rows against the restored migration fixture.
-
-The coherent reader batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` run in `artifacts/emulator-verification/20260822-043650` verified legacy migration, the exact J2K reader shell, the absence of manga page-number labels, active TTS transport controls, all five reader settings tabs, offline save, process restart recovery, the logged-out E-Hentai settings state, and Browse.
-
-The discarded custom-shell workflow remains in `artifacts/emulator-verification/20260822-032809` only as regression evidence. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote and highlight selection, and orientation changes still need dedicated device flows.
+The separate `NovelReaderActivity`, `J2kNovelReaderChrome`, and `NovelReaderChapterAdapter` have been removed. The implementation compiles through the real J2K reader boundary. Focused JVM tests cover reader routing, render-plan selection, normalized progress, paginated HTML/page reporting, and vertical-writing CSS. Final unit, boundary, localization, whitespace, and emulator results are recorded only after those commands complete successfully.

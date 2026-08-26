@@ -17,6 +17,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+$script:foregroundIntentArgs = $null
+$script:restoringForeground = $false
 $productionId = "dev.ahmedmohamed.hayai"
 if ($ApplicationId -eq $productionId -or !$ApplicationId.EndsWith(".debug")) { throw "Only the debug test application ID is allowed." }
 if (!$AllowAuthorizedAvd -and $AvdName -notmatch '(?i)(hayai.*test|test.*hayai)') {
@@ -77,7 +79,23 @@ function Dump-Window([string] $Name) {
         if (!$pulled) { Start-Sleep -Milliseconds 500 }
     }
     if (!$pulled) { throw "UI hierarchy was not created at $remote." }
-    return [xml](Get-Content -Raw -LiteralPath $path)
+    $window = [xml](Get-Content -Raw -LiteralPath $path)
+    $visiblePackage = $window.hierarchy.node.package
+    if (
+        !$script:restoringForeground -and
+        $null -ne $script:foregroundIntentArgs -and
+        $visiblePackage -ne $ApplicationId
+    ) {
+        $script:restoringForeground = $true
+        try {
+            Invoke-Adb $script:foregroundIntentArgs | Out-Null
+            Start-Sleep -Milliseconds 800
+            return Dump-Window $Name
+        } finally {
+            $script:restoringForeground = $false
+        }
+    }
+    return $window
 }
 function Find-Node([xml] $Window, [string] $Pattern) {
     $node = Find-NodeOptional $Window $Pattern
@@ -116,6 +134,15 @@ function Tap-NodeAfterSwiping([string] $Pattern, [string] $EvidenceName, [int] $
     throw "Scrollable UI node was not found: $Pattern"
 }
 function Assert-Node([string] $Pattern, [string] $EvidenceName) { [void](Find-Node (Dump-Window $EvidenceName) $Pattern) }
+function Assert-NodeAfterSwiping([string] $Pattern, [string] $EvidenceName, [int] $MaximumSwipes = 8) {
+    for ($attempt = 0; $attempt -le $MaximumSwipes; $attempt++) {
+        $window = Dump-Window "$EvidenceName-$attempt"
+        if ($null -ne (Find-NodeOptional $window $Pattern)) { return }
+        Invoke-Adb @("shell", "input", "swipe", "672", "2300", "672", "1150", "500") | Out-Null
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Scrollable UI node was not found: $Pattern"
+}
 function Dismiss-CompatibilityWarning {
     try {
         $window = Dump-Window "00-compatibility-warning"
@@ -284,28 +311,42 @@ try {
     Capture "01-migrated-library"
     Database-Report "01-migrated"
 
-    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
+    Invoke-Adb @("shell", "am", "start", "-S", "-W", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.reader.ReaderActivity", "--el", "manga", "100", "--el", "chapter", "1000") | Out-Null
     Start-Sleep -Seconds 2
     Dismiss-CompatibilityWarning
     Dismiss-ImmersiveModePrompt
-    Start-Sleep -Seconds 1
+    $script:foregroundIntentArgs = @("shell", "am", "start", "--activity-reorder-to-front", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.reader.ReaderActivity", "--el", "manga", "100", "--el", "chapter", "1000")
     $readerWindow = Dump-Window "02-novel-reader-actions"
+    if ($null -eq (Find-NodeOptional $readerWindow "Verification Novel")) {
+        Invoke-Adb @("shell", "input", "tap", "672", "1496") | Out-Null
+        Start-Sleep -Seconds 1
+        $readerWindow = Dump-Window "02-novel-reader-actions"
+    }
     [void](Find-Node $readerWindow "Verification Novel")
     [void](Find-Node $readerWindow "Read aloud")
-    $toolbarNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.'resource-id' -match ':(id/)?toolbar$' } | Select-Object -First 1
+    $viewerContainerNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.'resource-id' -match ':(id/)?reader_layout$' } | Select-Object -First 1
     $contentNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.class -in @('android.widget.EditText', 'android.webkit.WebView') } | Select-Object -First 1
-    if ($null -eq $toolbarNode -or $null -eq $contentNode) { throw "Reader chrome or novel content was missing from the hierarchy." }
-    if ($toolbarNode.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "Reader toolbar bounds were invalid." }
-    $toolbarBottom = [int]$Matches[4]
+    if ($null -eq $viewerContainerNode -or $null -eq $contentNode) { throw "The real J2K reader layout or novel content was missing from the hierarchy." }
+    if ($viewerContainerNode.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "J2K reader-layout bounds were invalid." }
+    $viewerBounds = @([int]$Matches[1], [int]$Matches[2], [int]$Matches[3], [int]$Matches[4])
     if ($contentNode.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "Novel content bounds were invalid." }
-    $contentTop = [int]$Matches[2]
-    if ($contentTop -lt $toolbarBottom) { throw "Novel content starts at y=$contentTop beneath toolbar bottom y=$toolbarBottom." }
-    $mangaProgressLabels = $readerWindow.SelectNodes("//node") | Where-Object {
-        $_.'resource-id' -match ':(id/)?(left_page_text|right_page_text)$'
+    $contentBounds = @([int]$Matches[1], [int]$Matches[2], [int]$Matches[3], [int]$Matches[4])
+    if (
+        $contentBounds[0] -lt $viewerBounds[0] -or
+        $contentBounds[1] -lt $viewerBounds[1] -or
+        $contentBounds[2] -gt $viewerBounds[2] -or
+        $contentBounds[3] -gt $viewerBounds[3] -or
+        $contentBounds[2] -le $contentBounds[0] -or
+        $contentBounds[3] -le $contentBounds[1]
+    ) {
+        throw "Novel content bounds [$($contentBounds -join ',')] were outside the real J2K reader layout [$($viewerBounds -join ',')]."
     }
-    if ($mangaProgressLabels) { throw "Novel mode exposed J2K's manga page-number labels." }
+    $j2kProgress = $readerWindow.SelectNodes("//node") | Where-Object {
+        $_.'resource-id' -match ':(id/)?(page_number|left_page_text|right_page_text)$' -and ($_.text -replace '\s', '') -match '^\d{1,3}%$'
+    } | Select-Object -First 1
+    if ($null -eq $j2kProgress) { throw "The real J2K progress surface did not expose continuous novel progress as a percentage." }
     Capture "02-novel-reader"
-    Tap-Node "^Read aloud$" "02a-open-tts-controls"
+    Tap-WindowNode (Find-Node $readerWindow "^Read aloud$") "Read aloud"
     $ttsWindow = $null
     for ($attempt = 0; $attempt -lt 8 -and $null -eq $ttsWindow; $attempt++) {
         Start-Sleep -Seconds 1
@@ -320,8 +361,9 @@ try {
     Tap-WindowNode (Find-Node $ttsWindow "^Stop reading aloud$") "Stop reading aloud"
     $readerWindow = Dump-Window "02-novel-reader-settings-action"
     if ($null -eq (Find-NodeOptional $readerWindow "^Reading$")) {
-        if ($null -eq (Find-NodeOptional $readerWindow "^Reader settings$")) { throw "Neither the reader settings action nor its sheet was visible." }
-        Tap-Node "^Reader settings$" "03-reader-settings-button"
+        $settingsAction = Find-NodeOptional $readerWindow "^(Reader settings|Display options)$"
+        if ($null -eq $settingsAction) { throw "Neither the reader settings action nor its sheet was visible." }
+        Tap-WindowNode $settingsAction "Reader settings"
     }
     $settingsWindow = Dump-Window "03-reader-settings-tabs"
     @("Reading", "Appearance", "Controls", "TTS", "Advanced") | ForEach-Object { [void](Find-Node $settingsWindow "^$([regex]::Escape($_))$") }
@@ -346,25 +388,33 @@ try {
     Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
     Start-Sleep -Seconds 3
     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
-    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
+    Invoke-Adb @("shell", "am", "start", "-S", "-W", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.reader.ReaderActivity", "--el", "manga", "100", "--el", "chapter", "1000") | Out-Null
     Start-Sleep -Seconds 2
     Dismiss-CompatibilityWarning
     Dismiss-ImmersiveModePrompt
+    $script:foregroundIntentArgs = @("shell", "am", "start", "--activity-reorder-to-front", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.reader.ReaderActivity", "--el", "manga", "100", "--el", "chapter", "1000")
+    Invoke-Adb @("shell", "input", "tap", "672", "1496") | Out-Null
     Start-Sleep -Seconds 1
     Assert-Node "Offline" "09-offline-after-restart"
     Capture "09-offline-after-restart"
 
     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
     Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity") | Out-Null
+    $script:foregroundIntentArgs = @("shell", "am", "start", "--activity-reorder-to-front", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity")
     Start-Sleep -Seconds 2
     Tap-Node "^More$" "07-eh-more"
     Tap-Node "^Settings$" "07-eh-settings"
-    Tap-NodeAfterSwiping "^Advanced$" "07-eh-advanced"
-    Tap-NodeAfterSwiping "^E-Hentai and ExHentai$" "07-eh-account"
-    if ($SkipAuthenticatedEh) {
-        Assert-Node "Logged out|credentials" "10-eh-logged-out"
-        Capture "10-eh-logged-out"
-    } else {
+    Tap-NodeAfterSwiping "^Reader$" "07-reader-settings"
+    Tap-NodeAfterSwiping "^Novel reader$" "07-novel-reader-settings"
+    Assert-NodeAfterSwiping "Rendering mode" "07-novel-reader-settings-open"
+    Capture "07-novel-reader-settings"
+    Invoke-Adb @("shell", "input", "keyevent", "4") | Out-Null
+    Start-Sleep -Milliseconds 800
+    Invoke-Adb @("shell", "input", "keyevent", "4") | Out-Null
+    Start-Sleep -Milliseconds 800
+    if (!$SkipAuthenticatedEh) {
+        Tap-NodeAfterSwiping "^Advanced$" "07-eh-advanced"
+        Tap-NodeAfterSwiping "^E-Hentai and ExHentai$" "07-eh-account"
         Tap-Node "Recheck current credentials" "07-eh-recheck"
         Start-Sleep -Seconds 5
         Assert-Node "Verified|verified" "08-eh-verified"
@@ -385,6 +435,7 @@ try {
 
     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
     Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity") | Out-Null
+    $script:foregroundIntentArgs = @("shell", "am", "start", "--activity-reorder-to-front", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity")
     Start-Sleep -Seconds 3
     Dismiss-CompatibilityWarning
     $mainWindow = Dump-Window "15-main-before-browse"

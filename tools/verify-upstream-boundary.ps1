@@ -36,6 +36,9 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/data/track/TrackManager.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/updater/GithubRelease.kt"
+        # Approved in docs/architecture/j2k-reset.md. Applies one Hayai-owned content seed before activity view inflation.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/base/activity/BaseActivity.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/base/activity/BaseThemedActivity.kt"
         "app/src/main/java/eu/kanade/tachiyomi/source/Source.kt"
         "app/src/main/java/eu/kanade/tachiyomi/source/NovelSource.kt"
         "app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt"
@@ -56,9 +59,15 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt"
+        # Approved in docs/architecture/j2k-reset.md. Reuses J2K migration sections and delegates novel side-data transfer to Hayai.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/BaseMigrationPresenter.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SelectionHeader.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationProcessAdapter.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/util/MangaExtensions.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsPresenter.kt"
         # Approved in docs/architecture/j2k-reset.md. Hayai product links replace inherited project destinations.
@@ -74,13 +83,16 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt"
-        # Approved in docs/architecture/j2k-reset.md. Reads one typed initial-page extra only.
+        # Approved in docs/architecture/j2k-reset.md. Hosts the Hayai novel viewer/attachment inside the sole J2K reader.
         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/reader/loader/ChapterLoader.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt"
         # Approved in docs/architecture/j2k-reset.md. Projects the conditional Hayai E-Hentai settings destination.
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsDownloadController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt"
         # Approved in docs/architecture/j2k-reset.md. Registers Hayai novel and conditional E-Hentai settings for J2K search.
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/search/SettingsSearchHelper.kt"
@@ -121,7 +133,7 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"
     )
     $approvedProtectedFiles = @(
-        # Approved in docs/architecture/j2k-reset.md. This reads one typed initial-page extra only.
+        # Approved in docs/architecture/j2k-reset.md. This hosts the novel viewer/attachment without changing image branches.
         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt"
     )
     $protectedChanges = $changed | Where-Object { $_ -in $protectedFiles -and $_ -notin $approvedProtectedFiles }
@@ -132,7 +144,7 @@ try {
     if ($preferencesHelper -match 'flowPrefs\.getEnum\s*\(') {
         Write-Error "PreferencesHelper reintroduced FlowPreferences' throwing enum decoder. Use getCompatibleEnum."
     }
-    Write-Host "Hayai boundary verified: $($allowedUpstreamKotlin.Count) J2K adapter files allowed; one documented ReaderActivity initial-page adapter approved."
+    Write-Host "Hayai boundary verified: $($allowedUpstreamKotlin.Count) J2K adapter files allowed; the documented unified ReaderActivity adapter is approved."
 }
 finally {
     Pop-Location

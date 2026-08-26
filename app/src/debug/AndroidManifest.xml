@@ -5,7 +5,7 @@
     <application>
         <!-- Debug-only emulator verification entry points. Production variants keep these private. -->
         <activity
-            android:name="dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity"
+            android:name="eu.kanade.tachiyomi.ui.reader.ReaderActivity"
             android:exported="true"
             tools:replace="android:exported" />
     </application>

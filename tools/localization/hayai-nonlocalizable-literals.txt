@@ -1367,6 +1367,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelAssetReferences.kt	
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelAssetReferences.kt	private val MARKDOWN_RESOURCE = Regex("!\\[[^]]*]\\(([^)\\s]+)(?:\\s+[^)]*)?\\)")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelAssetReferences.kt	return runCatching { URLDecoder.decode(encoded.replace("+", "%2B"), Charsets.UTF_8.name()) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadDelegate.kt	override val baseUrl: String = "https://invalid.invalid"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadPreferences.kt	"hayai_novel_download_delay_source_$sourceId"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadPreferences.kt	const val KEY_GLOBAL_DELAY_MILLIS = "hayai_novel_download_delay_ms"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	"Unable to create the novel download directory."
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	): String = sha256("$sourceId\n$chapterUrl".toByteArray(Charsets.UTF_8))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	check(canonicalTarget.parentFile == canonicalParent) { "Refusing to delete outside the novel download directory." }
@@ -1539,6 +1541,73 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"SELECT COUNT(*), COALESCE(SUM(s.word_count), 0), " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"WHERE c.manga_id IN ($placeholders)",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	val placeholders = ids.joinToString(",") { "?" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	?: throw NovelMigrationException("Source chapter $sourceId is missing")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	?: throw NovelMigrationException("Target chapter $targetChapterId disappeared during migration")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	.table("hayai_novel_chapter_stats")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	.where("chapter_id = ?")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"Chapter ${source.chapterNumber} has ${targets.size} possible migration targets",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"chapter_id = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"created_at,updated_at FROM hayai_novel_highlights WHERE highlight_id = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"created_at,updated_at FROM hayai_novel_highlights WHERE manga_id = ? ORDER BY highlight_id",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"hayai_novel_chapter_stats",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"hayai-migration-highlight-v1",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"hayai-migration-quote-v1",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? ORDER BY stats.chapter_id",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"SELECT highlight_id,manga_id,chapter_id,source_id,manga_url,chapter_url,color,note,anchor_json," +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"SELECT quote_id,manga_id,novel_name,chapter_name,displayed_content,original_content," +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"SELECT stats.chapter_id,stats.word_count FROM hayai_novel_chapter_stats stats " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"translated_content,language,timestamp FROM hayai_quotes WHERE manga_id = ? ORDER BY quote_id",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"translated_content,language,timestamp FROM hayai_quotes WHERE quote_id = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	chapter.id ?: throw NovelMigrationException("Novel chapter has no database identity")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	if (updated != 1) throw NovelMigrationException("Expected one $table row, updated $updated")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	if (updated != expected) throw NovelMigrationException("Expected to move $expected quotes, moved $updated")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	insertExactly("hayai_novel_chapter_stats", values)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	insertExactly("hayai_novel_highlights", values)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	insertExactly("hayai_quotes", values)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("anchor_json", highlight.anchorJson)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_id", action.targetChapterId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_id", chapterMap.getValue(highlight.chapterId))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_id", highlight.chapterId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_name", quote.chapterName)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_url", highlight.chapterUrl)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_url", highlightTargetChapterUrl(highlight, chapterMap, targetChapterUrls))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("color", highlight.color)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("created_at", highlight.createdAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("displayed_content", quote.displayedContent)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("highlight_id", highlight.id)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("language", quote.language)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("last_page_read", source.last_page_read)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_id", highlight.mangaId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_id", quote.mangaId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_id", targetMangaId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_url", highlight.mangaUrl)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_url", targetManga.url)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("note", highlight.note)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("novel_name", quote.novelName)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("original_content", quote.originalContent)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("pages_left", source.pages_left)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("quote_id", quote.id)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("source_id", highlight.sourceId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("source_id", targetManga.source)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("timestamp", quote.timestamp)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("translated_content", quote.translatedContent)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("updated_at", highlight.updatedAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("word_count", action.wordCount)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Chapter statistic conflicts with target chapter $targetChapterId")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Could not allocate a destination highlight identity")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Could not allocate a destination quote identity")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Could not insert migrated data into $table")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Could not remove the source chapter statistic")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Multiple source chapters map to target chapter $targetId")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Novel migration data transfer failed", error)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Source chapter $sourceId has no stable chapter number")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Target chapter $targetChapterId is missing")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	updateExactlyOne("chapters", "_id = ?", arrayOf(targetChapterId), values)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	updateExactlyOne("hayai_novel_highlights", "highlight_id = ?", arrayOf(highlight.id), values)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	UpdateQuery.builder().table("hayai_quotes").where("manga_id = ?").whereArgs(sourceMangaId).build(),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val sourceMangaId = sourceManga.id ?: throw NovelMigrationException("Source novel has no database identity")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val targetMangaId = targetManga.id ?: throw NovelMigrationException("Target novel has no database identity")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val values = ContentValues(1).apply { put("manga_id", targetMangaId) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	.setType("text/plain")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	@Suppress("DEPRECATION")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	const val GOOGLE_TRANSLATE_PACKAGE = "com.google.android.apps.translate"
@@ -2084,6 +2153,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	val ASSET_SCHEMES = setOf("hayai-novel-image", "novel-image")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	val REMOTE_SCHEMES = setOf("http", "https")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	check(NovelReaderIdentity.isNovel(source)) { "Source ${source.id} is not a novel source" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	private val downloadStore: NovelDownloadStore = NovelDownloadStore(File(context.filesDir, "hayai/novel-downloads")),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	require(page is NovelProgressPage) { "Novel loader received a non-novel page" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	val chapterId = requireNotNull(chapter.id) { "Novel chapter is missing its durable database identity" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessor.kt	.joinToString("\n") { paragraph -> "<p>${escapeHtml(paragraph).replace("\n", "<br>")}</p>" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessor.kt	.replace("\"", "&quot;")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessor.kt	.replace("\r\n", "\n")
@@ -2128,12 +2201,14 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"<style>$readerCss</style><style>${style.customCss.safeStyleText()}</style>"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"outline" -> ".hayai-tts-active { outline:2px solid $background; outline-offset:2px; border-radius:.2em; }"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"underline" -> ".hayai-tts-active { text-decoration:underline 3px $background; text-underline-offset:.18em; }"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<html class="hayai-$renderingMode" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<html class="hayai-$renderingMode" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<main id="hayai-reader"><article class="hayai-chapter-block" data-chapter-id="$chapterId" data-state="ready">$heading${content.html}</article></main>
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<meta charset="utf-8">
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	const activeBlock = () => document.querySelector('.hayai-chapter-block[data-active="true"]') || visibleBlock();
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	else -> ".hayai-tts-active { background:$background; color:$foreground; border-radius:.2em; }"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	private const val BRIDGE_SCRIPT = """
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	private fun cssString(value: String): String = "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	private fun String.safeScriptText(): String = replace("</script", "<\\/script", ignoreCase = true)
@@ -2146,32 +2221,32 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val resolvedFontFamily = if (importedFontId != null) "'HayaiImported'" else fontFamily
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val selection = if (style.textSelectable) "text" else "none"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	?: error("Could not open $uri")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	.joinToString("\n\n"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"chapter:${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	).joinToString(" ").takeIf(String::isNotBlank)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	customCss = listOf(preferences.novelCustomCss.get(), customization.enabledCss()).filter(String::isNotBlank).joinToString("\n"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	customJs = listOf(preferences.novelCustomJs.get(), customization.enabledJs()).filter(String::isNotBlank).joinToString("\n"),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	gravity = Gravity.CENTER_VERTICAL or if (preferences.novelVerticalScrollbarPosition.get() == "left") Gravity.START else Gravity.END
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	if (selected == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	NovelDownloadStore(File(filesDir, "hayai/novel-downloads")),
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	NovelReaderAction.ImportFont -> fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	private const val EXTRA_CHAPTER_ID = "hayai.chapter_id"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	private const val EXTRA_MANGA_ID = "hayai.manga_id"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	statusView.textSize = if (preferences.novelStatusBarSize.get() == "medium") 14f else 11f
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	type = "text/plain"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	val cacheKey = "${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}:${capture.selectedText.hashCode()}"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	val heightFraction = if (preferences.novelVerticalProgressSliderSize.get() == "half") 0.5f else 1f
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	val labels = fonts.map { "${if (fontStore.token(it) == selected) "✓  " else ""}${it.name}" }.toTypedArray()
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	val text = listOfNotNull(chapter.manga.title, chapter.chapter.name, url).joinToString("\n")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	?: error("Unable to read the selected quote file")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	.setItems(highlights.map { it.note?.let { note -> "$note · ${it.anchor.exact.take(100)}" } ?: it.anchor.exact.take(100) }.toTypedArray()) { _, index ->
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	"hayai-novel-font-${System.identityHashCode(this)}",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	"hayai-novel-quotes-${System.identityHashCode(this)}",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${Uri.encode(text)}")))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	if (selected == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	NovelReaderAction.ImportFont -> fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	type = "text/plain"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val key = "${current.manga.source}:${current.manga.url}:${current.chapter.url}:${text.hashCode()}"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val labels = fonts.map { "${if (fontStore.token(it) == selected) "✓  " else ""}${it.name}" }.toTypedArray()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val mangaId = requireNotNull(content.manga.id) { "Novel is missing its durable database identity" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val result = runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, input.text.toString(), "") }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val text = listOfNotNull(current.manga.title, current.chapter.name, sourcePageUrl()).joinToString("\n")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	AutoScroll("auto_scroll"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Battery("battery"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Chapter("chapter"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Continuous("continuous"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Edit("edit"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Horizontal("horizontal"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Native("default"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	NextChapter("next_chapter"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Orientation("orientation"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Paged("paged"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	PreviousChapter("prev_chapter"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Progress("progress"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Quotes("quotes"),
@@ -2183,6 +2258,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Tts("
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsNextParagraph("tts_next_paragraph"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsPreviousParagraph("tts_prev_paragraph"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsViewport("tts_viewport"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	VerticalRl("vertical-rl"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	WebView("webview"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 1) "left" else "right")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.hayai_novel_reader_app to "app", R.string.hayai_novel_reader_light to "light", R.string.dark to "dark", R.string.hayai_novel_reader_sepia to "sepia", R.string.black to "black", R.string.hayai_novel_reader_grey to "grey", R.string.hayai_novel_reader_custom to "custom"),
@@ -2190,13 +2266,19 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_alignment, preferences.novelTextAlign, listOf(R.string.left to "left", R.string.hayai_novel_reader_justified to "justify", R.string.center to "center", R.string.right to "right"), onStyleChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_font, preferences.novelFontFamily, listOf(R.string.hayai_novel_reader_sans_serif to "sans-serif", R.string.hayai_novel_reader_serif to "serif", R.string.hayai_novel_reader_monospace to "monospace"), onStyleChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_highlight_style, preferences.novelTtsHighlightStyle, listOf(R.string.hayai_novel_reader_background to "background", R.string.hayai_novel_reader_underline to "underline", R.string.hayai_novel_reader_outline to "outline"), onStyleChanged)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingMode, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelLayoutMode, listOf(R.string.hayai_novel_reader_continuous to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingBackend, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_position, preferences.novelStatusBarPosition, listOf(R.string.top to "top", R.string.bottom to "bottom"), onChromeChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_size, preferences.novelStatusBarSize, listOf(R.string.hayai_novel_reader_small to "small", R.string.hayai_novel_reader_medium to "medium"), onChromeChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_writing_direction, preferences.novelWritingDirection, listOf(R.string.hayai_novel_reader_horizontal to "horizontal", R.string.hayai_novel_reader_vertical_japanese to "vertical-rl"), onStyleChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelTheme.set("custom")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelVerticalScrollbarPosition.get() == "left" -> 1
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val values = listOf("") + voices.map { it.name }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderViewer.kt	customCss = listOf(preferences.novelCustomCss.get(), customization.enabledCss()).filter(String::isNotBlank).joinToString("\n"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderViewer.kt	customJs = listOf(preferences.novelCustomJs.get(), customization.enabledJs()).filter(String::isNotBlank).joinToString("\n"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderViewer.kt	fun documentText(callback: (String) -> Unit) = renderer?.documentText(callback) ?: callback("")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderViewer.kt	val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt	val appendJavaScript: String = "",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"black" -> 0xFF000000.toInt() to 0xFFECECEC.toInt()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"custom" ->
@@ -2273,8 +2355,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelCustomizationStore.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelCustomizationStore.kt	val id: String = "",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("app", "light", "dark", "sepia", "black", "grey", "custom")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("background", "underline", "outline")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("continuous", "paged")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("default", "webview")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("half", "full")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("horizontal", "vertical-rl")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("left", "justify", "center", "right")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("left", "right")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("NONE", "HORIZONTAL", "VERTICAL", "BOTH")
@@ -2746,6 +2830,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val nov
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelInfiniteScroll = store.getBoolean("pref_novel_infinite_scroll", false)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelKeepChaptersLoaded = store.getInt("pref_novel_keep_chapters_loaded", 0)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelKeepScreenOn = store.getBoolean("pref_novel_keep_screen_on", false)
+app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelLayoutMode = store.getString("pref_novel_layout_mode", "continuous")
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelLineHeight = store.getFloat("pref_novel_line_height", 1.6f)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelMarginBottom = store.getInt("pref_novel_margin_bottom", 16)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelMarginLeft = store.getInt("pref_novel_margin_left", 16)
@@ -2759,7 +2844,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val nov
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelParagraphIndent = store.getFloat("pref_novel_paragraph_indent", 0f)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelParagraphSpacing = store.getFloat("pref_novel_paragraph_spacing", 0.5f)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelRegexReplacements = store.getString("pref_novel_regex_replacements", "[]")
-app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelRenderingMode = store.getString("pref_novel_rendering_mode", "default")
+app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelRenderingBackend = store.getString("pref_novel_rendering_mode", "default")
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelShowProgressSlider = store.getBoolean("pref_novel_show_progress_slider", true)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelShowRawHtml = store.getBoolean("pref_novel_show_raw_html", false)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelSourceCssPriority = store.getBoolean("pref_novel_source_css_priority", false)
@@ -2796,6 +2881,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val nov
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelVerticalScrollbarPosition = store.getString("pref_novel_vertical_scrollbar_position", "right")
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelVolumeKeysScroll = store.getBoolean("pref_novel_volume_keys_scroll", false)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelWebViewDevTools = store.getBoolean("pref_novel_webview_devtools", false)
+app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelWritingDirection = store.getString("pref_novel_writing_direction", "horizontal")
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibility.kt	RecentSurface.Mixed -> error("Mixed visibility is derived from History and Updates")
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	.rawQuery(RawQuery.builder().query("SELECT DISTINCT source FROM mangas").build())
 app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	choice.copy(label = "${choice.label} (${choice.sourceId})")
@@ -3045,6 +3131,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	norm
 app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	normalized.contains("nhentai") -> SourceFamily.NHentai
 app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	normalized.contains("novel") -> SourceFamily.Novel
 app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	normalized.contains("pururin") || normalized.contains("puruin") -> SourceFamily.Pururin
+app/src/main/java/dev/ahmedmohamed/hayai/theme/HayaiThemePreferences.kt	const val KEY_CUSTOM_SEED_COLOR = "hayai_theme_custom_seed_color"
+app/src/main/java/dev/ahmedmohamed/hayai/theme/HayaiThemePreferences.kt	const val KEY_CUSTOM_SEED_ENABLED = "hayai_theme_custom_seed_enabled"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	?: error("The release has no Hayai APK for $primaryAbi.")
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"arm64-v8a" -> "-arm64-v8a"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"armeabi-v7a" -> "-armeabi-v7a"
