@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="hayai_library_scope">Library section</string>
     <string name="hayai_extension_apk">APK</string>
     <string name="hayai_extension_javascript">JavaScript</string>
     <string name="hayai_extension_catalog_problem">Extension catalog: %1$s</string>

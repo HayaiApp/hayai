@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hayai_novel_download_pacing">Novel download pacing</string>
+    <string name="hayai_novel_download_pacing_summary">Delay queued novel downloads to reduce source rate limiting</string>
+    <string name="hayai_novel_download_pacing_global">Global pacing</string>
+    <string name="hayai_novel_download_delay">Delay between novel downloads</string>
+    <string name="hayai_novel_download_delay_summary">The first queued chapter starts immediately. Later chapters from the same plugin wait from the previous start.</string>
+    <string name="hayai_novel_download_pacing_scope">This delay applies only to queued offline novel downloads. Reading, browsing, library updates, manga downloads, and unmetered sources are not delayed.</string>
+    <string name="hayai_novel_download_per_plugin">Per-plugin delay</string>
+    <string name="hayai_novel_download_use_global">Use global delay</string>
+    <string name="hayai_novel_download_no_delay">No delay</string>
+    <string name="hayai_novel_download_no_metered_plugins">No installed metered novel plugins are available.</string>
+    <string name="hayai_novel_download_unmetered_bypass">Local and other unmetered sources always bypass pacing, even if an old override remains stored for their source ID.</string>
+    <plurals name="hayai_novel_download_seconds">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
+
+    <string name="hayai_custom_theme_seed">Custom app color</string>
+    <string name="hayai_custom_theme_seed_summary">Generate the application color scheme from one seed color</string>
+    <string name="hayai_custom_theme_seed_unsupported">Custom generated colors are unavailable on this device. Your current application theme is unchanged.</string>
+    <string name="hayai_custom_theme_seed_color">Seed color</string>
+</resources>

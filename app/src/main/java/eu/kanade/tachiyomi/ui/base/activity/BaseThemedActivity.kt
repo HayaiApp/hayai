@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.base.activity
 import android.content.res.Resources
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import dev.ahmedmohamed.hayai.theme.HayaiThemeSeedApplicator
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.util.system.getThemeWithExtras
 import eu.kanade.tachiyomi.util.system.setLocaleByAppCompat
@@ -17,6 +18,7 @@ abstract class BaseThemedActivity : AppCompatActivity() {
         setLocaleByAppCompat()
         updatedTheme = null
         setThemeByPref(preferences)
+        HayaiThemeSeedApplicator.apply(this)
         super.onCreate(savedInstanceState)
     }
 

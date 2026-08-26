@@ -21,8 +21,8 @@ import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.PreMigrationControllerBinding
+import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.SourceManager
-import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.base.SmallToolbarInterface
 import eu.kanade.tachiyomi.ui.base.controller.BaseController
 import eu.kanade.tachiyomi.ui.migration.manga.process.MigrationListController
@@ -152,13 +152,12 @@ class PreMigrationController(
      *
      * @return list containing enabled sources.
      */
-    private fun getEnabledSources(): List<HttpSource> {
+    private fun getEnabledSources(): List<CatalogueSource> {
         val languages = prefs.enabledLanguages().get()
         val sourcesSaved = prefs.migrationSources().get().split("/")
         var sources =
             sourceManager
                 .getDiscoverableCatalogueSources()
-                .filterIsInstance<HttpSource>()
                 .filter { it.lang in languages }
                 .sortedBy { "(${it.lang}) ${it.name}" }
         sources =

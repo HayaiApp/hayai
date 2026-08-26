@@ -263,6 +263,15 @@ internal class WebNovelRenderer(
         }
 
         @JavascriptInterface
+        fun onPageLocation(progress: Int, pageNumber: Int, pageCount: Int) = webView.post {
+            callbacks.onPageLocation(
+                progress.coerceIn(0, 100),
+                pageNumber.coerceAtLeast(1),
+                pageCount.coerceAtLeast(1),
+            )
+        }
+
+        @JavascriptInterface
         fun retryChapter(chapterId: String) = webView.post { chapterId.toLongOrNull()?.let(callbacks::onRetryChapter) }
 
         @JavascriptInterface

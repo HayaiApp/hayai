@@ -30,7 +30,11 @@ class HayaiPreferences(
     val novelMarginRight = store.getInt("pref_novel_margin_right", 16)
     val novelMarginTop = store.getInt("pref_novel_margin_top", 50)
     val novelMarginBottom = store.getInt("pref_novel_margin_bottom", 16)
-    val novelRenderingMode = store.getString("pref_novel_rendering_mode", "default")
+    // Keep the old key as the durable backend choice for restored installations.
+    val novelRenderingBackend = store.getString("pref_novel_rendering_mode", "default")
+    val novelRenderingMode = novelRenderingBackend
+    val novelLayoutMode = store.getString("pref_novel_layout_mode", "continuous")
+    val novelWritingDirection = store.getString("pref_novel_writing_direction", "horizontal")
     val novelNavigationMode = store.getInt("reader_navigation_mode_novel", 5)
     val novelNavigationInverted = store.getString("reader_tapping_inverted_novel", "NONE")
     val novelEnableEpubStyles = store.getBoolean("pref_novel_enable_epub_css", true)

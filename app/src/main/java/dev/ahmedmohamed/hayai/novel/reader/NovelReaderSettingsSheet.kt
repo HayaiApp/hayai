@@ -90,7 +90,9 @@ internal class NovelReaderSettingsSheet(
 
     private fun readerPage(page: LinearLayout) {
         page.heading(R.string.hayai_novel_reader_renderer)
-        page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingMode, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
+        page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingBackend, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
+        page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelLayoutMode, listOf(R.string.hayai_novel_reader_continuous to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
+        page.choice(R.string.hayai_novel_reader_writing_direction, preferences.novelWritingDirection, listOf(R.string.hayai_novel_reader_horizontal to "horizontal", R.string.hayai_novel_reader_vertical_japanese to "vertical-rl"), onStyleChanged)
         page.choice(
             R.string.tap_zones,
             preferences.novelNavigationMode,

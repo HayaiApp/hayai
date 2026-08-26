@@ -8,6 +8,7 @@ import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
 import androidx.preference.PreferenceScreen
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import dev.ahmedmohamed.hayai.theme.HayaiThemeSettings
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.asImmediateFlow
 import eu.kanade.tachiyomi.data.preference.asImmediateFlowIn
@@ -89,6 +90,8 @@ class SettingsAppearanceController : SettingsController() {
                         true
                     }
                 }
+
+                HayaiThemeSettings.addTo(this, activity)
             }
 
             preferenceCategory {

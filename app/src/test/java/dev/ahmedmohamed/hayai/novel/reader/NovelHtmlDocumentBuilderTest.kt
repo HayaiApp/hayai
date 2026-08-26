@@ -38,9 +38,30 @@ class NovelHtmlDocumentBuilderTest {
         assertTrue(html.contains("closest('.hayai-chapter-block')"))
     }
 
+    @Test
+    fun `paged vertical documents expose page counting and vertical Japanese css`() {
+        val html =
+            NovelHtmlDocumentBuilder.build(
+                ProcessedNovelContent("<p>縦書き</p>", null),
+                "Chapter",
+                style(renderingMode = "paged", writingDirection = NovelWritingDirection.VerticalRl),
+            )
+
+        assertTrue(html.contains("class=\"hayai-paged\""))
+        assertTrue(html.contains("data-writing-direction=\"vertical-rl\""))
+        assertTrue(html.contains("writing-mode:vertical-rl"))
+        assertTrue(html.contains("text-orientation:mixed"))
+        assertTrue(html.contains("const position = reversePages() ? Math.abs(scrollX) : scrollX"))
+        assertTrue(html.contains("const origin = reversePages() ? Math.abs(block.offsetLeft) : block.offsetLeft"))
+        assertTrue(html.contains("HayaiReader.onPageLocation"))
+        assertTrue(html.contains("ResizeObserver"))
+    }
+
     private fun style(
         fontFamily: String = "sans-serif",
         hideTitle: Boolean = false,
+        renderingMode: String = "default",
+        writingDirection: NovelWritingDirection = NovelWritingDirection.Horizontal,
     ) = NovelReaderStyle(
         fontSize = 16,
         fontFamily = fontFamily,
@@ -59,12 +80,13 @@ class NovelHtmlDocumentBuilderTest {
         textSelectable = true,
         hideChapterTitle = hideTitle,
         sourceCssPriority = false,
-        renderingMode = "default",
+        renderingMode = renderingMode,
         customCss = "",
         customJs = "",
         ttsHighlightColor = 0xFFFFFF00.toInt(),
         ttsHighlightTextColor = 0xFF000000.toInt(),
         ttsHighlightStyle = "background",
         keepTtsHighlightInView = true,
+        writingDirection = writingDirection,
     )
 }

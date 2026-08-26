@@ -35,6 +35,8 @@ import eu.kanade.tachiyomi.ui.reader.loader.DownloadPageLoader
 import eu.kanade.tachiyomi.ui.reader.loader.HttpPageLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import dev.ahmedmohamed.hayai.novel.reader.NovelProgressPage
+import dev.ahmedmohamed.hayai.novel.reader.NovelReaderProgress
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.settings.OrientationType
 import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
@@ -496,22 +498,33 @@ class ReaderViewModel(
 
         val selectedChapter = page.chapter
 
-        // Save last page read and mark as read if needed
-        selectedChapter.chapter.last_page_read = page.index
-        selectedChapter.chapter.pages_left =
-            (selectedChapter.pages?.size ?: page.index) - page.index
         val shouldTrack = !isIncognitoModeForSource(manga?.source, preferences) || hasTrackers
-        if (shouldTrack &&
-            // For double pages, check if the second to last page is doubled up
-            (
-                (selectedChapter.pages?.lastIndex == page.index && page.firstHalf != true) ||
-                    (hasExtraPage && selectedChapter.pages?.lastIndex?.minus(1) == page.index)
-            )
-        ) {
-            selectedChapter.chapter.read = true
-            updateTrackChapterAfterReading(selectedChapter)
-            deleteChapterIfNeeded(selectedChapter)
-            markDuplicateChaptersAsRead(selectedChapter)
+        if (page is NovelProgressPage) {
+            val progress = NovelReaderProgress.update(page.index, page.content.markReadThreshold)
+            selectedChapter.chapter.last_page_read = progress.position
+            selectedChapter.chapter.pages_left = progress.pagesLeft
+            if (shouldTrack && progress.completed) {
+                selectedChapter.chapter.read = true
+                updateTrackChapterAfterReading(selectedChapter)
+                deleteChapterIfNeeded(selectedChapter)
+                markDuplicateChaptersAsRead(selectedChapter)
+            }
+        } else {
+            selectedChapter.chapter.last_page_read = page.index
+            selectedChapter.chapter.pages_left =
+                (selectedChapter.pages?.size ?: page.index) - page.index
+            if (shouldTrack &&
+                // For double pages, check if the second to last page is doubled up
+                (
+                    (selectedChapter.pages?.lastIndex == page.index && page.firstHalf != true) ||
+                        (hasExtraPage && selectedChapter.pages?.lastIndex?.minus(1) == page.index)
+                )
+            ) {
+                selectedChapter.chapter.read = true
+                updateTrackChapterAfterReading(selectedChapter)
+                deleteChapterIfNeeded(selectedChapter)
+                markDuplicateChaptersAsRead(selectedChapter)
+            }
         }
 
         if (selectedChapter != currentChapters.currChapter) {

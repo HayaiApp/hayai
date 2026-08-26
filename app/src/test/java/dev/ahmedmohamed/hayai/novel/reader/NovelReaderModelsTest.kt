@@ -50,6 +50,9 @@ class NovelReaderModelsTest {
         val decoded = NovelBottomActions.deserialize("""[{"id":"tts","enabled":false},{"id":"removed","enabled":true}]""")
 
         assertFalse(decoded.first { it.action == NovelBottomAction.Tts }.enabled)
+        assertFalse(decoded.first { it.action == NovelBottomAction.TtsViewport }.enabled)
+        assertFalse(decoded.first { it.action == NovelBottomAction.TtsPreviousParagraph }.enabled)
+        assertFalse(decoded.first { it.action == NovelBottomAction.TtsNextParagraph }.enabled)
         assertTrue(decoded.any { it.action == NovelBottomAction.Settings })
         assertEquals(decoded.size, decoded.distinctBy { it.action }.size)
     }
