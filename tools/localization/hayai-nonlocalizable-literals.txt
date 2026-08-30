@@ -1381,7 +1381,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	pr
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val backup = File(root, ".$key.bak-${UUID.randomUUID()}")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val digest = MessageDigest.getInstance("SHA-256")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val offlinePaths = references.associateWith { reference -> "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	return "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}${extension?.let { ".$it" }.orEmpty()}"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val extension = cleanPath.substringAfterLast('.', "").lowercase().takeIf { it.matches(SAFE_EXTENSION) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val SAFE_ASSET_FILE = Regex("[0-9a-f]{64}")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val SAFE_EXTENSION = Regex("[a-z0-9]{1,10}")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val staging = File(root, ".$key.tmp-${UUID.randomUUID()}")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelOfflineManager.kt	private val store = NovelDownloadStore(File(context.filesDir, "hayai/novel-downloads"))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	?: "bin"
@@ -1535,6 +1538,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsControl
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val cover = coverUrl?.takeIf { mediaType(it).startsWith("image/") }?.let { url ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val digest = MessageDigest.getInstance("SHA-256")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val language = source.lang.takeUnless { it.isBlank() || it == "all" } ?: "en"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? LIMIT 1",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"SELECT 1 FROM hayai_novel_plugin_sources WHERE source_id = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"COALESCE(SUM(CASE WHEN c.read = 1 THEN s.word_count " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"ELSE (s.word_count * MIN(MAX(c.last_page_read, 0), 100) / 100) END), 0) " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"FROM hayai_novel_chapter_stats s JOIN chapters c ON c._id = s.chapter_id " +
@@ -1921,6 +1930,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	?.get("exclude")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	?.get("include")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	?.let { header("Cookie", it) }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	?.let { set("Cookie", it) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	.header("Referer", absoluteChapterUrl(chapterUrl) ?: "$baseUrl/")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	.ifBlank { "https://example.com" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	.putString("$bridgeCacheKey:filters", filters)
@@ -3142,6 +3152,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/theme/HayaiThemePreferences.kt	const va
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	?: error("The release has no Hayai APK for $primaryAbi.")
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"arm64-v8a" -> "-arm64-v8a"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"armeabi-v7a" -> "-armeabi-v7a"
+app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	"content" -> requirePersistedWritePermission(context, uri)
+app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	"file" -> prepareFileDirectory(context, uri)
+app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	if (uri.scheme != "file") return false
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"x86_64" -> "-x86_64"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"x86" -> "-x86"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	else -> ""

@@ -42,7 +42,7 @@ class BackupCreatorJob(
             Result.success()
         } catch (e: Exception) {
             Timber.e(e)
-            if (!isAutoBackup) notifier.showBackupError(e.message)
+            notifier.showBackupError(e.message)
             Result.failure()
         } finally {
             context.notificationManager.cancel(Notifications.ID_BACKUP_PROGRESS)

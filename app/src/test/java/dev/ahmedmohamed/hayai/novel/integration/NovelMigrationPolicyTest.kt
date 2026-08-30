@@ -15,8 +15,7 @@ class NovelMigrationPolicyTest {
         val policy =
             NovelMigrationPolicy(
                 mangaLookup = { legacyNovel },
-                sourceIsNovel = { false },
-                hasNovelIdentity = { true },
+                contentIdentity = NovelContentIdentity(sourceIsNovel = { false }, hasDurableNovelEvidence = { true }),
             )
 
         val contentKind = policy.contentKind(legacyNovel)
@@ -39,8 +38,11 @@ class NovelMigrationPolicyTest {
         val policy =
             NovelMigrationPolicy(
                 mangaLookup = { legacyNovel },
-                sourceIsNovel = { false },
-                hasNovelIdentity = Manga::hasNovelGenreIdentity,
+                contentIdentity =
+                    NovelContentIdentity(
+                        sourceIsNovel = { false },
+                        hasDurableNovelEvidence = Manga::hasNovelGenreIdentity,
+                    ),
             )
 
         assertEquals(ContentKind.Novel, policy.contentKind(legacyNovel))
@@ -55,8 +57,11 @@ class NovelMigrationPolicyTest {
         val policy =
             NovelMigrationPolicy(
                 mangaLookup = { manga },
-                sourceIsNovel = { false },
-                hasNovelIdentity = Manga::hasNovelGenreIdentity,
+                contentIdentity =
+                    NovelContentIdentity(
+                        sourceIsNovel = { false },
+                        hasDurableNovelEvidence = Manga::hasNovelGenreIdentity,
+                    ),
             )
 
         assertEquals(ContentKind.Manga, policy.contentKind(manga))

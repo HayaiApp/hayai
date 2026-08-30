@@ -19,6 +19,7 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import com.bluelinelabs.conductor.Controller
 import com.fredporciuncula.flow.preferences.Preference
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.MigrationBottomSheetBinding
@@ -33,6 +34,7 @@ import uy.kohesive.injekt.injectLazy
 class MigrationBottomSheetDialog(
     activity: Activity,
     private val listener: StartMigrationListener,
+    private val contentKind: ContentKind,
 ) : E2EBottomSheetDialog<MigrationBottomSheetBinding>(activity) {
     /**
      * Preferences helper.
@@ -107,7 +109,7 @@ class MigrationBottomSheetDialog(
         val flags = preferences.migrateFlags().get()
 
         val enabledFlags = MigrationFlags.getEnabledFlags(flags)
-        MigrationFlags.titles.forEachIndexed { index, title ->
+        MigrationFlags.titles(contentKind).forEachIndexed { index, title ->
             val checkbox = CheckBox(context)
             checkbox.id = title.hashCode()
             checkbox.text = context.getString(title)

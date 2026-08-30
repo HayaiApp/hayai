@@ -51,7 +51,8 @@ internal class NovelAssetWebViewClient(
             }
         }
         if (blockMedia() && isMedia(uri)) return emptyResponse()
-        if (offline() && uri.scheme in REMOTE_SCHEMES) return notFoundResponse()
+        // Downloaded chapter assets use Hayai's offline scheme. Remote URLs injected by reader
+        // customization remain network-capable unless the user explicitly blocks media.
         if (uri.scheme !in ASSET_SCHEMES) return null
         val path = decodeAssetPath(uri) ?: return notFoundResponse()
         val blockId = uri.getQueryParameter(CHAPTER_ID_QUERY)?.toLongOrNull()

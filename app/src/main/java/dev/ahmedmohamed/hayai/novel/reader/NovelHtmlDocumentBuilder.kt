@@ -56,7 +56,7 @@ internal object NovelHtmlDocumentBuilder {
             }
             html.hayai-paged, html.hayai-paged body { height:100%; overflow-y:hidden; }
             html.hayai-paged body { overflow-x:auto; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
-            html.hayai-paged #hayai-reader { height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:32px; column-fill:auto; }
+            html.hayai-paged #hayai-reader { height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px; column-fill:auto; }
             html.hayai-paged .hayai-chapter-block { scroll-snap-align:start; }
             html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; }
             html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
@@ -114,27 +114,29 @@ internal object NovelHtmlDocumentBuilder {
     private const val BRIDGE_SCRIPT = """
         (() => {
           const paged = () => document.documentElement.classList.contains('hayai-paged');
+          const pageStride = () => Math.max(1, innerWidth);
           const reversePages = () => document.documentElement.dataset.writingDirection === 'vertical-rl';
           const blocks = () => [...document.querySelectorAll('.hayai-chapter-block')];
           const visibleBlock = () => {
-            const target = paged() ? innerWidth / 3 : innerHeight / 3;
+            const target = paged() ? pageStride() / 3 : innerHeight / 3;
             return blocks().sort((a,b) => Math.abs((paged()?a.getBoundingClientRect().left:a.getBoundingClientRect().top)-target)-Math.abs((paged()?b.getBoundingClientRect().left:b.getBoundingClientRect().top)-target))[0] || null;
           };
           const activeBlock = () => document.querySelector('.hayai-chapter-block[data-active="true"]') || visibleBlock();
           const activate = block => { blocks().forEach(it=>delete it.dataset.active); if(block)block.dataset.active='true'; return block; };
           const progress = () => {
             const block = activeBlock(); if(!block)return 0;
-            const max = paged() ? Math.max(1,block.scrollWidth-innerWidth) : Math.max(1,block.offsetHeight-innerHeight);
+            const max = paged() ? Math.max(1,block.scrollWidth-pageStride()) : Math.max(1,block.offsetHeight-innerHeight);
             const position = reversePages() ? Math.abs(scrollX) : scrollX;
             const origin = reversePages() ? Math.abs(block.offsetLeft) : block.offsetLeft;
             const current = paged() ? Math.max(0,position-origin) : Math.max(0,scrollY-block.offsetTop);
             return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
           };
           const pageLocation = () => {
-            const extent = Math.max(innerWidth, document.scrollingElement ? document.scrollingElement.scrollWidth : document.documentElement.scrollWidth);
-            const count = Math.max(1, Math.ceil(extent / Math.max(1, innerWidth)));
+            const stride = pageStride();
+            const extent = Math.max(stride, document.scrollingElement ? document.scrollingElement.scrollWidth : document.documentElement.scrollWidth);
+            const count = Math.max(1, Math.ceil(extent / stride));
             const position = Math.abs(scrollX);
-            const number = Math.max(1, Math.min(count, Math.round(position / Math.max(1, innerWidth)) + 1));
+            const number = Math.max(1, Math.min(count, Math.round(position / stride) + 1));
             return {number, count};
           };
           let scheduled = false;
@@ -195,7 +197,7 @@ internal object NovelHtmlDocumentBuilder {
               const block=activeBlock();if(!block)return;
               const ratio = Math.max(0, Math.min(100, value)) / 100;
               if (paged()) {
-                const max = Math.max(0, block.scrollWidth - innerWidth);
+                const max = Math.max(0, block.scrollWidth - pageStride());
                 scrollTo({left:(reversePages()?-1:1)*(block.offsetLeft+max * ratio), top:0, behavior:'auto'});
               } else {
                 const max = Math.max(0, block.offsetHeight - innerHeight);
@@ -203,7 +205,7 @@ internal object NovelHtmlDocumentBuilder {
               }
             },
             step(direction, fraction = .85) {
-              if (paged()) scrollBy({left:(reversePages()?-1:1)*innerWidth * fraction * direction, behavior:'smooth'});
+              if (paged()) scrollBy({left:(reversePages()?-1:1)*pageStride() * direction, behavior:'smooth'});
               else scrollBy({top:innerHeight * fraction * direction, behavior:'smooth'});
             },
             stepPixels(pixels) {
@@ -218,7 +220,7 @@ internal object NovelHtmlDocumentBuilder {
             viewportParagraph() {
               const root=activeBlock();const nodes=root?[...root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]:[];
               if(!nodes.length)return 0;
-              const target=paged()?innerWidth*.2:innerHeight*.2;
+              const target=paged()?pageStride()*.2:innerHeight*.2;
               let best=0,distance=Number.MAX_VALUE;
               nodes.forEach((node,index)=>{const rect=node.getBoundingClientRect();const point=paged()?rect.left:rect.top;const next=Math.abs(point-target);if(next<distance){distance=next;best=index;}});
               return best;

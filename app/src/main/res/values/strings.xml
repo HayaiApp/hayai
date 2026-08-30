@@ -16,6 +16,25 @@
     <string name="hayai_retry_legacy_migration">Retry legacy data migration</string>
     <string name="hayai_retry_legacy_migration_summary">Schedule one explicit retry on the next app start. Existing J2K data is never overwritten.</string>
     <string name="hayai_retry_legacy_migration_scheduled">Migration retry scheduled for the next app start</string>
+    <string name="hayai_storage_write_permission_missing">The selected folder did not grant write access</string>
+    <string name="hayai_storage_permission_lost">Access to this folder expired. Select it again</string>
+    <string name="hayai_storage_location_unavailable">This folder is unavailable or read only</string>
+    <string name="hayai_storage_location_unsupported">This storage location is not supported</string>
+    <string name="hayai_storage_all_files_required">This old shared folder needs all files access. Select a folder through the system picker instead</string>
+    <string name="untrusted">Untrusted</string>
+    <string name="hayai_custom_novel_info">Custom novel info</string>
+    <plurals name="hayai_migrate_novels">
+        <item quantity="one">Migrate %1$d%2$s novel?</item>
+        <item quantity="other">Migrate %1$d%2$s novels?</item>
+    </plurals>
+    <plurals name="hayai_copy_novels">
+        <item quantity="one">Copy %1$d%2$s novel?</item>
+        <item quantity="other">Copy %1$d%2$s novels?</item>
+    </plurals>
+    <plurals name="hayai_novels_migrated">
+        <item quantity="one">%d novel migrated</item>
+        <item quantity="other">%d novels migrated</item>
+    </plurals>
 
     <!--Models-->
 

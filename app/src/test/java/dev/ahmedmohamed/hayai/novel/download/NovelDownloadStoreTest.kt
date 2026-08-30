@@ -32,6 +32,7 @@ class NovelDownloadStoreTest {
 
             val loaded = store.loadDocument(7L, "/chapter/1")!!
             val offlinePath = NovelAssetReferences.providerPath(NovelAssetReferences.extract(loaded).single())!!
+            assertTrue(offlinePath.endsWith(".png"))
             assertEquals(NovelContentType.Html, loaded.contentType)
             assertNull(loaded.baseUrl)
             assertEquals("image-bytes", store.openAsset(7L, "/chapter/1", offlinePath)!!.bufferedReader().readText())

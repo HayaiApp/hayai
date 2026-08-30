@@ -53,6 +53,10 @@ class NovelHtmlDocumentBuilderTest {
         assertTrue(html.contains("text-orientation:mixed"))
         assertTrue(html.contains("const position = reversePages() ? Math.abs(scrollX) : scrollX"))
         assertTrue(html.contains("const origin = reversePages() ? Math.abs(block.offsetLeft) : block.offsetLeft"))
+        assertTrue(html.contains("const pageStride = () => Math.max(1, innerWidth)"))
+        assertTrue(html.contains("pageStride() * direction"))
+        assertFalse(html.contains("innerWidth * fraction * direction"))
+        assertTrue(html.contains("column-gap:32px"))
         assertTrue(html.contains("HayaiReader.onPageLocation"))
         assertTrue(html.contains("ResizeObserver"))
     }

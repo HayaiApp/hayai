@@ -10,6 +10,7 @@ import com.bluelinelabs.conductor.Controller
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
 import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationException
+import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Category
@@ -334,7 +335,9 @@ private fun showAddDuplicateDialog(
 ) {
     val source = sourceManager.getOrStub(libraryManga.source)
 
-    val titles by lazy { MigrationFlags.titles(activity, libraryManga) }
+    val titles by lazy {
+        MigrationFlags.titles(activity, libraryManga, Injekt.get<NovelContentIdentity>().contentKind(libraryManga))
+    }
 
     fun migrateManga(
         mDialog: DialogInterface,

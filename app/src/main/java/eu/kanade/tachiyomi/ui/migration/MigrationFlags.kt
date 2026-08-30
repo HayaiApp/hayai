@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.migration
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -20,7 +21,13 @@ object MigrationFlags {
     private val db: DatabaseHelper by injectLazy()
     private val customMangaManager: CustomMangaManager by injectLazy()
 
-    val titles get() = arrayOf(R.string.chapters, R.string.categories, R.string.tracking, R.string.custom_manga_info)
+    fun titles(contentKind: ContentKind = ContentKind.Manga) =
+        arrayOf(
+            R.string.chapters,
+            R.string.categories,
+            R.string.tracking,
+            if (contentKind == ContentKind.Novel) R.string.hayai_custom_novel_info else R.string.custom_manga_info,
+        )
     val flags get() = arrayOf(CHAPTERS, CATEGORIES, TRACK, CUSTOM_MANGA_INFO)
 
     fun hasChapters(value: Int): Boolean = value and CHAPTERS != 0
@@ -62,17 +69,22 @@ object MigrationFlags {
         return flags.toTypedArray()
     }
 
-    private fun titleForFlag(flag: Int): Int =
+    private fun titleForFlag(
+        flag: Int,
+        contentKind: ContentKind,
+    ): Int =
         when (flag) {
             CHAPTERS -> R.string.chapters
             CATEGORIES -> R.string.categories
             TRACK -> R.string.tracking
-            CUSTOM_MANGA_INFO -> R.string.custom_manga_info
+            CUSTOM_MANGA_INFO ->
+                if (contentKind == ContentKind.Novel) R.string.hayai_custom_novel_info else R.string.custom_manga_info
             else -> 0
         }
 
     fun titles(
         context: Context,
         manga: Manga?,
-    ): Array<String> = flags(manga).map { context.getString(titleForFlag(it)) }.toTypedArray()
+        contentKind: ContentKind = ContentKind.Manga,
+    ): Array<String> = flags(manga).map { context.getString(titleForFlag(it, contentKind)) }.toTypedArray()
 }

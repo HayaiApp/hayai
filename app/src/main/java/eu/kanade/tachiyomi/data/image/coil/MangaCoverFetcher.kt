@@ -11,9 +11,11 @@ import coil.fetch.SourceResult
 import coil.network.HttpException
 import coil.request.Options
 import coil.request.Parameters
+import dev.ahmedmohamed.hayai.source.presentation.SourceCoverRequestProvider
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.source.Source as TachiyomiSource
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.manga.MangaCoverMetadata
@@ -36,7 +38,7 @@ import java.util.Date
 
 class MangaCoverFetcher(
     private val manga: Manga,
-    private val sourceLazy: Lazy<HttpSource?>,
+    private val sourceLazy: Lazy<TachiyomiSource?>,
     private val options: Options,
     private val coverCache: CoverCache,
     private val callFactoryLazy: Lazy<Call.Factory>,
@@ -139,7 +141,12 @@ class MangaCoverFetcher(
     }
 
     private suspend fun executeNetworkRequest(): Response {
-        val client = sourceLazy.value?.client ?: callFactoryLazy.value
+        val client =
+            when (val source = sourceLazy.value) {
+                is HttpSource -> source.client
+                is SourceCoverRequestProvider -> source.coverCallFactory
+                else -> callFactoryLazy.value
+            }
         val response = client.newCall(newRequest()).await()
         if (!response.isSuccessful && response.code != HttpURLConnection.HTTP_NOT_MODIFIED) {
             response.body?.closeQuietly()
@@ -149,11 +156,18 @@ class MangaCoverFetcher(
     }
 
     private fun newRequest(): Request {
+        val source = sourceLazy.value
+        val headers =
+            when (source) {
+                is HttpSource -> source.headers
+                is SourceCoverRequestProvider -> source.coverRequestHeaders(url, options.headers)
+                else -> options.headers
+            }
         val request =
             Request
                 .Builder()
                 .url(url)
-                .headers(sourceLazy.value?.headers ?: options.headers)
+                .headers(headers)
                 // Support attaching custom data to the network request.
                 .tag(Parameters::class.java, options.parameters)
 
@@ -315,7 +329,7 @@ class MangaCoverFetcher(
             options: Options,
             imageLoader: ImageLoader,
         ): Fetcher {
-            val source = lazy { sourceManager.get(data.source) as? HttpSource }
+            val source = lazy { sourceManager.get(data.source) }
             return MangaCoverFetcher(data, source, options, coverCache, callFactoryLazy, diskCacheLazy)
         }
     }

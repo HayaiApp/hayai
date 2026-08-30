@@ -14,6 +14,7 @@ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import dev.ahmedmohamed.hayai.novel.source.NovelContentType
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import dev.ahmedmohamed.hayai.novel.source.NovelSource
+import dev.ahmedmohamed.hayai.source.presentation.SourceCoverRequestProvider
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.model.Filter
@@ -59,6 +60,7 @@ class NovelPluginSource(
     private val siteOverride: String? = null,
 ) : NovelSource,
     NovelAssetProvider,
+    SourceCoverRequestProvider,
     ConfigurableSource,
     AutoCloseable {
     private val plugin: NovelPluginDescriptor = installedPlugin.descriptor
@@ -214,17 +216,27 @@ class NovelPluginSource(
         ) { "Unable to cache plugin UI schemas" }
     }
 
-    fun getCoverRequestHeaders(coverUrl: String?): Headers =
+    override val coverCallFactory
+        get() = networkHelper.client
+
+    override fun coverRequestHeaders(
+        coverUrl: String,
+        fallbackHeaders: Headers,
+    ): Headers =
         try {
-            // Return default referer header for cover images.
-            // Plugins can override via imageRequestInit or headers properties if needed.
-            Headers
-                .Builder()
+            fallbackHeaders
+                .newBuilder()
                 .set("Referer", "$baseUrl/")
+                .apply {
+                    runCatching { CookieManager.getInstance().getCookie(coverUrl) }
+                        .getOrNull()
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { set("Cookie", it) }
+                }
                 .build()
         } catch (_: Exception) {
-            Headers
-                .Builder()
+            fallbackHeaders
+                .newBuilder()
                 .set("Referer", "$baseUrl/")
                 .build()
         }

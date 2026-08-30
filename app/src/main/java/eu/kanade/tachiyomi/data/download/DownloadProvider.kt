@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.download
 import android.content.Context
 import androidx.core.net.toUri
 import com.hippo.unifile.UniFile
+import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
@@ -38,20 +39,17 @@ class DownloadProvider(
     /**
      * The root directory for downloads.
      */
-    private var downloadsDir =
-        preferences.downloadsDirectory().get().let {
-            val dir = UniFile.fromUri(context, it.toUri())
-            DiskUtil.createNoMediaFile(dir, context)
-            dir
-        }
+    private var downloadsDir: UniFile? = null
+    private var locationError: String? = null
 
     init {
+        updateDownloadsDirectory(preferences.downloadsDirectory().get())
         preferences
             .downloadsDirectory()
             .asFlow()
             .drop(1)
             .onEach {
-                downloadsDir = UniFile.fromUri(context, it.toUri())
+                updateDownloadsDirectory(it)
             }.launchIn(scope)
     }
 
@@ -65,13 +63,11 @@ class DownloadProvider(
         manga: Manga,
         source: Source,
     ): UniFile {
-        try {
-            return downloadsDir
-                .createDirectory(getSourceDirName(source))
-                .createDirectory(getMangaDirName(manga))
-        } catch (e: NullPointerException) {
-            throw Exception(context.getString(R.string.invalid_download_location))
-        }
+        val root = downloadsDir ?: throw Exception(locationError ?: context.getString(R.string.invalid_download_location))
+        val sourceDir = root.createDirectory(getSourceDirName(source))
+            ?: throw Exception(context.getString(R.string.invalid_download_location))
+        return sourceDir.createDirectory(getMangaDirName(manga))
+            ?: throw Exception(context.getString(R.string.invalid_download_location))
     }
 
     /**
@@ -79,7 +75,22 @@ class DownloadProvider(
      *
      * @param source the source to query.
      */
-    fun findSourceDir(source: Source): UniFile? = downloadsDir.findFile(getSourceDirName(source), true)
+    fun findSourceDir(source: Source): UniFile? = downloadsDir?.findFile(getSourceDirName(source), true)
+
+    fun requiresAllFilesAccess(): Boolean =
+        StorageLocationAccess.needsAllFilesAccess(context, preferences.downloadsDirectory().get())
+
+    private fun updateDownloadsDirectory(rawUri: String) {
+        StorageLocationAccess.openDirectory(context, rawUri)
+            .onSuccess { directory ->
+                downloadsDir = directory
+                locationError = null
+                DiskUtil.createNoMediaFile(directory, context)
+            }.onFailure { error ->
+                downloadsDir = null
+                locationError = error.message
+            }
+    }
 
     /**
      * Returns the download directory for a manga if it exists.

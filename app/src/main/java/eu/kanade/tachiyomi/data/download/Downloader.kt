@@ -415,9 +415,7 @@ class Downloader(
             notifier.onError(context.getString(R.string.couldnt_download_low_space), chapName)
             return
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
-            !Environment.isExternalStorageManager()
-        ) {
+        if (provider.requiresAllFilesAccess()) {
             val intent =
                 Intent(
                     Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
