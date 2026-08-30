@@ -1,0 +1,1102 @@
+From 1f3f1441441f42c83a7d5f53640497f00f5aad27 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 13:45:49 +0300
+Subject: [PATCH] Move E-Hentai settings into J2K navigation
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index c53d0fbd1383175db5c33600c252552776909309..63b2e8d11127661ba7b65173829d90e02137e38e 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -55,8 +55,8 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T14:20:00Z	validation	compiled the integrated source experience and ran focused preference and presentation tests with one Gradle worker	verified data binding for all badge layouts, built-in settings routing, SY category encoding, malformed preference fallback, and badge classification	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.settings.* --tests dev.ahmedmohamed.hayai.source.presentation.* -x :app:formatKotlin	VERIFIED
+ 2026-08-21T15:00:00Z	enhanced-sources	replaced registry-only enhanced labels with ID-preserving extension wrappers	delegated core source behavior, validated imported hosts and identities, bounded secondary details parsing, and retained the original extension result on enrichment failure	EnhancedSourceRegistry.kt; HayaiEnhancedHttpSource.kt; EnhancedSourceUrlMapper.kt; EnhancedDetailsParser.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T15:15:00Z	validation	compiled delegated enhanced sources and ran focused registry, URL, parser, and badge tests with one Gradle worker	verified all six family parsers, foreign-host rejection, positive identities, fixed and dynamic matching, idempotent wrapping, filter preservation, and direct URL search fallback	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.source.enhanced.* --tests dev.ahmedmohamed.hayai.source.presentation.* -x :app:formatKotlin	VERIFIED
+-2026-08-21T16:30:00Z	eh-remote-uconfig	implemented the complete typed E-Hentai and ExHentai remote settings upload flow	preserved SY preference and cookie keys, encoded the full server matrix, reused owned profiles without destructive replacement, committed each site independently, and exposed pending state plus targeted retry	EhRemoteSettings.kt; EhUConfigFormCodec.kt; EhUConfigHttpRemote.kt; EhRemoteSettingsUploader.kt; EhSettingsActivity.kt	IMPLEMENTED_UNVERIFIED
+-2026-08-21T18:00:00Z	eh-favorites-sync	implemented durable bidirectional and remote-only E-Hentai favorites reconciliation	planned from base/local/remote state, preserved notes and unrelated categories, made remote writes retryable by verified preconditions, applied local changes atomically with journal state, and retained interrupted runs for resume	adult/eh/favorites; HayaiEhPersistenceStore.kt; HayaiSchema.kt; EhSettingsActivity.kt	IMPLEMENTED_UNVERIFIED
++2026-08-21T16:30:00Z	eh-remote-uconfig	implemented the complete typed E-Hentai and ExHentai remote settings upload flow	preserved SY preference and cookie keys, encoded the full server matrix, reused owned profiles without destructive replacement, committed each site independently, and exposed pending state plus targeted retry	EhRemoteSettings.kt; EhUConfigFormCodec.kt; EhUConfigHttpRemote.kt; EhRemoteSettingsUploader.kt; EhSettingsController.kt	IMPLEMENTED_UNVERIFIED
++2026-08-21T18:00:00Z	eh-favorites-sync	implemented durable bidirectional and remote-only E-Hentai favorites reconciliation	planned from base/local/remote state, preserved notes and unrelated categories, made remote writes retryable by verified preconditions, applied local changes atomically with journal state, and retained interrupted runs for resume	adult/eh/favorites; HayaiEhPersistenceStore.kt; HayaiSchema.kt; EhSettingsController.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T17:15:00Z	validation	compiled the integrated app and ran focused E-Hentai session, settings, uconfig, and MockWebServer tests with one Gradle worker	verified exact form encoding, bounded response parsing, challenge rejection, cookie safety, idempotent profile reuse, partial retry, account marker reset, UI integration, and J2K dependency wiring	gradlew --no-daemon --no-parallel --max-workers=1 :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.uconfig.* --tests dev.ahmedmohamed.hayai.adult.eh.settings.* --tests dev.ahmedmohamed.hayai.adult.eh.session.* -x :app:formatKotlin	VERIFIED
+ 2026-08-21T19:00:00Z	validation	compiled the integrated favorites runtime and ran focused planner, protocol, recovery, persistence, and backup tests with one Gradle worker	verified three-way conflict rules, alias safety, bounded remote parsing, journal round trips, restart recovery, schema and backup integration, and J2K adapter compilation	gradlew --no-daemon --no-parallel --max-workers=1 :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.favorites.* --tests dev.ahmedmohamed.hayai.backup.* --tests dev.ahmedmohamed.hayai.adult.eh.persistence.* -x :app:formatKotlin	VERIFIED
+ 2026-08-21T22:05:00Z	novel-parity	added narrow J2K seams for novel export, remote extension ownership, and concrete tracking services	kept novel state and network behavior Hayai-owned while J2K remains authoritative for library, chapters, history, tracking, extensions, and backup order	AppModule.kt; BackupRestorer.kt; MangaDetailsController.kt; TrackManager.kt; SettingsTrackingController.kt	IMPLEMENTED_UNVERIFIED
+@@ -92,3 +92,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T13:34:00+03:00	j2k-enhanced-batch-navigation	replaced the standalone enhanced batch-add activity, custom toolbar, and activity-scoped ViewModel with a J2K SettingsController and Hayai coordinator	preserved multiline input, input validation, per-item progress, retry-aware results, summary, cancellation, and duplicate handling while removing the duplicate app shell	EnhancedBatchAddController.kt; EnhancedBatchAddCoordinator; SettingsAdvancedController.kt	COMPILED
+ 2026-08-22T13:45:00+03:00	j2k-novel-plugin-navigation	replaced the standalone novel plugin manager activity and hand-built cards with a J2K SettingsController catalog	preserved repository add, enable, remove, refresh errors, search, install, update, uninstall, trust warning, and in-progress gating while removing the duplicate app shell	NovelPluginManagerController.kt; SettingsAdvancedController.kt	COMPILED
+ 2026-08-22T14:02:00+03:00	j2k-novel-data-navigation	replaced the standalone novel data-tools activity with a J2K SettingsController and controller-owned document results	preserved Tsundoku and LNReader dry-run import, warnings, atomic apply, EPUB export with bounded assets, destination cleanup, cancellation, and progress while deleting the duplicate activity shell	NovelDataToolsController.kt; NovelSettingsController.kt; MangaDetailsController.kt	COMPILED
++2026-08-22T14:25:00+03:00	j2k-eh-settings-navigation	replaced the standalone E-Hentai settings activity with a native J2K SettingsController	preserved login results, session verification, the remote settings matrix and retry, watched tags, favorites planning and sync, category mapping, updater policy, statistics, immediate run, and cancellation while deleting the duplicate toolbar and activity shell	EhSettingsController.kt; BrowseSourceController.kt; SettingsAdvancedController.kt; SourcePreviewController.kt	IMPLEMENTED_UNVERIFIED
+diff --git a/app/src/debug/AndroidManifest.xml b/app/src/debug/AndroidManifest.xml
+index e815e81ac58f9e3f85a1fde9a1756aae49e1cab3..660eefebaa5ab6b0dc166f8e9e8f8a5dbb4c452a 100644
+--- a/app/src/debug/AndroidManifest.xml
++++ b/app/src/debug/AndroidManifest.xml
+@@ -8,9 +8,5 @@
+             android:name="dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity"
+             android:exported="true"
+             tools:replace="android:exported" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity"
+-            android:exported="true"
+-            tools:replace="android:exported" />
+     </application>
+ </manifest>
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index a09bc485d38742bc98be078e022f84a321df53e4..ee3be0e187f222e251ca41f7827cfa7005d16574 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -146,10 +146,6 @@
+             android:name="dev.ahmedmohamed.hayai.novel.reader.NovelTtsPlaybackService"
+             android:exported="false"
+             android:foregroundServiceType="mediaPlayback" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity"
+-            android:exported="false"
+-            android:theme="@style/Theme.Tachiyomi" />
+         <activity
+             android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhLoginActivity"
+             android:configChanges="uiMode|orientation|screenSize"
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt
+similarity index 59%
+rename from app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+rename to app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt
+index 8678badf3893a85faf658503c16a4fb421fed24b..121c8bfc257997c0fdd7187f7dfd5211860eabd1 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt
+@@ -1,27 +1,13 @@
+ package dev.ahmedmohamed.hayai.adult.eh.ui
+ 
+-import android.content.Context
+ import android.content.Intent
+-import android.os.Bundle
+ import android.text.InputType
+-import android.view.ViewGroup
+ import android.widget.EditText
+-import android.widget.LinearLayout
+-import android.widget.ScrollView
+-import android.widget.TextView
+-import androidx.activity.result.contract.ActivityResultContracts
+-import androidx.core.view.setPadding
+-import androidx.core.view.isVisible
+-import androidx.lifecycle.Lifecycle
+-import androidx.lifecycle.lifecycleScope
+-import androidx.lifecycle.repeatOnLifecycle
+-import androidx.viewbinding.ViewBinding
+-import com.google.android.material.appbar.MaterialToolbar
+-import com.google.android.material.button.MaterialButton
+-import com.google.android.material.switchmaterial.SwitchMaterial
++import androidx.annotation.StringRes
++import androidx.preference.Preference
++import androidx.preference.PreferenceScreen
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+-import dev.ahmedmohamed.hayai.adult.eh.favorites.EhConflictPolicy
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperation
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteSlot
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesStatus
+@@ -48,14 +34,20 @@ import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateStateStore
+ import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateWorker
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.network.NetworkHelper
+-import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import eu.kanade.tachiyomi.ui.setting.onChange
++import eu.kanade.tachiyomi.ui.setting.onClick
++import eu.kanade.tachiyomi.ui.setting.preference
++import eu.kanade.tachiyomi.ui.setting.preferenceCategory
++import eu.kanade.tachiyomi.ui.setting.switchPreference
++import eu.kanade.tachiyomi.ui.setting.titleRes
+ import eu.kanade.tachiyomi.ui.webview.WebViewActivity
+-import eu.kanade.tachiyomi.util.system.dpToPx
+ import eu.kanade.tachiyomi.util.system.materialAlertDialog
++import kotlinx.coroutines.cancel
+ import kotlinx.coroutines.launch
+ import uy.kohesive.injekt.injectLazy
+ 
+-class EhSettingsActivity : BaseActivity<ViewBinding>() {
++class EhSettingsController : SettingsController() {
+     private val text by injectLazy<EhTextResolver>()
+     private val sessionStore by injectLazy<EhSessionStore>()
+     private val ehPreferences by injectLazy<EhPreferences>()
+@@ -64,256 +56,274 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private val favoritesSync by injectLazy<EhFavoritesSyncService>()
+     private val ehPersistence by injectLazy<HayaiEhPersistenceStore>()
+     private val verifier by lazy { EhSessionVerifier(network.client) }
+-    private val galleryUpdateStore by lazy { EhGalleryUpdateStateStore(this, ehPersistence) }
+-
+-    private lateinit var status: TextView
+-    private lateinit var recheck: MaterialButton
+-    private lateinit var watchedTags: MaterialButton
+-    private lateinit var categories: MaterialButton
+-    private lateinit var imageQuality: MaterialButton
+-    private lateinit var hentaiAtHome: MaterialButton
+-    private lateinit var filterThreshold: MaterialButton
+-    private lateinit var watchingThreshold: MaterialButton
+-    private lateinit var languages: MaterialButton
+-    private lateinit var remoteStatus: TextView
+-    private lateinit var uploadSettings: MaterialButton
+-    private lateinit var retryUpload: MaterialButton
+-    private lateinit var favoritesStatus: TextView
+-    private lateinit var conflictPolicy: MaterialButton
+-    private lateinit var categoryMappings: MaterialButton
+-    private lateinit var galleryUpdateInterval: MaterialButton
+-    private lateinit var galleryUpdateStats: TextView
++    private val galleryUpdateStore by lazy { EhGalleryUpdateStateStore(requireNotNull(activity), ehPersistence) }
++
++    private lateinit var status: Preference
++    private lateinit var recheck: Preference
++    private lateinit var watchedTags: Preference
++    private lateinit var categories: Preference
++    private lateinit var imageQuality: Preference
++    private lateinit var hentaiAtHome: Preference
++    private lateinit var filterThreshold: Preference
++    private lateinit var watchingThreshold: Preference
++    private lateinit var languages: Preference
++    private lateinit var remoteStatus: Preference
++    private lateinit var uploadSettings: Preference
++    private lateinit var retryUpload: Preference
++    private lateinit var favoritesStatus: Preference
++    private lateinit var conflictPolicy: Preference
++    private lateinit var categoryMappings: Preference
++    private lateinit var galleryUpdateInterval: Preference
++    private lateinit var galleryUpdateStats: Preference
+     private val uploadResults = linkedMapOf<EhSite, EhSiteUploadResult>()
+     private var retrySites = emptySet<EhSite>()
+ 
+-    private val loginLauncher =
+-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+-            val outcome = result.data?.getStringExtra(EhLoginActivity.EXTRA_OUTCOME)
+-            if (outcome == EhLoginOutcome.Success.name) {
+-                ehPreferences.clearRemoteSettingsApplied()
+-                remoteChanged()
+-            } else if (outcome != null) {
+-                status.text =
+-                    when (outcome) {
+-                        EhLoginOutcome.Cloudflare.name -> getString(R.string.hayai_eh_login_cloudflare_interrupted)
+-                        EhLoginOutcome.InvalidCredentials.name -> getString(R.string.hayai_eh_login_invalid_credentials)
+-                        else -> getString(R.string.hayai_eh_login_cancelled)
+-                    }
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
++        titleRes = R.string.hayai_eh_settings_title
++        preferenceCategory {
++            status = preference {
++                summary = getString(R.string.hayai_eh_session_logged_out)
++                isSelectable = false
++            }
++            preference {
++                summary = getString(R.string.hayai_eh_credentials_explanation)
++                isSelectable = false
++            }
++            preference {
++                title = getString(R.string.hayai_eh_login_or_replace)
++                onClick { startActivityForResult(EhLoginActivity.newIntent(context), LOGIN_REQUEST) }
++            }
++            recheck = preference {
++                title = getString(R.string.hayai_eh_recheck_credentials)
++                onClick { recheckSession() }
++            }
++            preference {
++                title = getString(R.string.log_out)
++                onClick { confirmLogout() }
+             }
+         }
+ 
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        val root = buildContent()
+-        binding = ViewBinding { root }
+-        setContentView(root)
+-
+-        lifecycleScope.launch {
+-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+-                sessionStore.state.collect(::renderState)
++        preferenceCategory {
++            title = getString(R.string.hayai_eh_server_gallery_settings)
++            remoteStatus = preference { isSelectable = false }
++            imageQuality = preference {
++                onClick { chooseImageQuality() }
+             }
+-        }
+-        lifecycleScope.launch {
+-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+-                favoritesSync.status.collect(::renderFavoritesStatus)
++            hentaiAtHome = preference {
++                onClick { chooseHentaiAtHome() }
++            }
++            switchPreference {
++                title = getString(R.string.hayai_eh_use_japanese_titles)
++                summary = getString(R.string.hayai_eh_use_japanese_titles_summary)
++                isPersistent = false
++                isChecked = ehPreferences.useJapaneseTitle.get()
++                onChange {
++                    ehPreferences.useJapaneseTitle.set(it as Boolean)
++                    remoteChanged()
++                    true
++                }
++            }
++            switchPreference {
++                title = getString(R.string.hayai_eh_use_original_images)
++                summary = getString(R.string.hayai_eh_use_original_images_summary)
++                isPersistent = false
++                isChecked = ehPreferences.useOriginalImages.get()
++                onChange {
++                    ehPreferences.useOriginalImages.set(it as Boolean)
++                    remoteChanged()
++                    true
++                }
++            }
++            filterThreshold = preference {
++                onClick {
++                    editThreshold(
++                        getString(R.string.hayai_eh_tag_filtering_threshold),
++                        ehPreferences.tagFilterThreshold.get(),
++                        -9999..0,
++                    ) {
++                        ehPreferences.tagFilterThreshold.set(it)
++                        filterThreshold.title = filterThresholdText()
++                        remoteChanged()
++                    }
++                }
++            }
++            watchingThreshold = preference {
++                onClick {
++                    editThreshold(
++                        getString(R.string.hayai_eh_tag_watching_threshold),
++                        ehPreferences.tagWatchingThreshold.get(),
++                        0..9999,
++                    ) {
++                        ehPreferences.tagWatchingThreshold.set(it)
++                        watchingThreshold.title = watchingThresholdText()
++                        remoteChanged()
++                    }
++                }
++            }
++            languages = preference {
++                onClick { editLanguages() }
++            }
++            categories = preference {
++                onClick { editDefaultCategories() }
++            }
++            uploadSettings = preference {
++                title = getString(R.string.hayai_eh_apply_remote_settings)
++                onClick { requestUpload(EhSite.entries.toSet()) }
++            }
++            retryUpload = preference {
++                title = getString(R.string.hayai_eh_retry_failed_sites)
++                isVisible = false
++                onClick { requestUpload(retrySites) }
+             }
+         }
+-    }
+ 
+-    private fun buildContent(): LinearLayout {
+-        val root =
+-            LinearLayout(this).apply {
+-                orientation = LinearLayout.VERTICAL
+-                fitsSystemWindows = true
+-            }
+-        root.addView(
+-            MaterialToolbar(this).apply {
+-                title = getString(R.string.hayai_eh_settings_title)
+-                setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
+-                navigationContentDescription = getString(R.string.hayai_eh_navigate_up)
+-                setNavigationOnClickListener { finish() }
+-            },
+-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+-        )
+-        val content =
+-            LinearLayout(this).apply {
+-                orientation = LinearLayout.VERTICAL
+-                setPadding(20.dpToPx)
+-            }
+-        status = TextView(this).apply { textSize = 16f }
+-        content.addView(status, matchWidth())
+-        content.addView(
+-            TextView(this).apply {
+-                text = getString(R.string.hayai_eh_credentials_explanation)
+-                setPadding(0, 8.dpToPx, 0, 16.dpToPx)
+-            },
+-            matchWidth(),
+-        )
+-        content.addView(button(getString(R.string.hayai_eh_login_or_replace)) { loginLauncher.launch(EhLoginActivity.newIntent(this)) })
+-        recheck = button(getString(R.string.hayai_eh_recheck_credentials), ::recheckSession)
+-        content.addView(recheck)
+-        content.addView(button(getString(R.string.log_out)) { confirmLogout() })
+-
+-        content.addView(sectionLabel(getString(R.string.hayai_eh_server_gallery_settings)))
+-        remoteStatus = TextView(this).apply { setPadding(0, 0, 0, 8.dpToPx) }
+-        content.addView(remoteStatus, matchWidth())
+-        imageQuality = button(imageQualityText(), ::chooseImageQuality)
+-        content.addView(imageQuality)
+-        hentaiAtHome = button(hentaiAtHomeText(), ::chooseHentaiAtHome)
+-        content.addView(hentaiAtHome)
+-        content.addView(
+-            settingSwitch(
+-                title = getString(R.string.hayai_eh_use_japanese_titles),
+-                summary = getString(R.string.hayai_eh_use_japanese_titles_summary),
+-                checked = ehPreferences.useJapaneseTitle.get(),
+-                onChanged = { ehPreferences.useJapaneseTitle.set(it); remoteChanged() },
+-            ),
+-        )
+-        content.addView(
+-            settingSwitch(
+-                title = getString(R.string.hayai_eh_use_original_images),
+-                summary = getString(R.string.hayai_eh_use_original_images_summary),
+-                checked = ehPreferences.useOriginalImages.get(),
+-                onChanged = { ehPreferences.useOriginalImages.set(it); remoteChanged() },
+-            ),
+-        )
+-        filterThreshold = button(filterThresholdText()) {
+-            editThreshold(getString(R.string.hayai_eh_tag_filtering_threshold), ehPreferences.tagFilterThreshold.get(), -9999..0) {
+-                ehPreferences.tagFilterThreshold.set(it)
+-                filterThreshold.text = filterThresholdText()
+-                remoteChanged()
++        preferenceCategory {
++            title = getString(R.string.hayai_eh_browsing_and_details)
++            switchPreference {
++                title = getString(R.string.hayai_eh_open_on_watched_list)
++                summary = getString(R.string.hayai_eh_open_on_watched_list_summary)
++                isPersistent = false
++                isChecked = ehPreferences.watchedListDefault.get()
++                onChange { ehPreferences.watchedListDefault.set(it as Boolean); true }
++            }
++            switchPreference {
++                title = getString(R.string.hayai_eh_enhanced_gallery_details)
++                summary = getString(R.string.hayai_eh_enhanced_gallery_details_summary)
++                isPersistent = false
++                isChecked = ehPreferences.enhancedView.get()
++                onChange { ehPreferences.enhancedView.set(it as Boolean); true }
++            }
++            watchedTags = preference {
++                title = getString(R.string.hayai_eh_manage_watched_tags)
++                onClick {
++                    startActivity(
++                        WebViewActivity.newIntent(
++                            context,
++                            "https://exhentai.org/mytags",
++                            EhSite.ExHentai.sourceId,
++                            getString(R.string.hayai_eh_watched_tags_web_title),
++                        ),
++                    )
++                }
+             }
+         }
+-        content.addView(filterThreshold)
+-        watchingThreshold = button(watchingThresholdText()) {
+-            editThreshold(getString(R.string.hayai_eh_tag_watching_threshold), ehPreferences.tagWatchingThreshold.get(), 0..9999) {
+-                ehPreferences.tagWatchingThreshold.set(it)
+-                watchingThreshold.text = watchingThresholdText()
+-                remoteChanged()
++
++        preferenceCategory {
++            title = getString(R.string.hayai_eh_favorites_sync)
++            switchPreference {
++                title = getString(R.string.hayai_eh_remote_to_device_only)
++                summary = getString(R.string.hayai_eh_remote_to_device_only_summary)
++                isPersistent = false
++                isChecked = ehPreferences.favoritesReadOnly.get()
++                onChange { ehPreferences.favoritesReadOnly.set(it as Boolean); true }
++            }
++            switchPreference {
++                title = getString(R.string.hayai_eh_continue_independent_errors)
++                summary = getString(R.string.hayai_eh_continue_independent_errors_summary)
++                isPersistent = false
++                isChecked = ehPreferences.favoritesLenient.get()
++                onChange { ehPreferences.favoritesLenient.set(it as Boolean); true }
++            }
++            conflictPolicy = preference { onClick { chooseConflictPolicy() } }
++            categoryMappings = preference {
++                title = getString(R.string.hayai_eh_edit_category_mappings)
++                onClick { editCategoryMapping() }
++            }
++            preference {
++                summary = getString(R.string.hayai_eh_category_notes_explanation)
++                isSelectable = false
++            }
++            favoritesStatus = preference { isSelectable = false }
++            preference {
++                title = getString(R.string.hayai_eh_preview_favorites_sync)
++                onClick { previewFavoritesSync() }
++            }
++            preference {
++                title = getString(R.string.hayai_eh_start_favorites_sync)
++                onClick { startFavoritesSync() }
+             }
+         }
+-        content.addView(watchingThreshold)
+-        languages = button(languageButtonText(), ::editLanguages)
+-        content.addView(languages)
+-        categories = button(categoryButtonText(), ::editDefaultCategories)
+-        content.addView(categories)
+-        uploadSettings = button(getString(R.string.hayai_eh_apply_remote_settings)) { requestUpload(EhSite.entries.toSet()) }
+-        content.addView(uploadSettings)
+-        retryUpload = button(getString(R.string.hayai_eh_retry_failed_sites)) { requestUpload(retrySites) }.apply { isVisible = false }
+-        content.addView(retryUpload)
+-
+-        content.addView(sectionLabel(getString(R.string.hayai_eh_browsing_and_details)))
+-        content.addView(
+-            settingSwitch(
+-                title = getString(R.string.hayai_eh_open_on_watched_list),
+-                summary = getString(R.string.hayai_eh_open_on_watched_list_summary),
+-                checked = ehPreferences.watchedListDefault.get(),
+-                onChanged = ehPreferences.watchedListDefault::set,
+-            ),
+-        )
+-        content.addView(
+-            settingSwitch(
+-                title = getString(R.string.hayai_eh_enhanced_gallery_details),
+-                summary = getString(R.string.hayai_eh_enhanced_gallery_details_summary),
+-                checked = ehPreferences.enhancedView.get(),
+-                onChanged = ehPreferences.enhancedView::set,
+-            ),
+-        )
+-        watchedTags = button(getString(R.string.hayai_eh_manage_watched_tags)) {
+-            startActivity(
+-                WebViewActivity.newIntent(
+-                    this,
+-                    "https://exhentai.org/mytags",
+-                    EhSite.ExHentai.sourceId,
+-                    getString(R.string.hayai_eh_watched_tags_web_title),
+-                ),
+-            )
++
++        preferenceCategory {
++            title = getString(R.string.hayai_eh_gallery_updater)
++            preference {
++                summary = getString(R.string.hayai_eh_gallery_updater_summary)
++                isSelectable = false
++            }
++            galleryUpdateInterval = preference { onClick { chooseGalleryUpdateInterval() } }
++            val updatePolicy = galleryUpdateStore.policy()
++            switchPreference {
++                title = getString(R.string.hayai_eh_wifi_only)
++                summary = getString(R.string.hayai_eh_wifi_only_summary)
++                isPersistent = false
++                isChecked = updatePolicy.wifiOnly
++                onChange { updateGalleryPolicy(galleryUpdateStore.policy().copy(wifiOnly = it as Boolean)); true }
++            }
++            switchPreference {
++                title = getString(R.string.hayai_eh_charging_only)
++                summary = getString(R.string.hayai_eh_charging_only_summary)
++                isPersistent = false
++                isChecked = updatePolicy.requiresCharging
++                onChange { updateGalleryPolicy(galleryUpdateStore.policy().copy(requiresCharging = it as Boolean)); true }
++            }
++            galleryUpdateStats = preference { isSelectable = false }
++            preference {
++                title = getString(R.string.hayai_eh_run_updater_now)
++                onClick {
++                    EhGalleryUpdateWorker.runNow(context, galleryUpdateStore.policy())
++                    galleryUpdateStats.summary = getString(R.string.hayai_eh_updater_queued)
++                }
++            }
++            preference {
++                title = getString(R.string.hayai_eh_cancel_updater)
++                onClick {
++                    EhGalleryUpdateWorker.cancel(context)
++                    galleryUpdateStats.summary = getString(R.string.hayai_eh_updater_cancelled)
++                }
++            }
+         }
+-        content.addView(watchedTags)
+-
+-        content.addView(sectionLabel(getString(R.string.hayai_eh_favorites_sync)))
+-        content.addView(
+-            settingSwitch(
+-                title = getString(R.string.hayai_eh_remote_to_device_only),
+-                summary = getString(R.string.hayai_eh_remote_to_device_only_summary),
+-                checked = ehPreferences.favoritesReadOnly.get(),
+-                onChanged = ehPreferences.favoritesReadOnly::set,
+-            ),
+-        )
+-        content.addView(
+-            settingSwitch(
+-                title = getString(R.string.hayai_eh_continue_independent_errors),
+-                summary = getString(R.string.hayai_eh_continue_independent_errors_summary),
+-                checked = ehPreferences.favoritesLenient.get(),
+-                onChanged = ehPreferences.favoritesLenient::set,
+-            ),
+-        )
+-        conflictPolicy = button(conflictPolicyText(), ::chooseConflictPolicy)
+-        content.addView(conflictPolicy)
+-        categoryMappings = button(getString(R.string.hayai_eh_edit_category_mappings), ::editCategoryMapping)
+-        content.addView(categoryMappings)
+-        content.addView(
+-            TextView(this).apply {
+-                text = getString(R.string.hayai_eh_category_notes_explanation)
+-                alpha = 0.72f
+-                setPadding(0, 4.dpToPx, 0, 8.dpToPx)
+-            },
+-            matchWidth(),
+-        )
+-        favoritesStatus = TextView(this)
+-        content.addView(favoritesStatus, matchWidth())
+-        content.addView(button(getString(R.string.hayai_eh_preview_favorites_sync), ::previewFavoritesSync))
+-        content.addView(button(getString(R.string.hayai_eh_start_favorites_sync), ::startFavoritesSync))
+-
+-        content.addView(sectionLabel(getString(R.string.hayai_eh_gallery_updater)))
+-        content.addView(
+-            TextView(this).apply {
+-                text = getString(R.string.hayai_eh_gallery_updater_summary)
+-                alpha = 0.72f
+-                setPadding(0, 0, 0, 8.dpToPx)
+-            },
+-            matchWidth(),
+-        )
+-        galleryUpdateInterval = button(galleryUpdateIntervalText(), ::chooseGalleryUpdateInterval)
+-        content.addView(galleryUpdateInterval)
+-        val updatePolicy = galleryUpdateStore.policy()
+-        content.addView(
+-            settingSwitch(
+-                title = getString(R.string.hayai_eh_wifi_only),
+-                summary = getString(R.string.hayai_eh_wifi_only_summary),
+-                checked = updatePolicy.wifiOnly,
+-                onChanged = { updateGalleryPolicy(galleryUpdateStore.policy().copy(wifiOnly = it)) },
+-            ),
+-        )
+-        content.addView(
+-            settingSwitch(
+-                title = getString(R.string.hayai_eh_charging_only),
+-                summary = getString(R.string.hayai_eh_charging_only_summary),
+-                checked = updatePolicy.requiresCharging,
+-                onChanged = { updateGalleryPolicy(galleryUpdateStore.policy().copy(requiresCharging = it)) },
+-            ),
+-        )
+-        galleryUpdateStats = TextView(this).apply { setPadding(0, 4.dpToPx, 0, 8.dpToPx) }
+-        content.addView(galleryUpdateStats, matchWidth())
+-        content.addView(button(getString(R.string.hayai_eh_run_updater_now)) {
+-            EhGalleryUpdateWorker.runNow(this, galleryUpdateStore.policy())
+-            galleryUpdateStats.text = getString(R.string.hayai_eh_updater_queued)
+-        })
+-        content.addView(button(getString(R.string.hayai_eh_cancel_updater)) {
+-            EhGalleryUpdateWorker.cancel(this)
+-            galleryUpdateStats.text = getString(R.string.hayai_eh_updater_cancelled)
+-        })
++        refreshPreferenceTitles()
+         renderGalleryUpdateStats()
++        renderState(sessionStore.state.value)
++        renderFavoritesStatus(favoritesSync.status.value)
++        viewScope.launch { sessionStore.state.collect(::renderState) }
++        viewScope.launch { favoritesSync.status.collect(::renderFavoritesStatus) }
++    }
+ 
+-        root.addView(
+-            ScrollView(this).apply { addView(content) },
+-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+-        )
+-        return root
++    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
++        if (requestCode != LOGIN_REQUEST) return
++        val outcome = data?.getStringExtra(EhLoginActivity.EXTRA_OUTCOME)
++        if (outcome == EhLoginOutcome.Success.name) {
++            ehPreferences.clearRemoteSettingsApplied()
++            remoteChanged()
++        } else if (outcome != null) {
++            status.summary =
++                when (outcome) {
++                    EhLoginOutcome.Cloudflare.name -> getString(R.string.hayai_eh_login_cloudflare_interrupted)
++                    EhLoginOutcome.InvalidCredentials.name -> getString(R.string.hayai_eh_login_invalid_credentials)
++                    else -> getString(R.string.hayai_eh_login_cancelled)
++                }
++        }
++    }
++
++    override fun onDestroy() {
++        viewScope.cancel()
++        super.onDestroy()
++    }
++
++    private fun refreshPreferenceTitles() {
++        imageQuality.title = imageQualityText()
++        hentaiAtHome.title = hentaiAtHomeText()
++        filterThreshold.title = filterThresholdText()
++        watchingThreshold.title = watchingThresholdText()
++        languages.title = languageButtonText()
++        categories.title = categoryButtonText()
++        conflictPolicy.title = conflictPolicyText()
++        galleryUpdateInterval.title = galleryUpdateIntervalText()
+     }
+ 
+     private fun renderState(state: EhSessionState) {
+-        status.text =
++        status.summary =
+             when (state) {
+                 EhSessionState.LoggedOut -> getString(R.string.hayai_eh_session_logged_out)
+                 is EhSessionState.CredentialsAvailable -> getString(R.string.hayai_eh_session_unverified)
+@@ -329,24 +339,24 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+ 
+     private fun recheckSession() {
+         recheck.isEnabled = false
+-        status.text = getString(R.string.hayai_eh_verifying_credentials)
+-        lifecycleScope.launch {
++        status.summary = getString(R.string.hayai_eh_verifying_credentials)
++        viewScope.launch {
+             when (val result = verifier.verify(sessionStore)) {
+                 EhVerificationResult.Verified -> {
+                     if (sessionStore.markVerified() is EhSessionMutationResult.Failure) {
+-                        status.text = getString(R.string.hayai_eh_no_complete_credentials)
++                        status.summary = getString(R.string.hayai_eh_no_complete_credentials)
+                     }
+                 }
+-                EhVerificationResult.Cloudflare -> status.text = getString(R.string.hayai_eh_login_cloudflare_failure)
++                EhVerificationResult.Cloudflare -> status.summary = getString(R.string.hayai_eh_login_cloudflare_failure)
+                 EhVerificationResult.InvalidCredentials -> sessionStore.markInvalid()
+-                is EhVerificationResult.NetworkFailure -> status.text = getString(R.string.hayai_eh_login_network_failure)
++                is EhVerificationResult.NetworkFailure -> status.summary = getString(R.string.hayai_eh_login_network_failure)
+             }
+             recheck.isEnabled = sessionStore.state.value !is EhSessionState.LoggedOut
+         }
+     }
+ 
+     private fun confirmLogout() {
+-        materialAlertDialog()
++        dialog()
+             .setTitle(R.string.hayai_eh_logout_title)
+             .setMessage(R.string.hayai_eh_logout_message)
+             .setPositiveButton(R.string.log_out) { _, _ ->
+@@ -357,44 +367,10 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             .show()
+     }
+ 
+-    private fun sectionLabel(text: String) =
+-        TextView(this).apply {
+-            this.text = text
+-            textSize = 18f
+-            setPadding(0, 24.dpToPx, 0, 8.dpToPx)
+-        }
+-
+-    private fun settingSwitch(
+-        title: String,
+-        summary: String,
+-        checked: Boolean,
+-        onChanged: (Boolean) -> Unit,
+-    ): LinearLayout =
+-        LinearLayout(this).apply {
+-            orientation = LinearLayout.VERTICAL
+-            setPadding(0, 8.dpToPx, 0, 8.dpToPx)
+-            addView(
+-                SwitchMaterial(context).apply {
+-                    text = title
+-                    isChecked = checked
+-                    setOnCheckedChangeListener { _, value -> onChanged(value) }
+-                },
+-                matchWidth(),
+-            )
+-            addView(
+-                TextView(context).apply {
+-                    text = summary
+-                    alpha = 0.72f
+-                    setPadding(48.dpToPx, 0, 0, 0)
+-                },
+-                matchWidth(),
+-            )
+-        }
+-
+     private fun editDefaultCategories() {
+         val all = EhCategory.entries
+         val selected = ehPreferences.excludedCategories().toMutableSet()
+-        materialAlertDialog()
++        dialog()
+             .setTitle(R.string.hayai_eh_categories_excluded_title)
+             .setMultiChoiceItems(
+                 all.map(::categoryName).toTypedArray(),
+@@ -404,7 +380,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             }
+             .setPositiveButton(android.R.string.ok) { _, _ ->
+                 ehPreferences.setExcludedCategories(selected)
+-                categories.text = categoryButtonText()
++                categories.title = categoryButtonText()
+                 remoteChanged()
+             }
+             .setNegativeButton(android.R.string.cancel, null)
+@@ -431,11 +407,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         val values = EhImageQuality.entries
+         val labels = imageQualityLabels()
+         val current = values.indexOf(EhImageQuality.fromPreference(ehPreferences.imageQuality.get()))
+-        materialAlertDialog()
++        dialog()
+             .setTitle(R.string.hayai_eh_image_resolution)
+             .setSingleChoiceItems(labels, current) { dialog, index ->
+                 ehPreferences.imageQuality.set(values[index].preferenceValue)
+-                imageQuality.text = imageQualityText()
++                imageQuality.title = imageQualityText()
+                 remoteChanged()
+                 dialog.dismiss()
+             }
+@@ -451,11 +427,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             getString(R.string.never),
+         )
+         val current = values.indexOf(EhHentaiAtHome.fromPreference(ehPreferences.useHentaiAtHome.get()))
+-        materialAlertDialog()
++        dialog()
+             .setTitle(R.string.hayai_eh_hath_title)
+             .setSingleChoiceItems(labels, current) { dialog, index ->
+                 ehPreferences.useHentaiAtHome.set(values[index].preferenceValue)
+-                hentaiAtHome.text = hentaiAtHomeText()
++                hentaiAtHome.title = hentaiAtHomeText()
+                 remoteChanged()
+                 dialog.dismiss()
+             }
+@@ -469,12 +445,12 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         range: IntRange,
+         save: (Int) -> Unit,
+     ) {
+-        val input = EditText(this).apply {
++        val input = EditText(requireNotNull(activity)).apply {
+             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
+             setText(current.toString())
+             selectAll()
+         }
+-        val dialog = materialAlertDialog()
++        val dialog = dialog()
+             .setTitle(title)
+             .setMessage(getString(R.string.hayai_eh_allowed_range, range.first, range.last))
+             .setView(input)
+@@ -511,7 +487,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             val value = selected.getValue(options[index].language)
+             when (options[index].field) { 0 -> value.original; 1 -> value.translated; else -> value.rewritten }
+         }
+-        materialAlertDialog()
++        dialog()
+             .setTitle(R.string.hayai_eh_language_filtering)
+             .setMultiChoiceItems(options.map(Option::label).toTypedArray(), checked) { _, index, enabled ->
+                 val option = options[index]
+@@ -524,7 +500,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             }
+             .setPositiveButton(android.R.string.ok) { _, _ ->
+                 ehPreferences.setLanguageSelections(selected)
+-                languages.text = languageButtonText()
++                languages.title = languageButtonText()
+                 remoteChanged()
+             }
+             .setNegativeButton(android.R.string.cancel, null)
+@@ -534,11 +510,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private fun requestUpload(targets: Set<EhSite>) {
+         if (targets.isEmpty()) return
+         if (sessionStore.state.value !is EhSessionState.Verified) {
+-            status.text = getString(R.string.hayai_eh_verify_before_upload)
++            status.summary = getString(R.string.hayai_eh_verify_before_upload)
+             return
+         }
+         if (ehPreferences.showSettingsUploadWarning.get()) {
+-            materialAlertDialog()
++            dialog()
+                 .setTitle(R.string.hayai_eh_create_remote_profiles_title)
+                 .setMessage(R.string.hayai_eh_create_remote_profiles_message)
+                 .setPositiveButton(R.string.hayai_eh_continue) { _, _ ->
+@@ -555,11 +531,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private fun performUpload(targets: Set<EhSite>) {
+         uploadSettings.isEnabled = false
+         retryUpload.isEnabled = false
+-        lifecycleScope.launch {
++        viewScope.launch {
+             try {
+                 val report = settingsUploader.upload(ehPreferences.remoteSettings(), targets) { progress ->
+                     if (progress is EhUploadProgress.Started) {
+-                        remoteStatus.text = getString(R.string.hayai_eh_uploading_site, progress.site.displayName)
++                        remoteStatus.summary = getString(R.string.hayai_eh_uploading_site, progress.site.displayName)
+                     }
+                 }
+                 uploadResults.putAll(report.results)
+@@ -599,7 +575,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+                 }
+             }
+         }
+-        remoteStatus.text = summary.joinToString("\n")
++        remoteStatus.summary = summary.joinToString("\n")
+     }
+ 
+     private fun imageQualityText(): String {
+@@ -648,11 +624,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             getString(R.string.hayai_eh_conflict_local),
+         )
+         val current = values.indexOf(ehPreferences.favoritesConflictPolicy.get()).coerceAtLeast(0)
+-        materialAlertDialog()
++        dialog()
+             .setTitle(R.string.hayai_eh_conflict_policy)
+             .setSingleChoiceItems(labels, current) { dialog, index ->
+                 ehPreferences.favoritesConflictPolicy.set(values[index])
+-                conflictPolicy.text = conflictPolicyText()
++                conflictPolicy.title = conflictPolicyText()
+                 dialog.dismiss()
+             }
+             .setNegativeButton(android.R.string.cancel, null)
+@@ -662,11 +638,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private fun editCategoryMapping() {
+         val mappings = favoritesSync.categoryMappings()
+         if (mappings.isEmpty()) {
+-            favoritesStatus.text = getString(R.string.hayai_eh_create_mappings_first)
++            favoritesStatus.summary = getString(R.string.hayai_eh_create_mappings_first)
+             return
+         }
+         val labels = mappings.map { getString(R.string.hayai_eh_mapping_label, it.slot.value, it.remoteName, it.categoryId) }.toTypedArray()
+-        materialAlertDialog()
++        dialog()
+             .setTitle(R.string.hayai_eh_choose_remote_slot)
+             .setItems(labels) { _, index -> chooseMappedCategory(mappings[index].slot) }
+             .setNegativeButton(android.R.string.cancel, null)
+@@ -675,39 +651,39 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+ 
+     private fun chooseMappedCategory(slot: EhFavoriteSlot) {
+         val categories = favoritesSync.availableCategories()
+-        materialAlertDialog()
++        dialog()
+             .setTitle(getString(R.string.hayai_eh_choose_j2k_category, slot.value))
+             .setItems(categories.map { it.second }.toTypedArray()) { _, index ->
+                 runCatching { favoritesSync.remapCategory(slot, categories[index].first) }
+-                    .onSuccess { favoritesStatus.text = getString(R.string.hayai_eh_mapping_updated) }
+-                    .onFailure { favoritesStatus.text = it.localizedEhMessage(text, R.string.hayai_eh_mapping_failed) }
++                    .onSuccess { favoritesStatus.summary = getString(R.string.hayai_eh_mapping_updated) }
++                    .onFailure { favoritesStatus.summary = it.localizedEhMessage(text, R.string.hayai_eh_mapping_failed) }
+             }
+             .setNegativeButton(android.R.string.cancel, null)
+             .show()
+     }
+ 
+     private fun previewFavoritesSync() {
+-        lifecycleScope.launch {
++        viewScope.launch {
+             runCatching { favoritesSync.preview() }
+                 .onSuccess { plan ->
+                     val remote = plan.operations.count { it is EhFavoriteOperation.SetRemote || it is EhFavoriteOperation.RemoveRemote }
+                     val local = plan.operations.size - remote
+                     val removals = plan.operations.count { it is EhFavoriteOperation.RemoveRemote || it is EhFavoriteOperation.RemoveLocal }
+-                    favoritesStatus.text = getString(R.string.hayai_eh_favorites_preview_result, remote, local, removals, plan.conflicts.size)
++                    favoritesStatus.summary = getString(R.string.hayai_eh_favorites_preview_result, remote, local, removals, plan.conflicts.size)
+                 }
+-                .onFailure { favoritesStatus.text = it.localizedEhMessage(text, R.string.hayai_eh_favorites_preview_failed) }
++                .onFailure { favoritesStatus.summary = it.localizedEhMessage(text, R.string.hayai_eh_favorites_preview_failed) }
+         }
+     }
+ 
+     private fun startFavoritesSync() {
+-        lifecycleScope.launch {
++        viewScope.launch {
+             runCatching { favoritesSync.start() }
+-                .onFailure { favoritesStatus.text = it.localizedEhMessage(text, R.string.hayai_eh_favorites_sync_failed) }
++                .onFailure { favoritesStatus.summary = it.localizedEhMessage(text, R.string.hayai_eh_favorites_sync_failed) }
+         }
+     }
+ 
+     private fun renderFavoritesStatus(value: EhFavoritesStatus) {
+-        favoritesStatus.text = when (value) {
++        favoritesStatus.summary = when (value) {
+             EhFavoritesStatus.Idle -> getString(R.string.hayai_eh_favorites_idle)
+             is EhFavoritesStatus.Planning -> value.message
+             is EhFavoritesStatus.NeedsReview -> getString(R.string.hayai_eh_favorites_needs_review, value.conflicts.size)
+@@ -747,11 +723,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             getString(R.string.hayai_eh_every_week),
+         )
+         val current = values.indexOf(galleryUpdateStore.policy().intervalHours).takeIf { it >= 0 } ?: 0
+-        materialAlertDialog()
++        dialog()
+             .setTitle(R.string.hayai_eh_gallery_update_interval)
+             .setSingleChoiceItems(labels, current) { dialog, index ->
+                 updateGalleryPolicy(galleryUpdateStore.policy().copy(intervalHours = values[index]))
+-                galleryUpdateInterval.text = galleryUpdateIntervalText()
++                galleryUpdateInterval.title = galleryUpdateIntervalText()
+                 dialog.dismiss()
+             }
+             .setNegativeButton(android.R.string.cancel, null)
+@@ -759,8 +735,8 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     }
+ 
+     private fun updateGalleryPolicy(policy: EhGalleryUpdatePolicy) {
+-        EhGalleryUpdateWorker.schedule(this, policy)
+-        galleryUpdateInterval.text = galleryUpdateIntervalText()
++        EhGalleryUpdateWorker.schedule(requireNotNull(activity), policy)
++        galleryUpdateInterval.title = galleryUpdateIntervalText()
+     }
+ 
+     private fun galleryUpdateIntervalText(): String =
+@@ -775,7 +751,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+ 
+     private fun renderGalleryUpdateStats() {
+         val stats = galleryUpdateStore.stats()
+-        galleryUpdateStats.text =
++        galleryUpdateStats.summary =
+             if (stats == null) {
+                 getString(R.string.hayai_eh_updater_never_run)
+             } else {
+@@ -792,20 +768,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             }
+     }
+ 
+-    private fun button(
+-        text: String,
+-        action: () -> Unit,
+-    ) = MaterialButton(this).apply {
+-        this.text = text
+-        setOnClickListener {
+-            action()
+-        }
+-    }
++    private fun dialog() = requireNotNull(activity).materialAlertDialog()
+ 
+-    private fun matchWidth() =
+-        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
++    private fun getString(@StringRes id: Int, vararg args: Any): String = requireNotNull(resources).getString(id, *args)
+ 
+     companion object {
+-        fun newIntent(context: Context): Intent = Intent(context, EhSettingsActivity::class.java)
++        private const val LOGIN_REQUEST = 4101
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+index 7aeea15e719c1e6453abbb72b89e14ba7e77fe0a..5f5b0daa8e0a6271c5853f9eb67a5edd6cd35efd 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+@@ -19,7 +19,7 @@ import androidx.recyclerview.widget.RecyclerView
+ import com.google.android.material.loadingindicator.LoadingIndicator
+ import com.google.android.material.slider.Slider
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+-import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
++import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
+ import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.util.system.launchIO
+ import eu.kanade.tachiyomi.util.system.materialAlertDialog
+ import eu.kanade.tachiyomi.util.system.withUIContext
+ import eu.kanade.tachiyomi.util.view.scrollViewWith
++import eu.kanade.tachiyomi.util.view.withFadeTransaction
+ import eu.kanade.tachiyomi.widget.EmptyView
+ import okhttp3.CacheControl
+ import uy.kohesive.injekt.Injekt
+@@ -131,7 +132,11 @@ class SourcePreviewController(
+                     val actions = buildList {
+                         add(EmptyView.Action(R.string.retry) { load(targetPage, forceRefresh = true) })
+                         if (manga.source == EhSite.ExHentai.sourceId) {
+-                            add(EmptyView.Action(R.string.hayai_open_ehentai_settings) { startActivity(EhSettingsActivity.newIntent(emptyView.context)) })
++                            add(
++                                EmptyView.Action(R.string.hayai_open_ehentai_settings) {
++                                    router.pushController(EhSettingsController().withFadeTransaction())
++                                },
++                            )
+                         }
+                     }
+                     emptyView.show(
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+index d8300e0b0ab9c5e7b9bedc76cd2e02d625394c15..63e5a578eba8352ae84e103258dd6ad997c6ca7f 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+@@ -16,7 +16,7 @@ import androidx.lifecycle.lifecycleScope
+ import androidx.preference.PreferenceScreen
+ import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+ import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerController
+-import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
++import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddController
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+@@ -117,7 +117,7 @@ class SettingsAdvancedController : SettingsController() {
+                 preference {
+                     titleRes = R.string.hayai_eh_account
+                     summaryRes = R.string.hayai_eh_account_summary
+-                    onClick { startActivity(Intent(context, EhSettingsActivity::class.java)) }
++                    onClick { router.pushController(EhSettingsController().withFadeTransaction()) }
+                 }
+ 
+                 preference {
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
+index f4ebf9f0cd8cecb259306ce59da2fb8054ac1455..50115902edbc27734a8b271d762b68d6fbdd74a7 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
+@@ -1,6 +1,5 @@
+ package eu.kanade.tachiyomi.ui.source.browse
+ 
+-import android.content.Intent
+ import android.os.Build
+ import android.os.Bundle
+ import android.view.Gravity
+@@ -36,7 +35,7 @@ import eu.kanade.tachiyomi.source.model.FilterList
+ import eu.kanade.tachiyomi.source.online.HttpSource
+ import eu.kanade.tachiyomi.source.pkgName
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+-import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
++import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
+ import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
+ import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
+ import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
+@@ -535,7 +534,7 @@ open class BrowseSourceController(
+ 
+     private fun openSourceSettings() {
+         if (EhSite.entries.any { it.sourceId == presenter.source.id }) {
+-            activity?.let { startActivity(Intent(it, EhSettingsActivity::class.java)) }
++            router.pushController(EhSettingsController().withFadeTransaction())
+             return
+         }
+         val pkgName = presenter.source.pkgName()
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index e344aa329883b354c9d1384d50392d887f39fd13..9d7e20fc3f5a25145eed64881336758d18afbdf8 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -44,7 +44,7 @@ The Advanced setting `eh_is_hentai_enabled` controls adult source discovery. Dis
+ 
+ `NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources, downloaded source chapters, installed Tsundoku novel APKs, and explicitly trusted LNReader JavaScript repositories are production implementations.
+ 
+-`SettingsSearchHelper` contains one registration seam for `NovelSettingsController`. The controller and all novel preferences remain under the Hayai namespace. This seam makes the full novel reader settings searchable without moving reader behavior into J2K.
++`SettingsSearchHelper` contains one registration seam for `NovelSettingsController`. The controller and all novel preferences remain under the Hayai namespace. This seam makes the full novel reader settings searchable without moving reader behavior into J2K. Novel language tools, custom-source building, APK extensions, JavaScript plugins, import/export, enhanced batch add, and E-Hentai account controls are J2K `SettingsController` screens. Their feature state, validation, jobs, and persistence remain Hayai-owned. Only reader and authenticated WebView lifecycles retain dedicated activities.
+ 
+ The text reader owns its lifecycle behind a Hayai renderer contract. Its XML shell reuses J2K reader visual language without subclassing or editing the protected image `ReaderActivity`. The default renderer is a native selectable text surface, while the opt-in WebView renderer remains isolated and blocks unsafe navigation and file access. A typed action registry drives the customizable bottom bar, a typed status registry drives ordered reader status, and the seven J2K/Tsundoku tap-zone modes share exact stored keys. The reader writes progress and bookmarks to J2K chapter rows, suppresses history in incognito mode, and keeps adjacent chapter documents in a bounded queue.
+ 
+@@ -58,7 +58,7 @@ Source-specific details use independent generic metadata and preview provider re
+ 
+ The browse-source presenter and its existing list item/holder form one approved presentation seam for E-Hentai's SY-style rich result rows. The presenter asks a source for an optional immutable `SourceBrowsePresentation`; the item selects J2K's list layout when that presentation exists; and the holder renders its category badge, uploader, rating, language, page count, and date. Parsing, category colors, localization, caching, and source-family recognition remain under `dev.ahmedmohamed.hayai`. Normal sources still take the original grid/list paths without extra work. The same presenter has one generic typed-filter branch for Hayai tag completion, while the E-Hentai catalog, chip state, validation, and suggestions remain Hayai-owned.
+ 
+-Built-in source settings are another deliberate adapter seam. `BrowseSourceController` sends E-Hentai sources to the Hayai account screen and sends other built-in `ConfigurableSource` implementations to `SourceSettingsController`. This fixes JavaScript novel source settings without adding a second settings model. Extension sources continue to use `ExtensionDetailsController`.
++Built-in source settings are another deliberate adapter seam. `BrowseSourceController` pushes E-Hentai sources into the Hayai account `SettingsController` inside J2K navigation and sends other built-in `ConfigurableSource` implementations to `SourceSettingsController`. This fixes JavaScript novel source settings without adding a second settings model or activity shell. Extension sources continue to use `ExtensionDetailsController`.
+ 
+ J2K's extension-facing `JavaScriptEngine` delegates evaluation to Hayai's QuickJS runtime. The novel plugin bridge needs the Dokar binding API, while J2K previously packaged a second QuickJS implementation with the same native `libquickjs.so` name. One Hayai-owned evaluator preserves the extension API and prevents an unresolvable APK native-library collision without changing application lifecycle code.
+ 
+@@ -72,7 +72,7 @@ Release channels use a Hayai-owned policy. Stable and beta builds query `HayaiAp
+ 
+ Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, normal URLs, cookies, and headers to the installed extension. Hayai adds the source-specific behavior SY exposes for 8Muses, HBrowse, Pururin, NHentai, and LANraragi. This includes host-validated URL import where supported, richer descriptions, generic batch add for importable sources, NHentai previews, and authenticated LANraragi previews. MangaDex-specific recommendations, related titles, and follows are outside this requested slice. A secondary parser failure returns the extension result and never removes a usable source.
+ 
+-E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category and language strings fall back to safe defaults. Remote uconfig uses a Hayai-owned typed settings model and an idempotent per-site profile upsert. It reuses Hayai and legacy SY application profiles, creates only in slots 1 through 3, commits cookies and the selected slot only after a verified apply, and reports partial two-site results for targeted retry. The settings activity owns the complete matrix and updater controls.
++E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category and language strings fall back to safe defaults. Remote uconfig uses a Hayai-owned typed settings model and an idempotent per-site profile upsert. It reuses Hayai and legacy SY application profiles, creates only in slots 1 through 3, commits cookies and the selected slot only after a verified apply, and reports partial two-site results for targeted retry. The Hayai settings controller exposes the complete matrix and updater controls through native J2K preference rows and dialogs.
+ 
+ Favorites synchronization uses a persisted three-way plan over the last completed Hayai snapshot, current J2K library state, and a bounded ExHentai snapshot. Remote mutations are journaled and executed before local mutations, use expected preconditions, preserve existing favorite notes during category moves, and verify their postconditions. Local favorite and category changes remain J2K-owned and transition the journal in the same database transaction. Ten explicit slot-to-category mappings prevent remote positions from renaming arbitrary J2K categories, while unrelated categories are retained. Alias components are canonicalized before comparison, ambiguous duplicates and multiple mapped categories become review conflicts, cancellation leaves an active resumable run, and the final remote fingerprint is verified before atomically advancing the baseline and checkpoint.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 6e8e675ffce225a8c2e968311e9a2e5d824fd6f6..385b1bb860cb4f6342a59263d3b171556ddaa0a9 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -12,7 +12,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | Library lewd filter show/only/hide (`pref_filter_library_lewd_v2`) | J2K library filter sheet plus typed `HayaiLibraryPolicy` | port |
+ | Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; logged-out emulator screen verified; authenticated login pending |
+-| EH source settings, default filters, enhanced details toggle, and remote uconfig | Typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
++| EH source settings, default filters, enhanced details toggle, and remote uconfig | Native J2K settings controller over typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
+ | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
+ | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, SY-style inline/full metadata UI, lazy cached preview pages, a J2K-hosted preview controller, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | port; fixture details, metadata, rich browse, autocomplete, empty previews, and cache recovery verified on emulator; authenticated ExHentai remains pending |
+ | 8Muses/EroMuse, HBrowse, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | implemented unverified for the source-specific behavior SY exposes |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 5b3107cbd05dcce82dbdec083e53cad0c732c00b..b2b773497840c67dc6b9ac3e6deb2e6116c04196 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -750,15 +750,15 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	if (rawR
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	private const val ALTERNATE_LOGIN_URL = "https://e-hentai.org/bounce_login.php"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	private const val EXH_URL = "https://exhentai.org/"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	private const val LOGIN_URL = "https://forums.e-hentai.org/index.php?act=Login&CODE=00"
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	.replace("AsianPorn", getString(R.string.hayai_eh_category_asian_porn))
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	.replace("Cg", getString(R.string.hayai_eh_category_cg))
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	.replace("ImageSet", getString(R.string.hayai_eh_category_image_set))
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	.replace("NonH", getString(R.string.hayai_eh_category_non_h))
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	"https://exhentai.org/mytags",
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	"local" -> getString(R.string.hayai_eh_conflict_local_value)
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	"remote" -> getString(R.string.hayai_eh_conflict_remote_value)
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	remoteStatus.text = summary.joinToString("\n")
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt	val values = listOf("stop", "remote", "local")
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	.replace("AsianPorn", getString(R.string.hayai_eh_category_asian_porn))
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	.replace("Cg", getString(R.string.hayai_eh_category_cg))
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	.replace("ImageSet", getString(R.string.hayai_eh_category_image_set))
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	.replace("NonH", getString(R.string.hayai_eh_category_non_h))
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	"https://exhentai.org/mytags",
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	"local" -> getString(R.string.hayai_eh_conflict_local_value)
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	"remote" -> getString(R.string.hayai_eh_conflict_remote_value)
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	remoteStatus.summary = summary.joinToString("\n")
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsController.kt	val values = listOf("stop", "remote", "local")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt	.put("chapterId", value.chapterId)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt	.put("mangaId", value.mangaId)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt	.put("newName", value.newName),
+-- 
+2.54.0.windows.1
+

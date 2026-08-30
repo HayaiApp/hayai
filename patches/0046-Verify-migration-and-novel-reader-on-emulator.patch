@@ -1,0 +1,315 @@
+From fbcfaa1def68e6d58d23c3d737d9b02918dd09dd Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 05:31:47 +0300
+Subject: [PATCH] Verify migration and novel reader on emulator
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 0883132382398c8788607bf607d3f71b142c20e3..b64fd9b30088a80dfa6556e54587ecaa5397d302 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -70,6 +70,7 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T00:16:00Z	conflict-resolution	combined J2K per-extension incognito imports with Hayai E-Hentai icon fallback and novel source ABI	Source.kt was the only content conflict; both upstream and Hayai behavior remain present	app/src/main/java/eu/kanade/tachiyomi/source/Source.kt	RESOLVED
+ 2026-08-22T00:21:00Z	validation	compiled the rebased app and ran 320 focused Hayai tests with one Gradle worker	verified source, novel, backup, migration, enhanced-source, E-Hentai, recents, and presentation integration after the upstream replay	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest with focused Hayai filters -x :app:formatKotlin	VERIFIED
+ 2026-08-22T00:08:20Z	emulator-harness	replaced the fixed startup sleep with database readiness and explicit first-run permission handling	the authorized emulator proved migration succeeds when the harness does not force-stop the app before its lazy database open	commit 99c6f64c43	IMPLEMENTED_UNVERIFIED
++2026-08-22T02:29:32Z	emulator-verification	verified migrated core and Hayai-owned rows, native novel reading, all five reader settings tabs, offline save, restart recovery, and logged-out EH settings	the run found and drove the fix for a tabbed-sheet superclass initialization crash	artifacts/emulator-verification/20260822-022932	VERIFIED
+ 2026-08-22T00:08:20Z	nightly-release	added an isolated nightly build, channel-aware updater policy, Hayai APK selection, monotonic release workflow, and pull-request CI	preserved stable and nightly identities while keeping release policy under the Hayai namespace	app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt; .github/workflows/nightly.yml	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T01:10:00Z	page-preview-parity	replaced eager bitmap strips with typed lazy previews, bounded caches, full navigation, dedicated source artwork, and selected-page reader routing	preserved source authentication and parsing in Hayai while adding one approved initial-page read to the unchanged J2K reader lifecycle	source/preview; EhDetailsPreviewLoader.kt; MangaDetailsController.kt; ReaderLauncher.kt; ReaderActivity.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T01:11:00Z	content-discovery	split Browse and the extension installer into Manga and Novel views with one content classifier	preserved J2K search and extension ownership while making local novels and novel APK repositories discoverable	ContentKind; BrowseController.kt; ExtensionBottomSheet.kt; RepoController.kt	IMPLEMENTED_UNVERIFIED
+diff --git a/app/src/debug/AndroidManifest.xml b/app/src/debug/AndroidManifest.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..e815e81ac58f9e3f85a1fde9a1756aae49e1cab3
+--- /dev/null
++++ b/app/src/debug/AndroidManifest.xml
+@@ -0,0 +1,16 @@
++<?xml version="1.0" encoding="utf-8"?>
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:tools="http://schemas.android.com/tools">
++
++    <application>
++        <!-- Debug-only emulator verification entry points. Production variants keep these private. -->
++        <activity
++            android:name="dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity"
++            android:exported="true"
++            tools:replace="android:exported" />
++        <activity
++            android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity"
++            android:exported="true"
++            tools:replace="android:exported" />
++    </application>
++</manifest>
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
+index 5bffdca9c43a99cb31d75f88d36ea5b9088b039d..b9b7c47d5c0b43c8064cae3453202dc30e720fea 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
+@@ -27,16 +27,15 @@ internal class NovelReaderSettingsSheet(
+     private val onChromeChanged: () -> Unit,
+     private val onAction: (NovelReaderAction) -> Unit,
+ ) : TabbedBottomSheetDialog(activity) {
+-    private val pages =
+-        listOf(
+-            page { readerPage(this) },
+-            page { textPage(this) },
+-            page { layoutPage(this) },
+-            page { ttsPage(this) },
+-            page { morePage(this) },
+-        )
++    // Keep these as individual fields, matching J2K's own tabbed sheets. The base class asks
++    // for the tab count from its constructor, before a subclass collection field can exist.
++    private val readerView = page { readerPage(this) }
++    private val textView = page { textPage(this) }
++    private val layoutView = page { layoutPage(this) }
++    private val ttsView = page { ttsPage(this) }
++    private val moreView = page { morePage(this) }
+ 
+-    override fun getTabViews(): List<View> = pages
++    override fun getTabViews(): List<View> = listOf(readerView, textView, layoutView, ttsView, moreView)
+ 
+     override fun getTabTitles(): List<Int> =
+         listOf(
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/local/LocalNovelSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/local/LocalNovelSource.kt
+index 9bb73b1ec2b663f6c47f11d2f21b72344278ae9c..d97b5adf34846f221bcddfe70c4139887f5340ce 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/local/LocalNovelSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/local/LocalNovelSource.kt
+@@ -397,9 +397,10 @@ class LocalNovelSource(
+         const val HELP_URL = "https://tsundoku-otaku.github.io/docs/guides/local-source/novels"
+         private val LATEST_THRESHOLD = TimeUnit.MILLISECONDS.convert(7, TimeUnit.DAYS)
+         private const val MAX_ASSET_BYTES = 50L * 1024 * 1024
++        private const val STORAGE_DIRECTORY = "Hayai"
+ 
+         private fun getBaseDirectories(context: Context): List<File> {
+-            val relativePath = context.getString(R.string.app_name) + File.separator + "localnovels"
++            val relativePath = STORAGE_DIRECTORY + File.separator + "localnovels"
+             return DiskUtil.getExternalStorages(context).map { File(it, relativePath).apply { mkdirs() } }
+         }
+     }
+diff --git a/docs/architecture/novel-reader-parity.md b/docs/architecture/novel-reader-parity.md
+index 7a2220aed2f38b8e4cac56ee7844a19d1dc9960d..8128aaab398bd1d16206f8168dc39a61b04f70a2 100644
+--- a/docs/architecture/novel-reader-parity.md
++++ b/docs/architecture/novel-reader-parity.md
+@@ -47,4 +47,6 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
+ 
+ ## Verification state
+ 
+-The implementation has only received static inspection and `git diff --check` in this batch. Run the focused unit tests, Kotlin compilation, upstream-boundary check, and emulator reader flows before changing the audit status to **Port**. The emulator flow must cover native and WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery, notification handoff, incognito history, quotes, highlights, process restart, and orientation changes.
++The coherent batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` emulator run in `artifacts/emulator-verification/20260822-022932` verified legacy migration, native local-novel launch, the Reading/Appearance/Controls/TTS/Advanced sheet, offline save, process restart recovery, and the logged-out EH settings state. The emulator also exposed an initialization-order crash in the first tabbed-sheet implementation; the verifier was rerun successfully after the fix.
++
++Do not describe the entire reader as emulator-verified yet. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote/highlight selection, and orientation changes still need dedicated device flows.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 129600c85619df5483d3ad448d8930c8f63e52fe..76677fe3f366ac0db80fca07323574d903c5c7f6 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -11,7 +11,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | Global hentai enable (`eh_is_hentai_enabled`) | Reactive discovery-source visibility; installed/library sources remain addressable | port |
+ | Library lewd filter show/only/hide (`pref_filter_library_lewd_v2`) | J2K library filter sheet plus typed `HayaiLibraryPolicy` | port |
+ | Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
+-| E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; emulator login pending |
++| E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; logged-out emulator screen verified; authenticated login pending |
+ | EH source settings, default filters, enhanced details toggle, and remote uconfig | Typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
+ | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
+ | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, lazy cached details rows, full preview browser, and typed J2K reader-page handoff | implemented unverified; authenticated emulator details flow pending |
+@@ -29,15 +29,15 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+-| Dedicated reader, central routing, and J2K history | Hayai-owned J2K-style XML shell, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | implemented unverified; emulator restart/recovery remains |
++| Dedicated reader, central routing, and J2K history | Hayai-owned J2K-style XML shell, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | implemented; native local-chapter launch and process restart verified; WebView, prepend, and incognito emulator flows pending |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+ | Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership and separate management entry points | implemented unverified; compile and emulator install flows pending |
+ | LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+-| Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | integration foundation verified; emulator bulk-flow pending |
+-| Typography, themes, spacing, navigation, presets, snippets, search/replace | Five-tab live reader sheet, Tsundoku preference keys and exact tap-zone tables, SAF-imported validated fonts shared by native/Web renderers, progress modes, ordered bottom/status registries, searchable full settings, ordered snippets with append semantics, and testable ordered replacements | implemented unverified; emulator settings/font-flow pending |
++| Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | implemented; local chapter offline save and restart recovery verified; bulk-flow pending |
++| Typography, themes, spacing, navigation, presets, snippets, search/replace | Five-tab live reader sheet, Tsundoku preference keys and exact tap-zone tables, SAF-imported validated fonts shared by native/Web renderers, progress modes, ordered bottom/status registries, searchable full settings, ordered snippets with append semantics, and testable ordered replacements | implemented; all five reader tabs verified on emulator; imported-font flow pending |
+ | Translation and dictionary handoff | Bounded provider clients, cache, selection/chapter reader actions, installed-app lookup, and web fallback | implemented unverified |
+ | TTS and playback controls | Foreground media-playback service, notification actions, viewport start, paragraph navigation/highlight, chapter handoff, and activity reattachment | implemented unverified; emulator background/restart recovery pending |
+ | Quotes | Typed `hayai_quotes`, native/Web selection capture, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | implemented unverified; emulator selection lifecycle pending |
+diff --git a/tools/verify-hayai-emulator.ps1 b/tools/verify-hayai-emulator.ps1
+index ff544cda2d60199ed034eee943d7747b04ee2070..188b1de58cfd8a42a86d34844e2cc3418cd0d847 100644
+--- a/tools/verify-hayai-emulator.ps1
++++ b/tools/verify-hayai-emulator.ps1
+@@ -67,25 +67,54 @@ function Assert-TestAvd {
+ }
+ function Dump-Window([string] $Name) {
+     $remote = "/data/local/tmp/hayai-window.xml"
+-    Invoke-Adb @("shell", "rm", "-f", $remote) | Out-Null
+-    Invoke-Adb @("shell", "uiautomator", "dump", $remote) | Out-Null
+     $path = Join-Path $script:evidence "$Name.xml"
+-    Invoke-Adb @("pull", $remote, $path) | Out-Null
++    $pulled = $false
++    for ($attempt = 0; $attempt -lt 5 -and !$pulled; $attempt++) {
++        & $Adb -s $Serial shell rm -f $remote 2>$null | Out-Null
++        & $Adb -s $Serial shell uiautomator dump --compressed $remote 2>$null | Out-Null
++        & $Adb -s $Serial pull $remote $path 2>$null | Out-Null
++        $pulled = $LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $path -PathType Leaf)
++        if (!$pulled) { Start-Sleep -Milliseconds 500 }
++    }
++    if (!$pulled) { throw "UI hierarchy was not created at $remote." }
+     return [xml](Get-Content -Raw -LiteralPath $path)
+ }
+ function Find-Node([xml] $Window, [string] $Pattern) {
+-    $node = $Window.SelectNodes("//node") | Where-Object { $_.text -match $Pattern -or $_.'content-desc' -match $Pattern } | Select-Object -First 1
++    $node = Find-NodeOptional $Window $Pattern
+     if ($null -eq $node) { throw "UI node was not found: $Pattern" }
+     return $node
+ }
++function Find-NodeOptional([xml] $Window, [string] $Pattern) {
++    return $Window.SelectNodes("//node") | Where-Object { $_.text -match $Pattern -or $_.'content-desc' -match $Pattern } | Select-Object -First 1
++}
+ function Tap-Node([string] $Pattern, [string] $EvidenceName) {
+     $node = Find-Node (Dump-Window $EvidenceName) $Pattern
++    Tap-WindowNode $node $Pattern
++}
++function Tap-WindowNode($Node, [string] $Pattern) {
++    $node = $Node
+     if ($node.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "UI node has invalid bounds: $Pattern" }
+     $x = ([int]$Matches[1] + [int]$Matches[3]) / 2
+     $y = ([int]$Matches[2] + [int]$Matches[4]) / 2
+     Invoke-Adb @("shell", "input", "tap", ([int]$x), ([int]$y)) | Out-Null
+     Start-Sleep -Milliseconds 800
+ }
++function Tap-NodeAfterSwiping([string] $Pattern, [string] $EvidenceName, [int] $MaximumSwipes = 8) {
++    for ($attempt = 0; $attempt -le $MaximumSwipes; $attempt++) {
++        $window = Dump-Window "$EvidenceName-$attempt"
++        $node = $window.SelectNodes("//node") | Where-Object { $_.text -match $Pattern -or $_.'content-desc' -match $Pattern } | Select-Object -First 1
++        if ($null -ne $node -and $node.bounds -match '\[(\d+),(\d+)\]\[(\d+),(\d+)\]' -and [int]$Matches[4] -gt 0) {
++            $x = ([int]$Matches[1] + [int]$Matches[3]) / 2
++            $y = ([int]$Matches[2] + [int]$Matches[4]) / 2
++            Invoke-Adb @("shell", "input", "tap", ([int]$x), ([int]$y)) | Out-Null
++            Start-Sleep -Milliseconds 800
++            return
++        }
++        Invoke-Adb @("shell", "input", "swipe", "672", "2300", "672", "1150", "500") | Out-Null
++        Start-Sleep -Milliseconds 500
++    }
++    throw "Scrollable UI node was not found: $Pattern"
++}
+ function Assert-Node([string] $Pattern, [string] $EvidenceName) { [void](Find-Node (Dump-Window $EvidenceName) $Pattern) }
+ function Dismiss-CompatibilityWarning {
+     try {
+@@ -96,7 +125,7 @@ function Dismiss-CompatibilityWarning {
+     }
+     $warning = $window.SelectNodes("//node") | Where-Object { $_.text -eq "Android App Compatibility" } | Select-Object -First 1
+     if ($warning) {
+-        Tap-Node "Don't Show Again|OK" "00-compatibility-warning"
++        Tap-Node "Don't Show Again" "00-compatibility-warning-dismiss"
+     }
+ }
+ function Capture([string] $Name) {
+@@ -104,13 +133,13 @@ function Capture([string] $Name) {
+     Invoke-Adb @("shell", "screencap", "-p", $remote) | Out-Null
+     Invoke-Adb @("pull", $remote, (Join-Path $script:evidence "$Name.png")) | Out-Null
+ }
+-function Export-PrivateDatabase([string] $Destination) {
++function Export-PrivateFile([string] $Source, [string] $Destination, [bool] $Required = $true) {
+     $start = [Diagnostics.ProcessStartInfo]::new()
+     $start.FileName = $Adb
+     $start.UseShellExecute = $false
+     $start.RedirectStandardOutput = $true
+     $start.RedirectStandardError = $true
+-    @("-s", $Serial, "exec-out", "run-as", $ApplicationId, "cat", "databases/hayai-j2k.db") | ForEach-Object {
++    @("-s", $Serial, "exec-out", "run-as", $ApplicationId, "cat", $Source) | ForEach-Object {
+         [void] $start.ArgumentList.Add($_)
+     }
+     $process = [Diagnostics.Process]::new()
+@@ -127,13 +156,20 @@ function Export-PrivateDatabase([string] $Destination) {
+     $errorText = $errorRead.GetAwaiter().GetResult()
+     if ($process.ExitCode -ne 0) {
+         Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
++        if (!$Required) { return $false }
+         throw "adb private database export failed: $errorText"
+     }
++    return $true
++}
++function Export-PrivateDatabase([string] $Destination) {
++    [void](Export-PrivateFile "databases/hayai-j2k.db" $Destination)
++    [void](Export-PrivateFile "databases/hayai-j2k.db-wal" "$Destination-wal" $false)
++    [void](Export-PrivateFile "databases/hayai-j2k.db-shm" "$Destination-shm" $false)
+     $bytes = [IO.File]::ReadAllBytes($Destination)
+     $header = if ($bytes.Length -ge 16) { [Text.Encoding]::ASCII.GetString($bytes, 0, 16) } else { "" }
+     if ($bytes.Length -lt 512 -or $header -ne "SQLite format 3`0") {
+         Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
+-        throw "The active database export is missing or is not SQLite. $errorText"
++        throw "The active database export is missing or is not SQLite."
+     }
+ }
+ function Wait-ForActiveDatabase([int] $TimeoutSeconds = 60) {
+@@ -213,6 +249,13 @@ try {
+     Invoke-Adb @("shell", "run-as", $ApplicationId, "mkdir", "-p", "databases", "shared_prefs") | Out-Null
+     Invoke-Adb @("shell", "run-as", $ApplicationId, "cp", "/data/local/tmp/hayai-tachiyomi.db", "databases/tachiyomi.db") | Out-Null
+ 
++    # Force the first database open to inspect the fixture even if an Android component opened
++    # the pristine target database between package install and fixture placement.
++    $migrationPrefsFile = Join-Path $temporary "hayai_legacy_migration.xml"
++    Set-Content -LiteralPath $migrationPrefsFile -Value '<?xml version="1.0" encoding="utf-8" standalone="yes" ?><map><boolean name="retry_requested" value="true" /></map>' -Encoding utf8
++    Invoke-Adb @("push", $migrationPrefsFile, "/data/local/tmp/hayai-migration-preferences.xml") | Out-Null
++    Invoke-Adb @("shell", "run-as", $ApplicationId, "cp", "/data/local/tmp/hayai-migration-preferences.xml", "shared_prefs/hayai_legacy_migration.xml") | Out-Null
++
+     if (!$SkipAuthenticatedEh) {
+         $prefs = "<?xml version=`"1.0`" encoding=`"utf-8`" standalone=`"yes`" ?><map><string name=`"__PRIVATE_eh_ipb_member_id`">$(XmlEscape $secrets.memberId)</string><string name=`"__PRIVATE_eh_ipb_pass_hash`">$(XmlEscape $secrets.passHash)</string><string name=`"__PRIVATE_eh_igneous`">$(XmlEscape $secrets.igneous)</string></map>"
+         $prefsFile = Join-Path $temporary "$ApplicationId`_preferences.xml"
+@@ -232,29 +275,41 @@ try {
+     Capture "01-migrated-library"
+     Database-Report "01-migrated"
+ 
+-    Invoke-Adb @("shell", "run-as", $ApplicationId, "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
+-    Start-Sleep -Seconds 3
++    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
++    Start-Sleep -Seconds 2
++    Dismiss-CompatibilityWarning
++    Start-Sleep -Seconds 1
+     Assert-Node "Verification Novel" "02-novel-reader"
++    Assert-Node "Read aloud" "02-novel-reader-actions"
+     Capture "02-novel-reader"
+-    Invoke-Adb @("shell", "input", "swipe", "300", "700", "650", "700", "1200") | Out-Null
+-    Start-Sleep -Seconds 1
+-    Assert-Node "Highlight|Translate|Dictionary|Look up" "03-novel-selection-actions"
+-    Capture "03-novel-selection-actions"
+-    Invoke-Adb @("shell", "input", "keyevent", "BACK") | Out-Null
+-    Tap-Node "Aa" "04-reader-menu-button"
+-    Tap-Node "Save chapter offline" "05-save-offline"
+-    Start-Sleep -Seconds 2
++    $readerWindow = Dump-Window "02-novel-reader-settings-action"
++    if ($null -eq (Find-NodeOptional $readerWindow "^Reading$")) {
++        if ($null -eq (Find-NodeOptional $readerWindow "^Reader settings$")) { throw "Neither the reader settings action nor its sheet was visible." }
++        Tap-Node "^Reader settings$" "03-reader-settings-button"
++    }
++    $settingsWindow = Dump-Window "03-reader-settings-tabs"
++    @("Reading", "Appearance", "Controls", "TTS", "Advanced") | ForEach-Object { [void](Find-Node $settingsWindow "^$([regex]::Escape($_))$") }
++    Capture "03-reader-settings-tabs"
++    Tap-WindowNode (Find-Node $settingsWindow "^Advanced$") "Advanced"
++    $advancedWindow = Dump-Window "07-reader-advanced"
++    [void](Find-Node $advancedWindow "Content")
++    Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
++    Start-Sleep -Seconds 3
+     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
+-    Invoke-Adb @("shell", "run-as", $ApplicationId, "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
++    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
+     Start-Sleep -Seconds 2
+-    Assert-Node "Offline" "06-offline-after-restart"
+-    Capture "06-offline-after-restart"
++    Dismiss-CompatibilityWarning
++    Start-Sleep -Seconds 1
++    Assert-Node "Offline" "09-offline-after-restart"
++    Capture "09-offline-after-restart"
+ 
+-    Invoke-Adb @("shell", "run-as", $ApplicationId, "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity") | Out-Null
+-    Start-Sleep -Seconds 2
++    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity") | Out-Null
++    Start-Sleep -Seconds 1
++    Dismiss-CompatibilityWarning
++    Start-Sleep -Seconds 1
+     if ($SkipAuthenticatedEh) {
+-        Assert-Node "E-Hentai|ExHentai|Log in|credentials" "07-eh-logged-out"
+-        Capture "07-eh-logged-out"
++        Assert-Node "E-Hentai|ExHentai|Log in|credentials" "10-eh-logged-out"
++        Capture "10-eh-logged-out"
+     } else {
+         Tap-Node "Recheck current credentials" "07-eh-recheck"
+         Start-Sleep -Seconds 5
+-- 
+2.54.0.windows.1
+

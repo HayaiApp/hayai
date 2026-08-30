@@ -1,0 +1,367 @@
+From 8035343c10db08fb58928ac00317f7b1cb63e0ed Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 18:22:28 +0300
+Subject: [PATCH] Complete novel quote management
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 21be9165d9c58aebbb6c94487b896e95ee7e742c..41f9d34e13e5d79fef59e7d36c92c1772882a858 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -22,3 +22,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-20T17:10:00Z	downloads	built self-contained offline novel chapters with atomic replacement and integrity checks	saved documents rewrite HTML, CSS, srcset, Markdown, relative, remote, and source-owned assets to a bounded offline store while preserving source-specific HTTP authentication	app/src/main/java/dev/ahmedmohamed/hayai/novel/download	VERIFIED
+ 2026-08-20T17:18:00Z	review	closed the independent offline-reader audit	removed live-resource fallback and remote bases for downloaded chapters, enforced read/write limits, and routed HTTP assets through source overrides	app/src/main/java/dev/ahmedmohamed/hayai/novel/reader	VERIFIED
+ 2026-08-20T17:20:00Z	validation	ran the complete focused novel suite and upstream boundary gate	verified formats, local sources, reader behavior, TTS, atomic downloads, asset rewriting, corruption fallback, and protected J2K files	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.*; tools/verify-upstream-boundary.ps1	125 tests green
++2026-08-20T17:48:00Z	quotes	completed migrated and new novel quote management	selection caching survives focus changes, duplicate capture is idempotent, writes are serialized and transactional, and users can browse, copy, confirm-delete, and retain legacy quotes	app/src/main/java/dev/ahmedmohamed/hayai/novel/quote; NovelReaderActivity.kt	VERIFIED
++2026-08-20T17:52:00Z	review	closed the independent quote-management audit	verified SQL, threading, legacy compatibility, capture lifecycle, concurrency, and destructive confirmation	app/src/main/java/dev/ahmedmohamed/hayai/novel/quote	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f0dc14a78a7ff88b69958d20d778646613a1c098
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt
+@@ -0,0 +1,151 @@
++package dev.ahmedmohamed.hayai.novel.quote
++
++import android.content.ContentValues
++import android.database.Cursor
++import com.pushtorefresh.storio.sqlite.queries.DeleteQuery
++import com.pushtorefresh.storio.sqlite.queries.InsertQuery
++import com.pushtorefresh.storio.sqlite.queries.RawQuery
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import java.util.UUID
++
++class NovelQuoteStore(
++    private val database: DatabaseHelper,
++) {
++    fun add(
++        mangaId: Long,
++        novelName: String,
++        chapterName: String,
++        selectedText: String,
++        language: String? = null,
++        timestamp: Long = System.currentTimeMillis(),
++    ): QuoteAddResult = synchronized(ADD_LOCK) {
++        val content = NovelQuoteText.normalize(selectedText)
++        database.inTransactionReturn {
++            findDuplicate(mangaId, chapterName, content)?.let { return@inTransactionReturn QuoteAddResult.Existing(it) }
++            val quote =
++                NovelQuote(
++                    id = UUID.randomUUID().toString(),
++                    mangaId = mangaId,
++                    novelName = novelName.trim(),
++                    chapterName = chapterName.trim(),
++                    displayedContent = content,
++                    originalContent = content,
++                    translatedContent = null,
++                    language = language?.trim()?.takeIf(String::isNotEmpty),
++                    timestamp = timestamp,
++                )
++            val inserted = database.lowLevel().insert(INSERT_QUERY, quote.toContentValues())
++            check(inserted >= 0) { "The quote could not be saved." }
++            QuoteAddResult.Created(quote)
++        }
++    }
++
++    fun forManga(mangaId: Long): List<NovelQuote> =
++        database
++            .lowLevel()
++            .rawQuery(
++                RawQuery
++                    .builder()
++                    .query("SELECT $COLUMNS FROM hayai_quotes WHERE manga_id = ? ORDER BY timestamp DESC, quote_id")
++                    .args(mangaId)
++                    .observesTables("hayai_quotes")
++                    .build(),
++            ).use { cursor ->
++                buildList {
++                    while (cursor.moveToNext()) {
++                        add(cursor.toQuote())
++                    }
++                }
++            }
++
++    fun delete(quoteId: String): Boolean =
++        database.lowLevel().delete(
++            DeleteQuery.builder().table("hayai_quotes").where("quote_id = ?").whereArgs(quoteId).build(),
++        ) > 0
++
++    private fun findDuplicate(
++        mangaId: Long,
++        chapterName: String,
++        content: String,
++    ): NovelQuote? =
++        database
++            .lowLevel()
++            .rawQuery(
++                RawQuery
++                    .builder()
++                    .query(
++                        "SELECT $COLUMNS FROM hayai_quotes " +
++                            "WHERE manga_id = ? AND chapter_name = ? AND displayed_content = ? LIMIT 1",
++                    ).args(mangaId, chapterName.trim(), content)
++                    .observesTables("hayai_quotes")
++                    .build(),
++            ).use { cursor -> cursor.takeIf(Cursor::moveToFirst)?.toQuote() }
++
++    private fun Cursor.toQuote() =
++        NovelQuote(
++            id = getString(0),
++            mangaId = getLong(1),
++            novelName = getString(2),
++            chapterName = getString(3),
++            displayedContent = getString(4),
++            originalContent = takeUnless { it.isNull(5) }?.getString(5),
++            translatedContent = takeUnless { it.isNull(6) }?.getString(6),
++            language = takeUnless { it.isNull(7) }?.getString(7),
++            timestamp = getLong(8),
++        )
++
++    private fun NovelQuote.toContentValues() =
++        ContentValues(9).apply {
++            put("quote_id", id)
++            put("manga_id", mangaId)
++            put("novel_name", novelName)
++            put("chapter_name", chapterName)
++            put("displayed_content", displayedContent)
++            put("original_content", originalContent)
++            put("translated_content", translatedContent)
++            put("language", language)
++            put("timestamp", timestamp)
++        }
++
++    private companion object {
++        const val COLUMNS =
++            "quote_id, manga_id, novel_name, chapter_name, displayed_content, original_content, translated_content, language, timestamp"
++        val INSERT_QUERY = InsertQuery.builder().table("hayai_quotes").build()
++        val ADD_LOCK = Any()
++    }
++}
++
++data class NovelQuote(
++    val id: String,
++    val mangaId: Long,
++    val novelName: String,
++    val chapterName: String,
++    val displayedContent: String,
++    val originalContent: String?,
++    val translatedContent: String?,
++    val language: String?,
++    val timestamp: Long,
++)
++
++sealed interface QuoteAddResult {
++    val quote: NovelQuote
++
++    data class Created(
++        override val quote: NovelQuote,
++    ) : QuoteAddResult
++
++    data class Existing(
++        override val quote: NovelQuote,
++    ) : QuoteAddResult
++}
++
++internal object NovelQuoteText {
++    fun normalize(value: String): String {
++        val normalized = value.replace("\r\n", "\n").replace('\r', '\n').trim()
++        require(normalized.isNotEmpty()) { "Select text before saving a quote." }
++        require(normalized.length <= MAX_LENGTH) { "The selected quote is too long." }
++        return normalized
++    }
++
++    const val MAX_LENGTH = 20_000
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+index d07374190354f710df8202f9adf3eec2a361c962..2b904bf316bb3c05953d82e5a7f220f277f3deca 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+@@ -87,6 +87,11 @@ internal object NovelHtmlDocumentBuilder {
+             return Math.max(0, Math.min(100, Math.round(scrollY * 100 / max)));
+           };
+           let scheduled = false;
++          let lastSelection = '';
++          document.addEventListener('selectionchange', () => {
++            const selected = (getSelection() ? getSelection().toString() : '').trim();
++            if (selected) lastSelection = selected;
++          });
+           addEventListener('scroll', () => {
+             if (scheduled) return;
+             scheduled = true;
+@@ -105,6 +110,11 @@ internal object NovelHtmlDocumentBuilder {
+               return [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]
+                 .map((node, index) => ({index, text:(node.innerText || '').trim()})).filter(it => it.text);
+             },
++            takeSelection() {
++              const selected = (getSelection() ? getSelection().toString() : '').trim() || lastSelection;
++              lastSelection = '';
++              return selected;
++            },
+             highlight(index) {
+               document.querySelectorAll('.hayai-tts-active').forEach(it => it.classList.remove('hayai-tts-active'));
+               const nodes = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')];
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index 85b656355eb0c04e206cee3861a1aac68d4d00c3..8fee41c008fc3fa6c7792f76d13ef007adb4f842 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -1,6 +1,8 @@
+ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.annotation.SuppressLint
++import android.content.ClipData
++import android.content.ClipboardManager
+ import android.content.Context
+ import android.content.Intent
+ import android.os.Bundle
+@@ -24,6 +26,9 @@ import androidx.appcompat.app.AppCompatActivity
+ import androidx.core.view.setPadding
+ import androidx.lifecycle.lifecycleScope
+ import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
++import dev.ahmedmohamed.hayai.novel.quote.NovelQuote
++import dev.ahmedmohamed.hayai.novel.quote.NovelQuoteStore
++import dev.ahmedmohamed.hayai.novel.quote.QuoteAddResult
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.preference.PreferenceStore
+@@ -56,6 +61,7 @@ class NovelReaderActivity :
+         )
+     }
+     private val contentProcessor = NovelContentProcessor()
++    private val quoteStore by lazy { NovelQuoteStore(Injekt.get<DatabaseHelper>()) }
+     private lateinit var webView: WebView
+     private lateinit var titleView: TextView
+     private lateinit var chapterView: TextView
+@@ -285,6 +291,7 @@ class NovelReaderActivity :
+                 "Toggle media",
+                 "Toggle auto-scroll",
+                 if (loaded?.isDownloaded == true) "Remove offline copy" else "Save chapter offline",
++                "Saved quotes",
+                 "Reset chapter progress",
+             )
+         AlertDialog
+@@ -298,16 +305,89 @@ class NovelReaderActivity :
+                     3 -> preferences.novelBlockMedia.set(!preferences.novelBlockMedia.get())
+                     4 -> if (autoScroll) stopAutoScroll() else startAutoScroll()
+                     5 -> toggleOfflineCopy()
+-                    6 -> {
++                    6 -> showSavedQuotes()
++                    7 -> {
+                         currentProgress = 0
+                         loaded?.chapter?.let(NovelProgress::reset)
+                         saveProgress()
+                     }
+                 }
+-                if (which !in setOf(4, 5)) loaded?.let(::showChapter)
++                if (which !in setOf(4, 5, 6)) loaded?.let(::showChapter)
+             }.show()
+     }
+ 
++    private fun captureSelectedQuote() {
++        val chapter = loaded ?: return
++        webView.evaluateJavascript("window.hayaiReader.takeSelection()") { encoded ->
++            val selection = runCatching { json.decodeFromString<String>(encoded) }.getOrNull().orEmpty()
++            lifecycleScope.launch {
++                val result =
++                    withContext(Dispatchers.IO) {
++                        runCatching {
++                            quoteStore.add(
++                                mangaId = requireNotNull(chapter.manga.id),
++                                novelName = chapter.manga.title,
++                                chapterName = chapter.chapter.name,
++                                selectedText = selection,
++                            )
++                        }
++                    }
++                result.fold(
++                    onSuccess = { added ->
++                        toast(if (added is QuoteAddResult.Created) "Quote saved" else "This quote is already saved")
++                    },
++                    onFailure = { toast(it.message ?: "The quote could not be saved") },
++                )
++            }
++        }
++    }
++
++    private fun showSavedQuotes() {
++        val mangaId = loaded?.manga?.id ?: return
++        lifecycleScope.launch {
++            val quotes = withContext(Dispatchers.IO) { quoteStore.forManga(mangaId) }
++            if (quotes.isEmpty()) {
++                toast("No saved quotes for this novel")
++                return@launch
++            }
++            val labels = quotes.map { quote -> "${quote.chapterName}  •  ${quote.displayedContent.replace('\n', ' ').take(80)}" }.toTypedArray()
++            AlertDialog
++                .Builder(this@NovelReaderActivity)
++                .setTitle("Saved quotes")
++                .setItems(labels) { _, index -> showQuote(quotes[index]) }
++                .setNegativeButton(android.R.string.cancel, null)
++                .show()
++        }
++    }
++
++    private fun showQuote(quote: NovelQuote) {
++        AlertDialog
++            .Builder(this)
++            .setTitle(quote.chapterName)
++            .setMessage(quote.displayedContent)
++            .setPositiveButton("Copy") { _, _ ->
++                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
++                clipboard.setPrimaryClip(ClipData.newPlainText("Novel quote", quote.displayedContent))
++                toast("Quote copied")
++            }.setNeutralButton("Delete") { _, _ -> confirmDeleteQuote(quote) }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun confirmDeleteQuote(quote: NovelQuote) {
++        AlertDialog
++            .Builder(this)
++            .setTitle("Delete quote?")
++            .setMessage("This cannot be undone.")
++            .setPositiveButton("Delete") { _, _ ->
++                lifecycleScope.launch {
++                    val deleted = withContext(Dispatchers.IO) { quoteStore.delete(quote.id) }
++                    toast(if (deleted) "Quote deleted" else "The quote no longer exists")
++                }
++            }.setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
+     private fun toggleOfflineCopy() {
+         val chapter = loaded ?: return
+         if (loadJob?.isActive == true) return
+@@ -478,6 +558,7 @@ class NovelReaderActivity :
+         controls.addView(playButton)
+         controls.addView(controlButton("▶") { ttsController.nextParagraph() })
+         controls.addView(nextButton)
++        controls.addView(controlButton("❝") { captureSelectedQuote() })
+         controls.addView(controlButton("Aa") { showReaderSettings() })
+         root.addView(controls)
+         return root
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteTextTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteTextTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..63b2ab6fc043c1734678378fce32bd415a92a59b
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteTextTest.kt
+@@ -0,0 +1,18 @@
++package dev.ahmedmohamed.hayai.novel.quote
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertThrows
++import org.junit.Test
++
++class NovelQuoteTextTest {
++    @Test
++    fun `normalizes line endings and surrounding whitespace`() {
++        assertEquals("first\nsecond", NovelQuoteText.normalize("  first\r\nsecond  "))
++    }
++
++    @Test
++    fun `rejects empty and excessively large selections`() {
++        assertThrows(IllegalArgumentException::class.java) { NovelQuoteText.normalize("  \n ") }
++        assertThrows(IllegalArgumentException::class.java) { NovelQuoteText.normalize("x".repeat(NovelQuoteText.MAX_LENGTH + 1)) }
++    }
++}
+-- 
+2.54.0.windows.1
+

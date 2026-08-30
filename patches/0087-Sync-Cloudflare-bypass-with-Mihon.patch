@@ -1,0 +1,186 @@
+From 8e622958054e06f01ab23a74e8adc7abde7f53fc Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 18:54:50 +0300
+Subject: [PATCH] Sync Cloudflare bypass with Mihon
+
+
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt b/app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt
+index bddf2bdcb6cd76963d4cac4680919a4ee29419d2..b1bcd35522f8023cbaac442c4bb490e72fbd8aed 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt
+@@ -2,12 +2,15 @@ package eu.kanade.tachiyomi.network.interceptor
+ 
+ import android.annotation.SuppressLint
+ import android.content.Context
++import android.webkit.JavascriptInterface
++import android.webkit.WebResourceRequest
++import android.webkit.WebResourceResponse
+ import android.webkit.WebView
++import android.webkit.WebViewClient
+ import android.widget.Toast
+ import androidx.core.content.ContextCompat
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.network.AndroidCookieJar
+-import eu.kanade.tachiyomi.util.system.WebViewClientCompat
+ import eu.kanade.tachiyomi.util.system.isOutdated
+ import eu.kanade.tachiyomi.util.system.toast
+ import okhttp3.Cookie
+@@ -26,8 +29,7 @@ class CloudflareInterceptor(
+     private val executor = ContextCompat.getMainExecutor(context)
+ 
+     override fun shouldIntercept(response: Response): Boolean {
+-        // Check if Cloudflare anti-bot is on
+-        return response.code in ERROR_CODES && response.header("Server") in SERVER_CHECK
++        return response.isCloudflareChallenge()
+     }
+ 
+     override fun intercept(
+@@ -48,7 +50,7 @@ class CloudflareInterceptor(
+             // Because OkHttp's enqueue only handles IOExceptions, wrap the exception so that
+             // we don't crash the entire app
+         } catch (e: CloudflareBypassException) {
+-            throw IOException(context.getString(R.string.failed_to_bypass_cloudflare))
++            throw IOException(context.getString(R.string.failed_to_bypass_cloudflare), e)
+         } catch (e: Exception) {
+             throw IOException(e)
+         }
+@@ -73,10 +75,22 @@ class CloudflareInterceptor(
+         val headers = parseHeaders(originalRequest.headers)
+ 
+         executor.execute {
+-            webView = createWebView(originalRequest)
++            val challengeWebView = createWebView(originalRequest)
++            webView = challengeWebView
++
++            challengeWebView.addJavascriptInterface(
++                object {
++                    @Suppress("unused")
++                    @JavascriptInterface
++                    fun interactiveDetected() {
++                        latch.countDown()
++                    }
++                },
++                "mihon",
++            )
+ 
+-            webView?.webViewClient =
+-                object : WebViewClientCompat() {
++            challengeWebView.webViewClient =
++                object : WebViewClient() {
+                     override fun onPageFinished(
+                         view: WebView,
+                         url: String,
+@@ -92,32 +106,40 @@ class CloudflareInterceptor(
+                             latch.countDown()
+                         }
+ 
+-                        if (url == origRequestUrl && !challengeFound) {
+-                            // The first request didn't return the challenge, abort.
+-                            latch.countDown()
++                        if (url == origRequestUrl) {
++                            if (!challengeFound) {
++                                latch.countDown()
++                            } else {
++                                view.evaluateJavascript(
++                                    """
++                                    addEventListener("message", ({data}) => {
++                                        if (data?.source === "cloudflare-challenge" && data?.event === "interactiveBegin") {
++                                            mihon.interactiveDetected();
++                                        }
++                                    })
++                                    """.trimIndent(),
++                                    null,
++                                )
++                            }
+                         }
+                     }
+ 
+-                    override fun onReceivedErrorCompat(
+-                        view: WebView,
+-                        errorCode: Int,
+-                        description: String?,
+-                        failingUrl: String,
+-                        isMainFrame: Boolean,
++                    override fun onReceivedHttpError(
++                        view: WebView?,
++                        request: WebResourceRequest?,
++                        errorResponse: WebResourceResponse?,
+                     ) {
+-                        if (isMainFrame) {
+-                            if (errorCode in ERROR_CODES) {
+-                                // Found the Cloudflare challenge page.
++                        if (request?.isForMainFrame == true) {
++                            if (errorResponse?.responseHeaders?.get("cf-mitigated") == "challenge") {
+                                 challengeFound = true
+                             } else {
+-                                // Unlock thread, the challenge wasn't found.
+                                 latch.countDown()
+                             }
+                         }
+                     }
+                 }
+ 
+-            webView?.loadUrl(origRequestUrl, headers)
++            challengeWebView.loadUrl(origRequestUrl, headers)
+         }
+ 
+         latch.awaitFor30Seconds()
+@@ -145,7 +167,9 @@ class CloudflareInterceptor(
+     }
+ }
+ 
+-private val ERROR_CODES = listOf(403, 503)
++internal fun Response.isCloudflareChallenge(): Boolean =
++    header("cf-mitigated") == "challenge" && header("Server") in SERVER_CHECK
++
+ private val SERVER_CHECK = arrayOf("cloudflare-nginx", "cloudflare")
+ private val COOKIE_NAMES = listOf("cf_clearance")
+ 
+diff --git a/app/src/test/java/eu/kanade/tachiyomi/network/interceptor/CloudflareChallengeTest.kt b/app/src/test/java/eu/kanade/tachiyomi/network/interceptor/CloudflareChallengeTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..e90dc3d0c9f3cfad8b7cd65ddc00c4e703d0976e
+--- /dev/null
++++ b/app/src/test/java/eu/kanade/tachiyomi/network/interceptor/CloudflareChallengeTest.kt
+@@ -0,0 +1,39 @@
++package eu.kanade.tachiyomi.network.interceptor
++
++import okhttp3.Protocol
++import okhttp3.Request
++import okhttp3.Response
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class CloudflareChallengeTest {
++    @Test
++    fun `official challenge header is detected regardless of status code`() {
++        assertTrue(response(200, "challenge", "cloudflare").isCloudflareChallenge())
++    }
++
++    @Test
++    fun `legacy error code without official header is not treated as a challenge`() {
++        assertFalse(response(503, null, "cloudflare").isCloudflareChallenge())
++    }
++
++    @Test
++    fun `non Cloudflare servers are ignored`() {
++        assertFalse(response(403, "challenge", "origin").isCloudflareChallenge())
++    }
++
++    private fun response(
++        code: Int,
++        mitigated: String?,
++        server: String,
++    ): Response =
++        Response.Builder()
++            .request(Request.Builder().url("https://example.com").build())
++            .protocol(Protocol.HTTP_2)
++            .message("test")
++            .code(code)
++            .header("Server", server)
++            .apply { mitigated?.let { header("cf-mitigated", it) } }
++            .build()
++}
+-- 
+2.54.0.windows.1
+

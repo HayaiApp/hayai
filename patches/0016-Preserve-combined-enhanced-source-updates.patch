@@ -1,0 +1,99 @@
+From 2f1c70c80cc8a3d55b335756e58220450029f858 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 01:22:01 +0300
+Subject: [PATCH] Preserve combined enhanced source updates
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt
+index 39c3cf1f64c217c8738fbcb6f973faa85d189d9b..73884bece4ce0a2082869aa697d5c1f1bd724763 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt
+@@ -50,7 +50,14 @@ open class HayaiEnhancedHttpSource(
+ 
+     override suspend fun getMangaDetails(manga: SManga): SManga {
+         val details = originalSource.getMangaDetails(manga)
+-        details.url = details.url.ifBlank { manga.url }
++        return enhanceDetails(details, manga.url)
++    }
++
++    private suspend fun enhanceDetails(
++        details: SManga,
++        fallbackUrl: String,
++    ): SManga {
++        details.url = details.url.ifBlank { fallbackUrl }
+         val enhanced = fetchEnhancedDetails(details) ?: return details
+         enhanced.title?.takeIf { details.title.isBlank() }?.let { details.title = it }
+         enhanced.author?.let { details.author = it }
+@@ -72,9 +79,9 @@ open class HayaiEnhancedHttpSource(
+         fetchDetails: Boolean,
+         fetchChapters: Boolean,
+     ): SMangaUpdate {
+-        val updatedManga = if (fetchDetails) getMangaDetails(manga) else manga
+-        val updatedChapters = if (fetchChapters) originalSource.getChapterList(updatedManga) else chapters
+-        return SMangaUpdate(updatedManga, updatedChapters)
++        val update = originalSource.getMangaUpdate(manga, chapters, fetchDetails, fetchChapters)
++        val updatedManga = if (fetchDetails) enhanceDetails(update.manga, manga.url) else update.manga
++        return SMangaUpdate(updatedManga, update.chapters)
+     }
+ 
+     override suspend fun getChapterList(manga: SManga): List<SChapter> = originalSource.getChapterList(manga)
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistryTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistryTest.kt
+index 805aee323c62219b3dacfa9d7455fa0487587728..9accb90870c50df4e8cc6d25b7695799837b7855 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistryTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistryTest.kt
+@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.source.model.Filter
+ import eu.kanade.tachiyomi.source.model.FilterList
+ import eu.kanade.tachiyomi.source.model.MangasPage
+ import eu.kanade.tachiyomi.source.model.SManga
++import eu.kanade.tachiyomi.source.model.SMangaUpdate
+ import eu.kanade.tachiyomi.source.online.HttpSource
+ import kotlinx.coroutines.runBlocking
+ import org.junit.Assert.assertEquals
+@@ -59,6 +60,19 @@ class EnhancedSourceRegistryTest {
+         assertEquals(listOf("https://example.com/g/123/"), original.searchQueries)
+         assertEquals("Imported", imported.mangas.single().title)
+     }
++
++    @Test
++    fun `combined updates remain one delegate operation`() = runBlocking {
++        val original = FakeHttpSource(77L, "NHentai", "https://nhentai.net")
++        val wrapped = EnhancedSourceRegistry.wrap(original)
++        val manga = SManga.create().apply { url = "/g/123/"; title = "Existing" }
++
++        val update = wrapped.getMangaUpdate(manga, emptyList(), fetchDetails = true, fetchChapters = true)
++
++        assertEquals(1, original.combinedUpdateCalls)
++        assertEquals("Combined", update.manga.title)
++        assertEquals(1, update.chapters.size)
++    }
+ }
+ 
+ private class FakeHttpSource(
+@@ -71,6 +85,7 @@ private class FakeHttpSource(
+     private val filters = FilterList(object : Filter.CheckBox("Enabled") {})
+     val detailUrls = mutableListOf<String>()
+     val searchQueries = mutableListOf<String>()
++    var combinedUpdateCalls = 0
+     override fun getFilterList(): FilterList = filters
+ 
+     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
+@@ -85,4 +100,16 @@ private class FakeHttpSource(
+             initialized = true
+         }
+     }
++
++    override suspend fun getMangaUpdate(
++        manga: SManga,
++        chapters: List<eu.kanade.tachiyomi.source.model.SChapter>,
++        fetchDetails: Boolean,
++        fetchChapters: Boolean,
++    ): SMangaUpdate {
++        combinedUpdateCalls++
++        val updated = manga.apply { title = "Combined"; initialized = true }
++        val updatedChapters = if (fetchChapters) listOf(eu.kanade.tachiyomi.source.model.SChapter.create().apply { url = "/1"; name = "One" }) else chapters
++        return SMangaUpdate(updated, updatedChapters)
++    }
+ }
+-- 
+2.54.0.windows.1
+

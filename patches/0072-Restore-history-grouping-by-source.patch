@@ -1,0 +1,652 @@
+From 642f1ea468e5b043eb56f0eece4ad5c06eb9120d Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 09:09:00 +0300
+Subject: [PATCH] Restore history grouping by source
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceGrouper.kt b/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceGrouper.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..23f67585aa085977eaee635b9ba8f4c6a9a7c2a3
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceGrouper.kt
+@@ -0,0 +1,24 @@
++package dev.ahmedmohamed.hayai.recents
++
++data class RecentSourceSection<T>(
++    val sourceId: Long,
++    val rows: List<T>,
++)
++
++object RecentSourceGrouper {
++    fun <T> sections(
++        rows: List<T>,
++        sourceId: (T) -> Long,
++        recency: (T) -> Long,
++    ): List<RecentSourceSection<T>> =
++        rows
++            .groupBy(sourceId)
++            .map { (id, sourceRows) ->
++                RecentSourceSection(
++                    sourceId = id,
++                    rows = sourceRows.sortedByDescending(recency),
++                )
++            }.sortedByDescending { section ->
++                section.rows.maxOfOrNull(recency) ?: Long.MIN_VALUE
++            }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibility.kt b/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibility.kt
+index 7ad84c10dcd0abb7bdab507170cfdbd54320e559..7a86ede285b761f0e1bd61c6b4be08ce54873264 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibility.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibility.kt
+@@ -53,6 +53,14 @@ class RecentSourceVisibility(
+         }
+     }
+ 
++    fun hideSource(
++        surface: RecentSurface,
++        sourceId: Long,
++    ) {
++        require(surface != RecentSurface.Mixed)
++        replaceHiddenSources(surface, hiddenSourceIds(surface) + sourceId)
++    }
++
+     fun changes(): Flow<Unit> =
+         combine(hiddenInHistory.changes(), hiddenInUpdates.changes()) { _, _ -> Unit }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
+index 1e6859817854a4c680b6b60413d2611e7e2fe981..a8a3b3cd168e1496de13e3ac0dd1cb9fb6153005 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
+@@ -448,7 +448,6 @@ class PreferencesHelper(
+         flowPrefs.getCompatibleEnum(
+             "group_chapters_history_type",
+             RecentsPresenter.GroupType.ByWeek,
+-            legacyAliases = mapOf("BySource" to RecentsPresenter.GroupType.BySeries),
+         )
+ 
+     fun collapseGroupedHistory() = flowPrefs.getBoolean("collapse_group_history", true)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaAdapter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaAdapter.kt
+index 272c92d32da3e586a0f20b568b21f6c32728fc83..4e04fef61d45cecd353c14ad5a1c98f8a2618797 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaAdapter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaAdapter.kt
+@@ -140,6 +140,8 @@ class RecentMangaAdapter(
+ 
+         fun onRemoveHistoryClicked(position: Int)
+ 
++        fun onHideSourceClicked(sourceId: Long)
++
+         fun onSubChapterClicked(
+             position: Int,
+             chapter: Chapter,
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaHeaderItem.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaHeaderItem.kt
+index 8d0ba47674f7070639b5380b072df8887beb5a37..fce9b31d2d1ae11cd2d87c6f72d0b0ffb94d5cbd 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaHeaderItem.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaHeaderItem.kt
+@@ -1,17 +1,31 @@
+ package eu.kanade.tachiyomi.ui.recents
+ 
+ import android.view.View
++import androidx.appcompat.widget.PopupMenu
++import androidx.core.content.ContextCompat
+ import androidx.recyclerview.widget.RecyclerView
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.AbstractHeaderItem
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.databinding.RecentsHeaderItemBinding
++import eu.kanade.tachiyomi.source.LocalSource
++import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.source.icon
+ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
++import eu.kanade.tachiyomi.util.system.dpToPx
++import uy.kohesive.injekt.injectLazy
+ 
+ class RecentMangaHeaderItem(
+     val recentsType: Int,
++    val sourceId: Long? = null,
++    val sourceName: String? = null,
+ ) : AbstractHeaderItem<RecentMangaHeaderItem.Holder>() {
++    init {
++        require((recentsType == SOURCE) == (sourceId != null && sourceName != null))
++    }
++
+     override fun getLayoutRes(): Int = R.layout.recents_header_item
+ 
+     override fun createViewHolder(
+@@ -25,13 +39,13 @@ class RecentMangaHeaderItem(
+         position: Int,
+         payloads: MutableList<Any?>?,
+     ) {
+-        holder.bind(recentsType)
++        holder.bind(this)
+     }
+ 
+     override fun equals(other: Any?): Boolean {
+         if (this === other) return true
+         if (other is RecentMangaHeaderItem) {
+-            return recentsType == other.recentsType
++            return recentsType == other.recentsType && sourceId == other.sourceId
+         }
+         return false
+     }
+@@ -40,27 +54,69 @@ class RecentMangaHeaderItem(
+ 
+     override fun isSwipeable(): Boolean = false
+ 
+-    override fun hashCode(): Int = recentsType.hashCode()
++    override fun hashCode(): Int = 31 * recentsType.hashCode() + (sourceId?.hashCode() ?: 0)
+ 
+     class Holder(
+         val view: View,
+-        adapter: RecentMangaAdapter,
++        private val adapter: RecentMangaAdapter,
+     ) : BaseFlexibleViewHolder(
+             view,
+             adapter,
+             true,
+         ) {
+         private val binding = RecentsHeaderItemBinding.bind(view)
++        private val sourceManager: SourceManager by injectLazy()
++
++        fun bind(item: RecentMangaHeaderItem) {
++            if (item.recentsType == SOURCE) {
++                bindSource(item)
++            } else {
++                binding.title.setText(
++                    when (item.recentsType) {
++                        CONTINUE_READING -> R.string.continue_reading
++                        NEW_CHAPTERS -> R.string.new_chapters
++                        NEWLY_ADDED -> R.string.newly_added
++                        else -> R.string.continue_reading
++                    },
++                )
++                binding.title.setCompoundDrawablesRelative(null, null, null, null)
++                binding.title.setOnClickListener(null)
++                binding.title.isClickable = false
++                binding.title.tooltipText = null
++            }
++        }
+ 
+-        fun bind(recentsType: Int) {
+-            binding.title.setText(
+-                when (recentsType) {
+-                    CONTINUE_READING -> R.string.continue_reading
+-                    NEW_CHAPTERS -> R.string.new_chapters
+-                    NEWLY_ADDED -> R.string.newly_added
+-                    else -> R.string.continue_reading
+-                },
+-            )
++        private fun bindSource(item: RecentMangaHeaderItem) {
++            val sourceId = requireNotNull(item.sourceId)
++            binding.title.text = requireNotNull(item.sourceName)
++            val source = sourceManager.getOrStub(sourceId)
++            val sourceIcon =
++                when (source.id) {
++                    LocalSource.ID -> ContextCompat.getDrawable(itemView.context, R.mipmap.ic_local_source)
++                    LocalNovelSource.ID -> ContextCompat.getDrawable(itemView.context, R.drawable.ic_local_novel_source)
++                    else -> source.icon() ?: ContextCompat.getDrawable(itemView.context, R.drawable.ic_book_24dp)
++                }
++            sourceIcon?.setBounds(0, 0, 24.dpToPx, 24.dpToPx)
++            val menuIcon = ContextCompat.getDrawable(itemView.context, R.drawable.ic_more_vert_24dp)
++            menuIcon?.setBounds(0, 0, 24.dpToPx, 24.dpToPx)
++            binding.title.compoundDrawablePadding = 8.dpToPx
++            binding.title.setCompoundDrawablesRelative(sourceIcon, null, menuIcon, null)
++            binding.title.isClickable = true
++            binding.title.tooltipText = itemView.context.getString(R.string.display_options)
++            binding.title.setOnClickListener { anchor ->
++                PopupMenu(anchor.context, anchor)
++                    .apply {
++                        menu.add(0, MENU_HIDE_SOURCE, 0, R.string.hide)
++                        setOnMenuItemClickListener { menuItem ->
++                            if (menuItem.itemId == MENU_HIDE_SOURCE) {
++                                adapter.delegate.onHideSourceClicked(sourceId)
++                                true
++                            } else {
++                                false
++                            }
++                        }
++                    }.show()
++            }
+         }
+ 
+         override fun onLongClick(view: View?): Boolean {
+@@ -73,5 +129,7 @@ class RecentMangaHeaderItem(
+         const val CONTINUE_READING = 0
+         const val NEW_CHAPTERS = 1
+         const val NEWLY_ADDED = 2
++        const val SOURCE = 3
++        private const val MENU_HIDE_SOURCE = 1
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
+index 0d46375862b0d5c8ac1a9a90a70cf5fc4afe7bc7..8e8a89f959cbc8373569ed56af954cff251af476 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
+@@ -845,6 +845,14 @@ class RecentsController(
+         onItemLongClick(position)
+     }
+ 
++    override fun onHideSourceClicked(sourceId: Long) {
++        if (presenter.hideSource(sourceId)) {
++            view?.snack(R.string.source_hidden, Snackbar.LENGTH_SHORT) {
++                anchorView = activityBinding?.bottomNav
++            }
++        }
++    }
++
+     override fun onSubChapterClicked(
+         position: Int,
+         chapter: Chapter,
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt
+index 590484bfe400073001deb404009fb0f6ee8d2a97..d73b9045eea4754aa359631aca50efbe8f4855ed 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt
+@@ -1,6 +1,7 @@
+ package eu.kanade.tachiyomi.ui.recents
+ 
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.recents.RecentSourceGrouper
+ import dev.ahmedmohamed.hayai.recents.RecentSourceVisibility
+ import dev.ahmedmohamed.hayai.recents.RecentSurface
+ import eu.kanade.tachiyomi.R
+@@ -66,6 +67,7 @@ class RecentsPresenter(
+     private val newChaptersHeader = RecentMangaHeaderItem(RecentMangaHeaderItem.NEW_CHAPTERS)
+     private val continueReadingHeader =
+         RecentMangaHeaderItem(RecentMangaHeaderItem.CONTINUE_READING)
++    private val sourceHeaders = mutableMapOf<Long, RecentMangaHeaderItem>()
+     var finished = false
+     private var shouldMoveToTop = false
+     var viewType: RecentsViewType = RecentsViewType.valueOf(preferences.recentsViewType().get())
+@@ -80,6 +82,7 @@ class RecentsPresenter(
+         shouldMoveToTop = true
+         pageOffset = 0
+         expandedSectionsMap.clear()
++        sourceHeaders.clear()
+     }
+ 
+     private var pageOffset = 0
+@@ -297,7 +300,39 @@ class RecentsPresenter(
+                                 }
+                             }
+                     } else {
+-                        items.executeOnIO()
++                        val historyItems = items.executeOnIO()
++                        if (groupChaptersHistory.isBySource) {
++                            historyItems
++                                .groupBy { it.manga.id to it.manga.source }
++                                .mapNotNull { (key, mchs) ->
++                                    val manga = mchs.first().manga
++                                    val chapters =
++                                        mchs
++                                            .map { mch ->
++                                                ChapterHistory(mch.chapter, mch.history)
++                                            }.filterChaptersByScanlators(manga)
++                                    extraCount += mchs.size - chapters.size
++                                    if (chapters.isEmpty()) return@mapNotNull null
++                                    val existingItem =
++                                        recentItems
++                                            .takeLast(ENDLESS_LIMIT)
++                                            .find { key == (it.manga_id to it.mch.manga.source) }
++                                            ?.takeIf { updatePageCount }
++                                    val sort =
++                                        Comparator<ChapterHistory> { c1, c2 ->
++                                            c2.history!!.last_read.compareTo(c1.history!!.last_read)
++                                        }
++                                    val (sortedChapters, firstChapter, subCount) =
++                                        setupExtraChapters(existingItem, chapters, sort)
++                                    extraCount += subCount
++                                    if (firstChapter == null) return@mapNotNull null
++                                    mchs.find { firstChapter.id == it.chapter.id }?.also {
++                                        it.extraChapters = sortedChapters
++                                    }
++                                }
++                        } else {
++                            historyItems
++                        }
+                     }
+                 }
+                 RecentsViewType.Updates -> {
+@@ -468,7 +503,9 @@ class RecentsPresenter(
+                             ?.last_read ?: 0L
+                     }.flatten()
+             } else {
+-                if (viewType.isUpdates) {
++                if (viewType.isHistory && groupChaptersHistory.isBySource) {
++                    pairs.map { RecentMangaItem(it.first, it.second, sourceHeaderFor(it.first.manga.source)) }
++                } else if (viewType.isUpdates) {
+                     val map =
+                         TreeMap<Date, MutableList<Pair<MangaChapterHistory, Chapter>>> { d1, d2 ->
+                             d2.compareTo(d1)
+@@ -487,12 +524,26 @@ class RecentsPresenter(
+                     pairs.map { RecentMangaItem(it.first, it.second, null) }
+                 }
+             }
+-        recentItems =
++        val accumulatedItems =
+             if (isOnFirstPage || !updatePageCount) {
+                 newItems
+             } else {
+                 recentItems + newItems
+             }
++        recentItems =
++            if (viewType.isHistory && groupChaptersHistory.isBySource) {
++                RecentSourceGrouper
++                    .sections(
++                        rows = accumulatedItems,
++                        sourceId = { it.mch.manga.source },
++                        recency = { it.mch.history.last_read },
++                    ).flatMap { section ->
++                        val header = sourceHeaderFor(section.sourceId)
++                        section.rows.onEach { it.header = header }
++                    }
++            } else {
++                accumulatedItems
++            }
+         val newCount =
+             itemCount +
+                 newItems.count { it.mch.manga.id != null } +
+@@ -565,6 +616,15 @@ class RecentsPresenter(
+         return Triple(sortedChapters, firstChapter, extraCount)
+     }
+ 
++    private fun sourceHeaderFor(sourceId: Long): RecentMangaHeaderItem =
++        sourceHeaders.getOrPut(sourceId) {
++            RecentMangaHeaderItem(
++                recentsType = RecentMangaHeaderItem.SOURCE,
++                sourceId = sourceId,
++                sourceName = Injekt.get<SourceManager>().getOrStub(sourceId).name,
++            )
++        }
++
+     private fun getNextChapter(
+         manga: Manga,
+         chapters: List<Chapter>,
+@@ -828,14 +888,27 @@ class RecentsPresenter(
+         }
+     }
+ 
++    fun hideSource(sourceId: Long): Boolean {
++        val surface =
++            when (viewType) {
++                RecentsViewType.History -> RecentSurface.History
++                RecentsViewType.Updates -> RecentSurface.Updates
++                RecentsViewType.GroupedAll, RecentsViewType.UngroupedAll -> return false
++        }
++        sourceVisibility.hideSource(surface, sourceId)
++        return true
++    }
++
+     enum class GroupType {
+         BySeries,
+         ByWeek,
+         ByDay,
++        BySource,
+         Never,
+         ;
+ 
+         val isByTime get() = this == ByWeek || this == ByDay
++        val isBySource get() = this == BySource
+     }
+ 
+     companion object {
+diff --git a/app/src/main/res/values/arrays.xml b/app/src/main/res/values/arrays.xml
+index 7f4a45c9081ed3380612d10d7b5a0729993ee543..f293ac5fd26935f6f57ddb14772769fba39cc696 100644
+--- a/app/src/main/res/values/arrays.xml
++++ b/app/src/main/res/values/arrays.xml
+@@ -94,6 +94,7 @@
+         <item>@string/by_series</item>
+         <item>@string/by_week</item>
+         <item>@string/by_day</item>
++        <item>@string/hayai_by_source</item>
+         <item>@string/never</item>
+     </string-array>
+ 
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index ea2ee9299574387bf97e69ed16359861e6158328..aefc8822874a1cc28a6379f8efaa84974f69e3c9 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -312,6 +312,7 @@
+     <string name="by_series">By series</string>
+     <string name="by_week">By week</string>
+     <string name="by_day">By day</string>
++    <string name="hayai_by_source">By source</string>
+     <string name="uniform_covers">Uniform covers</string>
+     <string name="affects_library_grid">Affects library grid covers</string>
+     <string name="only_unread">Only unread</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceGrouperTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceGrouperTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..c31e276e7800882adf14aa7cd4073d0c0308dc97
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceGrouperTest.kt
+@@ -0,0 +1,41 @@
++package dev.ahmedmohamed.hayai.recents
++
++import eu.kanade.tachiyomi.ui.recents.RecentsPresenter
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class RecentSourceGrouperTest {
++    @Test
++    fun `sections are ordered by newest source row`() {
++        val rows =
++            listOf(
++                Row(sourceId = 2, recency = 20, label = "two-newer"),
++                Row(sourceId = 1, recency = 10, label = "one"),
++                Row(sourceId = 2, recency = 5, label = "two-older"),
++                Row(sourceId = 3, recency = 30, label = "three"),
++            )
++
++        val sections =
++            RecentSourceGrouper.sections(
++                rows = rows,
++                sourceId = Row::sourceId,
++                recency = Row::recency,
++            )
++
++        assertEquals(listOf(3L, 2L, 1L), sections.map { it.sourceId })
++        assertEquals(listOf("two-newer", "two-older"), sections.single { it.sourceId == 2L }.rows.map { it.label })
++    }
++
++    @Test
++    fun `history group type contains the restored BySource member`() {
++        assertEquals(RecentsPresenter.GroupType.BySource, RecentsPresenter.GroupType.valueOf("BySource"))
++        assertEquals(false, RecentsPresenter.GroupType.BySource.isByTime)
++        assertEquals(true, RecentsPresenter.GroupType.BySource.isBySource)
++    }
++
++    private data class Row(
++        val sourceId: Long,
++        val recency: Long,
++        val label: String,
++    )
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityTest.kt
+index f1dfdfca85185b9ff99f01748a9de6972bc8bb0d..b8e3b69d85c9221fc04564e4289bb4ce9c396af8 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityTest.kt
+@@ -42,10 +42,23 @@ class RecentSourceVisibilityTest {
+         assertEquals(setOf("3", "1"), updates.get())
+     }
+ 
++    @Test
++    fun `hiding one source appends it to the selected surface only`() {
++        visibility.hideSource(RecentSurface.History, 9)
++
++        assertEquals(setOf("1", "-2", "9"), history.get())
++        assertEquals(setOf("3", "1"), updates.get())
++    }
++
+     @Test(expected = IllegalStateException::class)
+     fun `mixed view cannot be edited independently`() {
+         visibility.replaceHiddenSources(RecentSurface.Mixed, setOf(1))
+     }
++
++    @Test(expected = IllegalArgumentException::class)
++    fun `mixed view cannot hide a source independently`() {
++        visibility.hideSource(RecentSurface.Mixed, 1)
++    }
+ }
+ 
+ private class FakePreference<T>(initial: T) : Preference<T> {
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index 499e973f1f1b8237dd940e12927ae4b33929771e..fd54290d4027c02b799788a4df148f5c77148a00 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1071 | 0.0% |
+-| `ar` | 31 / 1071 | 2.9% |
+-| `ars` | 0 / 1071 | 0.0% |
+-| `az` | 0 / 1071 | 0.0% |
+-| `bg` | 0 / 1071 | 0.0% |
+-| `bn` | 0 / 1071 | 0.0% |
+-| `ca` | 0 / 1071 | 0.0% |
+-| `ceb` | 0 / 1071 | 0.0% |
+-| `cs` | 0 / 1071 | 0.0% |
+-| `cv` | 0 / 1071 | 0.0% |
+-| `de` | 29 / 1071 | 2.7% |
+-| `el` | 0 / 1071 | 0.0% |
+-| `eo` | 0 / 1071 | 0.0% |
+-| `es` | 31 / 1071 | 2.9% |
+-| `eu` | 0 / 1071 | 0.0% |
+-| `fa` | 0 / 1071 | 0.0% |
+-| `fi` | 0 / 1071 | 0.0% |
+-| `fil` | 31 / 1071 | 2.9% |
+-| `fr` | 31 / 1071 | 2.9% |
+-| `gl` | 0 / 1071 | 0.0% |
+-| `ha` | 0 / 1071 | 0.0% |
+-| `hi` | 0 / 1071 | 0.0% |
+-| `hr` | 31 / 1071 | 2.9% |
+-| `hu` | 0 / 1071 | 0.0% |
+-| `in` | 31 / 1071 | 2.9% |
+-| `it` | 17 / 1071 | 1.6% |
+-| `iw` | 0 / 1071 | 0.0% |
+-| `ja` | 29 / 1071 | 2.7% |
+-| `jv` | 0 / 1071 | 0.0% |
+-| `ka` | 0 / 1071 | 0.0% |
+-| `kk` | 0 / 1071 | 0.0% |
+-| `km` | 0 / 1071 | 0.0% |
+-| `ko` | 7 / 1071 | 0.7% |
+-| `lt` | 0 / 1071 | 0.0% |
+-| `lv` | 0 / 1071 | 0.0% |
+-| `ml` | 0 / 1071 | 0.0% |
+-| `mn` | 0 / 1071 | 0.0% |
+-| `ms` | 0 / 1071 | 0.0% |
+-| `my` | 0 / 1071 | 0.0% |
+-| `nb-rNO` | 0 / 1071 | 0.0% |
+-| `ne` | 5 / 1071 | 0.5% |
+-| `nl` | 0 / 1071 | 0.0% |
+-| `nn` | 0 / 1071 | 0.0% |
+-| `om` | 0 / 1071 | 0.0% |
+-| `or` | 0 / 1071 | 0.0% |
+-| `pl` | 0 / 1071 | 0.0% |
+-| `pt` | 31 / 1071 | 2.9% |
+-| `pt-rBR` | 31 / 1071 | 2.9% |
+-| `ro` | 0 / 1071 | 0.0% |
+-| `ru` | 31 / 1071 | 2.9% |
+-| `sc` | 0 / 1071 | 0.0% |
+-| `si` | 0 / 1071 | 0.0% |
+-| `sk` | 0 / 1071 | 0.0% |
+-| `sq` | 0 / 1071 | 0.0% |
+-| `sr` | 0 / 1071 | 0.0% |
+-| `sv` | 0 / 1071 | 0.0% |
+-| `ta` | 31 / 1071 | 2.9% |
+-| `te` | 0 / 1071 | 0.0% |
+-| `th` | 0 / 1071 | 0.0% |
+-| `ti` | 0 / 1071 | 0.0% |
+-| `tl` | 0 / 1071 | 0.0% |
+-| `tr` | 31 / 1071 | 2.9% |
+-| `uk` | 7 / 1071 | 0.7% |
+-| `ur` | 0 / 1071 | 0.0% |
+-| `vi` | 5 / 1071 | 0.5% |
+-| `zh-rCN` | 31 / 1071 | 2.9% |
+-| `zh-rTW` | 31 / 1071 | 2.9% |
++| `ajp` | 0 / 1072 | 0.0% |
++| `ar` | 31 / 1072 | 2.9% |
++| `ars` | 0 / 1072 | 0.0% |
++| `az` | 0 / 1072 | 0.0% |
++| `bg` | 0 / 1072 | 0.0% |
++| `bn` | 0 / 1072 | 0.0% |
++| `ca` | 0 / 1072 | 0.0% |
++| `ceb` | 0 / 1072 | 0.0% |
++| `cs` | 0 / 1072 | 0.0% |
++| `cv` | 0 / 1072 | 0.0% |
++| `de` | 29 / 1072 | 2.7% |
++| `el` | 0 / 1072 | 0.0% |
++| `eo` | 0 / 1072 | 0.0% |
++| `es` | 31 / 1072 | 2.9% |
++| `eu` | 0 / 1072 | 0.0% |
++| `fa` | 0 / 1072 | 0.0% |
++| `fi` | 0 / 1072 | 0.0% |
++| `fil` | 31 / 1072 | 2.9% |
++| `fr` | 31 / 1072 | 2.9% |
++| `gl` | 0 / 1072 | 0.0% |
++| `ha` | 0 / 1072 | 0.0% |
++| `hi` | 0 / 1072 | 0.0% |
++| `hr` | 31 / 1072 | 2.9% |
++| `hu` | 0 / 1072 | 0.0% |
++| `in` | 31 / 1072 | 2.9% |
++| `it` | 17 / 1072 | 1.6% |
++| `iw` | 0 / 1072 | 0.0% |
++| `ja` | 29 / 1072 | 2.7% |
++| `jv` | 0 / 1072 | 0.0% |
++| `ka` | 0 / 1072 | 0.0% |
++| `kk` | 0 / 1072 | 0.0% |
++| `km` | 0 / 1072 | 0.0% |
++| `ko` | 7 / 1072 | 0.7% |
++| `lt` | 0 / 1072 | 0.0% |
++| `lv` | 0 / 1072 | 0.0% |
++| `ml` | 0 / 1072 | 0.0% |
++| `mn` | 0 / 1072 | 0.0% |
++| `ms` | 0 / 1072 | 0.0% |
++| `my` | 0 / 1072 | 0.0% |
++| `nb-rNO` | 0 / 1072 | 0.0% |
++| `ne` | 5 / 1072 | 0.5% |
++| `nl` | 0 / 1072 | 0.0% |
++| `nn` | 0 / 1072 | 0.0% |
++| `om` | 0 / 1072 | 0.0% |
++| `or` | 0 / 1072 | 0.0% |
++| `pl` | 0 / 1072 | 0.0% |
++| `pt` | 31 / 1072 | 2.9% |
++| `pt-rBR` | 31 / 1072 | 2.9% |
++| `ro` | 0 / 1072 | 0.0% |
++| `ru` | 31 / 1072 | 2.9% |
++| `sc` | 0 / 1072 | 0.0% |
++| `si` | 0 / 1072 | 0.0% |
++| `sk` | 0 / 1072 | 0.0% |
++| `sq` | 0 / 1072 | 0.0% |
++| `sr` | 0 / 1072 | 0.0% |
++| `sv` | 0 / 1072 | 0.0% |
++| `ta` | 31 / 1072 | 2.9% |
++| `te` | 0 / 1072 | 0.0% |
++| `th` | 0 / 1072 | 0.0% |
++| `ti` | 0 / 1072 | 0.0% |
++| `tl` | 0 / 1072 | 0.0% |
++| `tr` | 31 / 1072 | 2.9% |
++| `uk` | 7 / 1072 | 0.7% |
++| `ur` | 0 / 1072 | 0.0% |
++| `vi` | 5 / 1072 | 0.5% |
++| `zh-rCN` | 31 / 1072 | 2.9% |
++| `zh-rTW` | 31 / 1072 | 2.9% |
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index c9466216f09d1cf6cd0ab42d70046481d6a00b81..7a5e21677c7ec2e2f4b879ef262380f4726e1a82 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -45,7 +45,11 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsPresenter.kt"
++        # Approved in docs/architecture/j2k-reset.md. Adds the source-header hide event to the existing Recents adapter delegate.
++        "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaAdapter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt"
++        # Approved in docs/architecture/j2k-reset.md. Reuses J2K's existing Recents header for source sections.
++        "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaHeaderItem.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt"
+-- 
+2.54.0.windows.1
+

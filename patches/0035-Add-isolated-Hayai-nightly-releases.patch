@@ -1,0 +1,709 @@
+From d8656753efce48bfb32bbfdbd70d864955399639 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 03:09:24 +0300
+Subject: [PATCH] Add isolated Hayai nightly releases
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 393b5f881e8dcfdc8666016834dd7e0d1ea65651..765c59b823406787763dfa99f83b35ca9e9396f0 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -68,3 +68,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T00:15:00Z	upstream-rebase	replayed the complete Hayai stack onto J2K cdae5f2d77 and preserved the previous published head on codex/j2k-reset-pre-update-20260822	the three new J2K commits add per-extension incognito mode, display-unit fixes, and animated-cover fixes	j2k/master cdae5f2d77; backup branch codex/j2k-reset-pre-update-20260822	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T00:16:00Z	conflict-resolution	combined J2K per-extension incognito imports with Hayai E-Hentai icon fallback and novel source ABI	Source.kt was the only content conflict; both upstream and Hayai behavior remain present	app/src/main/java/eu/kanade/tachiyomi/source/Source.kt	RESOLVED
+ 2026-08-22T00:21:00Z	validation	compiled the rebased app and ran 320 focused Hayai tests with one Gradle worker	verified source, novel, backup, migration, enhanced-source, E-Hentai, recents, and presentation integration after the upstream replay	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest with focused Hayai filters -x :app:formatKotlin	VERIFIED
++2026-08-22T00:08:20Z	emulator-harness	replaced the fixed startup sleep with database readiness and explicit first-run permission handling	the authorized emulator proved migration succeeds when the harness does not force-stop the app before its lazy database open	commit 99c6f64c43	IMPLEMENTED_UNVERIFIED
++2026-08-22T00:08:20Z	nightly-release	added an isolated nightly build, channel-aware updater policy, Hayai APK selection, monotonic release workflow, and pull-request CI	preserved stable and nightly identities while keeping release policy under the Hayai namespace	app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt; .github/workflows/nightly.yml	IMPLEMENTED_UNVERIFIED
+diff --git a/.github/workflows/build_check.yml b/.github/workflows/build_check.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..ae22dc4718126c2903e15935e2d6104184fa77ba
+--- /dev/null
++++ b/.github/workflows/build_check.yml
+@@ -0,0 +1,49 @@
++name: Build PR
++
++on:
++  pull_request:
++    paths-ignore:
++      - '**.md'
++
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref }}
++  cancel-in-progress: true
++
++permissions:
++  contents: read
++
++jobs:
++  build:
++    name: Build app
++    runs-on: ubuntu-24.04
++
++    steps:
++      - name: Checkout
++        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          fetch-depth: 0
++
++      - name: Set up JDK
++        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
++        with:
++          java-version: 21
++          distribution: temurin
++
++      - name: Set up Gradle
++        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
++
++      - name: Copy CI gradle.properties
++        run: |
++          mkdir -p ~/.gradle
++          cp .github/runner-files/ci-gradle.properties ~/.gradle/gradle.properties
++
++      - name: Build and test
++        run: ./gradlew assembleStandardRelease testStandardReleaseUnitTest -x formatKotlin
++
++      - name: Publish test report
++        uses: mikepenz/action-junit-report@v5
++        if: success() || failure()
++        with:
++          include_passed: true
++          detailed_summary: true
++          report_paths: '**/build/test-results/test*/TEST-*.xml'
+diff --git a/.github/workflows/build_push.yml b/.github/workflows/build_push.yml
+index 65b99ce213d5864fca0626f8a0b1e6369b1edbc1..6a6b938cb9962d617bc3c078d5f5dc9a1bcf1201 100644
+--- a/.github/workflows/build_push.yml
++++ b/.github/workflows/build_push.yml
+@@ -1,12 +1,9 @@
+ name: CI
+ on:
+-  push:
+-    branches:
+-      - master
+   workflow_dispatch:
+     inputs:
+       version:
+-        description: 'Version'
++        description: 'Release tag, for example v1.8.1'
+         required: true
+         type: string
+ 
+@@ -21,6 +18,7 @@ jobs:
+   build:
+     name: Build app
+     runs-on: ubuntu-24.04
++    environment: build
+ 
+     steps:
+       - name: Checkout
+@@ -76,24 +74,24 @@ jobs:
+         run: |
+           set -e
+ 
+-          mv app/build/outputs/apk/standard/release/app-standard-universal-release-unsigned-signed.apk tachiyomij2k-${{ env.VERSION_TAG }}.apk
+-          sha=`sha256sum tachiyomij2k-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
++          mv app/build/outputs/apk/standard/release/app-standard-universal-release-unsigned-signed.apk hayai-${{ env.VERSION_TAG }}.apk
++          sha=`sha256sum hayai-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+           echo "APK_UNIVERSAL_SHA=$sha" >> $GITHUB_ENV
+ 
+-          cp app/build/outputs/apk/standard/release/app-standard-arm64-v8a-release-unsigned-signed.apk tachiyomij2k-arm64-v8a-${{ env.VERSION_TAG }}.apk
+-          sha=`sha256sum tachiyomij2k-arm64-v8a-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
++          cp app/build/outputs/apk/standard/release/app-standard-arm64-v8a-release-unsigned-signed.apk hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk
++          sha=`sha256sum hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+           echo "APK_ARM64_V8A_SHA=$sha" >> $GITHUB_ENV
+ 
+-          cp app/build/outputs/apk/standard/release/app-standard-armeabi-v7a-release-unsigned-signed.apk tachiyomij2k-armeabi-v7a-${{ env.VERSION_TAG }}.apk
+-          sha=`sha256sum tachiyomij2k-armeabi-v7a-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
++          cp app/build/outputs/apk/standard/release/app-standard-armeabi-v7a-release-unsigned-signed.apk hayai-armeabi-v7a-${{ env.VERSION_TAG }}.apk
++          sha=`sha256sum hayai-armeabi-v7a-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+           echo "APK_ARMEABI_V7A_SHA=$sha" >> $GITHUB_ENV
+ 
+-          cp app/build/outputs/apk/standard/release/app-standard-x86-release-unsigned-signed.apk tachiyomij2k-x86-${{ env.VERSION_TAG }}.apk
+-          sha=`sha256sum tachiyomij2k-x86-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
++          cp app/build/outputs/apk/standard/release/app-standard-x86-release-unsigned-signed.apk hayai-x86-${{ env.VERSION_TAG }}.apk
++          sha=`sha256sum hayai-x86-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+           echo "APK_X86_SHA=$sha" >> $GITHUB_ENV
+ 
+-          cp app/build/outputs/apk/standard/release/app-standard-x86_64-release-unsigned-signed.apk tachiyomij2k-x86_64-${{ env.VERSION_TAG }}.apk
+-          sha=`sha256sum tachiyomij2k-x86_64-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
++          cp app/build/outputs/apk/standard/release/app-standard-x86_64-release-unsigned-signed.apk hayai-x86_64-${{ env.VERSION_TAG }}.apk
++          sha=`sha256sum hayai-x86_64-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
+           echo "APK_X86_64_SHA=$sha" >> $GITHUB_ENV
+ 
+       - name: Create Release
+@@ -101,7 +99,7 @@ jobs:
+         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+         with:
+           tag_name: ${{ env.VERSION_TAG }}
+-          name: TachiyomiJ2K ${{ env.VERSION_TAG }}
++          name: Hayai ${{ env.VERSION_TAG }}
+           body: |
+             ---
+ 
+@@ -109,17 +107,17 @@ jobs:
+ 
+             | Variant | SHA-256 |
+             | ------- | ------- |
+-            | Universal | ${{ env.APK_UNIVERSAL_SHA }}
+-            | arm64-v8a | ${{ env.APK_ARM64_V8A_SHA }}
+-            | armeabi-v7a | ${{ env.APK_ARMEABI_V7A_SHA }}
++            | Universal | ${{ env.APK_UNIVERSAL_SHA }} |
++            | arm64-v8a | ${{ env.APK_ARM64_V8A_SHA }} |
++            | armeabi-v7a | ${{ env.APK_ARMEABI_V7A_SHA }} |
+             | x86 | ${{ env.APK_X86_SHA }} |
+             | x86_64 | ${{ env.APK_X86_64_SHA }} |
+           files: |
+-            tachiyomij2k-${{ env.VERSION_TAG }}.apk
+-            tachiyomij2k-arm64-v8a-${{ env.VERSION_TAG }}.apk
+-            tachiyomij2k-armeabi-v7a-${{ env.VERSION_TAG }}.apk
+-            tachiyomij2k-x86-${{ env.VERSION_TAG }}.apk
+-            tachiyomij2k-x86_64-${{ env.VERSION_TAG }}.apk
++            hayai-${{ env.VERSION_TAG }}.apk
++            hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk
++            hayai-armeabi-v7a-${{ env.VERSION_TAG }}.apk
++            hayai-x86-${{ env.VERSION_TAG }}.apk
++            hayai-x86_64-${{ env.VERSION_TAG }}.apk
+           draft: true
+           prerelease: false
+         env:
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..089374be2ca54e55ebc57d3974ee83ed440da523
+--- /dev/null
++++ b/.github/workflows/nightly.yml
+@@ -0,0 +1,123 @@
++name: Nightly
++
++on:
++  push:
++    branches:
++      - main
++  workflow_dispatch:
++
++concurrency:
++  group: hayai-nightly
++  cancel-in-progress: true
++
++permissions:
++  contents: read
++
++jobs:
++  build:
++    name: Build and publish nightly
++    runs-on: ubuntu-24.04
++    environment: build
++
++    steps:
++      - name: Checkout
++        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          fetch-depth: 0
++
++      - name: Set up JDK
++        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
++        with:
++          java-version: 21
++          distribution: temurin
++
++      - name: Set up Gradle
++        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
++
++      - name: Copy CI gradle.properties
++        run: |
++          mkdir -p ~/.gradle
++          cp .github/runner-files/ci-gradle.properties ~/.gradle/gradle.properties
++
++      - name: Choose nightly number
++        env:
++          GH_TOKEN: ${{ secrets.NIGHTLY_PAT }}
++        shell: bash
++        run: |
++          set -euo pipefail
++          latest_tag=$(gh api repos/HayaiApp/hayai-nightly/releases/latest --jq '.tag_name')
++          if [[ ! "$latest_tag" =~ ^r([0-9]+)$ ]]; then
++            echo "Unexpected latest nightly tag: $latest_tag" >&2
++            exit 1
++          fi
++          next_remote=$((BASH_REMATCH[1] + 1))
++          commit_count=$(git rev-list --count HEAD)
++          if (( commit_count > next_remote )); then
++            build_number=$commit_count
++          else
++            build_number=$next_remote
++          fi
++          echo "NIGHTLY_BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
++          echo "VERSION_TAG=r$build_number" >> "$GITHUB_ENV"
++          echo "COMMIT_SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
++
++      - name: Build and test
++        run: ./gradlew assembleStandardNightly testStandardNightlyUnitTest -x formatKotlin
++
++      - name: Detect Android build tools
++        shell: bash
++        run: |
++          build_tools_version=$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort -V | tail -1)
++          echo "BUILD_TOOLS_VERSION=$build_tools_version" >> "$GITHUB_ENV"
++
++      - name: Sign APKs
++        uses: r0adkll/sign-android-release@v1
++        with:
++          releaseDirectory: app/build/outputs/apk/standard/nightly
++          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
++          alias: ${{ secrets.ALIAS }}
++          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
++          keyPassword: ${{ secrets.KEY_PASSWORD }}
++        env:
++          BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
++
++      - name: Prepare release assets
++        shell: bash
++        run: |
++          set -euo pipefail
++          dir=app/build/outputs/apk/standard/nightly
++          mv "$dir/app-standard-universal-nightly-unsigned-signed.apk" "hayai-${VERSION_TAG}.apk"
++          cp "$dir/app-standard-arm64-v8a-nightly-unsigned-signed.apk" "hayai-arm64-v8a-${VERSION_TAG}.apk"
++          cp "$dir/app-standard-armeabi-v7a-nightly-unsigned-signed.apk" "hayai-armeabi-v7a-${VERSION_TAG}.apk"
++          cp "$dir/app-standard-x86-nightly-unsigned-signed.apk" "hayai-x86-${VERSION_TAG}.apk"
++          cp "$dir/app-standard-x86_64-nightly-unsigned-signed.apk" "hayai-x86_64-${VERSION_TAG}.apk"
++          for apk in hayai-*-${VERSION_TAG}.apk hayai-${VERSION_TAG}.apk; do
++            sha256sum "$apk"
++          done | tee nightly-checksums.txt
++
++      - name: Publish nightly
++        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
++        with:
++          repository: HayaiApp/hayai-nightly
++          tag_name: ${{ env.VERSION_TAG }}
++          name: Hayai Nightly ${{ env.VERSION_TAG }}
++          body: |
++            This test build comes from [`${{ env.COMMIT_SHORT_SHA }}`](https://github.com/HayaiApp/hayai/commit/${{ github.sha }}).
++
++            Back up your library before installing a nightly build.
++          files: |
++            hayai-${{ env.VERSION_TAG }}.apk
++            hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk
++            hayai-armeabi-v7a-${{ env.VERSION_TAG }}.apk
++            hayai-x86-${{ env.VERSION_TAG }}.apk
++            hayai-x86_64-${{ env.VERSION_TAG }}.apk
++            nightly-checksums.txt
++          draft: false
++          prerelease: false
++          token: ${{ secrets.NIGHTLY_PAT }}
++
++      - name: Upload mapping
++        uses: actions/upload-artifact@v4
++        with:
++          name: nightly-mapping-${{ github.sha }}
++          path: app/build/outputs/mapping/standardNightly
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index a5c458e56922e4d55e423dfbefd40430b94e9e98..51de6ce353d9ae81a8fb19f0bcf621eb63a1417d 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -38,6 +38,7 @@ android {
+         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime()}\"")
+         buildConfigField("Boolean", "INCLUDE_UPDATER", "false")
+         buildConfigField("boolean", "BETA", "false")
++        buildConfigField("boolean", "NIGHTLY", "false")
+ 
+         ndk {
+             abiFilters += supportedAbis
+@@ -74,6 +75,16 @@ android {
+             versionNameSuffix = "-b${getBetaCount()}"
+             applicationIdSuffix = ".beta"
+         }
++        create("nightly") {
++            initWith(getByName("release"))
++            val nightlyBuildNumber = getNightlyBuildNumber()
++            buildConfigField("boolean", "BETA", "true")
++            buildConfigField("boolean", "NIGHTLY", "true")
++            buildConfigField("String", "COMMIT_COUNT", "\"$nightlyBuildNumber\"")
++            matchingFallbacks += "release"
++            versionNameSuffix = "-r$nightlyBuildNumber"
++            applicationIdSuffix = ".nightly"
++        }
+     }
+ 
+     buildFeatures {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt b/app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..c7086930c18a15a620429d3056199fcecd4403b5
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt
+@@ -0,0 +1,104 @@
++package dev.ahmedmohamed.hayai.update
++
++enum class HayaiReleaseChannel(val repository: String) {
++    STABLE("HayaiApp/hayai"),
++    NIGHTLY("HayaiApp/hayai-nightly"),
++}
++
++data class HayaiBuildRelease(
++    val channel: HayaiReleaseChannel,
++    val currentVersion: String,
++    val currentNightlyNumber: Long?,
++) {
++    val repository: String = channel.repository
++    val releaseTag: String =
++        when (channel) {
++            HayaiReleaseChannel.STABLE -> "v$currentVersion"
++            HayaiReleaseChannel.NIGHTLY -> "r${requireNotNull(currentNightlyNumber)}"
++        }
++
++    fun isNewer(candidateTag: String): Boolean = HayaiReleasePolicy.isNewer(channel, candidateTag, releaseTag)
++}
++
++object HayaiReleasePolicy {
++    fun current(
++        nightly: Boolean,
++        versionName: String,
++        buildNumber: String,
++    ): HayaiBuildRelease =
++        if (nightly) {
++            val nightlyNumber = buildNumber.toLongOrNull() ?: nightlyNumber(versionName)
++            requireNotNull(nightlyNumber) { "A nightly build requires a numeric build number." }
++            HayaiBuildRelease(HayaiReleaseChannel.NIGHTLY, versionName, nightlyNumber)
++        } else {
++            HayaiBuildRelease(HayaiReleaseChannel.STABLE, versionName, null)
++        }
++
++    fun selectApk(
++        downloadLinks: List<String>,
++        primaryAbi: String,
++    ): String {
++        require(downloadLinks.isNotEmpty()) { "The release has no assets." }
++        val abiSuffix =
++            when (primaryAbi) {
++                "arm64-v8a" -> "-arm64-v8a"
++                "armeabi-v7a" -> "-armeabi-v7a"
++                "x86" -> "-x86"
++                "x86_64" -> "-x86_64"
++                else -> ""
++            }
++        val apkLinks = downloadLinks.filter { it.substringAfterLast('/').endsWith(".apk", ignoreCase = true) }
++        return apkLinks.firstOrNull { it.substringAfterLast('/').startsWith("hayai$abiSuffix-") }
++            ?: apkLinks.firstOrNull {
++                val name = it.substringAfterLast('/')
++                name.startsWith("hayai-") &&
++                    listOf("hayai-arm64-v8a-", "hayai-armeabi-v7a-", "hayai-x86-", "hayai-x86_64-")
++                        .none(name::startsWith)
++            }
++            ?: error("The release has no Hayai APK for $primaryAbi.")
++    }
++
++    fun isNewer(
++        channel: HayaiReleaseChannel,
++        candidateTag: String,
++        currentTag: String,
++    ): Boolean =
++        when (channel) {
++            HayaiReleaseChannel.STABLE -> isNewStableVersion(candidateTag, currentTag)
++            HayaiReleaseChannel.NIGHTLY -> {
++                val candidate = nightlyNumber(candidateTag)
++                val current = nightlyNumber(currentTag)
++                candidate != null && current != null && candidate > current
++            }
++        }
++}
++
++private data class StableVersion(
++    val numbers: List<Int>,
++    val prereleaseNumber: Int?,
++)
++
++private fun isNewStableVersion(candidateTag: String, currentVersion: String): Boolean {
++    val candidate = stableVersion(candidateTag) ?: return false
++    val current = stableVersion(currentVersion) ?: return false
++    val width = maxOf(candidate.numbers.size, current.numbers.size)
++    repeat(width) { index ->
++        val newPart = candidate.numbers.getOrElse(index) { 0 }
++        val oldPart = current.numbers.getOrElse(index) { 0 }
++        if (newPart != oldPart) return newPart > oldPart
++    }
++    return when {
++        current.prereleaseNumber == null -> false
++        candidate.prereleaseNumber == null -> true
++        else -> candidate.prereleaseNumber > current.prereleaseNumber
++    }
++}
++
++private fun stableVersion(value: String): StableVersion? {
++    val match = Regex("^v?(\\d+(?:\\.\\d+)*)(?:-[A-Za-z]+(\\d+))?$").matchEntire(value) ?: return null
++    val numbers = match.groupValues[1].split('.').map { it.toIntOrNull() ?: return null }
++    return StableVersion(numbers, match.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull())
++}
++
++private fun nightlyNumber(value: String): Long? =
++    Regex("(?:^r|.*-r)(\\d+)$").matchEntire(value)?.groupValues?.get(1)?.toLongOrNull()
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt b/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt
+index 8d212d49db905fc2fc21e2f16501c9817fb99326..a4451ede5539b341174751543945f78fc28f2f6b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt
+@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.updater
+ 
+ import android.content.Context
+ import android.os.Build
++import dev.ahmedmohamed.hayai.update.HayaiReleasePolicy
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.network.GET
+@@ -19,6 +20,12 @@ class AppUpdateChecker {
+     private val json: Json by injectLazy()
+     private val networkService: NetworkHelper by injectLazy()
+     private val preferences: PreferencesHelper by injectLazy()
++    private val releasePolicy =
++        HayaiReleasePolicy.current(
++            nightly = BuildConfig.NIGHTLY,
++            versionName = BuildConfig.VERSION_NAME,
++            buildNumber = BuildConfig.COMMIT_COUNT,
++        )
+ 
+     suspend fun checkForUpdate(
+         context: Context,
+@@ -91,50 +98,16 @@ class AppUpdateChecker {
+ 
+     private fun isNewVersion(
+         versionTag: String,
+-        currentVersion: String = BuildConfig.VERSION_NAME,
+-    ): Boolean {
+-        // Removes prefixes like "r" or "v"
+-        val newVersion = versionTag.replace("[^\\d.-]".toRegex(), "")
+-        val oldVersion = currentVersion.replace("[^\\d.-]".toRegex(), "")
+-        val newPreReleaseVer = newVersion.split("-")
+-        val oldPreReleaseVer = oldVersion.split("-")
+-        val newSemVer = newPreReleaseVer.first().split(".").map { it.toInt() }
+-        val oldSemVer = oldPreReleaseVer.first().split(".").map { it.toInt() }
+-
+-        oldSemVer.mapIndexed { index, i ->
+-            if (newSemVer.getOrElse(index) { i } > i) {
+-                return true
+-            } else if (newSemVer.getOrElse(index) { i } < i) {
+-                return false
+-            }
+-        }
+-        // For cases of extreme patch versions (new: 1.2.3.1 vs old: 1.2.3, return true)
+-        return if (newSemVer.size > oldSemVer.size) {
+-            true
+-        } else if (newSemVer.size < oldSemVer.size) {
+-            false
+-        } else {
+-            // If the version numbers match, check the beta versions
+-            val newPreVersion =
+-                newPreReleaseVer.getOrNull(1)?.replace("[^\\d.-]".toRegex(), "")?.toIntOrNull()
+-            val oldPreVersion =
+-                oldPreReleaseVer.getOrNull(1)?.replace("[^\\d.-]".toRegex(), "")?.toIntOrNull()
+-            when {
+-                // For prod, don't bother with betas (current: 1.2.3 vs new: 1.2.3-b1)
+-                oldPreVersion == null -> false
+-                // For betas, always use prod builds (current: 1.2.3-b1 vs new: 1.2.3)
+-                newPreVersion == null -> true
+-                // For betas, higher beta ver is newer (current: 1.2.3-b1 vs new: 1.2.3-b2)
+-                else -> (oldPreVersion < newPreVersion)
+-            }
+-        }
+-    }
++        currentVersion: String = releasePolicy.currentVersion,
++    ): Boolean = HayaiReleasePolicy.isNewer(releasePolicy.channel, versionTag, currentVersion)
+ }
+ 
+ val RELEASE_TAG: String by lazy {
+-    "v${BuildConfig.VERSION_NAME}"
++    HayaiReleasePolicy.current(BuildConfig.NIGHTLY, BuildConfig.VERSION_NAME, BuildConfig.COMMIT_COUNT).releaseTag
+ }
+ 
+-const val GITHUB_REPO: String = "HayaiApp/hayai"
++val GITHUB_REPO: String by lazy {
++    HayaiReleasePolicy.current(BuildConfig.NIGHTLY, BuildConfig.VERSION_NAME, BuildConfig.COMMIT_COUNT).repository
++}
+ 
+ val RELEASE_URL = "https://github.com/$GITHUB_REPO/releases/tag/$RELEASE_TAG"
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/updater/GithubRelease.kt b/app/src/main/java/eu/kanade/tachiyomi/data/updater/GithubRelease.kt
+index 971b02abff69b75765f8d7b1946cae0d135f880f..140b562b4ba3c14852dd47562f86b38c76f8fcc6 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/updater/GithubRelease.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/updater/GithubRelease.kt
+@@ -1,6 +1,7 @@
+ package eu.kanade.tachiyomi.data.updater
+ 
+ import android.os.Build
++import dev.ahmedmohamed.hayai.update.HayaiReleasePolicy
+ import kotlinx.serialization.SerialName
+ import kotlinx.serialization.Serializable
+ 
+@@ -26,17 +27,7 @@ data class GithubRelease(
+      */
+     val downloadLink: String
+         get() {
+-            val apkVariant =
+-                when (Build.SUPPORTED_ABIS[0]) {
+-                    "arm64-v8a" -> "-arm64-v8a"
+-                    "armeabi-v7a" -> "-armeabi-v7a"
+-                    "x86" -> "-x86"
+-                    "x86_64" -> "-x86_64"
+-                    else -> ""
+-                }
+-
+-            return assets.find { it.downloadLink.contains("tachiyomij2k$apkVariant-") }?.downloadLink
+-                ?: assets[0].downloadLink
++            return HayaiReleasePolicy.selectApk(assets.map { it.downloadLink }, Build.SUPPORTED_ABIS[0])
+         }
+ 
+     /**
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicyTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicyTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..9ab4bed6abad50dce9bbfc62d622e5ee4a262fa2
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicyTest.kt
+@@ -0,0 +1,44 @@
++package dev.ahmedmohamed.hayai.update
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class HayaiReleasePolicyTest {
++    @Test
++    fun `nightly uses the nightly repository and numeric tags`() {
++        val release = HayaiReleasePolicy.current(true, "1.8.1-r6658", "6658")
++
++        assertEquals("HayaiApp/hayai-nightly", release.repository)
++        assertEquals("r6658", release.releaseTag)
++        assertTrue(release.isNewer("r6659"))
++        assertFalse(release.isNewer("r6658"))
++        assertFalse(release.isNewer("v9.0.0"))
++    }
++
++    @Test
++    fun `stable comparison handles releases betas and malformed tags`() {
++        val stable = HayaiReleasePolicy.current(false, "1.8.1", "0")
++        val beta = HayaiReleasePolicy.current(false, "1.8.1-b2", "0")
++
++        assertTrue(stable.isNewer("v1.8.2"))
++        assertFalse(stable.isNewer("v1.8.1-b9"))
++        assertTrue(beta.isNewer("v1.8.1"))
++        assertTrue(beta.isNewer("v1.8.1-b3"))
++        assertFalse(beta.isNewer("not-a-version"))
++    }
++
++    @Test
++    fun `apk selection prefers the device ABI then the universal Hayai build`() {
++        val links =
++            listOf(
++                "https://example.test/notes.txt",
++                "https://example.test/hayai-r6658.apk",
++                "https://example.test/hayai-arm64-v8a-r6658.apk",
++            )
++
++        assertEquals(links[2], HayaiReleasePolicy.selectApk(links, "arm64-v8a"))
++        assertEquals(links[1], HayaiReleasePolicy.selectApk(links, "riscv64"))
++    }
++}
+diff --git a/buildSrc/src/main/kotlin/Commands.kt b/buildSrc/src/main/kotlin/Commands.kt
+index 9e02c6fdd5bd17d9c72acc2b68a5fae362b10978..3c38698542c8750aa33d2c408d4b6e7f771ecbc1 100644
+--- a/buildSrc/src/main/kotlin/Commands.kt
++++ b/buildSrc/src/main/kotlin/Commands.kt
+@@ -21,6 +21,14 @@ fun Project.getBetaCount(): String {
+     // return "1"
+ }
+ 
++fun Project.getNightlyBuildNumber(): String {
++    val supplied = providers.environmentVariable("NIGHTLY_BUILD_NUMBER").orNull?.trim()
++    require(supplied == null || supplied.matches(Regex("[0-9]+"))) {
++        "NIGHTLY_BUILD_NUMBER must contain only decimal digits."
++    }
++    return supplied ?: getCommitCount()
++}
++
+ 
+ fun Project.getGitSha(): String {
+     return runCommand("git rev-parse --short HEAD")
+@@ -40,4 +48,4 @@ fun Project.runCommand(command: String): String {
+         }.standardOutput.asText
+         .get()
+         .trim()
+-}
+\ No newline at end of file
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 7b12d6c6504955502c5a0178815cbb8614d11bbf..e6611275a222a6541e75e27a0566d4ef3091c0a2 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -1,6 +1,6 @@
+ # Hayai on TachiyomiJ2K
+ 
+-Hayai is rooted directly at TachiyomiJ2K commit `57935d373fab209da0104d1a6ce2cb14ffd762dd`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the new baseline.
++Hayai is rooted directly at TachiyomiJ2K commit `cdae5f2d77d63529c974d97c4a37c0c8ac188397`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the new baseline.
+ 
+ ## Boundaries
+ 
+@@ -48,6 +48,10 @@ J2K's extension-facing `JavaScriptEngine` delegates evaluation to Hayai's QuickJ
+ 
+ Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
+ 
++Release channels use a Hayai-owned policy. Stable and beta builds query `HayaiApp/hayai`. Nightly builds use the isolated `.nightly` application ID, numeric `rN` versions, and `HayaiApp/hayai-nightly`. J2K's update checker delegates tag comparison and APK selection to this policy. The nightly workflow chooses `max(commit count, latest published nightly + 1)`, which prevents version rollback after the J2K reset and remains safe when a canceled job retries.
++
++`main` is the active reset branch. The previous application remains on `master` and `legacy/hayai-pre-j2k` for migration evidence. Release procedures live in `docs/development/releases.md`.
++
+ Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, normal URLs, cookies, and headers to the installed extension. Hayai adds the source-specific behavior SY exposes for 8Muses, HBrowse, Pururin, NHentai, and LANraragi. This includes host-validated URL import where supported, richer descriptions, generic batch add for importable sources, NHentai previews, and authenticated LANraragi previews. MangaDex-specific recommendations, related titles, and follows are outside this requested slice. A secondary parser failure returns the extension result and never removes a usable source.
+ 
+ E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category and language strings fall back to safe defaults. Remote uconfig uses a Hayai-owned typed settings model and an idempotent per-site profile upsert. It reuses Hayai and legacy SY application profiles, creates only in slots 1 through 3, commits cookies and the selected slot only after a verified apply, and reports partial two-site results for targeted retry. The settings activity owns the complete matrix and updater controls.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 4e853b98428a0567c3dcfda64652e2d50120f8d0..7ecefd20459ed1550d83a21a0d0026a6441116f9 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -1,6 +1,6 @@
+ # TachiyomiSY and Tsundoku feature audit
+ 
+-Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `547ddea3ce3e2a4943a1279b517e14b7af422467`, and J2K `57935d373fab209da0104d1a6ce2cb14ffd762dd`.
++Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `547ddea3ce3e2a4943a1279b517e14b7af422467`, and J2K `cdae5f2d77d63529c974d97c4a37c0c8ac188397`.
+ 
+ **Foundation** means a boundary or partial implementation exists. **Port** means the end-to-end production behavior is implemented and verified. **Audit** means upstream behavior is mapped but production work remains. This distinction prevents the clean baseline from being mistaken for the full multi-upstream port.
+ 
+@@ -55,6 +55,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
++| Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, and isolated nightly publishing | implemented unverified; hosted nightly run pending |
+ 
+ ## Completion rules
+ 
+diff --git a/docs/development/releases.md b/docs/development/releases.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..8e06e1c912ce687e7385d634a32c6186c17aabc3
+--- /dev/null
++++ b/docs/development/releases.md
+@@ -0,0 +1,21 @@
++# Hayai releases
++
++## Publish a nightly build
++
++Every push to `main` runs `.github/workflows/nightly.yml`. The workflow reads the latest release from `HayaiApp/hayai-nightly` and chooses the larger of the Git commit count or the latest `rN` value plus one. A canceled or retried run therefore cannot lower the published version.
++
++The workflow builds and tests `StandardNightly`, signs every ABI with the `build` environment, and publishes the APKs to `HayaiApp/hayai-nightly`. Nightly builds use `dev.ahmedmohamed.hayai.nightly`, so they can remain installed beside stable Hayai. The updater checks only the nightly repository.
++
++The `build` environment must define `SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, and `KEY_PASSWORD`. The repository must define `NIGHTLY_PAT` with release access to `HayaiApp/hayai-nightly`.
++
++Run the workflow manually only when a push run did not publish. The monotonic number check makes a retry safe.
++
++## Draft a stable release
++
++Run `.github/workflows/build_push.yml` manually and enter the complete tag, such as `v1.8.1`. The workflow builds `StandardRelease`, signs the ABI APKs, and creates a draft in `HayaiApp/hayai`. Review the draft and its checksums before publishing it.
++
++Stable releases use `dev.ahmedmohamed.hayai`. Their updater checks only `HayaiApp/hayai`.
++
++## Check pull requests
++
++`.github/workflows/build_check.yml` builds and tests `StandardRelease` for pull requests that change code or configuration. Documentation-only pull requests skip the Android build.
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 42390842277e3d18ff2dc90b575338a1daa3da40..df00c272331e86bd14695749c9dc2843ed81d6cd 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -17,6 +17,7 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/track/TrackManager.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/data/updater/GithubRelease.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/Source.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/NovelSource.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt"
+-- 
+2.54.0.windows.1
+

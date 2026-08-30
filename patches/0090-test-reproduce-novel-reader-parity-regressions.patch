@@ -1,0 +1,103 @@
+From 0286a81931b3dbe1ed157935ea9dcfcb49db90ec Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 20:39:31 +0300
+Subject: [PATCH] test: reproduce novel reader parity regressions
+
+
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChromeTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChromeTest.kt
+index e069f64ff2e05b9ee5e0f544e0aefe434e2675a7..5fe04fea6b304e03d9dad6cd2bc3c052f8cf855e 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChromeTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChromeTest.kt
+@@ -5,9 +5,9 @@ import org.junit.Test
+ 
+ class J2kNovelReaderChromeTest {
+     @Test
+-    fun `fullscreen overlay reserves the status bar and toolbar`() {
++    fun `fullscreen chrome overlays content without pushing the viewer`() {
+         assertEquals(
+-            168,
++            0,
+             novelViewerTopPadding(
+                 overlaysSystemBars = true,
+                 systemBarTop = 48,
+@@ -17,9 +17,9 @@ class J2kNovelReaderChromeTest {
+     }
+ 
+     @Test
+-    fun `non fullscreen layout does not reserve the status bar twice`() {
++    fun `non fullscreen chrome overlays content without pushing the viewer`() {
+         assertEquals(
+-            120,
++            0,
+             novelViewerTopPadding(
+                 overlaysSystemBars = false,
+                 systemBarTop = 48,
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelProgressTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelProgressTest.kt
+index f7d74bf0489fa4dc694229deda467310fbc3f9d0..a3a60d9783c5388ebd1abd1f50e5f2e62c7fad9e 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelProgressTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelProgressTest.kt
+@@ -42,6 +42,35 @@ class NovelProgressTest {
+         assertEquals(100, chapter.pages_left)
+     }
+ 
++    @Test
++    fun `opening an unread chapter never restores completed progress`() {
++        val chapter =
++            chapter().apply {
++                read = false
++                last_page_read = 100
++                pages_left = 0
++            }
++
++        assertEquals(0, NovelProgress.opening(chapter))
++        assertFalse(chapter.read)
++        assertEquals(100, chapter.last_page_read)
++    }
++
++    @Test
++    fun `opening a partially read chapter restores its progress without mutation`() {
++        val chapter =
++            chapter().apply {
++                read = false
++                last_page_read = 37
++                pages_left = 63
++            }
++
++        assertEquals(37, NovelProgress.opening(chapter))
++        assertFalse(chapter.read)
++        assertEquals(37, chapter.last_page_read)
++        assertEquals(63, chapter.pages_left)
++    }
++
+     private fun chapter() =
+         Chapter.create().apply {
+             url = "chapter"
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
+index 9e68c51a523f6b610674c98d4a5428cc92a66a11..35a4959a2eea49305485bdfc2d077ab0fc84ad05 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
+@@ -1,5 +1,6 @@
+ package dev.ahmedmohamed.hayai.novel.reader
+ 
++import android.view.Menu
+ import eu.kanade.tachiyomi.R
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertNull
+@@ -45,4 +46,14 @@ class NovelSelectionActionMenuTest {
+ 
+         assertEquals(R.string.hayai_novel_reader_quote, quote.titleRes)
+     }
++
++    @Test
++    fun `reader actions use the selected alternative category ahead of platform actions`() {
++        NovelSelectionActionMenu.entries.indices.forEach { index ->
++            assertEquals(
++                Menu.CATEGORY_ALTERNATIVE + index,
++                NovelSelectionActionMenu.orderFor(index),
++            )
++        }
++    }
+ }
+-- 
+2.54.0.windows.1
+

@@ -1,0 +1,147 @@
+From f8b7ef3a46ecdd3bd051001ff6e2a6874c3cef59 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 22:09:33 +0300
+Subject: [PATCH] Retry missing E-Hentai galleries safely
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateModels.kt
+index a9d27c92f4fa2f4142c5026dc6b1f4152904c42d..5f458a441a2078f4e61140eab76e2b80ea7f842f 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateModels.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateModels.kt
+@@ -20,6 +20,15 @@ data class EhGalleryUpdateState(
+     val notFoundAt: Long? = null,
+ ) {
+     val aged: Boolean get() = agedAt != null
++
++    fun isEligible(now: Long, forceRefresh: Boolean = false): Boolean {
++        if (aged) return false
++        if (forceRefresh) return true
++        if (checkedAt <= 0) return true
++        if (now < checkedAt) return false
++        val interval = if (notFoundAt != null) NOT_FOUND_RECHECK_INTERVAL_MILLIS else MIN_CHECK_INTERVAL_MILLIS
++        return now - checkedAt >= interval
++    }
+ }
+ 
+ data class EhGalleryUpdateCandidate(
+@@ -102,3 +111,6 @@ data class EhGalleryUpdaterStats(
+ internal fun EhGalleryUpdateCandidate.site(): EhSite =
+     EhSite.entries.firstOrNull { it.sourceId == sourceId }
+         ?: error("Unsupported E-Hentai source $sourceId")
++
++internal const val MIN_CHECK_INTERVAL_MILLIS = 24L * 60 * 60 * 1_000
++internal const val NOT_FOUND_RECHECK_INTERVAL_MILLIS = 7L * 24 * 60 * 60 * 1_000
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateRuntime.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateRuntime.kt
+index fbb7d25f8680fbbcc4f5ba646201f371895c986d..57aea6792220b9dc8739f856831b995f357deadb 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateRuntime.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateRuntime.kt
+@@ -36,6 +36,7 @@ class EhGalleryUpdateRuntime(
+     private val downloadManager: DownloadManager,
+     private val renameJournal: EhDownloadRenameJournal,
+     private val downloadTreeMerger: EhDownloadTreeMerger,
++    private val forceRefresh: Boolean = false,
+     private val clock: () -> Long = System::currentTimeMillis,
+ ) : EhGalleryUpdateOperations {
+     override suspend fun candidates(): List<EhGalleryUpdateCandidate> = withContext(Dispatchers.IO) {
+@@ -47,7 +48,7 @@ class EhGalleryUpdateRuntime(
+                 val id = manga.id ?: return@mapNotNull null
+                 val identity = SourceMangaIdentity(manga.source, manga.url)
+                 val state = stateStore.state(identity)
+-                if (state.aged || now - state.checkedAt < MIN_CHECK_INTERVAL_MILLIS) return@mapNotNull null
++                if (!state.isEligible(now, forceRefresh)) return@mapNotNull null
+                 EhGalleryUpdateCandidate(id, manga.source, manga.title, manga.url, state)
+             }
+             .sortedWith(compareBy({ it.state.checkedAt }, { it.mangaId }))
+@@ -101,7 +102,9 @@ class EhGalleryUpdateRuntime(
+             when (failure) {
+                 is EhFailure.AuthenticationRequired -> EhGalleryUpdateResult(EhGalleryUpdateDisposition.AuthenticationSkipped, candidate.title)
+                 is EhFailure.GalleryNotFound -> {
+-                    stateStore.record(identity, EhGalleryUpdateState(now, now, now))
++                    // A remote 404 may be caused by a replaced gallery, an expired session, or
++                    // temporary edge state. Keep it out of the daily queue, but recheck weekly.
++                    stateStore.record(identity, EhGalleryUpdateState(checkedAt = now, notFoundAt = now))
+                     EhGalleryUpdateResult(EhGalleryUpdateDisposition.NotFound, candidate.title)
+                 }
+                 is EhFailure.Network, is EhFailure.RateLimited ->
+@@ -255,7 +258,6 @@ class EhGalleryUpdateRuntime(
+     companion object {
+         const val MAX_GALLERIES_PER_RUN = 50
+         const val FAILURE_CUTOFF = 5
+-        const val MIN_CHECK_INTERVAL_MILLIS = 24L * 60 * 60 * 1_000
+         const val GALLERY_AGE_MILLIS = 365L * 24 * 60 * 60 * 1_000
+         private val SUPPORTED_SOURCE_IDS = dev.ahmedmohamed.hayai.adult.eh.domain.EhSite.entries.map { it.sourceId }.toSet()
+     }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateWorker.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateWorker.kt
+index fb469d19d5b2d5d18414d41c46b739f318773fbd..ef6a2baa32948299223dbeb71d3d35a2fe2d89d8 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateWorker.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateWorker.kt
+@@ -14,6 +14,7 @@ import androidx.work.OneTimeWorkRequestBuilder
+ import androidx.work.PeriodicWorkRequestBuilder
+ import androidx.work.WorkManager
+ import androidx.work.WorkerParameters
++import androidx.work.workDataOf
+ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+ import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+@@ -55,6 +56,7 @@ class EhGalleryUpdateWorker(
+                 downloadManager = Injekt.get<DownloadManager>(),
+                 renameJournal = EhDownloadRenameJournal(applicationContext),
+                 downloadTreeMerger = EhDownloadTreeMerger(DownloadProvider(applicationContext)),
++                forceRefresh = inputData.getBoolean(INPUT_FORCE_REFRESH, false),
+             )
+             val run = EhGalleryUpdateCoordinator(runtime).run { candidate, current, total ->
+                 notifier.progress(id, candidate, current, total)
+@@ -84,6 +86,7 @@ class EhGalleryUpdateWorker(
+         const val MANUAL_WORK_NAME = "hayai.eh.gallery-update.manual"
+         const val WORK_TAG = "hayai.eh.gallery-update"
+         private const val MAX_TRANSIENT_RETRIES = 3
++        private const val INPUT_FORCE_REFRESH = "force_refresh"
+ 
+         fun schedule(context: Context, policy: EhGalleryUpdatePolicy) {
+             val persistence = Injekt.get<HayaiEhPersistenceStore>()
+@@ -105,6 +108,7 @@ class EhGalleryUpdateWorker(
+             val request = OneTimeWorkRequestBuilder<EhGalleryUpdateWorker>()
+                 .setConstraints(resolved.constraints())
+                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
++                .setInputData(workDataOf(INPUT_FORCE_REFRESH to true))
+                 .addTag(WORK_TAG)
+                 .build()
+             WorkManager.getInstance(context).enqueueUniqueWork(MANUAL_WORK_NAME, ExistingWorkPolicy.KEEP, request)
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinatorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinatorTest.kt
+index 1c6ed0511d1b42fa5f8c00483c94ec0fd46f1a50..8391b159b4ee0306cf81f4ff5aac270852fbc167 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinatorTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinatorTest.kt
+@@ -40,6 +40,25 @@ class EhGalleryUpdateCoordinatorTest {
+         assertFalse(run.shouldRetry)
+     }
+ 
++    @Test
++    fun `not found state is retried weekly without becoming permanently aged`() {
++        val checkedAt = 1_000L
++        val state = EhGalleryUpdateState(checkedAt = checkedAt, notFoundAt = checkedAt)
++
++        assertFalse(state.aged)
++        assertFalse(state.isEligible(checkedAt + NOT_FOUND_RECHECK_INTERVAL_MILLIS - 1))
++        assertTrue(state.isEligible(checkedAt + 1, forceRefresh = true))
++        assertTrue(state.isEligible(checkedAt + NOT_FOUND_RECHECK_INTERVAL_MILLIS))
++    }
++
++    @Test
++    fun `genuinely old galleries remain excluded`() {
++        val state = EhGalleryUpdateState(checkedAt = 1_000L, agedAt = 1_000L)
++
++        assertTrue(state.aged)
++        assertFalse(state.isEligible(Long.MAX_VALUE))
++    }
++
+     private fun candidate(id: Long) = EhGalleryUpdateCandidate(
+         mangaId = id,
+         sourceId = EhSite.EHentai.sourceId,
+@@ -56,4 +75,3 @@ class EhGalleryUpdateCoordinatorTest {
+         override suspend fun update(candidate: EhGalleryUpdateCandidate) = updateResult(candidate)
+     }
+ }
+-
+-- 
+2.54.0.windows.1
+

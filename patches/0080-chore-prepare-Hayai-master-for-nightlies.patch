@@ -1,0 +1,915 @@
+From a533d138923a6ed0920a76d2d950fc95be56835d Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 13:05:34 +0300
+Subject: [PATCH] chore: prepare Hayai master for nightlies
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 39ca1961d449ab771624072060a5338df259a0e1..de73d725794a47aa32ef7cfa5197e263a6d91d41 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -102,3 +102,7 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T09:25:00Z	lnreader-v3-repository	restored the production LNReader v3 catalogue	accepted root and enveloped documents, encoded raw brackets outside URL authorities, stripped Unicode format marks from language labels, and ignored invalid optional site metadata without weakening required plugin URL validation	NovelPluginRepositoryDocument.kt; NovelPluginModels.kt; NovelPluginRepositoryDocumentTest.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-23T10:05:00Z	novel-repository-navigation	added one native J2K settings hub with typed APK-extension and LNReader-plugin destinations	made both repository formats discoverable from Browse and Browse settings without URL auto-detection or bypassing the JavaScript plugin trust warning	NovelRepositoryKind; NovelRepositoryHubController.kt; BrowseController.kt; SettingsBrowseController.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-23T10:30:00Z	novel-selection-lookup	restored selected-text quote, definition, Google Translate, and web-search actions in both novel renderers	routed validated transient queries through forced resizable Custom Tabs, app-intent fallbacks, and a secure J2K bottom-sheet WebView without coupling browser state to either renderer	NovelSelectionActionMode.kt; NovelLookupModels.kt; NovelLookupLauncher.kt; NovelLookupWebSheet.kt; NovelReaderActivity.kt	IMPLEMENTED_UNVERIFIED
++2026-08-23T12:15:00+03:00	unified-extension-management	superseded the separate Manga, Novel APK, and JavaScript plugin catalogs with one Extensions list plus Migration	kept J2K authoritative for APK signatures and installation, kept Hayai authoritative for JavaScript trust and runtime, namespaced identities, retained installed and failed entries, and removed duplicate manager navigation	ManagedExtensionProjector.kt; ExtensionBottomPresenter.kt; ExtensionBottomSheet.kt; NovelPluginRepositoryController.kt	COMPILED
++2026-08-23T12:15:00+03:00	extension-failure-reconciliation	surfaced identified APK load failures and JavaScript runtime failures and centralized duplicate package selection	preserved J2K versionCode-or-library update semantics while ensuring list, notification check, and download select the same newest repository copy	ApkLoadFailure.kt; ExtensionCatalogReconciler.kt; ExtensionLoader.kt; ExtensionManager.kt; NovelPluginManager.kt	VERIFIED
++2026-08-23T12:15:00+03:00	ehentai-details-repair	accepted current E-Hentai direct-anchor sprite previews, invalidated stale empty listings, removed duplicated flattened metadata, and repaired the details vertical chain	kept parsing, typed metadata, authenticated networking, and cache policy Hayai-owned behind the existing J2K details adapter	EhHtmlParser.kt; EhRequestBuilder.kt; EhentaiSource.kt; SourcePreviewCache.kt; manga_header_item.xml	VERIFIED
++2026-08-23T12:15:00+03:00	hayai-public-identity	rewrote the README and issue forms, restored Hayai 1.15.0 code 114 metadata, replaced product J2K links, and documented credits and no-stable-release policy	retained upstream J2K, SY, Tsundoku, LNReader, Mihon, and legacy provenance links only as explicit credits or technical references	README.md; .github/ISSUE_TEMPLATE; AboutLinksPreference.kt; Dependencies.kt; releases.md	IMPLEMENTED_UNVERIFIED
+diff --git a/.github/CONTRIBUTING.md b/.github/CONTRIBUTING.md
+index 1e4b4afab4e8f213c486b6dfabfa4f548ed09560..0560a57a1f8a940b11e9ba72bad7ffd81b6a3e61 100644
+--- a/.github/CONTRIBUTING.md
++++ b/.github/CONTRIBUTING.md
+@@ -1,29 +1,9 @@
+-1. **Before reporting a new issue, take a look at the [FAQ](https://mihon.app/docs/faq/general), the [changelog](https://mihon.app/changelogs/) and the already opened [issues](https://github.com/mihonapp/mihon/issues).**
+-2. If you are unsure, ask here: [![Discord](https://img.shields.io/discord/349436576037732353.svg)](https://discord.gg/mihon)
+-3. What is your type of issue?
+-    * [Catalogue request](#catalogue-requests)
+-    * [Bugs](#bugs)
+-    * [Feature requests](#feature-requests)
+-    * Translations: no link yet, coming later
+-4. After following 1. and 3. you can [open your issue](https://github.com/mihonapp/mihon/issues/new)
++# Contributing to Hayai
+ 
+-***
++Search [existing issues](https://github.com/HayaiApp/hayai/issues) and read the repository `AGENTS.md`, [architecture](../docs/architecture/j2k-reset.md), and [feature audit](../docs/architecture/upstream-feature-audit.md) before changing code.
+ 
+-# Catalogue requests
++Hayai keeps TachiyomiJ2K as its architectural parent. TachiyomiSY and Tsundoku are behavior references, not merge parents. New application code belongs under `dev.ahmedmohamed.hayai`; changes to J2K files must stay limited to documented adapter seams.
+ 
+-* Catalogue requests should be checked at https://mihon.app/docs/faq/browse/extensions, not here
++For bug reports, include the Hayai version and build channel, Android version, steps to reproduce, expected and actual behavior, and relevant logs. Extension and source reports are welcome when the failure is in Hayai's manager, compatibility layer, reader, or integration behavior.
+ 
+-# Bugs
+-* Include version (Setting > About > Version)
+- * If not latest, try updating, it may have already been solved
+- * Dev version is equal to the number of commits as seen in the main page
+-* Include steps to reproduce (if not obvious from description)
+-* Include screenshot (if needed)
+-* If it could be device-dependent, try reproducing on another device (if possible)
+-* For large logs use http://pastebin.com/ (or similar)
+-* Don't group unrelated requests into one issue
+-
+-# Feature requests
+-
+-* Write a detailed issue, explaning what it should do or how. Avoid writing just "like X app does"
+-* Include screenshot (if needed)
++For code changes, implement a complete vertical slice, add focused tests, keep interface strings localizable with `hayai_` keys, update the feature audit honestly, and run the validation commands listed in `AGENTS.md` before handoff.
+diff --git a/.github/FUNDING.yml b/.github/FUNDING.yml
+deleted file mode 100644
+index 410a50bd978f3fe7232cdc9c294f28e47ae3c7d5..0000000000000000000000000000000000000000
+--- a/.github/FUNDING.yml
++++ /dev/null
+@@ -1,2 +0,0 @@
+-github: inorichi
+-ko_fi: inorichi
+diff --git a/.github/ISSUE_TEMPLATE.md b/.github/ISSUE_TEMPLATE.md
+index f390e53ae8eedf0a6535d425f9042f7d657467d1..12199f0520a285a467f014af3448a385145c3810 100644
+--- a/.github/ISSUE_TEMPLATE.md
++++ b/.github/ISSUE_TEMPLATE.md
+@@ -1,16 +1,6 @@
+-**PLEASE READ THIS**
++Please use one of Hayai's structured issue forms:
+ 
+-I acknowledge that:
++- [Report a bug](https://github.com/HayaiApp/hayai/issues/new?template=issue_report.yml)
++- [Request a feature](https://github.com/HayaiApp/hayai/issues/new?template=feature_request.yml)
+ 
+-- If this is a bug or a feature, I will not use this issue template and instead use one of the options on the previous page
+-- I have tried the troubleshooting guide: https://mihon.app/docs/guides/troubleshooting/
+-- I have updated to the latest version of the app (latest J2K is v1.8.1)
+-- I will not repeat an issue already requested
+-- If this is an request for an extension/source, that I should be checking https://mihon.app/docs/faq/browse/extensions instead
+-
+-**DELETE THIS SECTION IF YOU HAVE READ AND ACKNOWLEDGED IT**
+-
+----
+-
+-### Why/User Benefit/User Problem
+-(explain what this issue is about)
++Before filing, search existing issues and check the [Hayai wiki](https://github.com/HayaiApp/hayai/wiki). Include the Hayai version and channel, Android version, reproduction steps, expected behavior, actual behavior, and relevant logs. Keep unrelated problems in separate issues.
+diff --git a/.github/ISSUE_TEMPLATE/config.yml b/.github/ISSUE_TEMPLATE/config.yml
+index 02d7d441772016daa43307aa1c040d72e475e4c7..ee9bf5ccc2028628d1faefb4b2b8a6beecb077b9 100644
+--- a/.github/ISSUE_TEMPLATE/config.yml
++++ b/.github/ISSUE_TEMPLATE/config.yml
+@@ -1,11 +1,8 @@
+ blank_issues_enabled: false
+ contact_links:
+-  - name: ⚠️ Extension/source issue
+-    url: https://mihon.app/docs/faq/browse/extensions
+-    about: For extension-related questions/issues
+-  - name: 📘 Main Mihon issue
+-    url: https://github.com/mihonapp/mihon/issues/new/choose
+-    about: Issues that exist on both this fork AND Mihon should be opened in the Mihon repository instead
+-  - name: 🖥️ Mihon website
+-    url: https://mihon.app/
+-    about: Guides, troubleshooting, and answers to common questions
++  - name: Documentation and troubleshooting
++    url: https://github.com/HayaiApp/hayai/wiki
++    about: Installation, migration, extensions, readers, and troubleshooting
++  - name: Existing Hayai issues
++    url: https://github.com/HayaiApp/hayai/issues
++    about: Search current and closed reports before opening a new one
+diff --git a/.github/ISSUE_TEMPLATE/feature_request.yml b/.github/ISSUE_TEMPLATE/feature_request.yml
+index 69f87f66ce540cd24aa9650b1e5ad1b9cc758fd5..45823ffd7817362b5e06ec7977f659c9c17985a3 100644
+--- a/.github/ISSUE_TEMPLATE/feature_request.yml
++++ b/.github/ISSUE_TEMPLATE/feature_request.yml
+@@ -1,13 +1,13 @@
+ name: 🌟 Feature request
+-description: Suggest a feature to improve TachiyomiJ2K
+-labels: [feature]
++description: Suggest a feature to improve Hayai
++labels: [enhancement]
+ body:
+ 
+   - type: textarea
+     id: feature-description
+     attributes:
+       label: Describe your suggested feature
+-      description: How can TachiyomiJ2K be improved?
++      description: What problem should Hayai solve, and how should it behave?
+       placeholder: |
+         Example:
+           "It should work like this..."
+@@ -31,14 +31,9 @@ body:
+           required: true
+         - label: I have written a short but informative title.
+           required: true
+-        - label: If this is an request for a feature in the original Tachiyomi, I am opening because multiple versions of TachiyomiJ2K have been released without this feature.
+-          required: true
+-        - label: If this is an issue with an extension, or a request for an extension, I should be checking the [extensions FAQ](https://mihon.app/docs/faq/browse/extensions) instead.
+-          required: true
+-        - label: I have updated the app to version **[1.8.1](https://github.com/Jays2Kings/tachiyomiJ2K/releases/latest)**.
++        - label: I have checked the [Hayai wiki](https://github.com/HayaiApp/hayai/wiki) and current feature audit.
+           required: true
+         - label: I have checked through the app settings for my feature.
+           required: true
+-        - label: I have admitted that I am a clown by having checked this box, as I have not read these acknowledgements.
+         - label: I will fill out all of the requested information in this form.
+           required: true
+diff --git a/.github/ISSUE_TEMPLATE/issue_report.yml b/.github/ISSUE_TEMPLATE/issue_report.yml
+index 5bdbf6229c6202ce2f6b806e54d3d7a719356aa7..3a02ff4637c86217655a6a3988179776992b8255 100644
+--- a/.github/ISSUE_TEMPLATE/issue_report.yml
++++ b/.github/ISSUE_TEMPLATE/issue_report.yml
+@@ -1,5 +1,5 @@
+ name: 🐞 Issue report
+-description: Report an issue or bug in TachiyomiJ2K
++description: Report an issue or bug in Hayai
+ labels: [bug]
+ body:
+ 
+@@ -48,12 +48,12 @@ body:
+         You can paste the crash logs in pure text or upload it as an attachment.
+ 
+   - type: input
+-    id: tachiyomi-version
++    id: hayai-version
+     attributes:
+-      label: TachiyomiJ2K version
+-      description: You can find your TachiyomiJ2K version in **More → About**.
++      label: Hayai version and channel
++      description: Copy the version from **More → About** and say whether this is stable, nightly, or debug.
+       placeholder: |
+-        Example: "1.5.8"
++        Example: "1.15.0-r6661 nightly"
+     validations:
+       required: true
+ 
+@@ -94,16 +94,11 @@ body:
+           required: true
+         - label: I have written a short but informative title.
+           required: true
+-        - label: If this is an issue with an extension, I should be checking the [extensions FAQ](https://mihon.app/docs/faq/browse/extensions) instead.
++        - label: I have tried the relevant steps in the [Hayai wiki](https://github.com/HayaiApp/hayai/wiki).
+           required: true
+-        - label: I am reporting an issue exclusive to this fork. I have also checked that is not an issue on [Mihon](https://github.com/mihonapp/mihon)
+-          required: true
+-        - label: I have tried the [troubleshooting guide](https://mihon.app/docs/guides/troubleshooting/).
+-          required: true
+-        - label: I have updated the app to version **[1.8.1](https://github.com/Jays2Kings/tachiyomiJ2K/releases/latest)**.
++        - label: I have reproduced this on the latest available [Hayai nightly](https://github.com/HayaiApp/hayai-nightly/releases/latest), or explained why I cannot.
+           required: true
+         - label: I have updated all installed extensions.
+           required: true
+-        - label: I have admitted that I am a clown by having checked this box, as I have not read these acknowledgements.
+         - label: I have filled out all of the requested information in this form.
+           required: true
+diff --git a/.github/workflows/build_push.yml b/.github/workflows/build_push.yml
+index 6a6b938cb9962d617bc3c078d5f5dc9a1bcf1201..856b69a20b0328efcee75b3248dd2642b8506d49 100644
+--- a/.github/workflows/build_push.yml
++++ b/.github/workflows/build_push.yml
+@@ -3,7 +3,7 @@ on:
+   workflow_dispatch:
+     inputs:
+       version:
+-        description: 'Release tag, for example v1.8.1'
++        description: 'Draft release tag, for example v1.15.0'
+         required: true
+         type: string
+ 
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index 35cdd0ce9340ba117fed1b7bbb11bc65c41e9120..2e906e33e899fadd615d8bbc89b29085b097ece4 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -3,7 +3,7 @@ name: Nightly
+ on:
+   push:
+     branches:
+-      - main
++      - master
+   workflow_dispatch:
+ 
+ concurrency:
+diff --git a/README.md b/README.md
+index a22d3e1bd36a9f09f51bb70c198a12137712ed8c..538897019b49468ad146c2745e9edc150f55a0a3 100644
+--- a/README.md
++++ b/README.md
+@@ -2,101 +2,48 @@
+ 
+ ![Hayai app icon](./.github/readme-images/app-icon.webp)
+ 
+-Hayai is an Android reader built as a direct fork of [TachiyomiJ2K](https://github.com/Jays2Kings/tachiyomiJ2K). It preserves J2K's library and image-reader architecture while establishing Hayai-owned boundaries for novel support and opt-in adult/source enhancements inspired by [Tsundoku](https://github.com/tsundoku-otaku/tsundoku) and [TachiyomiSY](https://github.com/jobobby04/TachiyomiSY).
++Hayai is an Android manga and light-novel reader built on the TachiyomiJ2K architecture. J2K remains the source of truth for the library, chapters, tracking, downloads, and image reader. Hayai adds a text reader, novel sources and plugins, defensive legacy migration, and optional adult-source features through small, documented integration seams.
+ 
+-This branch is the clean J2K reset. The former Hayai/Rokku implementation is retained only as an archival branch and migration source; its application code is not part of the new baseline.
++## Downloads
+ 
+-This reset currently ships the migration, policy, source-contract, launch-routing, and basic text-reader foundation—not the complete SY/Tsundoku runtime. See [the reset architecture](docs/architecture/j2k-reset.md) and [the feature audit](docs/architecture/upstream-feature-audit.md) for the exact implemented/remaining split.
++Development builds are published in [Hayai Nightly](https://github.com/HayaiApp/hayai-nightly/releases/latest). Nightlies use a separate application ID, may contain unfinished work, and should be installed only after making a backup.
+ 
+-<!-- Upstream J2K feature list retained below. -->
++There is no new stable Hayai release yet. The main repository will not publish one until the reset and migration paths have completed their release checks.
+ 
+-![screenshots of app](./.github/readme-images/screens.gif)
++## Current capabilities
+ 
+-## Features
++- J2K manga library, reader, downloads, tracking, categories, history, and migration
++- Native light-novel reader with themes, pagination, continuous reading, downloads, EPUB export, text-to-speech, dictionaries, and translation providers
++- Selected-text Define, Google Translate, and web-search actions using the signed-in browser in a resizable Custom Tab, with a secure in-app sheet fallback
++- Manga and novel APK extension compatibility plus LNReader-style JavaScript novel plugins
++- E-Hentai and ExHentai browsing, metadata, previews, favorites, and authenticated behavior rebuilt from TachiyomiSY contracts
++- Defensive import from the archived pre-J2K Hayai database without writing to the legacy database
+ 
+-Features of Tachiyomi include:
+-* Online reading from a variety of sources
+-* Local reading of downloaded content
+-* A configurable reader with multiple viewers, reading directions and other settings.
+-* [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/), [Kitsu](https://kitsu.io/explore/anime), [Shikimori](https://shikimori.one), and [Manga Updates](https://www.mangaupdates.com/) support
+-* Categories to organize your library
+-* Automatic light and dark themes
+-* Schedule updating your library for new chapters
+-* Create backups locally to read offline or to your desired cloud service 
++See the [architecture](docs/architecture/j2k-reset.md), [feature audit](docs/architecture/upstream-feature-audit.md), and [release policy](docs/development/releases.md) for precise implementation and verification status.
+ 
+-Plus some new features in this fork such as:
+-* New Manga details screens, themed by their manga covers
+-* Combine 2 pages while reading into a single one for a better tablet experience
+-* An expanded toolbar for easier one handed use (with the option to reduce the size back down)
+-* Floating searchbar to easily start a search in your library or while browsing
+-* Library redesigned as a single list view: See categories listed in a vertical view, that can be collasped or expanded with a tap
+-* Staggered Library grid
+-* Drag & Drop Sorting in Library
+-* Dynamic Categories: Group your library automatically by the tags, tracking status, source, and more
+-* New Recents page: Providing quick access to newly added manga, new chapters, and to continue where you left on in a series
+-* Stats Page
+-* New Themes
+-* Dynamic Shortcuts: open the latest chapter of what you were last reading right from your homescreen
+-* [New material snackbar](.github/readme-images/material%20snackbar.png): Removing manga now auto deletes chapters and has an undo button in case you change your mind
+-* Batch Auto-Source Migration (taken from [TachiyomiEH](https://github.com/NerdNumber9/TachiyomiEH))
+-* [Share sheets upgrade for Android 10](.github/readme-images/share%20menu.png)
+-* View all chapters right in the reader
+-* A lot more Material Design You additions
+-* Android 12 features such as automatic extension and app updates
++## Support and contributing
+ 
+-## Issues, Feature Requests and Contributing
++- [Report a bug](https://github.com/HayaiApp/hayai/issues/new?template=issue_report.yml)
++- [Request a feature](https://github.com/HayaiApp/hayai/issues/new?template=feature_request.yml)
++- [Read the wiki](https://github.com/HayaiApp/hayai/wiki)
++- [Contributing guide](.github/CONTRIBUTING.md)
+ 
+-Please make sure to read the full guidelines. Your issue may be closed without warning if you do not.
++Include the Hayai version, build channel, Android version, reproduction steps, and logs with bug reports. Extension and source failures belong here when they involve Hayai's manager, compatibility layer, reader, or integration behavior.
+ 
+-<details><summary>Issues</summary>
++## Credits and provenance
+ 
+-1. **Before reporting a new issue, take a look at the [FAQ](https://mihon.app/docs/faq/general), the [changelog](https://github.com/jays2kings/tachiyomi/releases) and the already opened [issues](https://github.com/mihonapp/mihon/issues).**
+-2. If you are unsure, ask here: [![Discord](https://img.shields.io/discord/349436576037732353.svg)](https://discord.gg/mihon)
++Hayai is a direct fork of [TachiyomiJ2K](https://github.com/Jays2Kings/tachiyomiJ2K), which is the architectural parent and upstream update base.
+ 
+-</details>
++- [TachiyomiSY](https://github.com/jobobby04/TachiyomiSY) is the behavior reference for E-Hentai and other adult-source features.
++- [Tsundoku](https://github.com/tsundoku-otaku/tsundoku) is the behavior reference for the novel reader and novel APK compatibility.
++- [LNReader](https://github.com/LNReader/lnreader) is the compatibility reference for JavaScript novel plugins.
++- The archived Hayai, Rokku, and Yōkai line is used only to understand user-data formats, preferences, branding, and Hayai-specific behavior such as selected-text browser tools.
++- Hayai also carries the work and licensing lineage of Tachiyomi, Mihon, and their contributors. Upstream copyright and license notices remain intact.
+ 
+-<details><summary>Bugs</summary>
+-
+-* Include version (Setting > About > Version)
+- * If not latest, try updating, it may have already been solved
+- * Dev version is equal to the number of commits as seen in the main page
+-* Include steps to reproduce (if not obvious from description)
+-* Include screenshot (if needed)
+-* If it could be device-dependent, try reproducing on another device (if possible)
+-* For large logs use http://pastebin.com/ (or similar)
+-* Don't group unrelated requests into one issue
+-
+-</details>
+-
+-<details><summary>Feature Requests</summary>
+-
+-* Write a detailed issue, explaning what it should do or how. Avoid writing just "like X app does"
+-* Include screenshot (if needed)
+-
+-Source requests should be checked at https://mihon.app/docs/faq/browse/extensions, they do not belong in this repository.
+-</details>
+-
+-## FAQ
+-
+-[See our website.](https://mihon.app/)
+-You can also reach out to us on [Discord](https://discord.gg/mihon).
++Upstream projects are credited as sources and references. Hayai is not affiliated with them or with any content provider.
+ 
+ ## License
+ 
+-    Copyright 2015 Javier Tomás
+-
+-    Licensed under the Apache License, Version 2.0 (the "License");
+-    you may not use this file except in compliance with the License.
+-    You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-    Unless required by applicable law or agreed to in writing, software
+-    distributed under the License is distributed on an "AS IS" BASIS,
+-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-    See the License for the specific language governing permissions and
+-    limitations under the License.
+-
+-## Disclaimer
++Copyright 2015 Javier Tomás and project contributors.
+ 
+-The developer of this application does not have any affiliation with the content providers available.
++Licensed under the [Apache License 2.0](LICENSE). Unless required by applicable law or agreed to in writing, the software is provided without warranties or conditions of any kind.
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/track/bangumi/BangumiInterceptor.kt b/app/src/main/java/eu/kanade/tachiyomi/data/track/bangumi/BangumiInterceptor.kt
+index b56881b210a41e22ebddbf4ca7ad94e2e527ed50..893ffed87412b80eae11017420f00e1d410aa87e 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/track/bangumi/BangumiInterceptor.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/track/bangumi/BangumiInterceptor.kt
+@@ -38,7 +38,7 @@ class BangumiInterceptor(
+                 .header(
+                     "User-Agent",
+                     "Tachiyomi J2K/${BuildConfig.VERSION_NAME} (${BuildConfig.APPLICATION_ID}) " +
+-                        "(Android) (https://github.com/Jays2Kings/tachiyomiJ2K)",
++                        "(Android) (https://github.com/HayaiApp/hayai)",
+                 ).header("Authorization", "Bearer ${currAuth.access_token}")
+                 .build()
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/track/mangabaka/MangaBakaApi.kt b/app/src/main/java/eu/kanade/tachiyomi/data/track/mangabaka/MangaBakaApi.kt
+index bcfa5fbe28eec17f61cebe97878b14642aef72d1..c4cac5945cde0b266afbb15b3c0b764b07fd3c97 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/track/mangabaka/MangaBakaApi.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/track/mangabaka/MangaBakaApi.kt
+@@ -54,7 +54,7 @@ class MangaBakaApi(
+                     .header(
+                         "User-Agent",
+                         "Tachiyomi J2K/${BuildConfig.VERSION_NAME} (${BuildConfig.APPLICATION_ID}) " +
+-                            "(Android) (https://github.com/Jays2Kings/tachiyomiJ2K)",
++                            "(Android) (https://github.com/HayaiApp/hayai)",
+                     ).build()
+                     .let(it::proceed)
+             }.build()
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutController.kt
+index 62d8b427591f36433dd4991e1278c597ce01cbb8..98c26ab151d28ba2e0a50dc9f2752a206bd1a281 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutController.kt
+@@ -70,7 +70,7 @@ class AboutController : SettingsController() {
+                         Intent(
+                             Intent.ACTION_VIEW,
+                             if (BuildConfig.DEBUG) {
+-                                "https://github.com/Jays2Kings/tachiyomiJ2K/commits/master"
++                                "https://github.com/HayaiApp/hayai/commits/master"
+                             } else {
+                                 RELEASE_URL
+                             }.toUri(),
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutLinksPreference.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutLinksPreference.kt
+index b340cba9ff1c79b08dc99f60ea10eb7fdc53961b..0a724203fa8ea8de146bf05e459004015cc39f42 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutLinksPreference.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutLinksPreference.kt
+@@ -36,31 +36,11 @@ class AboutLinksPreference
+             }
+             holder.findViewById(R.id.btn_website).apply {
+                 tooltipText = contentDescription
+-                setOnClickListener { context.openInBrowser("https://mihon.app") }
+-            }
+-            holder.findViewById(R.id.btn_discord).apply {
+-                tooltipText = contentDescription
+-                setOnClickListener { context.openInBrowser("https://discord.gg/mihon") }
+-            }
+-            holder.findViewById(R.id.btn_x).apply {
+-                tooltipText = contentDescription
+-                setOnClickListener { context.openInBrowser("https://x.com/mihonapp") }
+-            }
+-            holder.findViewById(R.id.btn_facebook).apply {
+-                tooltipText = contentDescription
+-                setOnClickListener { context.openInBrowser("https://facebook.com/mihonapp") }
+-            }
+-            holder.findViewById(R.id.btn_reddit).apply {
+-                tooltipText = contentDescription
+-                setOnClickListener { context.openInBrowser("https://www.reddit.com/r/mihonapp") }
++                setOnClickListener { context.openInBrowser("https://github.com/HayaiApp/hayai/wiki") }
+             }
+             holder.findViewById(R.id.btn_github).apply {
+                 tooltipText = contentDescription
+-                setOnClickListener { context.openInBrowser("https://github.com/Jays2Kings/tachiyomiJ2K") }
+-            }
+-            holder.findViewById(R.id.btn_mihon).apply {
+-                tooltipText = contentDescription
+-                setOnClickListener { context.openInBrowser("https://github.com/mihonapp") }
++                setOnClickListener { context.openInBrowser("https://github.com/HayaiApp/hayai") }
+             }
+         }
+     }
+diff --git a/app/src/main/res/layout/pref_about_links.xml b/app/src/main/res/layout/pref_about_links.xml
+index 05746c1bd4eef8ee842a159f692eeeaf0fd46495..04b7158e925daaa3632f32e2d1279e8c96b3d6b3 100644
+--- a/app/src/main/res/layout/pref_about_links.xml
++++ b/app/src/main/res/layout/pref_about_links.xml
+@@ -3,9 +3,9 @@
+     xmlns:app="http://schemas.android.com/apk/res-auto"
+     android:id="@+id/main_layout"
+     android:layout_width="match_parent"
+-    android:orientation="horizontal"
+     android:layout_height="wrap_content"
+-    android:gravity="center">
++    android:gravity="center"
++    android:orientation="horizontal">
+ 
+     <LinearLayout
+         android:layout_width="wrap_content"
+@@ -21,51 +21,12 @@
+             android:padding="16dp"
+             android:src="@drawable/ic_open_in_webview_24dp"
+             app:tint="?attr/colorAccent" />
+-
+-        <ImageButton
+-            android:id="@+id/btn_discord"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:background="?attr/selectableItemBackgroundBorderless"
+-            android:contentDescription="@string/discord"
+-            android:padding="16dp"
+-            android:src="@drawable/ic_discord_24dp"
+-            app:tint="?attr/colorAccent" />
+-
+-        <ImageButton
+-            android:id="@+id/btn_x"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:background="?attr/selectableItemBackgroundBorderless"
+-            android:contentDescription="@string/hayai_accessibility_x"
+-            android:padding="16dp"
+-            android:src="@drawable/ic_x_24dp"
+-            app:tint="?attr/colorAccent" />
+-
+-        <ImageButton
+-            android:id="@+id/btn_facebook"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:background="?attr/selectableItemBackgroundBorderless"
+-            android:contentDescription="@string/hayai_accessibility_facebook"
+-            android:padding="16dp"
+-            android:src="@drawable/ic_facebook_24dp"
+-            app:tint="?attr/colorAccent" />
+     </LinearLayout>
+ 
+     <LinearLayout
+         android:layout_width="wrap_content"
+         android:layout_height="wrap_content"
+         android:gravity="center">
+-        <ImageButton
+-            android:id="@+id/btn_reddit"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:background="?attr/selectableItemBackgroundBorderless"
+-            android:contentDescription="@string/hayai_accessibility_reddit"
+-            android:padding="16dp"
+-            android:src="@drawable/ic_reddit_24dp"
+-            app:tint="?attr/colorAccent" />
+ 
+         <ImageButton
+             android:id="@+id/btn_github"
+@@ -76,17 +37,5 @@
+             android:padding="16dp"
+             android:src="@drawable/ic_github_24dp"
+             app:tint="?attr/colorAccent" />
+-
+-        <ImageButton
+-            android:id="@+id/btn_mihon"
+-            android:layout_width="56dp"
+-            android:layout_height="56dp"
+-            android:background="?attr/selectableItemBackgroundBorderless"
+-            android:contentDescription="@string/hayai_accessibility_mihon"
+-            android:padding="16dp"
+-            android:scaleType="fitCenter"
+-            android:src="@drawable/ic_mihon"
+-            app:tint="?attr/colorAccent" />
+-
+     </LinearLayout>
+ </LinearLayout>
+diff --git a/buildSrc/src/main/kotlin/Dependencies.kt b/buildSrc/src/main/kotlin/Dependencies.kt
+index 99b11fdf76ce94739a720efcc1d2e3ca7dc7d714..78ca0d88af0c842a3cbf76e8054e60439126411f 100644
+--- a/buildSrc/src/main/kotlin/Dependencies.kt
++++ b/buildSrc/src/main/kotlin/Dependencies.kt
+@@ -2,8 +2,8 @@ object AndroidVersions {
+     const val compileSdk = 37
+     const val minSdk = 26
+     const val targetSdk = 37
+-    const val versionCode = 113
+-    const val versionName = "1.8.1"
++    const val versionCode = 114
++    const val versionName = "1.15.0"
+     const val ndk = "23.1.7779620"
+     const val kotlin = "2.3.10"
+ }
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index f0e9949243ae6e2f3d20dfacd608e61ba30de37f..54286ca60ce0a70f12e159bafc3e438f1bc31710 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -24,11 +24,11 @@ The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one
+ 
+ `ExtensionLoader` is also an intentional adapter seam. Package discovery delegates manifest interpretation to Hayai's pure `NovelExtensionManifest` contract, then uses J2K's existing signature trust, NSFW policy, private-extension, and class-loading paths. A small `eu.kanade.tachiyomi.source.NovelSource` compatibility shim retains the exact legacy binary name and recognizes both the current virtual property and older marker implementations. This adds Tsundoku's `tachiyomi.novelextension` namespace without creating a second extension manager or bypassing J2K's security checks.
+ 
+-Extension discovery uses one Hayai-owned `ContentKind` policy at the J2K presentation seams. Tsundoku's protobuf `isNovel` field is authoritative for remote APKs, with its historical novel package prefix as the legacy fallback. Installed APKs are classified from their actual loaded sources, so an APK that exposes both kinds appears in both installer tabs. Browse and global search use the same source classification, and local novels remain discoverable even when their synthetic language is not enabled. J2K continues to own loading, trust, installation, source registration, and searching.
++Extension discovery uses one Hayai-owned `ContentKind` policy for browse, search, reader routing, and migration. Extension management deliberately does not partition the catalog by content kind. `ManagedExtensionProjector` unions J2K APK state and LNReader JavaScript plugin state into one Extensions list with namespaced `apk:` and `js:` identities, format and content badges, and shared Update, Installed, and Available sections. Installation, update, and health are orthogonal, so an installed plugin can remain visible while its runtime is unhealthy or its repository is offline. Language and adult-source filters apply only to remote available entries; installed, untrusted, and load-failed packages remain manageable. J2K continues to own APK loading, signature trust, package installation, source registration, and update semantics. `NovelPluginManager` continues to own JavaScript repository trust, checksums, signing keys, QuickJS warm-up, atomic storage, and semantic versions.
+ 
+-APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores only novel membership and novel-only ownership tags. Manga-only, novel-only, and shared ownership transitions are idempotent: removing one view never deletes a URL or its metadata while the other view still owns it. Repository redirects migrate both J2K URLs and Hayai tags together. The typed Manga/Novel repository controllers and Manga/Novel/Migration extension tabs are narrow UI adapters over those contracts; they do not introduce a second downloader or extension catalog. Novel repository actions in Browse and Browse settings open one Hayai-owned J2K settings hub. Its `NovelRepositoryKind` entries route users explicitly to either APK extension repositories or LNReader JavaScript plugin repositories, so the two trust and document formats never rely on URL auto-detection.
++APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores only novel membership and novel-only ownership tags. Manga-only, novel-only, and shared ownership transitions are idempotent: removing one view never deletes a URL or its metadata while the other view still owns it. Repository redirects migrate both J2K URLs and Hayai tags together. Browse and Browse settings expose one repository destination with explicit APK-index and LNReader JavaScript sections. The distinct repository formats remain visible because their trust models differ, but neither section contains a second extension catalog.
+ 
+-LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. It also caches filter and setting schemas so J2K's synchronous source UI never starts QuickJS on the main thread. Chapter documents expose an absolute base URL. Source-owned asset requests retain cookies and a referrer and enforce a 16 MiB stream limit. Users explicitly accept repository and install warnings because TLS and file integrity do not authenticate a repository publisher. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
++LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. Android application context now enters explicitly through `NovelPluginManager`, `NovelPluginSource`, `NovelPluginRuntime`, and `NovelPluginLibrary`; the runtime never resolves an unregistered raw `Context` from global DI. Runtime construction failures remain attached to installed plugin IDs in the unified catalog instead of disappearing. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
+ 
+ ## Database reset and migration
+ 
+@@ -44,7 +44,7 @@ The Advanced setting `eh_is_hentai_enabled` controls adult source discovery. Dis
+ 
+ `NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources, downloaded source chapters, installed Tsundoku novel APKs, and explicitly trusted LNReader JavaScript repositories are production implementations.
+ 
+-`SettingsSearchHelper` contains one registration seam for `NovelSettingsController`. The controller and all novel preferences remain under the Hayai namespace. This seam makes the full novel reader settings searchable without moving reader behavior into J2K. Novel language tools, custom-source building, APK extensions, JavaScript plugins, import/export, enhanced batch add, and E-Hentai account controls are J2K `SettingsController` screens. Their feature state, validation, jobs, and persistence remain Hayai-owned. Only reader and authenticated WebView lifecycles retain dedicated activities.
++`SettingsSearchHelper` contains one registration seam for `NovelSettingsController`. The controller and all novel preferences remain under the Hayai namespace. This seam makes the full novel reader settings searchable without moving reader behavior into J2K. Novel language tools, custom-source building, import/export, enhanced batch add, and E-Hentai account controls are J2K `SettingsController` screens. APK and JavaScript extensions are managed only from Browse's unified Extensions surface. Their feature state, validation, jobs, and persistence remain owned by their typed backends. Only reader and authenticated WebView lifecycles retain dedicated activities.
+ 
+ `PreferencesHelper` has one compatibility seam that routes its enum-backed FlowPreferences through Hayai's non-throwing name decoder. Current enum names round-trip unchanged, known legacy aliases retain the closest supported behavior, and removed or future values use each preference's declared default without rewriting the stored value. This protects startup, shortcuts, widgets, settings, and presenters before they consume restored pre-reset preferences. The legacy `group_chapters_history_type=BySource` value is a live enum member again and renders History source sections instead of projecting to `BySeries`. The complete reset-era preference comparison is recorded in `docs/development/legacy-preference-audit.md`.
+ 
+@@ -58,7 +58,7 @@ Novel integration uses a small set of presentation adapters rather than parallel
+ 
+ The novel reader inflates J2K's existing `reader_activity` and binds its existing app bar, toolbar, viewer container, navigation controls, chapter sheet, and slider. Hayai applies system-bar and display-cutout insets at that shared layout boundary. While reader chrome is visible, the novel viewer starts after the system inset and toolbar height; when chrome visibility changes, the same inset binding recalculates the viewer margin. This avoids a second novel-specific safe-area model and keeps the image-reader activity unchanged.
+ 
+-Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. `SettingsAppearanceController` exposes only the inline-row preference adapter; the cache, loaders, metadata documents, and UI state remain Hayai-owned. Full metadata and previews are Hayai controllers hosted by J2K's existing `MainActivity`, `BaseController`, toolbar, navigation, theme, and safe-area lifecycle. Inline preview rows follow SY's adaptive 120 by 200 dp grid, 16 dp spacing, fit-width images, centered text action, and J2K empty state instead of a custom horizontal strip. E-Hentai, ExHentai, 8Muses, HBrowse, NHentai, Pururin, and LANraragi metadata inflate the corresponding SY description layout reconstructed from `sy/master` at `14648c7c`, while values still come only from typed Hayai documents. Tapping a preview routes through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
++Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. The E-Hentai parser accepts both legacy `.gdtm`/`.gdtl` cells and the current direct-anchor sprite layout, including unitless zero offsets. Listing-cache schema changes invalidate stale successful-empty pages, and cache publication cannot suppress a successful network image. E-Hentai maps typed metadata to the SY-style metadata block only; it no longer duplicates the same fields in J2K description text. The inserted feature container and J2K Less/Start Reading controls form one non-cyclic vertical chain. Full metadata and previews remain Hayai controllers hosted by J2K navigation. Tapping a preview routes through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
+ 
+ The browse-source presenter and its existing list item/holder form one approved presentation seam for E-Hentai's SY-style rich result rows. The presenter asks a source for an optional immutable `SourceBrowsePresentation`; the item selects J2K's list layout when that presentation exists; and the holder renders its category badge, uploader, rating, language, page count, and date. Parsing, category colors, localization, caching, and source-family recognition remain under `dev.ahmedmohamed.hayai`. Normal sources still take the original grid/list paths without extra work. The same presenter has one generic typed-filter branch for Hayai tag completion, while the E-Hentai catalog, chip state, validation, and suggestions remain Hayai-owned.
+ 
+@@ -72,9 +72,11 @@ Hayai-owned interface text uses `hayai_` Android resources. Pure parsers and ser
+ 
+ Release channels use a Hayai-owned policy. Stable and beta builds query `HayaiApp/hayai`. Nightly builds use the isolated `.nightly` application ID, numeric `rN` versions, and `HayaiApp/hayai-nightly`. J2K's update checker delegates tag comparison and APK selection to this policy. The nightly workflow chooses `max(commit count, latest published nightly + 1)`, which prevents version rollback after the J2K reset and remains safe when a canceled job retries.
+ 
++Inherited About and HTTP client identity links are an approved branding seam. Product navigation points to `HayaiApp/hayai`, its wiki, and its channel-specific releases. Upstream J2K, SY, Tsundoku, LNReader, Mihon, and legacy links remain only where they document provenance, licensing, behavior references, or still-applicable upstream help. Hayai does not invent social accounts or redirect users to unrelated issue trackers.
++
+ The minified build keeps Hayai-owned classes under the same release boundary as J2K-owned classes. Its R8 configuration preserves generic signatures and Injekt `TypeReference` subclasses because Injekt resolves reified Kotlin registrations from that runtime type metadata. It also preserves Hayai serializers and companion factories. The nightly workflow signs the x86_64 APK, launches that exact minified artifact on an Android 12 emulator, rejects any startup fatal exception or crash-handler redirect, and only then prepares and publishes release assets. This is an intentional J2K build-file seam: a new namespace cannot safely inherit rules scoped only to `eu.kanade`.
+ 
+-`main` is the active reset branch. The previous application remains on `master` and `legacy/hayai-pre-j2k` for migration evidence. Release procedures live in `docs/development/releases.md`.
++`master` is the active J2K reset branch. The previous application remains on `legacy/hayai-pre-j2k` for migration evidence. Release procedures live in `docs/development/releases.md`.
+ 
+ Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, normal URLs, cookies, and headers to the installed extension. Hayai adds the source-specific behavior SY exposes for 8Muses, HBrowse, Pururin, NHentai, and LANraragi. This includes host-validated URL import where supported, richer descriptions, generic batch add for importable sources, NHentai previews, and authenticated LANraragi previews. MangaDex-specific recommendations, related titles, and follows are outside this requested slice. A secondary parser failure returns the extension result and never removes a usable source.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 402bbc1b6f52c3c4076ec07ecb4ab876d815182f..c57ebeefb37d43b5b3745389dad70f81ff20e072 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -14,7 +14,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; logged-out emulator screen verified; authenticated login pending |
+ | EH source settings, default filters, enhanced details toggle, and remote uconfig | Native J2K settings controller over typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
+ | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
+-| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, SY-style inline/full metadata UI, lazy cached preview pages, a J2K-hosted preview controller, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | port; fixture details, metadata, rich browse, autocomplete, empty previews, and cache recovery verified on emulator; authenticated ExHentai remains pending |
++| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, non-duplicated SY-style inline/full metadata UI, current direct-anchor and legacy thumbnail parsing, lazy versioned preview caches, a J2K-hosted preview controller, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | port; focused live-shape parser and request tests pass; repaired layout compiled; authenticated ExHentai and post-fix visual emulator verification remain pending |
+ | 8Muses/EroMuse, HBrowse, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | implemented unverified for the source-specific behavior SY exposes |
+ | Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions, source-specific SY description layouts, adaptive SY preview rows, bounded listing/image caches, and a J2K-hosted preview controller | port; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not; live authenticated source verification remains pending |
+ | Raised metadata, titles, and tags | Additive schema, typed source documents, durable enhanced-source cache, inline summary, and a full metadata controller hosted by J2K navigation | port; E-Hentai fixture verified on emulator |
+@@ -44,8 +44,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+ | Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | exact J2K shell and native renderer verified on emulator; WebView, prepend, and incognito emulator flows pending |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+-| Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership; typed repository hub with explicit APK and LNReader destinations | implemented unverified; compile and emulator install flows pending |
+-| LNReader JavaScript repository sources | Hayai manager, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge, and a Browse/settings repository entry that preserves the plugin trust warning | port |
++| Remote novel extension catalogs and installation | One unified Extensions list over J2K APK authority and Hayai JavaScript authority; namespaced identities; explicit load failures; consistent duplicate reconciliation; shared-safe tagged repository ownership | implemented unverified; focused projector tests and compilation pass; emulator APK install/trust/remove flows pending |
++| LNReader JavaScript repository sources | Unified Extensions list, explicit application-context runtime construction, runtime-error retention, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, and full catalogue/chapter bridge | implemented unverified; focused mixed-catalog tests and compilation pass; emulator install/update/remove and runtime verification pending |
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+@@ -69,7 +69,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ |---|---|---|
+ | Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
+ | Group History by source | Restored `BySource` enum mode with J2K Recents rows, source headers, source icons, per-section hide action, and legacy preference compatibility | port |
+-| Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, and isolated nightly publishing | implemented unverified; hosted nightly run pending |
++| Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, isolated nightly publishing, and master-triggered workflow | nightly port verified by hosted r6661 build, tests, signed/minified startup, and publication; no reset stable release published |
+ | Localized Hayai interface | `hayai_` Android resources, typed presentation failures, a reviewed nonlocalizable-literal inventory, per-locale coverage, and deterministic SY translation imports | implemented; static gate verified; translation coverage remains incomplete and is reported per locale |
+ | Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
+ 
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index 7f0da64591483b1640be1d3a5efc7c8e03a55c65..dab4496f5765e5172e1a0a0f7cf9ee6e61b89dd8 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1083 | 0.0% |
+-| `ar` | 31 / 1083 | 2.9% |
+-| `ars` | 0 / 1083 | 0.0% |
+-| `az` | 0 / 1083 | 0.0% |
+-| `bg` | 0 / 1083 | 0.0% |
+-| `bn` | 0 / 1083 | 0.0% |
+-| `ca` | 0 / 1083 | 0.0% |
+-| `ceb` | 0 / 1083 | 0.0% |
+-| `cs` | 0 / 1083 | 0.0% |
+-| `cv` | 0 / 1083 | 0.0% |
+-| `de` | 29 / 1083 | 2.7% |
+-| `el` | 0 / 1083 | 0.0% |
+-| `eo` | 0 / 1083 | 0.0% |
+-| `es` | 31 / 1083 | 2.9% |
+-| `eu` | 0 / 1083 | 0.0% |
+-| `fa` | 0 / 1083 | 0.0% |
+-| `fi` | 0 / 1083 | 0.0% |
+-| `fil` | 31 / 1083 | 2.9% |
+-| `fr` | 31 / 1083 | 2.9% |
+-| `gl` | 0 / 1083 | 0.0% |
+-| `ha` | 0 / 1083 | 0.0% |
+-| `hi` | 0 / 1083 | 0.0% |
+-| `hr` | 31 / 1083 | 2.9% |
+-| `hu` | 0 / 1083 | 0.0% |
+-| `in` | 31 / 1083 | 2.9% |
+-| `it` | 17 / 1083 | 1.6% |
+-| `iw` | 0 / 1083 | 0.0% |
+-| `ja` | 29 / 1083 | 2.7% |
+-| `jv` | 0 / 1083 | 0.0% |
+-| `ka` | 0 / 1083 | 0.0% |
+-| `kk` | 0 / 1083 | 0.0% |
+-| `km` | 0 / 1083 | 0.0% |
+-| `ko` | 7 / 1083 | 0.6% |
+-| `lt` | 0 / 1083 | 0.0% |
+-| `lv` | 0 / 1083 | 0.0% |
+-| `ml` | 0 / 1083 | 0.0% |
+-| `mn` | 0 / 1083 | 0.0% |
+-| `ms` | 0 / 1083 | 0.0% |
+-| `my` | 0 / 1083 | 0.0% |
+-| `nb-rNO` | 0 / 1083 | 0.0% |
+-| `ne` | 5 / 1083 | 0.5% |
+-| `nl` | 0 / 1083 | 0.0% |
+-| `nn` | 0 / 1083 | 0.0% |
+-| `om` | 0 / 1083 | 0.0% |
+-| `or` | 0 / 1083 | 0.0% |
+-| `pl` | 0 / 1083 | 0.0% |
+-| `pt` | 31 / 1083 | 2.9% |
+-| `pt-rBR` | 31 / 1083 | 2.9% |
+-| `ro` | 0 / 1083 | 0.0% |
+-| `ru` | 31 / 1083 | 2.9% |
+-| `sc` | 0 / 1083 | 0.0% |
+-| `si` | 0 / 1083 | 0.0% |
+-| `sk` | 0 / 1083 | 0.0% |
+-| `sq` | 0 / 1083 | 0.0% |
+-| `sr` | 0 / 1083 | 0.0% |
+-| `sv` | 0 / 1083 | 0.0% |
+-| `ta` | 31 / 1083 | 2.9% |
+-| `te` | 0 / 1083 | 0.0% |
+-| `th` | 0 / 1083 | 0.0% |
+-| `ti` | 0 / 1083 | 0.0% |
+-| `tl` | 0 / 1083 | 0.0% |
+-| `tr` | 31 / 1083 | 2.9% |
+-| `uk` | 7 / 1083 | 0.6% |
+-| `ur` | 0 / 1083 | 0.0% |
+-| `vi` | 5 / 1083 | 0.5% |
+-| `zh-rCN` | 31 / 1083 | 2.9% |
+-| `zh-rTW` | 31 / 1083 | 2.9% |
++| `ajp` | 0 / 1089 | 0.0% |
++| `ar` | 31 / 1089 | 2.8% |
++| `ars` | 0 / 1089 | 0.0% |
++| `az` | 0 / 1089 | 0.0% |
++| `bg` | 0 / 1089 | 0.0% |
++| `bn` | 0 / 1089 | 0.0% |
++| `ca` | 0 / 1089 | 0.0% |
++| `ceb` | 0 / 1089 | 0.0% |
++| `cs` | 0 / 1089 | 0.0% |
++| `cv` | 0 / 1089 | 0.0% |
++| `de` | 29 / 1089 | 2.7% |
++| `el` | 0 / 1089 | 0.0% |
++| `eo` | 0 / 1089 | 0.0% |
++| `es` | 31 / 1089 | 2.8% |
++| `eu` | 0 / 1089 | 0.0% |
++| `fa` | 0 / 1089 | 0.0% |
++| `fi` | 0 / 1089 | 0.0% |
++| `fil` | 31 / 1089 | 2.8% |
++| `fr` | 31 / 1089 | 2.8% |
++| `gl` | 0 / 1089 | 0.0% |
++| `ha` | 0 / 1089 | 0.0% |
++| `hi` | 0 / 1089 | 0.0% |
++| `hr` | 31 / 1089 | 2.8% |
++| `hu` | 0 / 1089 | 0.0% |
++| `in` | 31 / 1089 | 2.8% |
++| `it` | 17 / 1089 | 1.6% |
++| `iw` | 0 / 1089 | 0.0% |
++| `ja` | 29 / 1089 | 2.7% |
++| `jv` | 0 / 1089 | 0.0% |
++| `ka` | 0 / 1089 | 0.0% |
++| `kk` | 0 / 1089 | 0.0% |
++| `km` | 0 / 1089 | 0.0% |
++| `ko` | 7 / 1089 | 0.6% |
++| `lt` | 0 / 1089 | 0.0% |
++| `lv` | 0 / 1089 | 0.0% |
++| `ml` | 0 / 1089 | 0.0% |
++| `mn` | 0 / 1089 | 0.0% |
++| `ms` | 0 / 1089 | 0.0% |
++| `my` | 0 / 1089 | 0.0% |
++| `nb-rNO` | 0 / 1089 | 0.0% |
++| `ne` | 5 / 1089 | 0.5% |
++| `nl` | 0 / 1089 | 0.0% |
++| `nn` | 0 / 1089 | 0.0% |
++| `om` | 0 / 1089 | 0.0% |
++| `or` | 0 / 1089 | 0.0% |
++| `pl` | 0 / 1089 | 0.0% |
++| `pt` | 31 / 1089 | 2.8% |
++| `pt-rBR` | 31 / 1089 | 2.8% |
++| `ro` | 0 / 1089 | 0.0% |
++| `ru` | 31 / 1089 | 2.8% |
++| `sc` | 0 / 1089 | 0.0% |
++| `si` | 0 / 1089 | 0.0% |
++| `sk` | 0 / 1089 | 0.0% |
++| `sq` | 0 / 1089 | 0.0% |
++| `sr` | 0 / 1089 | 0.0% |
++| `sv` | 0 / 1089 | 0.0% |
++| `ta` | 31 / 1089 | 2.8% |
++| `te` | 0 / 1089 | 0.0% |
++| `th` | 0 / 1089 | 0.0% |
++| `ti` | 0 / 1089 | 0.0% |
++| `tl` | 0 / 1089 | 0.0% |
++| `tr` | 31 / 1089 | 2.8% |
++| `uk` | 7 / 1089 | 0.6% |
++| `ur` | 0 / 1089 | 0.0% |
++| `vi` | 5 / 1089 | 0.5% |
++| `zh-rCN` | 31 / 1089 | 2.8% |
++| `zh-rTW` | 31 / 1089 | 2.8% |
+diff --git a/docs/development/releases.md b/docs/development/releases.md
+index cfbeb7f959a04881bbfd17f95d96c7fd3d99c642..f8d8dec0b9e1218578a33115798f83b7d04aee25 100644
+--- a/docs/development/releases.md
++++ b/docs/development/releases.md
+@@ -2,7 +2,7 @@
+ 
+ ## Publish a nightly build
+ 
+-Every push to `main` runs `.github/workflows/nightly.yml`. The workflow reads the latest release from `HayaiApp/hayai-nightly` and chooses the larger of the Git commit count or the latest `rN` value plus one. A canceled or retried run therefore cannot lower the published version.
++Every push to `master` runs `.github/workflows/nightly.yml`. The workflow reads the latest release from `HayaiApp/hayai-nightly` and chooses the larger of the Git commit count or the latest `rN` value plus one. A canceled or retried run therefore cannot lower the published version.
+ 
+ The workflow builds and tests `StandardNightly` and signs every ABI with the `build` environment. Before publication, it installs the exact signed/minified x86_64 APK on an Android 12 emulator and observes a cold launch for 20 seconds. `tools/verify-apk-startup.ps1` rejects fatal exceptions, the Hayai crash activity, a missing main activity, or a dead main process. Only a passing artifact is published to `HayaiApp/hayai-nightly`. Nightly builds use `dev.ahmedmohamed.hayai.nightly`, so they can remain installed beside stable Hayai. The updater checks only the nightly repository.
+ 
+@@ -12,7 +12,9 @@ Run the workflow manually only when a push run did not publish. The monotonic nu
+ 
+ ## Draft a stable release
+ 
+-Run `.github/workflows/build_push.yml` manually and enter the complete tag, such as `v1.8.1`. The workflow builds `StandardRelease`, signs the ABI APKs, and creates a draft in `HayaiApp/hayai`. Review the draft and its checksums before publishing it.
++Do not run this workflow for the J2K reset yet. No new stable Hayai release has been published.
++
++When the stable checklist is complete, run `.github/workflows/build_push.yml` manually and enter the complete tag, such as `v1.15.0`. The workflow builds `StandardRelease`, signs the ABI APKs, and creates a draft in `HayaiApp/hayai`. Review the draft and its checksums before publishing it.
+ 
+ Stable releases use `dev.ahmedmohamed.hayai`. Their updater checks only `HayaiApp/hayai`.
+ 
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index c27d82e0cab6047c43a517d5489e6e4535e99d43..d292027d953091686e0c97592cebbbc179e3933d 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -3016,3 +3016,15 @@ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	return apk
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	STABLE("HayaiApp/hayai"),
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	val apkLinks = downloadLinks.filter { it.substringAfterLast('/').endsWith(".apk", ignoreCase = true) }
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	val match = Regex("^v?(\\d+(?:\\.\\d+)*)(?:-[A-Za-z]+(\\d+))?$").matchEntire(value) ?: return null
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)(?:px)?\\s+(-?\\d+)(?:px)?", RegexOption.IGNORE_CASE)
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val cells = document.select("#gdt .gdtm, #gdt .gdtl, #gdt > a[href]")
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = linkElement?.absUrl("href").orEmpty()
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val linkElement = cell.takeIf { it.`is`("a[href]") } ?: cell.selectFirst("a[href]")
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	genre = tags.map { "${it.namespace}: ${it.name}" }
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "apk:$packageName"
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "js:$pluginId"
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt	js.repositoryErrors.forEach { (url, error) -> add(ManagedExtensionNotice("js-repository:$url", error.message ?: error::class.java.simpleName)) }
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt	key = "hayai.plugin.repository.${repository.url.hashCode()}"
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v2"
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
+diff --git a/tools/verify-hayai-emulator.ps1 b/tools/verify-hayai-emulator.ps1
+index 8a39dc07e01ed431ab7849cd1ea4de3caf190004..7d99fe7c07240e6b4b30227bc13ff81ab4dbdf47 100644
+--- a/tools/verify-hayai-emulator.ps1
++++ b/tools/verify-hayai-emulator.ps1
+@@ -128,6 +128,15 @@ function Dismiss-CompatibilityWarning {
+         Tap-Node "Don't Show Again" "00-compatibility-warning-dismiss"
+     }
+ }
++function Dismiss-ImmersiveModePrompt {
++    try {
++        $window = Dump-Window "00-immersive-mode-prompt"
++        $button = Find-NodeOptional $window "^Got it$"
++        if ($button) { Tap-WindowNode $button "Got it" }
++    } catch {
++        Write-Warning "Immersive-mode prompt inspection was unavailable; continuing with reader readiness checks. $($_.Exception.Message)"
++    }
++}
+ function Capture([string] $Name) {
+     $remote = "/sdcard/$Name.png"
+     Invoke-Adb @("shell", "screencap", "-p", $remote) | Out-Null
+@@ -278,6 +287,7 @@ try {
+     Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
+     Start-Sleep -Seconds 2
+     Dismiss-CompatibilityWarning
++    Dismiss-ImmersiveModePrompt
+     Start-Sleep -Seconds 1
+     $readerWindow = Dump-Window "02-novel-reader-actions"
+     [void](Find-Node $readerWindow "Verification Novel")
+@@ -323,7 +333,7 @@ try {
+     $advancedWindow = Dump-Window "07-reader-advanced"
+     [void](Find-Node $advancedWindow "Content")
+     [void](Find-Node $advancedWindow "Use EPUB styles")
+-    [void](Find-Node $advancedWindow "Move Previous chapter down")
++    [void](Find-Node $advancedWindow "^Previous chapter$")
+     Capture "07-reader-settings-advanced"
+     Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
+     Start-Sleep -Seconds 3
+@@ -331,16 +341,20 @@ try {
+     Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity", "--el", "hayai.manga_id", "100", "--el", "hayai.chapter_id", "1000") | Out-Null
+     Start-Sleep -Seconds 2
+     Dismiss-CompatibilityWarning
++    Dismiss-ImmersiveModePrompt
+     Start-Sleep -Seconds 1
+     Assert-Node "Offline" "09-offline-after-restart"
+     Capture "09-offline-after-restart"
+ 
+-    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity") | Out-Null
+-    Start-Sleep -Seconds 1
+-    Dismiss-CompatibilityWarning
+-    Start-Sleep -Seconds 1
++    Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
++    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity") | Out-Null
++    Start-Sleep -Seconds 2
++    Tap-Node "^More$" "07-eh-more"
++    Tap-Node "^Settings$" "07-eh-settings"
++    Tap-NodeAfterSwiping "^Advanced$" "07-eh-advanced"
++    Tap-NodeAfterSwiping "^E-Hentai and ExHentai$" "07-eh-account"
+     if ($SkipAuthenticatedEh) {
+-        Assert-Node "E-Hentai|ExHentai|Log in|credentials" "10-eh-logged-out"
++        Assert-Node "Logged out|credentials" "10-eh-logged-out"
+         Capture "10-eh-logged-out"
+     } else {
+         Tap-Node "Recheck current credentials" "07-eh-recheck"
+@@ -375,6 +389,8 @@ try {
+     [void](Find-Node $browseWindow "^Manga$")
+     [void](Find-Node $browseWindow "^Novels$")
+     [void](Find-Node $browseWindow "^E-Hentai$")
++    [void](Find-Node $browseWindow "^Extensions$")
++    [void](Find-Node $browseWindow "^Migration$")
+     Capture "16-browse"
+ 
+     Database-Report "17-final"
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 7a5e21677c7ec2e2f4b879ef262380f4726e1a82..8072dc7320877a0d369342d5d15242baee945afe 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -15,7 +15,11 @@ try {
+         # Approved in docs/architecture/j2k-reset.md. Routes enum preferences through Hayai's legacy-safe decoder.
+         "app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt"
++        # Approved in docs/architecture/j2k-reset.md. Exposes identified loader failures and one reconciled APK catalog.
++        "app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/extension/model/LoadResult.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
+@@ -29,6 +33,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt"
+@@ -45,6 +51,11 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsPresenter.kt"
++        # Approved in docs/architecture/j2k-reset.md. Hayai product links replace inherited project destinations.
++        "app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/more/AboutLinksPreference.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/data/track/bangumi/BangumiInterceptor.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/data/track/mangabaka/MangaBakaApi.kt"
+         # Approved in docs/architecture/j2k-reset.md. Adds the source-header hide event to the existing Recents adapter delegate.
+         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentMangaAdapter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt"
+-- 
+2.54.0.windows.1
+

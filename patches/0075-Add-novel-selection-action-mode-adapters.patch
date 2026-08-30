@@ -1,0 +1,407 @@
+From fc34dcadf75674f355a970f0a6df5da9c2840b4b Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 10:25:43 +0300
+Subject: [PATCH] Add novel selection action mode adapters
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+index 765e2ecfa4daf9471f09648c12426d8867fdcdbb..f7a9b552fa6f0d96490fc14c147ef281800be79a 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+@@ -8,6 +8,7 @@ import android.text.SpannableStringBuilder
+ import android.text.TextWatcher
+ import android.text.style.BackgroundColorSpan
+ import android.text.style.UnderlineSpan
++import android.view.ActionMode
+ import android.view.Gravity
+ import android.view.MotionEvent
+ import android.view.View
+@@ -111,22 +112,24 @@ internal class NativeNovelRenderer(
+ 
+     override fun selection(callback: (NovelSelection?) -> Unit) {
+         val textView = activeBlock()?.textView ?: return callback(null)
+-        val start = textView.selectionStart.coerceAtLeast(0)
+-        val end = textView.selectionEnd.coerceAtLeast(0)
+-        if (start == end) return callback(null)
++        callback(textView.novelSelection())
++    }
++
++    private fun TextView.novelSelection(): NovelSelection? {
++        val start = selectionStart.coerceAtLeast(0)
++        val end = selectionEnd.coerceAtLeast(0)
++        if (start == end) return null
+         val from = minOf(start, end)
+         val to = maxOf(start, end)
+-        val document = textView.text.toString()
++        val document = text.toString()
+         val exact = document.substring(from, to).trim()
+-        if (exact.isBlank()) return callback(null)
+-        callback(
+-            NovelSelection(
+-                document,
+-                exact,
+-                document.substring(maxOf(0, from - 64), from),
+-                document.substring(to, minOf(document.length, to + 64)),
+-                occurrenceBefore(document, exact, from),
+-            ),
++        if (exact.isBlank()) return null
++        return NovelSelection(
++            document,
++            exact,
++            document.substring(maxOf(0, from - 64), from),
++            document.substring(to, minOf(document.length, to + 64)),
++            occurrenceBefore(document, exact, from),
+         )
+     }
+ 
+@@ -268,6 +271,13 @@ internal class NativeNovelRenderer(
+             setTextIsSelectable(request.style.textSelectable && !editMode)
+             showSoftInputOnFocus = editMode
+             isFocusableInTouchMode = editMode
++            val selectionTextView = this
++            customSelectionActionModeCallback =
++                NovelSelectionActionModes.wrap(
++                    context = context,
++                    onAction = { action, mode -> dispatchSelectionAction(selectionTextView, action, mode) },
++                    onSelectionModeChanged = callbacks::onSelectionModeChanged,
++                )
+         }
+         block.textView = textView
+         block.style = request.style
+@@ -312,6 +322,16 @@ internal class NativeNovelRenderer(
+         applyingText = false
+     }
+ 
++    private fun dispatchSelectionAction(
++        textView: TextView,
++        action: NovelSelectionAction,
++        mode: ActionMode,
++    ) {
++        val selection = textView.novelSelection()
++        mode.finish()
++        selection?.let { callbacks.onSelectionAction(action, it) }
++    }
++
+     private fun focusBlock(id: Long, progress: Int) {
+         val block = blocks[id] ?: return
+         activeChapterId = id
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt
+index 1b5c32b9f0860ec003ae1579b6347ba5bb37360a..1c1697e0528e31b150d2437b6613d8d17f7f50e6 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt
+@@ -33,6 +33,13 @@ internal data class NovelSelection(
+     val occurrence: Int,
+ )
+ 
++internal enum class NovelSelectionAction {
++    SaveQuote,
++    Define,
++    GoogleTranslate,
++    SearchWeb,
++}
++
+ internal data class NovelPersistentHighlight(
+     val id: String,
+     val exact: String,
+@@ -71,6 +78,8 @@ internal interface NovelRenderer {
+         fun onVisibleChapter(chapterId: Long, progress: Int)
+         fun onRetryChapter(chapterId: Long)
+         fun onTap(xFraction: Float, yFraction: Float)
++        fun onSelectionAction(action: NovelSelectionAction, selection: NovelSelection) = Unit
++        fun onSelectionModeChanged(active: Boolean) = Unit
+         fun onContentEdited(content: String)
+         fun onRendererError(message: String)
+     }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..26d5d31200b09c5f0292478c4271d42bd1c1e6c5
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt
+@@ -0,0 +1,165 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import android.content.Context
++import android.graphics.Rect
++import android.view.ActionMode
++import android.view.Menu
++import android.view.MenuItem
++import android.view.View
++import androidx.annotation.IdRes
++import androidx.annotation.StringRes
++import eu.kanade.tachiyomi.R
++
++internal enum class NovelSelectionMenuPlacement {
++    IfRoom,
++    Overflow,
++}
++
++internal data class NovelSelectionMenuEntry(
++    val action: NovelSelectionAction,
++    @IdRes val itemId: Int,
++    @StringRes val titleRes: Int,
++    val placement: NovelSelectionMenuPlacement,
++)
++
++internal object NovelSelectionActionMenu {
++    val entries =
++        listOf(
++            NovelSelectionMenuEntry(
++                NovelSelectionAction.SaveQuote,
++                R.id.hayai_novel_selection_save_quote,
++                R.string.hayai_novel_reader_save_selected_quote,
++                NovelSelectionMenuPlacement.IfRoom,
++            ),
++            NovelSelectionMenuEntry(
++                NovelSelectionAction.Define,
++                R.id.hayai_novel_selection_define,
++                R.string.hayai_novel_selection_define,
++                NovelSelectionMenuPlacement.IfRoom,
++            ),
++            NovelSelectionMenuEntry(
++                NovelSelectionAction.GoogleTranslate,
++                R.id.hayai_novel_selection_google_translate,
++                R.string.hayai_novel_selection_google_translate,
++                NovelSelectionMenuPlacement.IfRoom,
++            ),
++            NovelSelectionMenuEntry(
++                NovelSelectionAction.SearchWeb,
++                R.id.hayai_novel_selection_search_web,
++                R.string.hayai_novel_selection_search_web,
++                NovelSelectionMenuPlacement.Overflow,
++            ),
++        )
++
++    fun actionFor(itemId: Int): NovelSelectionAction? =
++        entries.firstOrNull { it.itemId == itemId }?.action
++
++    fun addMissing(context: Context, menu: Menu): Boolean {
++        var changed = false
++        entries.forEachIndexed { order, entry ->
++            if (menu.findItem(entry.itemId) == null) {
++                menu
++                    .add(Menu.NONE, entry.itemId, CUSTOM_ITEM_ORDER + order, context.getString(entry.titleRes))
++                    .setShowAsAction(
++                        when (entry.placement) {
++                            NovelSelectionMenuPlacement.IfRoom -> MenuItem.SHOW_AS_ACTION_IF_ROOM
++                            NovelSelectionMenuPlacement.Overflow -> MenuItem.SHOW_AS_ACTION_NEVER
++                        },
++                    )
++                changed = true
++            }
++        }
++        return changed
++    }
++
++    private const val CUSTOM_ITEM_ORDER = 100
++}
++
++internal object NovelSelectionActionModes {
++    fun wrap(
++        context: Context,
++        delegate: ActionMode.Callback? = null,
++        onAction: (NovelSelectionAction, ActionMode) -> Unit,
++        onSelectionModeChanged: (Boolean) -> Unit,
++    ): ActionMode.Callback {
++        val state = CallbackState(context, delegate, onAction, onSelectionModeChanged)
++        val delegateCallback2 = delegate as? ActionMode.Callback2
++        return if (delegateCallback2 != null) {
++            object : ActionMode.Callback2() {
++                override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean =
++                    state.onCreateActionMode(mode, menu)
++
++                override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean =
++                    state.onPrepareActionMode(mode, menu)
++
++                override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean =
++                    state.onActionItemClicked(mode, item)
++
++                override fun onDestroyActionMode(mode: ActionMode) =
++                    state.onDestroyActionMode(mode)
++
++                override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) =
++                    delegateCallback2.onGetContentRect(mode, view, outRect)
++            }
++        } else {
++            object : ActionMode.Callback {
++                override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean =
++                    state.onCreateActionMode(mode, menu)
++
++                override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean =
++                    state.onPrepareActionMode(mode, menu)
++
++                override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean =
++                    state.onActionItemClicked(mode, item)
++
++                override fun onDestroyActionMode(mode: ActionMode) =
++                    state.onDestroyActionMode(mode)
++            }
++        }
++    }
++
++    private class CallbackState(
++        private val context: Context,
++        private val delegate: ActionMode.Callback?,
++        private val onAction: (NovelSelectionAction, ActionMode) -> Unit,
++        private val onSelectionModeChanged: (Boolean) -> Unit,
++    ) {
++        private var selectionModeActive = false
++
++        fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
++            val created = delegate?.onCreateActionMode(mode, menu) ?: true
++            if (!created) return false
++            NovelSelectionActionMenu.addMissing(context, menu)
++            if (!selectionModeActive) {
++                selectionModeActive = true
++                onSelectionModeChanged(true)
++            }
++            return true
++        }
++
++        fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
++            val delegateChanged = delegate?.onPrepareActionMode(mode, menu) == true
++            return NovelSelectionActionMenu.addMissing(context, menu) || delegateChanged
++        }
++
++        fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
++            val action = NovelSelectionActionMenu.actionFor(item.itemId)
++            if (action != null) {
++                onAction(action, mode)
++                return true
++            }
++            return delegate?.onActionItemClicked(mode, item) == true
++        }
++
++        fun onDestroyActionMode(mode: ActionMode) {
++            try {
++                delegate?.onDestroyActionMode(mode)
++            } finally {
++                if (selectionModeActive) {
++                    selectionModeActive = false
++                    onSelectionModeChanged(false)
++                }
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
+index 26afb8756a4f729a51d6aef6a1cdb035d45bfb72..630bf99132f01d0f2579d1d2ef966c155c70c4ee 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
+@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.annotation.SuppressLint
+ import android.content.Context
++import android.view.ActionMode
+ import android.view.MotionEvent
+ import android.view.View
+ import android.webkit.ConsoleMessage
+@@ -34,7 +35,20 @@ internal class WebNovelRenderer(
+     private val json = Json { ignoreUnknownKeys = true }
+     private var requestedProgress = 0
+     private var editMode = false
+-    private val webView = WebView(context).apply {
++    private val webView = object : WebView(context) {
++        override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? {
++            val wrapped =
++                callback?.let {
++                    NovelSelectionActionModes.wrap(
++                        context = this@WebNovelRenderer.context,
++                        delegate = it,
++                        onAction = ::dispatchSelectionAction,
++                        onSelectionModeChanged = callbacks::onSelectionModeChanged,
++                    )
++                }
++            return super.startActionMode(wrapped, type)
++        }
++    }.apply {
+         WebView.setWebContentsDebuggingEnabled(enableDevTools)
+         settings.javaScriptEnabled = true
+         settings.domStorageEnabled = false
+@@ -114,7 +128,18 @@ internal class WebNovelRenderer(
+     override fun selection(callback: (NovelSelection?) -> Unit) {
+         webView.evaluateJavascript("JSON.stringify(window.hayaiReader.takeSelectionAnchor())") { encoded ->
+             val payload = decodeJsString(encoded) ?: return@evaluateJavascript callback(null)
+-            callback(runCatching { json.decodeFromString<SelectionPayload>(payload).asSelection() }.getOrNull())
++            callback(
++                runCatching { json.decodeFromString<SelectionPayload>(payload).asSelection() }
++                    .getOrNull()
++                    ?.takeIf { it.selectedText.isNotBlank() },
++            )
++        }
++    }
++
++    private fun dispatchSelectionAction(action: NovelSelectionAction, mode: ActionMode) {
++        selection { selection ->
++            mode.finish()
++            selection?.let { callbacks.onSelectionAction(action, it) }
+         }
+     }
+ 
+diff --git a/app/src/main/res/values/ids_hayai_novel_reader.xml b/app/src/main/res/values/ids_hayai_novel_reader.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..2e811984322bb72182a0f03400fd59854807673a
+--- /dev/null
++++ b/app/src/main/res/values/ids_hayai_novel_reader.xml
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <item name="hayai_novel_selection_save_quote" type="id" />
++    <item name="hayai_novel_selection_define" type="id" />
++    <item name="hayai_novel_selection_google_translate" type="id" />
++    <item name="hayai_novel_selection_search_web" type="id" />
++</resources>
+diff --git a/app/src/main/res/values/strings_hayai_novel_reader.xml b/app/src/main/res/values/strings_hayai_novel_reader.xml
+index beba09a748dcaef18dc3aef512189c09b9c67432..951b6f6646cc39f7eb2216594ad57db1389a712c 100644
+--- a/app/src/main/res/values/strings_hayai_novel_reader.xml
++++ b/app/src/main/res/values/strings_hayai_novel_reader.xml
+@@ -150,6 +150,9 @@
+     <string name="hayai_novel_reader_save_selected_quote">Save selected quote</string>
+     <string name="hayai_novel_reader_highlights">Highlights</string>
+     <string name="hayai_novel_reader_dictionary_lookup">Dictionary lookup</string>
++    <string name="hayai_novel_selection_define">Define</string>
++    <string name="hayai_novel_selection_google_translate">Google Translate</string>
++    <string name="hayai_novel_selection_search_web">Search web</string>
+     <string name="hayai_novel_reader_translate_chapter">Translate chapter</string>
+     <string name="hayai_novel_reader_chapter_statistics">Chapter statistics</string>
+     <string name="hayai_novel_reader_toggle_offline">Save or remove offline copy</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..42635c3dfe35e8268370d136ee7bd6ab90aa9bea
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
+@@ -0,0 +1,32 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class NovelSelectionActionMenuTest {
++    @Test
++    fun `every selection action has exactly one menu entry`() {
++        assertEquals(
++            NovelSelectionAction.entries.toSet(),
++            NovelSelectionActionMenu.entries.map { it.action }.toSet(),
++        )
++        assertEquals(NovelSelectionAction.entries.size, NovelSelectionActionMenu.entries.size)
++    }
++
++    @Test
++    fun `menu ids are unique and unknown ids do not resolve`() {
++        val ids = NovelSelectionActionMenu.entries.map { it.itemId }
++        assertEquals(ids.size, ids.toSet().size)
++        assertNull(NovelSelectionActionMenu.actionFor(Int.MIN_VALUE))
++    }
++
++    @Test
++    fun `web search stays in overflow`() {
++        val entry = NovelSelectionActionMenu.entries.single { it.action == NovelSelectionAction.SearchWeb }
++        assertEquals(NovelSelectionMenuPlacement.Overflow, entry.placement)
++        NovelSelectionActionMenu.entries
++            .filterNot { it.action == NovelSelectionAction.SearchWeb }
++            .forEach { assertEquals(NovelSelectionMenuPlacement.IfRoom, it.placement) }
++    }
++}
+-- 
+2.54.0.windows.1
+

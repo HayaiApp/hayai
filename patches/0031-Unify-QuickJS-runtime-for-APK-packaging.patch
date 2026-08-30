@@ -1,0 +1,128 @@
+From d904ded3c82bc6657053fb83f168ce5aa4bea149 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 23:43:59 +0300
+Subject: [PATCH] Unify QuickJS runtime for APK packaging
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 8953af017198df436fcec6a2f049a7752752c435..98dd025c688d96d19c8d0e0a69d93022f74f8c0a 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -63,3 +63,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T22:02:00Z	validation	compiled the integrated parity batch and ran 241 focused tests with one Gradle worker	confirmed the new Hayai modules and their narrow J2K adapter seams compile together without parallel validation load	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin with focused Hayai test filters	VERIFIED
+ 2026-08-21T22:16:00Z	independent-review	resolved all three medium findings without adding a protected J2K seam	used J2K's existing public tracker helper and kept E-Hentai retry state plus tracker protocol validation in Hayai-owned modules	.audit/final-parity-review.md; commits 7027b48e05 and 6cc6c5d7fa	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T22:22:00Z	post-review-validation	compiled the integrated app and ran 31 tracker and gallery-updater regression tests with one Gradle worker	confirmed the review fixes compile and pass while the protected lifecycle and image-reader boundary remains untouched	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests novel.tracker.* --tests adult.eh.update.* -x :app:formatKotlin	VERIFIED
++2026-08-21T22:35:00Z	javascript-runtime	unified J2K extension evaluation and Hayai novel plugins on one QuickJS implementation	two incompatible dependencies packaged the same native libquickjs.so path and made every APK variant unassemblable	JavaScriptEngine.kt; HayaiJavaScriptEvaluator.kt; app/build.gradle.kts	IMPLEMENTED_UNVERIFIED
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 91f4ffc6d003c3769aef1a038512a7968f95c60e..a5c458e56922e4d55e423dfbefd40430b94e9e98 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -213,7 +213,6 @@ dependencies {
+     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio:${kotlinSerialization}")
+ 
+     // JavaScript engine
+-    implementation("com.github.zhanghai.quickjs-java:quickjs-android:547f5b1597")
+     implementation("io.github.dokar3:quickjs-kt:1.0.0-alpha13")
+ 
+     // Disk
+diff --git a/app/proguard-rules.pro b/app/proguard-rules.pro
+index 5699b23435960d58e1eb6acaf9f01ccb79e56329..a84469652169993085e607f98451ab3004ea357c 100644
+--- a/app/proguard-rules.pro
++++ b/app/proguard-rules.pro
+@@ -14,7 +14,7 @@
+ -keep,allowoptimization class rx.** { public protected *; }
+ -keep class org.jsoup.** { public protected *; }
+ -keep,allowoptimization class com.google.gson.** { public protected *; }
+--keep,allowoptimization class app.cash.quickjs.** { public protected *; }
++-keep,allowoptimization class com.dokar.quickjs.** { public protected *; }
+ -keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
+ -keep,allowoptimization class eu.davidea.flexibleadapter.** { public protected *; }
+ -keep class io.requery.android.database.** { public protected *; }
+@@ -100,4 +100,4 @@
+ -keepclassmembers class eu.kanade.tachiyomi.extension.shizuku.ShellInterface {
+     public <init>();
+     public void destroy();
+-}
+\ No newline at end of file
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/HayaiJavaScriptEvaluator.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/HayaiJavaScriptEvaluator.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d7d9e212f3e2858b8b40833e418bfb1aed2e3c57
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/HayaiJavaScriptEvaluator.kt
+@@ -0,0 +1,19 @@
++package dev.ahmedmohamed.hayai.novel.plugin.runtime
++
++import com.dokar.quickjs.QuickJs
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++
++/**
++ * One native QuickJS runtime for both J2K extension helpers and Hayai novel plugins.
++ * Keeping one implementation avoids two incompatible JNI libraries with the same filename.
++ */
++object HayaiJavaScriptEvaluator {
++    suspend fun <T> evaluate(script: String): T =
++        withContext(Dispatchers.IO) {
++            QuickJs.create(Dispatchers.IO).use { runtime ->
++                @Suppress("UNCHECKED_CAST")
++                runtime.evaluate<Any?>(script, "tachiyomi-extension.js", asModule = false) as T
++            }
++        }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt b/app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt
+index 80475f6cdd2e646a2cbbe8804519d82e7791395e..6f8b2e0161038a247e476788b268c558b942dec6 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt
+@@ -1,8 +1,7 @@
+ package eu.kanade.tachiyomi.network
+ 
+ import android.content.Context
+-import app.cash.quickjs.QuickJs
+-import eu.kanade.tachiyomi.util.system.withIOContext
++import dev.ahmedmohamed.hayai.novel.plugin.runtime.HayaiJavaScriptEvaluator
+ 
+ /**
+  * Util for evaluating JavaScript in sources.
+@@ -18,11 +17,6 @@ class JavaScriptEngine(
+      * @param script JavaScript to execute.
+      * @return Result of JavaScript code as a primitive type.
+      */
+-    @Suppress("UNUSED", "UNCHECKED_CAST")
+-    suspend fun <T> evaluate(script: String): T =
+-        withIOContext {
+-            QuickJs.create().use {
+-                it.evaluate(script) as T
+-            }
+-        }
++    @Suppress("UNUSED")
++    suspend fun <T> evaluate(script: String): T = HayaiJavaScriptEvaluator.evaluate(script)
+ }
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 1cc33c5d38f8e850af428d13ac9d701b056d8885..7b12d6c6504955502c5a0178815cbb8614d11bbf 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -44,6 +44,8 @@ Source-specific details use one generic provider registry on manga details. E-He
+ 
+ Built-in source settings are another deliberate adapter seam. `BrowseSourceController` sends E-Hentai sources to the Hayai account screen and sends other built-in `ConfigurableSource` implementations to `SourceSettingsController`. This fixes JavaScript novel source settings without adding a second settings model. Extension sources continue to use `ExtensionDetailsController`.
+ 
++J2K's extension-facing `JavaScriptEngine` delegates evaluation to Hayai's QuickJS runtime. The novel plugin bridge needs the Dokar binding API, while J2K previously packaged a second QuickJS implementation with the same native `libquickjs.so` name. One Hayai-owned evaluator preserves the extension API and prevents an unresolvable APK native-library collision without changing application lifecycle code.
++
+ Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
+ 
+ Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, normal URLs, cookies, and headers to the installed extension. Hayai adds the source-specific behavior SY exposes for 8Muses, HBrowse, Pururin, NHentai, and LANraragi. This includes host-validated URL import where supported, richer descriptions, generic batch add for importable sources, NHentai previews, and authenticated LANraragi previews. MangaDex-specific recommendations, related titles, and follows are outside this requested slice. A secondary parser failure returns the extension result and never removes a usable source.
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 72cda7013177942a57edd4ecc5f9b22062d0c6bf..42390842277e3d18ff2dc90b575338a1daa3da40 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -13,6 +13,7 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/track/TrackManager.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
+-- 
+2.54.0.windows.1
+

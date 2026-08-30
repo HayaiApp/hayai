@@ -1,0 +1,79 @@
+From 815e2b614d509afe4b7a6bcb242066d7c5297b1b Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 18:54:42 +0300
+Subject: [PATCH] Fix persisted novel repository trust
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+index 2ab589e03b4f9a745d0f926f8a5c0aa8923bf4b8..1f731bf51beab1365ae4c401cf0846f7c7e18bae 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+@@ -73,11 +73,14 @@ class NovelPluginManager(
+             val url = ExtensionRepositoryDefaults.LNREADER_NOVELS
+             if (store.repositories().none { it.url == url }) {
+                 store.addRepositoryIfAbsent(NovelPluginRepository("LNReader", url, enabled = true))
+-                trustStore.trustUnsigned(url)
+             }
+             bootstrap.edit().putBoolean(DEFAULT_REPOSITORY_SEEDED, true).commit()
+         }
+-        return store.repositories()
++        val repositories = store.repositories()
++        NovelRepositoryTrustBootstrap
++            .missingTrust(repositories) { trustStore.isTrusted(it.url) }
++            .forEach { trustStore.trustUnsigned(it.url) }
++        return repositories
+     }
+ 
+     suspend fun refresh(): NovelPluginCatalog =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginTrustStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginTrustStore.kt
+index f964731bf2c81c1f9f4d07ec969a1d186f5ef4bd..0f9e7f176f10e4746eccd0e5b4a3cc014b7d4dad 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginTrustStore.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginTrustStore.kt
+@@ -51,6 +51,8 @@ internal class NovelPluginTrustStore(context: Context) {
+         return NovelRepositoryTrust(repositoryUrl, publicKey, fingerprint, timestamp)
+     }
+ 
++    fun isTrusted(repositoryUrl: String): Boolean = preferences.contains(key(repositoryUrl))
++
+     fun verify(repositoryUrl: String, descriptor: NovelPluginDescriptor, code: ByteArray) {
+         val value = preferences.getString(key(repositoryUrl), null) ?: novelFailure(NovelFailure.Code.PluginRepositoryUntrusted)
+         if (descriptor.signingKey == null) {
+@@ -98,3 +100,10 @@ internal class NovelPluginTrustStore(context: Context) {
+         )
+     }
+ }
++
++internal object NovelRepositoryTrustBootstrap {
++    fun missingTrust(
++        repositories: List<NovelPluginRepository>,
++        isTrusted: (NovelPluginRepository) -> Boolean,
++    ): List<NovelPluginRepository> = repositories.filterNot(isTrusted)
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelRepositoryTrustBootstrapTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelRepositoryTrustBootstrapTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a33492270cb9d7720b463e7691496486570a427a
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelRepositoryTrustBootstrapTest.kt
+@@ -0,0 +1,19 @@
++package dev.ahmedmohamed.hayai.novel.plugin
++
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class NovelRepositoryTrustBootstrapTest {
++    @Test
++    fun `persisted repositories missing trust are repaired on bootstrap`() {
++        val configured =
++            listOf(
++                NovelPluginRepository("LNReader", "https://repo.example/plugins.json", enabled = true),
++                NovelPluginRepository("Signed", "https://signed.example/plugins.json", enabled = true),
++            )
++
++        val missing = NovelRepositoryTrustBootstrap.missingTrust(configured) { repository -> repository.name == "Signed" }
++
++        assertEquals(listOf(configured.first()), missing)
++    }
++}
+-- 
+2.54.0.windows.1
+

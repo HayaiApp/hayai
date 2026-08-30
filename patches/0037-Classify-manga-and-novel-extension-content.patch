@@ -1,0 +1,247 @@
+From 94ca10512bdc8c288fa6d746c14031692be5816e Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 03:58:28 +0300
+Subject: [PATCH] Classify manga and novel extension content
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
+index a897cf2b76188eaf67704775ecb83629df78b70b..7f72c1bbc1c5b34dc90ff210a4f31d0f7e6dce4b 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
+@@ -16,16 +16,45 @@ import kotlinx.coroutines.launch
+ 
+ interface NovelApkRepositoryRegistry {
+     suspend fun repositories(): Set<String>
++    fun repositoriesNow(): Set<String>
++    fun novelOnlyRepositoriesNow(): Set<String>
++    suspend fun addMangaOwnership(indexUrl: String)
++    suspend fun removeMangaOwnership(indexUrl: String)
+     suspend fun add(indexUrl: String)
+     suspend fun remove(indexUrl: String)
++    fun migrate(
++        oldUrl: String,
++        newUrl: String,
++    )
+ }
+ 
+ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: PreferencesHelper) : NovelApkRepositoryRegistry {
+     private val tags = context.getSharedPreferences("hayai_novel_apk_repositories", Context.MODE_PRIVATE)
+-    override suspend fun repositories(): Set<String> = tags.getStringSet(KEY, emptySet()).orEmpty().toSet()
++    override suspend fun repositories(): Set<String> = repositoriesNow()
++    override fun repositoriesNow(): Set<String> = tags.getStringSet(KEY, emptySet()).orEmpty().toSet()
++    override fun novelOnlyRepositoriesNow(): Set<String> = tags.getStringSet(OWNED_KEY, emptySet()).orEmpty().toSet()
++
++    override suspend fun addMangaOwnership(indexUrl: String) {
++        val global = preferences.extensionRepos().get()
++        val novelOnly = novelOnlyRepositoriesNow()
++        if (indexUrl in novelOnly) {
++            check(tags.edit().putStringSet(OWNED_KEY, novelOnly - indexUrl).commit())
++        }
++        if (indexUrl !in global) preferences.extensionRepos().set(global + indexUrl)
++    }
++
++    override suspend fun removeMangaOwnership(indexUrl: String) {
++        val global = preferences.extensionRepos().get()
++        if (indexUrl in repositoriesNow()) {
++            check(tags.edit().putStringSet(OWNED_KEY, novelOnlyRepositoriesNow() + indexUrl).commit())
++        } else if (indexUrl in global) {
++            preferences.extensionRepos().set(global - indexUrl)
++        }
++    }
++
+     override suspend fun add(indexUrl: String) {
+         val global = preferences.extensionRepos().get()
+-        val owned = tags.getStringSet(OWNED_KEY, emptySet()).orEmpty().toSet()
++        val owned = novelOnlyRepositoriesNow()
+         check(
+             tags.edit()
+                 .putStringSet(KEY, repositories() + indexUrl)
+@@ -35,7 +64,7 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
+         if (indexUrl !in global) preferences.extensionRepos().set(global + indexUrl)
+     }
+     override suspend fun remove(indexUrl: String) {
+-        val owned = tags.getStringSet(OWNED_KEY, emptySet()).orEmpty().toSet()
++        val owned = novelOnlyRepositoriesNow()
+         if (indexUrl in owned) preferences.extensionRepos().set(preferences.extensionRepos().get() - indexUrl)
+         check(
+             tags.edit()
+@@ -44,7 +73,25 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
+                 .commit(),
+         )
+     }
+-    private companion object { const val KEY = "urls_v1"; const val OWNED_KEY = "owned_global_urls_v1" }
++
++    override fun migrate(
++        oldUrl: String,
++        newUrl: String,
++    ) {
++        if (oldUrl == newUrl || oldUrl !in repositoriesNow()) return
++        val owned = novelOnlyRepositoriesNow()
++        check(
++            tags.edit()
++                .putStringSet(KEY, repositoriesNow() - oldUrl + newUrl)
++                .putStringSet(OWNED_KEY, if (oldUrl in owned) owned - oldUrl + newUrl else owned)
++                .commit(),
++        )
++    }
++
++    private companion object {
++        const val KEY = "urls_v1"
++        const val OWNED_KEY = "owned_global_urls_v1"
++    }
+ }
+ 
+ data class NovelApkExtensionCatalog(
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt
+index ca95beba09f93e844f99078d16b961f3a84b03b6..c13f2afbb1c013ca966e479155ce1902d275659a 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt
+@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.integration
+ 
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.source.CatalogueSource
+ import eu.kanade.tachiyomi.source.SourceManager
+ import eu.kanade.tachiyomi.source.isNovelSource
+@@ -47,4 +48,19 @@ enum class ContentKind {
+     ;
+ 
+     fun accepts(isNovelSource: Boolean): Boolean = (this == Novel) == isNovelSource
++
++    fun accepts(source: CatalogueSource): Boolean = accepts(source.isNovelSource())
++
++    fun accepts(extension: Extension): Boolean =
++        when (extension) {
++            is Extension.Installed -> {
++                val declaredKinds = extension.sources.map { it.isNovelSource() }.toSet()
++                if (declaredKinds.isEmpty()) accepts(extension.isNovel) else (this == Novel) in declaredKinds
++            }
++            else -> accepts(extension.isNovel)
++        }
++
++    companion object {
++        fun fromPosition(position: Int): ContentKind = entries.getOrElse(position) { Manga }
++    }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt
+index 775cf379a7572724a50912c55fc7d14bb5cf39a2..029a5f067c65b46de3a7530134218388a0d3850e 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt
+@@ -1,6 +1,7 @@
+ package eu.kanade.tachiyomi.extension.api
+ 
+ import android.content.Context
++import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.extension.model.Extension
+@@ -119,7 +120,12 @@ internal class ExtensionApi {
+     ) {
+         val repos = preferences.extensionRepos().get()
+         if (oldUrl !in repos) return
++        Injekt.get<NovelApkRepositoryRegistry>().migrate(oldUrl, newUrl)
+         preferences.extensionRepos().set(repos - oldUrl + newUrl)
++        val metadata = preferences.extensionRepoMetadata().get()
++        metadata[oldUrl]?.let { oldMetadata ->
++            preferences.extensionRepoMetadata().set(metadata - oldUrl + (newUrl to oldMetadata))
++        }
+     }
+ 
+     /**
+@@ -306,6 +312,7 @@ internal class ExtensionApi {
+                     libVersion = it.extractLibVersion(),
+                     lang = it.lang,
+                     isNsfw = it.nsfw == 1,
++                    isNovel = it.pkg.startsWith(NOVEL_EXTENSION_PACKAGE_PREFIX),
+                     sources = it.sources ?: emptyList(),
+                     apkName = it.apk,
+                     iconUrl = "$repoUrl/icon/${it.pkg}.png",
+@@ -328,6 +335,7 @@ internal class ExtensionApi {
+                     libVersion = it.extensionLib.toDouble(),
+                     lang = if (langs.size == 1) langs.first() else "all",
+                     isNsfw = it.contentWarning >= ExtensionProtoObject.ContentWarning.MIXED,
++                    isNovel = it.isNovel || it.packageName.startsWith(NOVEL_EXTENSION_PACKAGE_PREFIX),
+                     sources =
+                         it.sources.map { source ->
+                             Extension.AvailableSource(
+@@ -405,6 +413,7 @@ private data class ExtensionProtoObject(
+     @ProtoNumber(6) val versionName: String,
+     @ProtoNumber(7) val contentWarning: ContentWarning = ContentWarning.UNSPECIFIED,
+     @ProtoNumber(8) val sources: List<SourceProtoObject> = emptyList(),
++    @ProtoNumber(8000) val isNovel: Boolean = false,
+ ) {
+     @Serializable
+     enum class ContentWarning {
+@@ -435,3 +444,5 @@ private data class SourceProtoObject(
+     @ProtoNumber(3) val language: String,
+     @ProtoNumber(4) val homeUrl: String = "",
+ )
++
++private const val NOVEL_EXTENSION_PACKAGE_PREFIX = "eu.kanade.tachiyomi.novelextension"
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt
+index 99f205470f7f041bbfd343770b149c0cf42d1482..ab19e1deb4a263ca6cc2bdefe55edc76a508b83a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt
+@@ -12,6 +12,7 @@ sealed class Extension {
+     abstract val libVersion: Double
+     abstract val lang: String?
+     abstract val isNsfw: Boolean
++    abstract val isNovel: Boolean
+ 
+     data class Installed(
+         override val name: String,
+@@ -21,6 +22,7 @@ sealed class Extension {
+         override val libVersion: Double,
+         override val lang: String,
+         override val isNsfw: Boolean,
++        override val isNovel: Boolean,
+         val pkgFactory: String?,
+         val sources: List<Source>,
+         val icon: Drawable?,
+@@ -38,6 +40,7 @@ sealed class Extension {
+         override val libVersion: Double,
+         override val lang: String,
+         override val isNsfw: Boolean,
++        override val isNovel: Boolean,
+         val apkName: String,
+         val iconUrl: String,
+         val sources: List<AvailableSource>,
+@@ -61,5 +64,6 @@ sealed class Extension {
+         val signatureHash: String,
+         override val lang: String? = null,
+         override val isNsfw: Boolean = false,
++        override val isNovel: Boolean = false,
+     ) : Extension()
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
+index e4fc4764c9b96fb6be9d631800b2a121b48b1327..90245306b69dabf8d5d427057cdce27b4ae16f74 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
+@@ -41,6 +41,7 @@ internal object ExtensionLoader {
+ 
+     const val LIB_VERSION_MIN = 1.3
+     const val LIB_VERSION_MAX = 1.6
++    private const val NOVEL_EXTENSION_PACKAGE_PREFIX = "eu.kanade.tachiyomi.novelextension"
+ 
+     @Suppress("DEPRECATION")
+     private val PACKAGE_FLAGS =
+@@ -372,6 +373,7 @@ internal object ExtensionLoader {
+                     versionCode,
+                     libVersion,
+                     signatures.last(),
++                    isNovel = manifest.isNovel || pkgName.startsWith(NOVEL_EXTENSION_PACKAGE_PREFIX),
+                 )
+             Timber.w("Extension $pkgName isn't trusted")
+             return LoadResult.Untrusted(extension)
+@@ -456,6 +458,7 @@ internal object ExtensionLoader {
+                 libVersion = libVersion,
+                 lang = lang,
+                 isNsfw = isNsfw,
++                isNovel = manifest.isNovel,
+                 sources = sources,
+                 pkgFactory = metadata.getString(manifest.factoryKey),
+                 icon = appInfo.loadIcon(pkgManager),
+-- 
+2.54.0.windows.1
+

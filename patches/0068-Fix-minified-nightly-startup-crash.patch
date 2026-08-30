@@ -1,0 +1,331 @@
+From 5ad30fbf54534e2d7fa2a6ef1ea410175afefaba Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 06:04:39 +0300
+Subject: [PATCH] Fix minified nightly startup crash
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 59ce9f747caedea77352bcd557dfe1608a18c943..b4f933ae01a0d5fc99d5f61c77c314d3f9b928b2 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -96,3 +96,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T15:10:00+03:00	sy-source-details-ui	replaced the custom horizontal preview strip and generic enhanced-source summaries with their SY presentation contracts	used adaptive full-width preview rows, fit-width 120 by 200 dp cells, J2K text actions and empty state, plus source-specific E-Hentai, ExHentai, 8Muses, HBrowse, NHentai, Pururin, and LANraragi description layouts reconstructed from pinned SY while retaining typed Hayai data and loaders	SourceMetadataUi.kt; SourcePreviewController.kt; MangaDetailsController.kt; hayai_sy_description_*.xml; manga_header_item.xml	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T15:42:00+03:00	j2k-novel-reader-controls	replaced the remaining bespoke novel option controls and arrow-order editor with native J2K layouts and interaction patterns	preserved the full preference surface and immediate reader updates while using J2K filter and text buttons, subtitle labels, material dialogs, and draggable download-header cards; emulator evidence confirms subtitle values do not collide with titles and the ordering surface uses drag handles	NovelReaderSettingsSheet.kt; novel-reader-parity.md; artifacts/emulator-verification/reader-settings-refactor-options.png; artifacts/emulator-verification/reader-settings-refactor-more.png	VERIFIED
+ 2026-08-22T16:40:00+03:00	sy-eh-metadata-responsiveness	fixed the emulator-discovered empty gallery badge and clipped metadata action at large display and font scales	kept the SY information hierarchy while using J2K's Material 3 text-button style, wrap-content height, two-line fallback, and an explicit localized unknown type for absent upstream category data; verified after reinstall with restored migration fixture	hayai_sy_description_eh.xml; SourceMetadataUi.kt; artifacts/emulator-verification/reader-settings-refactor-eh-detail-fixed.png	VERIFIED
++2026-08-23T06:03:48+03:00	release-safety	preserved Injekt generic type metadata and Hayai serializers in minified builds, and gated publication on launching the signed nightly APK on Android 12	prevents release-only startup crashes hidden by debug-only emulator verification	app/proguard-rules.pro; tools/verify-apk-startup.ps1; .github/workflows/nightly.yml	VERIFIED
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index a1fa3afcfab150f96855edb98791d5108d9fc5e6..35cdd0ce9340ba117fed1b7bbb11bc65c41e9120 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -86,6 +86,18 @@ jobs:
+         env:
+           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOLS_VERSION }}
+ 
++      - name: Verify signed minified APK startup on Android 12
++        uses: ReactiveCircus/android-emulator-runner@c9c93e6ba9c4194322e114c40970d5983d9a07cc # v2.38.0
++        with:
++          api-level: 31
++          arch: x86_64
++          target: default
++          disable-animations: true
++          script: >-
++            pwsh -File tools/verify-apk-startup.ps1
++            -Apk app/build/outputs/apk/standard/nightly/app-standard-x86_64-nightly-unsigned-signed.apk
++            -PackageId dev.ahmedmohamed.hayai.nightly
++
+       - name: Prepare release assets
+         shell: bash
+         run: |
+diff --git a/app/proguard-rules.pro b/app/proguard-rules.pro
+index a84469652169993085e607f98451ab3004ea357c..85a73ca3e4501a39edacfcbc67dc6c44ae45beec 100644
+--- a/app/proguard-rules.pro
++++ b/app/proguard-rules.pro
+@@ -2,6 +2,7 @@
+ 
+ -keep class eu.kanade.tachiyomi.source.** { public protected *; } # Avoid access modification
+ -keep,allowoptimization class eu.kanade.** { public protected *; }
++-keep,allowoptimization class dev.ahmedmohamed.hayai.** { public protected *; }
+ -keep,allowoptimization class tachiyomi.** { public protected *; }
+ 
+ # Keep common dependencies used in extensions
+@@ -16,6 +17,8 @@
+ -keep,allowoptimization class com.google.gson.** { public protected *; }
+ -keep,allowoptimization class com.dokar.quickjs.** { public protected *; }
+ -keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
++-keepattributes Signature
++-keep,allowoptimization class * extends uy.kohesive.injekt.api.TypeReference
+ -keep,allowoptimization class eu.davidea.flexibleadapter.** { public protected *; }
+ -keep class io.requery.android.database.** { public protected *; }
+ -keep,allowoptimization class com.squareup.zstd.** { public protected *; }
+@@ -79,12 +82,19 @@
+ }
+ 
+ -keep,includedescriptorclasses class eu.kanade.**$$serializer { *; }
++-keep,includedescriptorclasses class dev.ahmedmohamed.hayai.**$$serializer { *; }
+ -keepclassmembers class eu.kanade.** {
+     *** Companion;
+ }
++-keepclassmembers class dev.ahmedmohamed.hayai.** {
++    *** Companion;
++}
+ -keepclasseswithmembers class eu.kanade.** {
+     kotlinx.serialization.KSerializer serializer(...);
+ }
++-keepclasseswithmembers class dev.ahmedmohamed.hayai.** {
++    kotlinx.serialization.KSerializer serializer(...);
++}
+ 
+ -keep class kotlinx.serialization.**
+ -keepclassmembers class kotlinx.serialization.** {
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 6d94e35a82df51e7ac1e648dcdff5cfb1cc0c57c..271423b1365a7b14c13fd1574d9ac4a63aa55991 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -68,6 +68,8 @@ Hayai-owned interface text uses `hayai_` Android resources. Pure parsers and ser
+ 
+ Release channels use a Hayai-owned policy. Stable and beta builds query `HayaiApp/hayai`. Nightly builds use the isolated `.nightly` application ID, numeric `rN` versions, and `HayaiApp/hayai-nightly`. J2K's update checker delegates tag comparison and APK selection to this policy. The nightly workflow chooses `max(commit count, latest published nightly + 1)`, which prevents version rollback after the J2K reset and remains safe when a canceled job retries.
+ 
++The minified build keeps Hayai-owned classes under the same release boundary as J2K-owned classes. Its R8 configuration preserves generic signatures and Injekt `TypeReference` subclasses because Injekt resolves reified Kotlin registrations from that runtime type metadata. It also preserves Hayai serializers and companion factories. The nightly workflow signs the x86_64 APK, launches that exact minified artifact on an Android 12 emulator, rejects any startup fatal exception or crash-handler redirect, and only then prepares and publishes release assets. This is an intentional J2K build-file seam: a new namespace cannot safely inherit rules scoped only to `eu.kanade`.
++
+ `main` is the active reset branch. The previous application remains on `master` and `legacy/hayai-pre-j2k` for migration evidence. Release procedures live in `docs/development/releases.md`.
+ 
+ Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, normal URLs, cookies, and headers to the installed extension. Hayai adds the source-specific behavior SY exposes for 8Muses, HBrowse, Pururin, NHentai, and LANraragi. This includes host-validated URL import where supported, richer descriptions, generic batch add for importable sources, NHentai previews, and authenticated LANraragi previews. MangaDex-specific recommendations, related titles, and follows are outside this requested slice. A secondary parser failure returns the extension result and never removes a usable source.
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index f97f205e3b18ec919933b4825240c0807b299a84..499e973f1f1b8237dd940e12927ae4b33929771e 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1069 | 0.0% |
+-| `ar` | 31 / 1069 | 2.9% |
+-| `ars` | 0 / 1069 | 0.0% |
+-| `az` | 0 / 1069 | 0.0% |
+-| `bg` | 0 / 1069 | 0.0% |
+-| `bn` | 0 / 1069 | 0.0% |
+-| `ca` | 0 / 1069 | 0.0% |
+-| `ceb` | 0 / 1069 | 0.0% |
+-| `cs` | 0 / 1069 | 0.0% |
+-| `cv` | 0 / 1069 | 0.0% |
+-| `de` | 29 / 1069 | 2.7% |
+-| `el` | 0 / 1069 | 0.0% |
+-| `eo` | 0 / 1069 | 0.0% |
+-| `es` | 31 / 1069 | 2.9% |
+-| `eu` | 0 / 1069 | 0.0% |
+-| `fa` | 0 / 1069 | 0.0% |
+-| `fi` | 0 / 1069 | 0.0% |
+-| `fil` | 31 / 1069 | 2.9% |
+-| `fr` | 31 / 1069 | 2.9% |
+-| `gl` | 0 / 1069 | 0.0% |
+-| `ha` | 0 / 1069 | 0.0% |
+-| `hi` | 0 / 1069 | 0.0% |
+-| `hr` | 31 / 1069 | 2.9% |
+-| `hu` | 0 / 1069 | 0.0% |
+-| `in` | 31 / 1069 | 2.9% |
+-| `it` | 17 / 1069 | 1.6% |
+-| `iw` | 0 / 1069 | 0.0% |
+-| `ja` | 29 / 1069 | 2.7% |
+-| `jv` | 0 / 1069 | 0.0% |
+-| `ka` | 0 / 1069 | 0.0% |
+-| `kk` | 0 / 1069 | 0.0% |
+-| `km` | 0 / 1069 | 0.0% |
+-| `ko` | 7 / 1069 | 0.7% |
+-| `lt` | 0 / 1069 | 0.0% |
+-| `lv` | 0 / 1069 | 0.0% |
+-| `ml` | 0 / 1069 | 0.0% |
+-| `mn` | 0 / 1069 | 0.0% |
+-| `ms` | 0 / 1069 | 0.0% |
+-| `my` | 0 / 1069 | 0.0% |
+-| `nb-rNO` | 0 / 1069 | 0.0% |
+-| `ne` | 5 / 1069 | 0.5% |
+-| `nl` | 0 / 1069 | 0.0% |
+-| `nn` | 0 / 1069 | 0.0% |
+-| `om` | 0 / 1069 | 0.0% |
+-| `or` | 0 / 1069 | 0.0% |
+-| `pl` | 0 / 1069 | 0.0% |
+-| `pt` | 31 / 1069 | 2.9% |
+-| `pt-rBR` | 31 / 1069 | 2.9% |
+-| `ro` | 0 / 1069 | 0.0% |
+-| `ru` | 31 / 1069 | 2.9% |
+-| `sc` | 0 / 1069 | 0.0% |
+-| `si` | 0 / 1069 | 0.0% |
+-| `sk` | 0 / 1069 | 0.0% |
+-| `sq` | 0 / 1069 | 0.0% |
+-| `sr` | 0 / 1069 | 0.0% |
+-| `sv` | 0 / 1069 | 0.0% |
+-| `ta` | 31 / 1069 | 2.9% |
+-| `te` | 0 / 1069 | 0.0% |
+-| `th` | 0 / 1069 | 0.0% |
+-| `ti` | 0 / 1069 | 0.0% |
+-| `tl` | 0 / 1069 | 0.0% |
+-| `tr` | 31 / 1069 | 2.9% |
+-| `uk` | 7 / 1069 | 0.7% |
+-| `ur` | 0 / 1069 | 0.0% |
+-| `vi` | 5 / 1069 | 0.5% |
+-| `zh-rCN` | 31 / 1069 | 2.9% |
+-| `zh-rTW` | 31 / 1069 | 2.9% |
++| `ajp` | 0 / 1071 | 0.0% |
++| `ar` | 31 / 1071 | 2.9% |
++| `ars` | 0 / 1071 | 0.0% |
++| `az` | 0 / 1071 | 0.0% |
++| `bg` | 0 / 1071 | 0.0% |
++| `bn` | 0 / 1071 | 0.0% |
++| `ca` | 0 / 1071 | 0.0% |
++| `ceb` | 0 / 1071 | 0.0% |
++| `cs` | 0 / 1071 | 0.0% |
++| `cv` | 0 / 1071 | 0.0% |
++| `de` | 29 / 1071 | 2.7% |
++| `el` | 0 / 1071 | 0.0% |
++| `eo` | 0 / 1071 | 0.0% |
++| `es` | 31 / 1071 | 2.9% |
++| `eu` | 0 / 1071 | 0.0% |
++| `fa` | 0 / 1071 | 0.0% |
++| `fi` | 0 / 1071 | 0.0% |
++| `fil` | 31 / 1071 | 2.9% |
++| `fr` | 31 / 1071 | 2.9% |
++| `gl` | 0 / 1071 | 0.0% |
++| `ha` | 0 / 1071 | 0.0% |
++| `hi` | 0 / 1071 | 0.0% |
++| `hr` | 31 / 1071 | 2.9% |
++| `hu` | 0 / 1071 | 0.0% |
++| `in` | 31 / 1071 | 2.9% |
++| `it` | 17 / 1071 | 1.6% |
++| `iw` | 0 / 1071 | 0.0% |
++| `ja` | 29 / 1071 | 2.7% |
++| `jv` | 0 / 1071 | 0.0% |
++| `ka` | 0 / 1071 | 0.0% |
++| `kk` | 0 / 1071 | 0.0% |
++| `km` | 0 / 1071 | 0.0% |
++| `ko` | 7 / 1071 | 0.7% |
++| `lt` | 0 / 1071 | 0.0% |
++| `lv` | 0 / 1071 | 0.0% |
++| `ml` | 0 / 1071 | 0.0% |
++| `mn` | 0 / 1071 | 0.0% |
++| `ms` | 0 / 1071 | 0.0% |
++| `my` | 0 / 1071 | 0.0% |
++| `nb-rNO` | 0 / 1071 | 0.0% |
++| `ne` | 5 / 1071 | 0.5% |
++| `nl` | 0 / 1071 | 0.0% |
++| `nn` | 0 / 1071 | 0.0% |
++| `om` | 0 / 1071 | 0.0% |
++| `or` | 0 / 1071 | 0.0% |
++| `pl` | 0 / 1071 | 0.0% |
++| `pt` | 31 / 1071 | 2.9% |
++| `pt-rBR` | 31 / 1071 | 2.9% |
++| `ro` | 0 / 1071 | 0.0% |
++| `ru` | 31 / 1071 | 2.9% |
++| `sc` | 0 / 1071 | 0.0% |
++| `si` | 0 / 1071 | 0.0% |
++| `sk` | 0 / 1071 | 0.0% |
++| `sq` | 0 / 1071 | 0.0% |
++| `sr` | 0 / 1071 | 0.0% |
++| `sv` | 0 / 1071 | 0.0% |
++| `ta` | 31 / 1071 | 2.9% |
++| `te` | 0 / 1071 | 0.0% |
++| `th` | 0 / 1071 | 0.0% |
++| `ti` | 0 / 1071 | 0.0% |
++| `tl` | 0 / 1071 | 0.0% |
++| `tr` | 31 / 1071 | 2.9% |
++| `uk` | 7 / 1071 | 0.7% |
++| `ur` | 0 / 1071 | 0.0% |
++| `vi` | 5 / 1071 | 0.5% |
++| `zh-rCN` | 31 / 1071 | 2.9% |
++| `zh-rTW` | 31 / 1071 | 2.9% |
+diff --git a/docs/development/releases.md b/docs/development/releases.md
+index 8e06e1c912ce687e7385d634a32c6186c17aabc3..cfbeb7f959a04881bbfd17f95d96c7fd3d99c642 100644
+--- a/docs/development/releases.md
++++ b/docs/development/releases.md
+@@ -4,7 +4,7 @@
+ 
+ Every push to `main` runs `.github/workflows/nightly.yml`. The workflow reads the latest release from `HayaiApp/hayai-nightly` and chooses the larger of the Git commit count or the latest `rN` value plus one. A canceled or retried run therefore cannot lower the published version.
+ 
+-The workflow builds and tests `StandardNightly`, signs every ABI with the `build` environment, and publishes the APKs to `HayaiApp/hayai-nightly`. Nightly builds use `dev.ahmedmohamed.hayai.nightly`, so they can remain installed beside stable Hayai. The updater checks only the nightly repository.
++The workflow builds and tests `StandardNightly` and signs every ABI with the `build` environment. Before publication, it installs the exact signed/minified x86_64 APK on an Android 12 emulator and observes a cold launch for 20 seconds. `tools/verify-apk-startup.ps1` rejects fatal exceptions, the Hayai crash activity, a missing main activity, or a dead main process. Only a passing artifact is published to `HayaiApp/hayai-nightly`. Nightly builds use `dev.ahmedmohamed.hayai.nightly`, so they can remain installed beside stable Hayai. The updater checks only the nightly repository.
+ 
+ The `build` environment must define `SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, and `KEY_PASSWORD`. The repository must define `NIGHTLY_PAT` with release access to `HayaiApp/hayai-nightly`.
+ 
+diff --git a/tools/verify-apk-startup.ps1 b/tools/verify-apk-startup.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..261134ac555de906b09e6d642ba55d6bba4dce9d
+--- /dev/null
++++ b/tools/verify-apk-startup.ps1
+@@ -0,0 +1,75 @@
++param(
++    [Parameter(Mandatory = $true)]
++    [string] $Apk,
++
++    [Parameter(Mandatory = $true)]
++    [string] $PackageId,
++
++    [string] $Serial = "",
++
++    [ValidateRange(10, 60)]
++    [int] $StartupWaitSeconds = 20
++)
++
++$ErrorActionPreference = "Stop"
++
++$resolvedApk = (Resolve-Path -LiteralPath $Apk).Path
++if ((Get-Item -LiteralPath $resolvedApk).Length -eq 0) {
++    throw "APK is empty: $resolvedApk"
++}
++
++$adbPrefix = @()
++if ($Serial) {
++    $adbPrefix = @("-s", $Serial)
++}
++
++function Invoke-Adb {
++    param(
++        [Parameter(Mandatory = $true)]
++        [string[]] $Arguments
++    )
++
++    $output = & adb @adbPrefix @Arguments 2>&1
++    if ($LASTEXITCODE -ne 0) {
++        throw "adb $($Arguments -join ' ') failed:`n$($output -join [Environment]::NewLine)"
++    }
++    return $output
++}
++
++$state = (Invoke-Adb -Arguments @("get-state") | Select-Object -Last 1).Trim()
++if ($state -ne "device") {
++    throw "Android target is not ready: $state"
++}
++
++$install = Invoke-Adb -Arguments @("install", "-r", $resolvedApk)
++if (($install -join "`n") -notmatch "Success") {
++    throw "APK installation did not report success:`n$($install -join [Environment]::NewLine)"
++}
++
++Invoke-Adb -Arguments @("shell", "am", "force-stop", $PackageId) | Out-Null
++Invoke-Adb -Arguments @("logcat", "-c") | Out-Null
++Invoke-Adb -Arguments @("shell", "monkey", "-p", $PackageId, "-c", "android.intent.category.LAUNCHER", "1") | Out-Null
++Start-Sleep -Seconds $StartupWaitSeconds
++
++$crashLog = Invoke-Adb -Arguments @("logcat", "-d", "-v", "brief", "AndroidRuntime:E", "*:S")
++$crashText = $crashLog -join [Environment]::NewLine
++if ($crashText -match "FATAL EXCEPTION" -and $crashText -match [regex]::Escape($PackageId)) {
++    throw "APK crashed during startup:`n$crashText"
++}
++
++$activities = (Invoke-Adb -Arguments @("shell", "dumpsys", "activity", "activities")) -join [Environment]::NewLine
++$packagePattern = [regex]::Escape($PackageId)
++if ($activities -match "$packagePattern/eu\.kanade\.tachiyomi\.crash\.CrashActivity") {
++    throw "Hayai redirected to CrashActivity during startup."
++}
++
++$mainActivityPattern = "$packagePattern/eu\.kanade\.tachiyomi\.ui\.main\.MainActivity"
++$mainProcess = (Invoke-Adb -Arguments @("shell", "pidof", $PackageId) | Select-Object -Last 1).Trim()
++if (-not $mainProcess -or $activities -notmatch $mainActivityPattern) {
++    $relevantActivities = $activities -split "`r?`n" | Where-Object {
++        $_ -match "ResumedActivity|topResumedActivity|CrashActivity|$packagePattern"
++    } | Select-Object -First 30
++    throw "Hayai MainActivity or its main process did not survive startup:`n$($relevantActivities -join [Environment]::NewLine)"
++}
++
++Write-Output "Signed/minified APK startup verification passed for $PackageId."
+-- 
+2.54.0.windows.1
+

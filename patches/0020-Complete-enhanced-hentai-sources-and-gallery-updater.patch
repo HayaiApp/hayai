@@ -1,0 +1,3778 @@
+From 4fddae23d2eddc2088622eddbdbdf3dbe00977ff Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 21:16:45 +0300
+Subject: [PATCH] Complete enhanced hentai sources and gallery updater
+
+
+diff --git a/.audit/parity-completion.tsv b/.audit/parity-completion.tsv
+index 644887d8ecaee55cc67e65536ce19adc985c8a14..4e7dd8ec15fc526cc140363817abb292f80b768e 100644
+--- a/.audit/parity-completion.tsv
++++ b/.audit/parity-completion.tsv
+@@ -2,3 +2,7 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T20:00:00Z	frame	excluded MangaDex-specific parity but retained its existing delegated wrapper	the user explicitly removed MangaDex from this port	docs/architecture/upstream-feature-audit.md	open
+ 2026-08-21T20:01:00Z	workflow	write every requested production and test artifact before starting validation	the user requested code-first execution and the machine must not be hit by repeated builds	AGENTS.md; current task plan	open
+ 2026-08-21T20:02:00Z	architecture	keep enhanced sources, novel features, and the E-Hentai updater in disjoint Hayai-owned modules	the workstreams have separate data ownership and can be reviewed without changing protected J2K lifecycle files	app/src/main/java/dev/ahmedmohamed/hayai	open
++2026-08-21T21:10:00Z	enhanced-sources	implemented only upstream-supported non-MangaDex actions and page previews	SY exposes URL import and metadata for 8Muses, HBrowse, NHentai, and Pururin; previews exist for NHentai and LANraragi; recommendations, follows, and related titles are MangaDex-only	app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced	implemented-unverified
++2026-08-21T21:12:00Z	preview-safety	replaced source-specific full bitmap rendering with a paginated provider registry and bounded sampled decoding	full-resolution page and sprite bitmaps can crash manga details on memory-constrained devices	app/src/main/java/dev/ahmedmohamed/hayai/source/preview; EhDetailsPreviewLoader.kt	implemented-unverified
++2026-08-21T21:15:00Z	eh-updater	implemented unique bounded gallery work with durable state, statistics, revision-root merging, and download recovery	SY parity requires periodic checks without copying its partial-mutation and unconditional-success failure behavior	app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update	implemented-unverified
++2026-08-21T21:17:00Z	emulator-harness	added a guarded dedicated-AVD workflow and sanitized migration fixture	automation must refuse personal emulators and keep credentials outside the repository	tools/verify-hayai-emulator.ps1; tools/fixtures/hayai-emulator	implemented-unverified
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 163b28023ce749a65ad6e0f2ca1661dfb5fa068c..ebed8348491f18c86144dc74c39a053e2d76ae43 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -154,6 +154,10 @@
+             android:configChanges="uiMode|orientation|screenSize"
+             android:exported="false"
+             android:theme="@style/Theme.Tachiyomi" />
++        <activity
++            android:name="dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity"
++            android:exported="false"
++            android:theme="@style/Theme.Tachiyomi" />
+         <activity
+             android:name=".ui.webview.WebViewActivity"
+             android:configChanges="uiMode|orientation|screenSize"/>
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
+index 029a07726d37309f8f378d21f7d700b258c87e58..57da5594f2cb685a8c91d887731e179037c14bbb 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
+@@ -2,86 +2,167 @@ package dev.ahmedmohamed.hayai.adult.eh.ui
+ 
+ import android.graphics.Bitmap
+ import android.graphics.BitmapFactory
++import android.graphics.BitmapRegionDecoder
++import android.graphics.Rect
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhPagePreview
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
+ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+-import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewProvider
++import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreview
++import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import kotlinx.coroutines.CancellationException
++import okhttp3.CacheControl
++import java.io.ByteArrayOutputStream
+ 
+ class EhDetailsPreviewLoader(
+     private val gateway: EhHttpGateway,
+     private val preferences: HayaiPreferences,
+     private val ehPreferences: EhPreferences,
+-) {
+-    fun owns(manga: Manga): Boolean =
++) : SourceDetailsPreviewProvider {
++    override fun owns(manga: Manga): Boolean =
+         preferences.hentaiFeaturesEnabled.get() &&
+             ehPreferences.enhancedView.get() &&
+             EhSite.entries.any { it.sourceId == manga.source }
+ 
+-    suspend fun load(manga: Manga): List<EhRenderedPreview> {
+-        val site = EhSite.entries.firstOrNull { it.sourceId == manga.source } ?: return emptyList()
+-        val previews = gateway.previews(site, GalleryKey.parse(manga.url)).take(MAX_PREVIEWS)
+-        val sprites = mutableMapOf<String, Bitmap>()
+-        return previews.mapNotNull { preview ->
+-            try {
+-                val source = sprites[preview.imageUrl] ?: downloadBitmap(site, preview.imageUrl).also { bitmap ->
+-                    if (preview.crop != null) sprites[preview.imageUrl] = bitmap
++    override suspend fun load(
++        manga: Manga,
++        page: Int,
++        cacheControl: CacheControl?,
++    ): SourceRenderedPreviewPage {
++        require(page in 1..MAX_LISTING_PAGES)
++        val site = EhSite.entries.firstOrNull { it.sourceId == manga.source }
++            ?: error("The E-Hentai source is unavailable")
++        val previews = gateway.previews(site, GalleryKey.parse(manga.url), page - 1).take(PREVIEWS_PER_PAGE)
++        val spriteBytes = mutableMapOf<String, ByteArray>()
++        var spriteByteCount = 0L
++        var decodedByteCount = 0L
++        val rendered = mutableListOf<SourceRenderedPreview>()
++        try {
++            previews.forEach { preview ->
++                try {
++                    val bytes =
++                        if (preview.crop != null) {
++                            spriteBytes[preview.imageUrl] ?: download(site, preview.imageUrl, cacheControl).also {
++                                spriteByteCount += it.size
++                                require(spriteByteCount <= MAX_ENCODED_SPRITE_BYTES) { "Preview sprites exceeded the memory budget" }
++                                spriteBytes[preview.imageUrl] = it
++                            }
++                        } else {
++                            download(site, preview.imageUrl, cacheControl)
++                        }
++                    val bitmap = decode(bytes, preview)
++                    decodedByteCount += bitmap.byteCount
++                    if (decodedByteCount > MAX_DECODED_BYTES_PER_PAGE) {
++                        bitmap.recycle()
++                        error("Preview page exceeded the decoded bitmap budget")
++                    }
++                    rendered += SourceRenderedPreview(preview.index, preview.pageUrl, bitmap)
++                } catch (cancelled: CancellationException) {
++                    throw cancelled
++                } catch (_: Exception) {
++                    // One malformed or unavailable thumbnail must not hide the usable previews.
+                 }
+-                val bitmap =
+-                    preview.crop?.let { crop ->
+-                        if (crop.x + crop.width > source.width || crop.y + crop.height > source.height) return@mapNotNull null
+-                        Bitmap.createBitmap(source, crop.x, crop.y, crop.width, crop.height)
+-                    } ?: source
+-                EhRenderedPreview(preview, bitmap)
+-            } catch (error: CancellationException) {
+-                throw error
+-            } catch (_: Exception) {
+-                null
+             }
++        } catch (failure: Throwable) {
++            rendered.forEach { if (!it.bitmap.isRecycled) it.bitmap.recycle() }
++            throw failure
+         }
++        val hasNext = previews.size == PREVIEWS_PER_PAGE && page < MAX_LISTING_PAGES
++        return SourceRenderedPreviewPage(page, rendered, hasNext, if (hasNext) page + 1 else page)
+     }
+ 
+-    private suspend fun downloadBitmap(
++    private suspend fun download(
+         site: EhSite,
+         url: String,
++        cacheControl: CacheControl?,
++    ): ByteArray {
++        val request = gateway.imageRequest(site, url).newBuilder().apply {
++            cacheControl?.let { cacheControl(it) }
++        }.build()
++        return gateway.executeImage(request).use { response ->
++            val declared = response.body.contentLength()
++            require(declared < 0 || declared <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
++            response.body.byteStream().readBytesBounded(MAX_IMAGE_BYTES)
++        }
++    }
++
++    @Suppress("DEPRECATION")
++    private fun decode(
++        bytes: ByteArray,
++        preview: EhPagePreview,
+     ): Bitmap {
+-        val response = gateway.executeImage(gateway.imageRequest(site, url))
+-        val bytes = response.use {
+-            val declared = it.body.contentLength()
+-            require(declared in -1..MAX_IMAGE_BYTES.toLong()) { "Preview image is too large" }
+-            it.body.byteStream().readBytesBounded(MAX_IMAGE_BYTES)
++        val crop = preview.crop
++        if (crop != null) {
++            val decoder = requireNotNull(BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)) {
++                "Preview sprite could not be decoded"
++            }
++            return decoder.useCompat {
++                require(it.width in 1..MAX_SOURCE_DIMENSION && it.height in 1..MAX_SOURCE_DIMENSION)
++                require(crop.x + crop.width <= it.width && crop.y + crop.height <= it.height) {
++                    "Preview crop is outside the sprite"
++                }
++                requireNotNull(
++                    it.decodeRegion(
++                        Rect(crop.x, crop.y, crop.x + crop.width, crop.y + crop.height),
++                        decodeOptions(sampleSize(crop.width, crop.height)),
++                    ),
++                ) { "Preview sprite region could not be decoded" }
++            }
+         }
+         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+-        require(bounds.outWidth in 1..MAX_DIMENSION && bounds.outHeight in 1..MAX_DIMENSION) { "Invalid preview dimensions" }
+-        return requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size)) { "Preview could not be decoded" }
++        require(bounds.outWidth in 1..MAX_SOURCE_DIMENSION && bounds.outHeight in 1..MAX_SOURCE_DIMENSION) {
++            "Preview image dimensions are invalid"
++        }
++        return requireNotNull(
++            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions(sampleSize(bounds.outWidth, bounds.outHeight))),
++        ) { "Preview image could not be decoded" }
++    }
++
++    private fun sampleSize(width: Int, height: Int): Int {
++        var sample = 1
++        while (width / sample > MAX_RENDER_DIMENSION || height / sample > MAX_RENDER_DIMENSION) sample *= 2
++        return sample
++    }
++
++    private fun decodeOptions(sample: Int) = BitmapFactory.Options().apply {
++        inSampleSize = sample
++        inPreferredConfig = Bitmap.Config.RGB_565
+     }
+ 
+-    private fun java.io.InputStream.readBytesBounded(limit: Int): ByteArray {
+-        val output = java.io.ByteArrayOutputStream(minOf(limit, 64 * 1024))
++    private fun java.io.InputStream.readBytesBounded(limit: Long): ByteArray {
++        val output = ByteArrayOutputStream(minOf(limit, 64 * 1024L).toInt())
+         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+-        var total = 0
++        var total = 0L
+         while (true) {
+             val read = read(buffer)
+             if (read < 0) break
+             total += read
+-            require(total <= limit) { "Preview image is too large" }
++            require(total <= limit) { "Preview image exceeded the size limit" }
+             output.write(buffer, 0, read)
+         }
+         return output.toByteArray()
+     }
+ 
++    @Suppress("DEPRECATION")
++    private inline fun <T> BitmapRegionDecoder.useCompat(block: (BitmapRegionDecoder) -> T): T =
++        try {
++            block(this)
++        } finally {
++            recycle()
++        }
++
+     private companion object {
+-        const val MAX_PREVIEWS = 20
+-        const val MAX_IMAGE_BYTES = 20 * 1024 * 1024
+-        const val MAX_DIMENSION = 12_000
++        const val PREVIEWS_PER_PAGE = 12
++        const val MAX_LISTING_PAGES = 200
++        const val MAX_IMAGE_BYTES = 4L * 1024L * 1024L
++        const val MAX_ENCODED_SPRITE_BYTES = 12L * 1024L * 1024L
++        const val MAX_DECODED_BYTES_PER_PAGE = 12L * 1024L * 1024L
++        const val MAX_SOURCE_DIMENSION = 16_384
++        const val MAX_RENDER_DIMENSION = 512
+     }
+ }
+-
+-data class EhRenderedPreview(
+-    val preview: EhPagePreview,
+-    val bitmap: Bitmap,
+-)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+index f4fc53ccc558ea25d0bd58a6236c5222d30d934e..2b9c9a6b33d4b457ee6da3d7f7107fa17cc42657 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+@@ -38,6 +38,10 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhSiteUploadResult
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUploadProgress
++import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
++import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdatePolicy
++import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateStateStore
++import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateWorker
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
+ import eu.kanade.tachiyomi.ui.webview.WebViewActivity
+@@ -52,7 +56,9 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private val network by injectLazy<NetworkHelper>()
+     private val settingsUploader by injectLazy<EhRemoteSettingsUploader>()
+     private val favoritesSync by injectLazy<EhFavoritesSyncService>()
++    private val ehPersistence by injectLazy<HayaiEhPersistenceStore>()
+     private val verifier by lazy { EhSessionVerifier(network.client) }
++    private val galleryUpdateStore by lazy { EhGalleryUpdateStateStore(this, ehPersistence) }
+ 
+     private lateinit var status: TextView
+     private lateinit var recheck: MaterialButton
+@@ -69,6 +75,8 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private lateinit var favoritesStatus: TextView
+     private lateinit var conflictPolicy: MaterialButton
+     private lateinit var categoryMappings: MaterialButton
++    private lateinit var galleryUpdateInterval: MaterialButton
++    private lateinit var galleryUpdateStats: TextView
+     private val uploadResults = linkedMapOf<EhSite, EhSiteUploadResult>()
+     private var retrySites = emptySet<EhSite>()
+ 
+@@ -250,6 +258,46 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         content.addView(button("Preview favorites sync", ::previewFavoritesSync))
+         content.addView(button("Start or resume favorites sync", ::startFavoritesSync))
+ 
++        content.addView(sectionLabel("Gallery updater"))
++        content.addView(
++            TextView(this).apply {
++                text = "Periodically checks favorite E-Hentai galleries for replacement revisions. Chapter state, history, categories, favorites, and downloaded copies are preserved when revisions are consolidated."
++                alpha = 0.72f
++                setPadding(0, 0, 0, 8.dpToPx)
++            },
++            matchWidth(),
++        )
++        galleryUpdateInterval = button(galleryUpdateIntervalText(), ::chooseGalleryUpdateInterval)
++        content.addView(galleryUpdateInterval)
++        val updatePolicy = galleryUpdateStore.policy()
++        content.addView(
++            settingSwitch(
++                title = "Wi-Fi only",
++                summary = "Require an unmetered connection for gallery revision checks.",
++                checked = updatePolicy.wifiOnly,
++                onChanged = { updateGalleryPolicy(galleryUpdateStore.policy().copy(wifiOnly = it)) },
++            ),
++        )
++        content.addView(
++            settingSwitch(
++                title = "Only while charging",
++                summary = "Run periodic gallery revision checks only while the device is charging.",
++                checked = updatePolicy.requiresCharging,
++                onChanged = { updateGalleryPolicy(galleryUpdateStore.policy().copy(requiresCharging = it)) },
++            ),
++        )
++        galleryUpdateStats = TextView(this).apply { setPadding(0, 4.dpToPx, 0, 8.dpToPx) }
++        content.addView(galleryUpdateStats, matchWidth())
++        content.addView(button("Run gallery updater now") {
++            EhGalleryUpdateWorker.runNow(this, galleryUpdateStore.policy())
++            galleryUpdateStats.text = "Gallery updater queued. Progress appears in notifications."
++        })
++        content.addView(button("Cancel gallery updater") {
++            EhGalleryUpdateWorker.cancel(this)
++            galleryUpdateStats.text = "Gallery updater work was cancelled. Completed gallery changes remain saved."
++        })
++        renderGalleryUpdateStats()
++
+         root.addView(
+             ScrollView(this).apply { addView(content) },
+             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+@@ -635,6 +683,48 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         else -> "stop and review"
+     }
+ 
++    private fun chooseGalleryUpdateInterval() {
++        val values = intArrayOf(0, 12, 24, 48, 72, 168)
++        val labels = arrayOf("Disabled", "Every 12 hours", "Every day", "Every 2 days", "Every 3 days", "Every week")
++        val current = values.indexOf(galleryUpdateStore.policy().intervalHours).takeIf { it >= 0 } ?: 0
++        materialAlertDialog()
++            .setTitle("Gallery update interval")
++            .setSingleChoiceItems(labels, current) { dialog, index ->
++                updateGalleryPolicy(galleryUpdateStore.policy().copy(intervalHours = values[index]))
++                galleryUpdateInterval.text = galleryUpdateIntervalText()
++                dialog.dismiss()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun updateGalleryPolicy(policy: EhGalleryUpdatePolicy) {
++        EhGalleryUpdateWorker.schedule(this, policy)
++        galleryUpdateInterval.text = galleryUpdateIntervalText()
++    }
++
++    private fun galleryUpdateIntervalText(): String =
++        when (val hours = galleryUpdateStore.policy().intervalHours) {
++            0 -> "Gallery updater: disabled"
++            24 -> "Gallery updater: every day"
++            48 -> "Gallery updater: every 2 days"
++            72 -> "Gallery updater: every 3 days"
++            168 -> "Gallery updater: every week"
++            else -> "Gallery updater: every $hours hours"
++        }
++
++    private fun renderGalleryUpdateStats() {
++        val stats = galleryUpdateStore.stats()
++        galleryUpdateStats.text =
++            if (stats == null) {
++                "The gallery updater has not completed a run on this device."
++            } else {
++                "Last run checked ${stats.attempted} of ${stats.eligible} eligible galleries. " +
++                    "${stats.updated} updated, ${stats.newRevisions} new revisions, ${stats.aged} aged, " +
++                    "${stats.transientFailures} temporary failures, and ${stats.permanentFailures} permanent failures."
++            }
++    }
++
+     private fun button(
+         text: String,
+         action: () -> Unit,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..1a17d151f91378f53b3b8fec9e96d800bb6f5474
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadRenameJournal.kt
+@@ -0,0 +1,52 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import android.content.Context
++import org.json.JSONArray
++import org.json.JSONObject
++
++data class EhPendingDownloadRename(
++    val mangaId: Long,
++    val chapterId: Long,
++    val oldName: String,
++    val newName: String,
++)
++
++class EhDownloadRenameJournal(context: Context) {
++    private val preferences = context.getSharedPreferences("hayai.eh.gallery_updater.renames", Context.MODE_PRIVATE)
++
++    @Synchronized
++    fun pending(mangaId: Long): List<EhPendingDownloadRename> = read().filter { it.mangaId == mangaId }
++
++    @Synchronized
++    fun prepare(rename: EhPendingDownloadRename) {
++        val values = read().filterNot { it.mangaId == rename.mangaId && it.chapterId == rename.chapterId } + rename
++        write(values)
++    }
++
++    @Synchronized
++    fun complete(mangaId: Long, chapterIds: Set<Long>) {
++        write(read().filterNot { it.mangaId == mangaId && it.chapterId in chapterIds })
++    }
++
++    private fun read(): List<EhPendingDownloadRename> = runCatching {
++        val array = JSONArray(preferences.getString("pending", "[]"))
++        List(array.length()) { index ->
++            val value = array.getJSONObject(index)
++            EhPendingDownloadRename(value.getLong("mangaId"), value.getLong("chapterId"), value.getString("oldName"), value.getString("newName"))
++        }
++    }.getOrDefault(emptyList())
++
++    private fun write(values: List<EhPendingDownloadRename>) {
++        val array = JSONArray()
++        values.sortedWith(compareBy(EhPendingDownloadRename::mangaId, EhPendingDownloadRename::chapterId)).forEach { value ->
++            array.put(
++                JSONObject()
++                    .put("mangaId", value.mangaId)
++                    .put("chapterId", value.chapterId)
++                    .put("oldName", value.oldName)
++                    .put("newName", value.newName),
++            )
++        }
++        preferences.edit().putString("pending", array.toString()).commit()
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadTreeMerger.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadTreeMerger.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..5edc14bc2671b9c037d02183670ea134eef0eb97
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhDownloadTreeMerger.kt
+@@ -0,0 +1,46 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import com.hippo.unifile.UniFile
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.data.download.DownloadProvider
++import eu.kanade.tachiyomi.source.Source
++
++class EhDownloadTreeMerger(
++    private val provider: DownloadProvider,
++) {
++    fun copyDownloadedChapter(
++        source: Source,
++        fromManga: Manga,
++        toManga: Manga,
++        chapter: Chapter,
++    ) {
++        if (fromManga.id == toManga.id) return
++        val sourceChapter = provider.findChapterDir(chapter, fromManga, source) ?: return
++        val sourceDir = provider.findSourceDir(source) ?: error("E-Hentai download source directory disappeared")
++        val targetMangaDir = sourceDir.createDirectory(provider.getMangaDirName(toManga))
++        val finalName = requireNotNull(sourceChapter.name)
++        if (targetMangaDir.findFile(finalName) != null) return
++        val partialName = ".hayai-part-$finalName"
++        targetMangaDir.findFile(partialName)?.delete()
++        val partial = if (sourceChapter.isDirectory) targetMangaDir.createDirectory(partialName) else targetMangaDir.createFile(partialName)
++        copy(sourceChapter, partial)
++        check(partial.renameTo(finalName)) { "Unable to finalize copied E-Hentai download $finalName" }
++    }
++
++    fun removeMergedManga(source: Source, manga: Manga) {
++        provider.findMangaDir(manga, source)?.delete()
++    }
++
++    private fun copy(source: UniFile, target: UniFile) {
++        if (source.isFile) {
++            source.openInputStream().use { input -> target.openOutputStream().use(input::copyTo) }
++            return
++        }
++        source.listFiles().orEmpty().forEach { child ->
++            val name = requireNotNull(child.name)
++            val destination = if (child.isDirectory) target.createDirectory(name) else target.createFile(name)
++            copy(child, destination)
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinator.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinator.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..78ff4c3ef17b01a44710db36ca3385df9f332b34
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinator.kt
+@@ -0,0 +1,50 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import kotlinx.coroutines.CancellationException
++
++data class EhGalleryUpdateRun(
++    val stats: EhGalleryUpdaterStats,
++    val results: List<EhGalleryUpdateResult>,
++) {
++    val shouldRetry: Boolean get() = stats.transientFailures > 0
++}
++
++class EhGalleryUpdateCoordinator(
++    private val operations: EhGalleryUpdateOperations,
++    private val clock: () -> Long = System::currentTimeMillis,
++) {
++    suspend fun run(onProgress: (EhGalleryUpdateCandidate, Int, Int) -> Unit = { _, _, _ -> }): EhGalleryUpdateRun {
++        val startedAt = clock()
++        val candidates = operations.candidates()
++        val results = mutableListOf<EhGalleryUpdateResult>()
++        var transientFailures = 0
++        for ((index, candidate) in candidates.withIndex()) {
++            if (transientFailures >= EhGalleryUpdateRuntime.FAILURE_CUTOFF) break
++            onProgress(candidate, index, candidates.size)
++            val result = try {
++                operations.update(candidate)
++            } catch (failure: CancellationException) {
++                throw failure
++            } catch (failure: Throwable) {
++                EhGalleryUpdateResult(EhGalleryUpdateDisposition.TransientFailure, candidate.title, failure = failure.message)
++            }
++            results += result
++            if (result.disposition == EhGalleryUpdateDisposition.TransientFailure) transientFailures++
++        }
++        val stats = EhGalleryUpdaterStats(
++            startedAt = startedAt,
++            finishedAt = clock(),
++            eligible = candidates.size,
++            attempted = results.size,
++            updated = results.count { it.disposition == EhGalleryUpdateDisposition.Updated },
++            newRevisions = results.sumOf(EhGalleryUpdateResult::newRevisionCount),
++            aged = results.count { it.disposition == EhGalleryUpdateDisposition.Aged },
++            notFound = results.count { it.disposition == EhGalleryUpdateDisposition.NotFound },
++            authenticationSkipped = results.count { it.disposition == EhGalleryUpdateDisposition.AuthenticationSkipped },
++            transientFailures = transientFailures,
++            permanentFailures = results.count { it.disposition == EhGalleryUpdateDisposition.PermanentFailure },
++            stoppedAtFailureCutoff = transientFailures >= EhGalleryUpdateRuntime.FAILURE_CUTOFF && results.size < candidates.size,
++        )
++        return EhGalleryUpdateRun(stats, results)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateModels.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d2ca83d6fea60ed1b709a0c4bb5e587b44147843
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateModels.kt
+@@ -0,0 +1,102 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
++
++data class EhGalleryUpdatePolicy(
++    val intervalHours: Int = 24,
++    val wifiOnly: Boolean = false,
++    val requiresCharging: Boolean = false,
++) {
++    init {
++        require(intervalHours == 0 || intervalHours in 1..168) { "Update interval must be disabled or between 1 and 168 hours" }
++    }
++}
++
++data class EhGalleryUpdateState(
++    val checkedAt: Long = 0,
++    val agedAt: Long? = null,
++    val notFoundAt: Long? = null,
++) {
++    val aged: Boolean get() = agedAt != null
++}
++
++data class EhGalleryUpdateCandidate(
++    val mangaId: Long,
++    val sourceId: Long,
++    val title: String,
++    val mangaUrl: String,
++    val state: EhGalleryUpdateState,
++)
++
++data class EhRemoteRevision(
++    val key: GalleryKey,
++    val title: String,
++    val postedAt: Long,
++)
++
++data class EhLocalRevision(
++    val id: Long,
++    val url: String,
++    val title: String,
++    val read: Boolean,
++    val bookmark: Boolean,
++    val lastPageRead: Int,
++    val pagesLeft: Int,
++    val downloaded: Boolean,
++    val historyLastRead: Long = 0,
++    val historyTimeRead: Long = 0,
++)
++
++data class EhRevisionMutation(
++    val localId: Long?,
++    val remote: EhRemoteRevision,
++    val read: Boolean,
++    val bookmark: Boolean,
++    val lastPageRead: Int,
++    val pagesLeft: Int,
++    val downloaded: Boolean,
++    val historyLastRead: Long,
++    val historyTimeRead: Long,
++)
++
++data class EhRevisionMerge(
++    val mutations: List<EhRevisionMutation>,
++    val newRevisionCount: Int,
++)
++
++enum class EhGalleryUpdateDisposition {
++    Updated,
++    Unchanged,
++    Aged,
++    NotFound,
++    AuthenticationSkipped,
++    TransientFailure,
++    PermanentFailure,
++}
++
++data class EhGalleryUpdateResult(
++    val disposition: EhGalleryUpdateDisposition,
++    val title: String,
++    val newRevisionCount: Int = 0,
++    val failure: String? = null,
++)
++
++data class EhGalleryUpdaterStats(
++    val startedAt: Long,
++    val finishedAt: Long,
++    val eligible: Int,
++    val attempted: Int,
++    val updated: Int,
++    val newRevisions: Int,
++    val aged: Int,
++    val notFound: Int,
++    val authenticationSkipped: Int,
++    val transientFailures: Int,
++    val permanentFailures: Int,
++    val stoppedAtFailureCutoff: Boolean,
++)
++
++internal fun EhGalleryUpdateCandidate.site(): EhSite =
++    EhSite.entries.firstOrNull { it.sourceId == sourceId }
++        ?: error("Unsupported E-Hentai source $sourceId")
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateNotifier.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateNotifier.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..ccb49633861c17f157f916ceaf3e9620e68a2cf9
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateNotifier.kt
+@@ -0,0 +1,74 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import android.app.Notification
++import android.content.Context
++import androidx.core.app.NotificationCompat
++import androidx.core.app.NotificationManagerCompat
++import androidx.work.WorkManager
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.notification.Notifications
++
++class EhGalleryUpdateNotifier(
++    private val context: Context,
++) {
++    fun foreground(workId: java.util.UUID): Notification = base()
++        .setContentTitle("Updating E-Hentai galleries")
++        .setContentText("Preparing gallery updates")
++        .setOngoing(true)
++        .setProgress(0, 0, true)
++        .addAction(0, "Cancel", WorkManager.getInstance(context).createCancelPendingIntent(workId))
++        .build()
++
++    fun progress(workId: java.util.UUID, candidate: EhGalleryUpdateCandidate, current: Int, total: Int) {
++        notify(
++            PROGRESS_ID,
++            base()
++                .setContentTitle("Updating E-Hentai galleries")
++                .setContentText(candidate.title.take(80))
++                .setOnlyAlertOnce(true)
++                .setOngoing(true)
++                .setProgress(total.coerceAtLeast(1), current.coerceAtMost(total), false)
++                .addAction(0, "Cancel", WorkManager.getInstance(context).createCancelPendingIntent(workId))
++                .build(),
++        )
++    }
++
++    fun complete(run: EhGalleryUpdateRun) {
++        cancelProgress()
++        if (run.stats.newRevisions == 0 && run.stats.transientFailures == 0 && run.stats.permanentFailures == 0) return
++        val summary = buildList {
++            if (run.stats.newRevisions > 0) add("${run.stats.newRevisions} new revisions")
++            if (run.stats.notFound > 0) add("${run.stats.notFound} unavailable")
++            val failures = run.stats.transientFailures + run.stats.permanentFailures
++            if (failures > 0) add("$failures failed")
++        }.joinToString(" · ")
++        notify(
++            COMPLETE_ID,
++            base()
++                .setContentTitle("E-Hentai gallery update complete")
++                .setContentText(summary)
++                .setAutoCancel(true)
++                .build(),
++        )
++    }
++
++    fun cancelProgress() {
++        NotificationManagerCompat.from(context).cancel(PROGRESS_ID)
++    }
++
++    private fun base(): NotificationCompat.Builder =
++        NotificationCompat.Builder(context, Notifications.CHANNEL_LIBRARY_PROGRESS)
++            .setSmallIcon(R.drawable.ic_refresh_24dp)
++            .setPriority(NotificationCompat.PRIORITY_LOW)
++            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
++
++    @Suppress("MissingPermission")
++    private fun notify(id: Int, notification: Notification) {
++        runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
++    }
++
++    companion object {
++        const val PROGRESS_ID = 690_201
++        const val COMPLETE_ID = 690_202
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateRuntime.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateRuntime.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..fbb7d25f8680fbbcc4f5ba646201f371895c986d
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateRuntime.kt
+@@ -0,0 +1,262 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhRevision
++import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
++import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryAlias
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
++import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
++import dev.ahmedmohamed.hayai.adult.eh.source.EhentaiSource
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import eu.kanade.tachiyomi.data.database.models.History
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.data.database.models.MangaCategory
++import eu.kanade.tachiyomi.data.download.DownloadManager
++import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.source.model.SManga
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import timber.log.Timber
++
++interface EhGalleryUpdateOperations {
++    suspend fun candidates(): List<EhGalleryUpdateCandidate>
++    suspend fun update(candidate: EhGalleryUpdateCandidate): EhGalleryUpdateResult
++}
++
++class EhGalleryUpdateRuntime(
++    private val database: DatabaseHelper,
++    private val sourceManager: SourceManager,
++    private val gateway: EhHttpGateway,
++    private val persistence: HayaiEhPersistenceStore,
++    private val stateStore: EhGalleryUpdateStateStore,
++    private val downloadManager: DownloadManager,
++    private val renameJournal: EhDownloadRenameJournal,
++    private val downloadTreeMerger: EhDownloadTreeMerger,
++    private val clock: () -> Long = System::currentTimeMillis,
++) : EhGalleryUpdateOperations {
++    override suspend fun candidates(): List<EhGalleryUpdateCandidate> = withContext(Dispatchers.IO) {
++        val now = clock()
++        database.getFavoriteMangas().executeAsBlocking()
++            .asSequence()
++            .filter { manga -> manga.source in SUPPORTED_SOURCE_IDS }
++            .mapNotNull { manga ->
++                val id = manga.id ?: return@mapNotNull null
++                val identity = SourceMangaIdentity(manga.source, manga.url)
++                val state = stateStore.state(identity)
++                if (state.aged || now - state.checkedAt < MIN_CHECK_INTERVAL_MILLIS) return@mapNotNull null
++                EhGalleryUpdateCandidate(id, manga.source, manga.title, manga.url, state)
++            }
++            .sortedWith(compareBy({ it.state.checkedAt }, { it.mangaId }))
++            .take(MAX_GALLERIES_PER_RUN)
++            .toList()
++    }
++
++    override suspend fun update(candidate: EhGalleryUpdateCandidate): EhGalleryUpdateResult {
++        val manga = withContext(Dispatchers.IO) { database.getManga(candidate.mangaId).executeAsBlocking() }
++            ?: return EhGalleryUpdateResult(EhGalleryUpdateDisposition.Unchanged, candidate.title)
++        val source = sourceManager.get(candidate.sourceId) as? EhentaiSource
++            ?: return EhGalleryUpdateResult(EhGalleryUpdateDisposition.PermanentFailure, candidate.title, failure = "E-Hentai source is unavailable")
++        val identity = SourceMangaIdentity(candidate.sourceId, candidate.mangaUrl)
++        val now = clock()
++
++        return try {
++            val start = GalleryKey.parse(candidate.mangaUrl)
++            val firstDetails = gateway.details(candidate.site(), start)
++            val newest = (firstDetails.newerRevisions + firstDetails.metadata.asRevision())
++                .maxWithOrNull(compareBy<EhRevision>({ it.postedAtMillis ?: 0 }, { it.key.id.value }))
++                ?.key ?: start
++            val remoteDetails = source.getMangaDetails(SManga.create().apply { url = newest.normalizedPath })
++            val chain = gateway.revisionChain(candidate.site(), newest)
++            check(chain.isNotEmpty()) { "E-Hentai returned an empty revision chain" }
++            val remote = chain.map { revision ->
++                EhRemoteRevision(revision.key, revision.title, revision.postedAtMillis ?: 0)
++            }
++            val revisionKeys = remote.mapTo(mutableSetOf()) { it.key }
++            val roots = withContext(Dispatchers.IO) {
++                database.getFavoriteMangas().executeAsBlocking().filter { root ->
++                    root.source == candidate.sourceId && runCatching { GalleryKey.parse(root.url) }.getOrNull() in revisionKeys
++                }.ifEmpty { listOf(manga) }
++            }
++            val merge = mergeIntoJ2k(roots, source, remoteDetails, remote)
++            persistAliases(remote)
++            val postedAt = chain.last().postedAtMillis
++            val aged = postedAt != null && now - postedAt >= GALLERY_AGE_MILLIS
++            val completedState = EhGalleryUpdateState(now, now.takeIf { aged }, null)
++            roots.forEach { root -> stateStore.record(SourceMangaIdentity(root.source, root.url), completedState) }
++            EhGalleryUpdateResult(
++                disposition = when {
++                    aged -> EhGalleryUpdateDisposition.Aged
++                    merge.newRevisionCount > 0 -> EhGalleryUpdateDisposition.Updated
++                    else -> EhGalleryUpdateDisposition.Unchanged
++                },
++                title = roots.minBy { requireNotNull(it.id) }.title,
++                newRevisionCount = merge.newRevisionCount,
++            )
++        } catch (failure: Throwable) {
++            if (failure is CancellationException) throw failure
++            when (failure) {
++                is EhFailure.AuthenticationRequired -> EhGalleryUpdateResult(EhGalleryUpdateDisposition.AuthenticationSkipped, candidate.title)
++                is EhFailure.GalleryNotFound -> {
++                    stateStore.record(identity, EhGalleryUpdateState(now, now, now))
++                    EhGalleryUpdateResult(EhGalleryUpdateDisposition.NotFound, candidate.title)
++                }
++                is EhFailure.Network, is EhFailure.RateLimited ->
++                    EhGalleryUpdateResult(EhGalleryUpdateDisposition.TransientFailure, candidate.title, failure = failure.message)
++                else -> EhGalleryUpdateResult(EhGalleryUpdateDisposition.PermanentFailure, candidate.title, failure = failure.message)
++            }
++        }
++    }
++
++    private suspend fun mergeIntoJ2k(
++        roots: List<Manga>,
++        source: EhentaiSource,
++        remoteDetails: SManga,
++        remote: List<EhRemoteRevision>,
++    ): EhRevisionMerge = withContext(Dispatchers.IO) {
++        require(roots.isNotEmpty())
++        val manga = roots.minBy { requireNotNull(it.id) }
++        val discarded = roots.filterNot { it.id == manga.id }
++        val chaptersByManga = roots.associateWith { database.getChapters(it).executeAsBlocking() }
++        val local = chaptersByManga.values.flatten()
++        val existingById = local.associateBy { it.id }
++        val pendingRenames = renameJournal.pending(requireNotNull(manga.id))
++        pendingRenames.forEach { pending ->
++            val chapter = existingById[pending.chapterId] ?: return@forEach
++            val after = chapter.copyForRename().apply { name = pending.newName }
++            when {
++                downloadManager.isChapterDownloaded(after, manga, skipCache = true) -> Unit
++                downloadManager.isChapterDownloaded(chapter, manga, skipCache = true) -> {
++                    downloadManager.renameChapter(source, manga, chapter, after)
++                    check(downloadManager.isChapterDownloaded(after, manga, skipCache = true)) {
++                        "Unable to recover E-Hentai download rename for chapter ${pending.chapterId}"
++                    }
++                }
++            }
++        }
++        val pendingRenameIds = pendingRenames.map { it.chapterId }.toSet()
++        val history = roots.flatMap { database.getHistoryByMangaId(requireNotNull(it.id)).executeAsBlocking() }.associateBy(History::chapter_id)
++        val mangaById = roots.associateBy { it.id }
++        val localModels = local.map { chapter ->
++            val itemHistory = history[chapter.id]
++            EhLocalRevision(
++                id = requireNotNull(chapter.id),
++                url = chapter.url,
++                title = chapter.name,
++                read = chapter.read,
++                bookmark = chapter.bookmark,
++                lastPageRead = chapter.last_page_read,
++                pagesLeft = chapter.pages_left,
++                downloaded = downloadManager.isChapterDownloaded(chapter, requireNotNull(mangaById[chapter.manga_id]), skipCache = true),
++                historyLastRead = itemHistory?.last_read ?: 0,
++                historyTimeRead = itemHistory?.time_read ?: 0,
++            )
++        }
++        val merge = EhRevisionMerger.merge(remote, localModels)
++        val localById = existingById
++        val preparedRenames = mutableSetOf<Long>()
++        val renames = mutableListOf<Pair<Chapter, Chapter>>()
++        val chapters = merge.mutations.mapIndexed { index, mutation ->
++            val existing = mutation.localId?.let(localById::get)
++            val chapter = existing ?: Chapter.create().apply {
++                manga_id = manga.id
++                url = mutation.remote.key.normalizedPath
++                date_fetch = clock()
++            }
++            chapter.manga_id = manga.id
++            val before = existing?.copyForRename()
++            chapter.name = "v${index + 1} · ${mutation.remote.title}"
++            chapter.chapter_number = index + 1f
++            chapter.source_order = merge.mutations.lastIndex - index
++            chapter.date_upload = mutation.remote.postedAt
++            chapter.read = mutation.read
++            chapter.bookmark = mutation.bookmark
++            chapter.last_page_read = mutation.lastPageRead
++            chapter.pages_left = mutation.pagesLeft
++            if (before != null && mutation.downloaded && before.name != chapter.name) {
++                renames += before to chapter
++            }
++            chapter
++        }
++
++        val stableUrl = manga.url
++        val stableTitle = manga.title
++        manga.copyFrom(remoteDetails)
++        manga.url = stableUrl
++        manga.title = stableTitle
++        manga.last_update = clock()
++        manga.favorite = roots.any(Manga::favorite)
++        manga.date_added = roots.map(Manga::date_added).filter { it > 0 }.minOrNull() ?: manga.date_added
++        discarded.forEach { fromManga ->
++            chaptersByManga.getValue(fromManga).filter { downloadManager.isChapterDownloaded(it, fromManga, skipCache = true) }.forEach { chapter ->
++                downloadTreeMerger.copyDownloadedChapter(source, fromManga, manga, chapter)
++            }
++        }
++        renames.forEach { (before, after) ->
++            renameJournal.prepare(EhPendingDownloadRename(requireNotNull(manga.id), requireNotNull(before.id), before.name, after.name))
++            preparedRenames += requireNotNull(before.id)
++        }
++        renames.forEach { (before, after) ->
++            downloadManager.renameChapter(source, manga, before, after)
++            check(downloadManager.isChapterDownloaded(after, manga, skipCache = true)) {
++                "Unable to preserve downloaded E-Hentai revision ${before.id}"
++            }
++        }
++        val selectedIds = merge.mutations.mapNotNullTo(mutableSetOf(), EhRevisionMutation::localId)
++        val unmatched = local.filter { chapter ->
++            val chapterId = chapter.id
++            (chapterId == null || chapterId !in selectedIds) &&
++                merge.mutations.none { it.remote.key == runCatching { GalleryKey.parse(chapter.url) }.getOrNull() }
++        }.onEach { it.manga_id = manga.id }
++        val categories = roots.flatMap { database.getCategoriesForManga(it).executeAsBlocking() }.distinctBy { it.id }
++        database.inTransaction {
++            database.insertManga(manga).executeAsBlocking()
++            database.insertChapters(chapters + unmatched).executeAsBlocking()
++            merge.mutations.forEach { mutation ->
++                val chapterId = mutation.localId ?: return@forEach
++                if (mutation.historyLastRead <= 0 && mutation.historyTimeRead <= 0) return@forEach
++                database.upsertHistoryLastRead(
++                    History.create(requireNotNull(chapters.firstOrNull { it.id == chapterId })).apply {
++                        last_read = mutation.historyLastRead
++                        time_read = mutation.historyTimeRead
++                    },
++                ).executeAsBlocking()
++            }
++            database.deleteOldMangasCategories(roots).executeAsBlocking()
++            database.insertMangasCategories(
++                categories.map { category -> MangaCategory.create(manga, category) },
++            ).executeAsBlocking()
++            discarded.forEach { database.deleteManga(it).executeAsBlocking() }
++        }
++        renameJournal.complete(requireNotNull(manga.id), pendingRenameIds + preparedRenames)
++        discarded.forEach { downloadTreeMerger.removeMergedManga(source, it) }
++        downloadManager.refreshCache()
++        merge
++    }
++
++    private fun persistAliases(remote: List<EhRemoteRevision>) {
++        val canonical = remote.minWith(compareBy<EhRemoteRevision>({ it.postedAt }, { it.key.id.value })).key.toPersistence()
++        remote.asSequence().map { it.key.toPersistence() }.filter { it != canonical }.forEach { alternate ->
++            runCatching { persistence.addAlias(EhGalleryAlias(canonical, alternate)) }
++                .onFailure { Timber.w(it, "Unable to persist E-Hentai revision alias %s", alternate.gid) }
++        }
++    }
++
++    private fun Chapter.copyForRename(): Chapter = Chapter.create().also { it.copyFrom(this) }
++
++    private fun dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryMetadata.asRevision() =
++        EhRevision(key, title, postedAtMillis)
++
++    private fun GalleryKey.toPersistence() = EhGalleryIdentity(id.value, token.value)
++
++    companion object {
++        const val MAX_GALLERIES_PER_RUN = 50
++        const val FAILURE_CUTOFF = 5
++        const val MIN_CHECK_INTERVAL_MILLIS = 24L * 60 * 60 * 1_000
++        const val GALLERY_AGE_MILLIS = 365L * 24 * 60 * 60 * 1_000
++        private val SUPPORTED_SOURCE_IDS = dev.ahmedmohamed.hayai.adult.eh.domain.EhSite.entries.map { it.sourceId }.toSet()
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateStateStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateStateStore.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..bd42f01ded9522f1111d276cc05bdc4e2102e08e
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateStateStore.kt
+@@ -0,0 +1,123 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import android.content.Context
++import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
++import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
++import org.json.JSONObject
++import java.security.MessageDigest
++
++class EhGalleryUpdateStateStore(
++    context: Context,
++    private val persistence: HayaiEhPersistenceStore,
++) {
++    private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
++
++    fun state(identity: SourceMangaIdentity): EhGalleryUpdateState {
++        val metadata = persistence.metadata(identity) ?: return fallbackState(identity)
++        val update = runCatching { JSONObject(metadata.extra).optJSONObject(UPDATE_FIELD) }.getOrNull()
++            ?: return EhGalleryUpdateState()
++        return EhGalleryUpdateState(
++            checkedAt = update.optLong("checkedAt", 0),
++            agedAt = update.nullableLong("agedAt"),
++            notFoundAt = update.nullableLong("notFoundAt"),
++        )
++    }
++
++    fun record(identity: SourceMangaIdentity, state: EhGalleryUpdateState) {
++        val metadata = persistence.metadata(identity)
++        if (metadata == null) {
++            preferences.edit().putString(fallbackKey(identity), state.toJson().toString()).apply()
++            return
++        }
++        val root = runCatching { JSONObject(metadata.extra) }.getOrElse { JSONObject() }
++        root.put(
++            UPDATE_FIELD,
++            JSONObject()
++                .put("checkedAt", state.checkedAt)
++                .put("agedAt", state.agedAt ?: JSONObject.NULL)
++                .put("notFoundAt", state.notFoundAt ?: JSONObject.NULL),
++        )
++        persistence.replaceMetadata(metadata.copy(extra = root.toString()))
++        preferences.edit().remove(fallbackKey(identity)).apply()
++    }
++
++    fun policy(): EhGalleryUpdatePolicy = EhGalleryUpdatePolicy(
++        intervalHours = preferences.getInt("intervalHours", 24),
++        wifiOnly = preferences.getBoolean("wifiOnly", false),
++        requiresCharging = preferences.getBoolean("requiresCharging", false),
++    )
++
++    fun setPolicy(policy: EhGalleryUpdatePolicy) {
++        preferences.edit()
++            .putInt("intervalHours", policy.intervalHours)
++            .putBoolean("wifiOnly", policy.wifiOnly)
++            .putBoolean("requiresCharging", policy.requiresCharging)
++            .apply()
++    }
++
++    fun stats(): EhGalleryUpdaterStats? = preferences.getString("stats", null)?.let(EhGalleryUpdaterStatsCodec::decode)
++
++    fun recordStats(stats: EhGalleryUpdaterStats) {
++        preferences.edit().putString("stats", EhGalleryUpdaterStatsCodec.encode(stats)).apply()
++    }
++
++    private fun JSONObject.nullableLong(name: String): Long? = if (isNull(name) || !has(name)) null else getLong(name)
++
++    private fun fallbackState(identity: SourceMangaIdentity): EhGalleryUpdateState {
++        val value = preferences.getString(fallbackKey(identity), null) ?: return EhGalleryUpdateState()
++        return runCatching {
++            val json = JSONObject(value)
++            EhGalleryUpdateState(json.optLong("checkedAt", 0), json.nullableLong("agedAt"), json.nullableLong("notFoundAt"))
++        }.getOrDefault(EhGalleryUpdateState())
++    }
++
++    private fun EhGalleryUpdateState.toJson(): JSONObject = JSONObject()
++        .put("checkedAt", checkedAt)
++        .put("agedAt", agedAt ?: JSONObject.NULL)
++        .put("notFoundAt", notFoundAt ?: JSONObject.NULL)
++
++    private fun fallbackKey(identity: SourceMangaIdentity): String {
++        val bytes = MessageDigest.getInstance("SHA-256").digest("${identity.sourceId}\u0000${identity.mangaUrl}".toByteArray())
++        return "fallback." + bytes.joinToString("") { "%02x".format(it) }
++    }
++
++    private companion object {
++        const val PREFERENCES = "hayai.eh.gallery_updater"
++        const val UPDATE_FIELD = "hayaiUpdater"
++    }
++}
++
++object EhGalleryUpdaterStatsCodec {
++    fun encode(value: EhGalleryUpdaterStats): String = JSONObject()
++        .put("startedAt", value.startedAt)
++        .put("finishedAt", value.finishedAt)
++        .put("eligible", value.eligible)
++        .put("attempted", value.attempted)
++        .put("updated", value.updated)
++        .put("newRevisions", value.newRevisions)
++        .put("aged", value.aged)
++        .put("notFound", value.notFound)
++        .put("authenticationSkipped", value.authenticationSkipped)
++        .put("transientFailures", value.transientFailures)
++        .put("permanentFailures", value.permanentFailures)
++        .put("stoppedAtFailureCutoff", value.stoppedAtFailureCutoff)
++        .toString()
++
++    fun decode(value: String): EhGalleryUpdaterStats {
++        val json = JSONObject(value)
++        return EhGalleryUpdaterStats(
++            startedAt = json.getLong("startedAt"),
++            finishedAt = json.getLong("finishedAt"),
++            eligible = json.getInt("eligible"),
++            attempted = json.getInt("attempted"),
++            updated = json.getInt("updated"),
++            newRevisions = json.getInt("newRevisions"),
++            aged = json.getInt("aged"),
++            notFound = json.getInt("notFound"),
++            authenticationSkipped = json.getInt("authenticationSkipped"),
++            transientFailures = json.getInt("transientFailures"),
++            permanentFailures = json.getInt("permanentFailures"),
++            stoppedAtFailureCutoff = json.getBoolean("stoppedAtFailureCutoff"),
++        )
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateWorker.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateWorker.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..fb469d19d5b2d5d18414d41c46b739f318773fbd
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateWorker.kt
+@@ -0,0 +1,125 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import android.content.Context
++import android.content.pm.ServiceInfo
++import android.os.Build
++import androidx.work.BackoffPolicy
++import androidx.work.Constraints
++import androidx.work.CoroutineWorker
++import androidx.work.ExistingPeriodicWorkPolicy
++import androidx.work.ExistingWorkPolicy
++import androidx.work.ForegroundInfo
++import androidx.work.NetworkType
++import androidx.work.OneTimeWorkRequestBuilder
++import androidx.work.PeriodicWorkRequestBuilder
++import androidx.work.WorkManager
++import androidx.work.WorkerParameters
++import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
++import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.download.DownloadManager
++import eu.kanade.tachiyomi.data.download.DownloadProvider
++import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.util.system.isConnectedToWifi
++import eu.kanade.tachiyomi.util.system.tryToSetForeground
++import kotlinx.coroutines.CancellationException
++import timber.log.Timber
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++import java.util.concurrent.TimeUnit
++
++class EhGalleryUpdateWorker(
++    appContext: Context,
++    parameters: WorkerParameters,
++) : CoroutineWorker(appContext, parameters) {
++    private val notifier = EhGalleryUpdateNotifier(appContext)
++
++    override suspend fun doWork(): Result {
++        if (!HayaiPreferences(Injekt.get()).hentaiFeaturesEnabled.get()) return Result.success()
++        val persistence = Injekt.get<HayaiEhPersistenceStore>()
++        val stateStore = EhGalleryUpdateStateStore(applicationContext, persistence)
++        if (stateStore.policy().wifiOnly && !applicationContext.isConnectedToWifi()) return Result.success()
++        return try {
++            try {
++                tryToSetForeground()
++            } catch (denied: SecurityException) {
++                Timber.w(denied, "Notification permission denied for E-Hentai updater")
++            }
++            val runtime = EhGalleryUpdateRuntime(
++                database = Injekt.get<DatabaseHelper>(),
++                sourceManager = Injekt.get<SourceManager>(),
++                gateway = Injekt.get<EhHttpGateway>(),
++                persistence = persistence,
++                stateStore = stateStore,
++                downloadManager = Injekt.get<DownloadManager>(),
++                renameJournal = EhDownloadRenameJournal(applicationContext),
++                downloadTreeMerger = EhDownloadTreeMerger(DownloadProvider(applicationContext)),
++            )
++            val run = EhGalleryUpdateCoordinator(runtime).run { candidate, current, total ->
++                notifier.progress(id, candidate, current, total)
++            }
++            stateStore.recordStats(run.stats)
++            notifier.complete(run)
++            if (run.shouldRetry && runAttemptCount < MAX_TRANSIENT_RETRIES) Result.retry() else Result.success()
++        } catch (failure: CancellationException) {
++            throw failure
++        } catch (failure: Throwable) {
++            Timber.e(failure, "E-Hentai gallery updater failed")
++            if (runAttemptCount < MAX_TRANSIENT_RETRIES) Result.retry() else Result.failure()
++        } finally {
++            notifier.cancelProgress()
++        }
++    }
++
++    override suspend fun getForegroundInfo(): ForegroundInfo =
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++            ForegroundInfo(EhGalleryUpdateNotifier.PROGRESS_ID, notifier.foreground(id), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
++        } else {
++            ForegroundInfo(EhGalleryUpdateNotifier.PROGRESS_ID, notifier.foreground(id))
++        }
++
++    companion object {
++        const val PERIODIC_WORK_NAME = "hayai.eh.gallery-update.periodic"
++        const val MANUAL_WORK_NAME = "hayai.eh.gallery-update.manual"
++        const val WORK_TAG = "hayai.eh.gallery-update"
++        private const val MAX_TRANSIENT_RETRIES = 3
++
++        fun schedule(context: Context, policy: EhGalleryUpdatePolicy) {
++            val persistence = Injekt.get<HayaiEhPersistenceStore>()
++            EhGalleryUpdateStateStore(context, persistence).setPolicy(policy)
++            val manager = WorkManager.getInstance(context)
++            if (policy.intervalHours == 0) {
++                manager.cancelUniqueWork(PERIODIC_WORK_NAME)
++                return
++            }
++            val request = PeriodicWorkRequestBuilder<EhGalleryUpdateWorker>(policy.intervalHours.toLong(), TimeUnit.HOURS)
++                .setConstraints(policy.constraints())
++                .addTag(WORK_TAG)
++                .build()
++            manager.enqueueUniquePeriodicWork(PERIODIC_WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
++        }
++
++        fun runNow(context: Context, policy: EhGalleryUpdatePolicy? = null) {
++            val resolved = policy ?: EhGalleryUpdateStateStore(context, Injekt.get()).policy()
++            val request = OneTimeWorkRequestBuilder<EhGalleryUpdateWorker>()
++                .setConstraints(resolved.constraints())
++                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
++                .addTag(WORK_TAG)
++                .build()
++            WorkManager.getInstance(context).enqueueUniqueWork(MANUAL_WORK_NAME, ExistingWorkPolicy.KEEP, request)
++        }
++
++        fun cancel(context: Context) {
++            WorkManager.getInstance(context).apply {
++                cancelUniqueWork(PERIODIC_WORK_NAME)
++                cancelUniqueWork(MANUAL_WORK_NAME)
++            }
++        }
++
++        private fun EhGalleryUpdatePolicy.constraints(): Constraints = Constraints.Builder()
++            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
++            .setRequiresCharging(requiresCharging)
++            .build()
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhRevisionMerger.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhRevisionMerger.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..6a1d4d9b889e37fb7aa06d3fbcc8e5ae4aa37a93
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/update/EhRevisionMerger.kt
+@@ -0,0 +1,30 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
++
++object EhRevisionMerger {
++    fun merge(
++        remote: List<EhRemoteRevision>,
++        local: List<EhLocalRevision>,
++    ): EhRevisionMerge {
++        require(remote.isNotEmpty()) { "A gallery revision chain cannot be empty" }
++        val distinctRemote = remote.distinctBy { it.key }.sortedWith(compareBy(EhRemoteRevision::postedAt, { it.key.id.value }))
++        val localByKey = local.groupBy { runCatching { GalleryKey.parse(it.url) }.getOrNull() }
++        val mutations = distinctRemote.map { revision ->
++            val matches = localByKey[revision.key].orEmpty()
++            val preferred = matches.sortedWith(compareByDescending<EhLocalRevision> { it.downloaded }.thenBy { it.id }).firstOrNull()
++            EhRevisionMutation(
++                localId = preferred?.id,
++                remote = revision,
++                read = matches.any(EhLocalRevision::read),
++                bookmark = matches.any(EhLocalRevision::bookmark),
++                lastPageRead = matches.maxOfOrNull(EhLocalRevision::lastPageRead) ?: 0,
++                pagesLeft = matches.map(EhLocalRevision::pagesLeft).filter { it > 0 }.minOrNull() ?: 0,
++                downloaded = matches.any(EhLocalRevision::downloaded),
++                historyLastRead = matches.maxOfOrNull(EhLocalRevision::historyLastRead) ?: 0,
++                historyTimeRead = matches.maxOfOrNull(EhLocalRevision::historyTimeRead) ?: 0,
++            )
++        }
++        return EhRevisionMerge(mutations, mutations.count { it.localId == null })
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt
+index 7fd93e9bfa55a7aa73cdcced0b123d40f9637550..d13e5bf5a9bb9e74b92eb120d6b5bc0c7181be10 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt
+@@ -90,7 +90,6 @@ object SourceCapabilityRegistry {
+                     adultMetadata + SourceCapability.BatchAdd + SourceCapability.NonHentaiGenreOverride
+                 SourceFamily.Lanraragi ->
+                     setOf(
+-                        SourceCapability.BatchAdd,
+                         SourceCapability.CustomDescription,
+                         SourceCapability.InAppOpen,
+                         SourceCapability.Metadata,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt
+index 8d550c549a959bc045d6820d142fbf799f9e19a7..67c77847e9222f134fc95a66b4bc434582535a00 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt
+@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
+ import kotlinx.serialization.json.contentOrNull
+ import kotlinx.serialization.json.jsonObject
+ import org.jsoup.Jsoup
++import java.time.Instant
+ 
+ data class EnhancedDetails(
+     val title: String? = null,
+@@ -77,13 +78,22 @@ object EnhancedDetailsParser {
+             row.child(1).select("a").map { "$namespace: ${it.text().trim()}" }
+         }.distinct()
+         val fieldText = fields.associate { it.child(0).text().trim().lowercase().removeSuffix(":") to it.child(1).text().trim() }
++        val pages = fieldText["pages"].orEmpty().substringBefore('(').trim().takeIf(String::isNotBlank)
++        val fileSize = fieldText["pages"].orEmpty().substringAfter('(', "").removeSuffix(")").trim().takeIf(String::isNotBlank)
++        val ratings = fields.singleOrNull {
++            it.child(0).text().trim().lowercase().removeSuffix(":") == "ratings"
++        }?.child(1)
++        val ratingCount = ratings?.selectFirst("[itemprop=ratingCount]")?.attr("content")?.takeIf(String::isNotBlank)
++        val ratingValue = ratings?.selectFirst("[itemprop=ratingValue]")?.attr("content")?.takeIf(String::isNotBlank)
+         return EnhancedDetails(
+             title = wrapper.selectFirst(".title h1")?.text()?.trim(),
+             alternateTitle = wrapper.selectFirst(".alt-title")?.text()?.trim()?.takeIf(String::isNotBlank),
+             description = description(
+                 listOf(
+-                    "Pages" to fieldText["pages"],
+-                    "Ratings" to fieldText["ratings"],
++                    "Pages" to pages,
++                    "File size" to fileSize,
++                    "Rating" to ratingValue,
++                    "Rating count" to ratingCount,
+                     "Uploader" to fieldText["uploader"],
+                     "Tags" to tags.joinToString().takeIf(String::isNotBlank),
+                 ),
+@@ -107,9 +117,15 @@ object EnhancedDetailsParser {
+             alternateTitle = titles?.string("japanese"),
+             description = description(
+                 listOf(
++                    "ID" to root.long("id")?.toString(),
++                    "Media ID" to root.string("media_id"),
++                    "Posted" to root.long("upload_date")?.let { Instant.ofEpochSecond(it).toString() },
+                     "Pages" to root.long("num_pages")?.toString(),
+                     "Favorites" to root.long("num_favorites")?.toString(),
+                     "Scanlator" to root.string("scanlator"),
++                    "English title" to titles?.string("english"),
++                    "Japanese title" to titles?.string("japanese"),
++                    "Short title" to titles?.string("pretty"),
+                     "Tags" to tags.joinToString().takeIf(String::isNotBlank),
+                 ),
+             ),
+@@ -154,6 +170,7 @@ object EnhancedDetailsParser {
+                     "Summary" to root.string("summary"),
+                     "Pages" to root.long("pagecount")?.toString(),
+                     "File" to root.string("filename"),
++                    "Archive type" to root.string("extension")?.uppercase(),
+                     "Tags" to tags.joinToString().takeIf(String::isNotBlank),
+                 ),
+             ),
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..59417d1204d9f55870b566ecc62c59639671b079
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt
+@@ -0,0 +1,124 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import android.graphics.Bitmap
++import android.graphics.BitmapFactory
++import dev.ahmedmohamed.hayai.source.enhanced.EnhancedSourceFeature.PagePreview
++import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewProvider
++import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreview
++import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.source.SourceManager
++import kotlinx.coroutines.async
++import kotlinx.coroutines.awaitAll
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.sync.Semaphore
++import kotlinx.coroutines.sync.withPermit
++import kotlinx.coroutines.supervisorScope
++import okhttp3.CacheControl
++import java.io.ByteArrayOutputStream
++import java.util.Collections
++import java.util.concurrent.atomic.AtomicLong
++
++class EnhancedDetailsPreviewLoader(
++    private val sourceManager: SourceManager,
++    private val database: DatabaseHelper,
++) : SourceDetailsPreviewProvider {
++    override fun owns(manga: Manga): Boolean {
++        val source = sourceManager.get(manga.source) as? HayaiEnhancedHttpSource ?: return false
++        return EnhancedSourceFeatureRegistry.features(source)?.contains(PagePreview) == true
++    }
++
++    override suspend fun load(
++        manga: Manga,
++        page: Int = 1,
++        cacheControl: CacheControl? = null,
++    ): SourceRenderedPreviewPage {
++        require(page > 0)
++        val source = sourceManager.get(manga.source) as? HayaiEnhancedHttpSource
++            ?: error("The enhanced source is no longer installed")
++        check(EnhancedSourceFeatureRegistry.features(source)?.contains(PagePreview) == true) {
++            "${source.name} does not expose page previews"
++        }
++        val chapters = database.getChapters(manga).executeAsBlocking()
++        val previews = source.getPagePreviews(manga, chapters, page)
++        val semaphore = Semaphore(MAX_PARALLEL_IMAGES)
++        val decodedBytes = AtomicLong(0)
++        val allocated = Collections.synchronizedList(mutableListOf<SourceRenderedPreview>())
++        val rendered = try {
++            supervisorScope {
++                previews.previews.map { preview ->
++                    async {
++                        semaphore.withPermit {
++                            try {
++                                source.fetchPreviewImage(preview, cacheControl).use { response ->
++                                    val bitmap = response.body.readPreviewBitmap()
++                                    val total = decodedBytes.addAndGet(bitmap.byteCount.toLong())
++                                    if (total > MAX_DECODED_BYTES_PER_PAGE) {
++                                        decodedBytes.addAndGet(-bitmap.byteCount.toLong())
++                                        bitmap.recycle()
++                                        error("Preview page exceeded the decoded bitmap budget")
++                                    }
++                                    SourceRenderedPreview(preview.index, preview.pageUrl, bitmap).also(allocated::add)
++                                }
++                            } catch (cancelled: CancellationException) {
++                                throw cancelled
++                            } catch (_: Exception) {
++                                null
++                            }
++                        }
++                    }
++                }.awaitAll().filterNotNull()
++            }
++        } catch (error: Throwable) {
++            allocated.forEach { if (!it.bitmap.isRecycled) it.bitmap.recycle() }
++            throw error
++        }
++        check(rendered.isNotEmpty() || previews.previews.isEmpty()) { "No page preview images could be loaded" }
++        return SourceRenderedPreviewPage(previews.page, rendered, previews.hasNextPage, previews.totalPages)
++    }
++
++    private fun okhttp3.ResponseBody.readPreviewBitmap(): Bitmap {
++        val declared = contentLength()
++        require(declared < 0 || declared <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
++        val bytes = byteStream().use { input ->
++            val output = ByteArrayOutputStream(minOf(MAX_IMAGE_BYTES, maxOf(16 * 1024L, declared)).toInt())
++            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
++            var total = 0L
++            while (true) {
++                val count = input.read(buffer)
++                if (count < 0) break
++                total += count
++                require(total <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
++                output.write(buffer, 0, count)
++            }
++            output.toByteArray()
++        }
++        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
++        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
++        require(bounds.outWidth in 1..MAX_SOURCE_DIMENSION && bounds.outHeight in 1..MAX_SOURCE_DIMENSION) {
++            "Preview image dimensions are invalid"
++        }
++        var sample = 1
++        while (bounds.outWidth / sample > MAX_RENDER_DIMENSION || bounds.outHeight / sample > MAX_RENDER_DIMENSION) sample *= 2
++        return requireNotNull(
++            BitmapFactory.decodeByteArray(
++                bytes,
++                0,
++                bytes.size,
++                BitmapFactory.Options().apply {
++                    inSampleSize = sample
++                    inPreferredConfig = Bitmap.Config.RGB_565
++                },
++            ),
++        ) { "Preview image could not be decoded" }
++    }
++
++    companion object {
++        private const val MAX_PARALLEL_IMAGES = 3
++        private const val MAX_IMAGE_BYTES = 4L * 1024L * 1024L
++        private const val MAX_SOURCE_DIMENSION = 16_384
++        private const val MAX_RENDER_DIMENSION = 512
++        private const val MAX_DECODED_BYTES_PER_PAGE = 12L * 1024L * 1024L
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedPagePreview.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedPagePreview.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..9cfb089e42dcf02e9c0ed4c77431395c76fbe9b7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedPagePreview.kt
+@@ -0,0 +1,236 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import eu.kanade.tachiyomi.network.GET
++import eu.kanade.tachiyomi.network.awaitSuccess
++import eu.kanade.tachiyomi.source.model.SChapter
++import eu.kanade.tachiyomi.source.model.SManga
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.CancellationException
++import kotlinx.serialization.SerialName
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
++import okhttp3.CacheControl
++import okhttp3.Response
++import java.io.IOException
++import kotlin.math.ceil
++
++data class EnhancedPagePreview(
++    val index: Int,
++    val imageUrl: String,
++    val pageUrl: String?,
++)
++
++data class EnhancedPagePreviewPage(
++    val page: Int,
++    val previews: List<EnhancedPagePreview>,
++    val hasNextPage: Boolean,
++    val totalPages: Int,
++)
++
++interface EnhancedPagePreviewSource {
++    suspend fun getPagePreviews(
++        manga: SManga,
++        chapters: List<SChapter>,
++        page: Int,
++    ): EnhancedPagePreviewPage
++
++    suspend fun fetchPreviewImage(preview: EnhancedPagePreview, cacheControl: CacheControl? = null): Response
++}
++
++internal object EnhancedPagePreviewParser {
++    private val json = Json { ignoreUnknownKeys = true }
++
++    fun nhentaiConfig(body: String): List<String> =
++        json.decodeFromString<NHentaiConfig>(body).thumbServers.filter { it.startsWith("https://") }
++
++    fun nhentai(
++        body: String,
++        baseUrl: String,
++        thumbServers: List<String>,
++    ): List<EnhancedPagePreview> {
++        require(thumbServers.isNotEmpty())
++        val gallery = json.decodeFromString<NHentaiGallery>(body)
++        require(gallery.id > 0) { "NHentai returned an invalid gallery ID" }
++        return gallery.pages.mapIndexedNotNull { index, item ->
++            val path = item.thumbnail?.trim()?.takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
++            val server = thumbServers[Math.floorMod((gallery.mediaId.orEmpty() + index).hashCode(), thumbServers.size)].trimEnd('/')
++            val url = if (path.startsWith("https://")) path else "$server/${path.trimStart('/')}"
++            require(url.startsWith("https://")) { "NHentai returned an insecure preview URL" }
++            EnhancedPagePreview(index + 1, url, "${baseUrl.trimEnd('/')}/g/${gallery.id}/${index + 1}/")
++        }
++    }
++
++    fun lanraragi(
++        body: String,
++        baseUrl: String,
++    ): List<EnhancedPagePreview> {
++        val archive = json.decodeFromString<LanraragiArchive>(body)
++        require(archive.arcid.matches(ARC_ID_REGEX)) { "LANraragi returned an invalid archive ID" }
++        require(archive.pagecount in 1..MAX_GALLERY_PAGES) { "LANraragi returned an invalid page count" }
++        val base = baseUrl.trimEnd('/')
++        return (1..archive.pagecount).map { index ->
++            val suffix = if (index == 1) "" else "?page=$index&no_fallback=true"
++            EnhancedPagePreview(index, "$base/api/archives/${archive.arcid}/thumbnail$suffix", "$base/reader?id=${archive.arcid}#page=$index")
++        }
++    }
++
++    fun lanraragiThumbnailJob(body: String): Int = json.decodeFromString<LanraragiThumbnailTask>(body).job
++    fun lanraragiJobFinished(body: String): Boolean = json.decodeFromString<LanraragiTaskProgress>(body).state == "finished"
++
++    fun paginate(
++        previews: List<EnhancedPagePreview>,
++        page: Int,
++        pageSize: Int = EnhancedPagePreviewGateway.PREVIEWS_PER_PAGE,
++    ): EnhancedPagePreviewPage {
++        require(page > 0)
++        require(pageSize in 1..100)
++        val totalPages = maxOf(1, ceil(previews.size / pageSize.toDouble()).toInt())
++        if (page > totalPages) return EnhancedPagePreviewPage(page, emptyList(), false, totalPages)
++        val from = (page - 1) * pageSize
++        return EnhancedPagePreviewPage(page, previews.drop(from).take(pageSize), page < totalPages, totalPages)
++    }
++
++    @Serializable
++    private data class NHentaiConfig(
++        @SerialName("thumb_servers") val thumbServers: List<String> = emptyList(),
++    )
++
++    @Serializable
++    private data class NHentaiGallery(
++        val id: Long,
++        @SerialName("media_id") val mediaId: String? = null,
++        val pages: List<NHentaiPage> = emptyList(),
++    )
++
++    @Serializable
++    private data class NHentaiPage(val thumbnail: String? = null)
++
++    @Serializable
++    private data class LanraragiArchive(val arcid: String, val pagecount: Int)
++
++    @Serializable
++    private data class LanraragiThumbnailTask(val job: Int)
++
++    @Serializable
++    private data class LanraragiTaskProgress(val state: String)
++
++    private const val MAX_GALLERY_PAGES = 10_000
++    private val ARC_ID_REGEX = Regex("[A-Za-z0-9]{40}")
++}
++
++internal class EnhancedPagePreviewGateway(
++    private val source: HayaiEnhancedHttpSource,
++) {
++    @Volatile private var nhentaiConfig: NHentaiConfig? = null
++
++    fun supportsPreviews(): Boolean = source.definition.family in PREVIEW_FAMILIES
++
++    suspend fun page(
++        manga: SManga,
++        page: Int,
++    ): EnhancedPagePreviewPage {
++        require(page > 0) { "Preview page must be positive" }
++        return when (source.definition.family) {
++            dev.ahmedmohamed.hayai.source.SourceFamily.NHentai -> nhentaiPage(manga, page)
++            dev.ahmedmohamed.hayai.source.SourceFamily.Lanraragi -> lanraragiPage(manga, page)
++            else -> error("${source.name} does not expose page previews")
++        }
++    }
++
++    suspend fun image(preview: EnhancedPagePreview, cacheControl: CacheControl?): Response {
++        val request = if (cacheControl != null) {
++            GET(preview.imageUrl, headers = source.headers, cache = cacheControl)
++        } else {
++            GET(preview.imageUrl, headers = source.headers)
++        }
++        var response = source.client.newCall(request).awaitSuccessOrAccepted()
++        if (source.definition.family != dev.ahmedmohamed.hayai.source.SourceFamily.Lanraragi || response.code != 202) {
++            return response
++        }
++        val task = response.use { EnhancedPagePreviewParser.lanraragiThumbnailJob(it.body.stringBounded(MAX_METADATA_BYTES)) }
++        repeat(LANRARAGI_JOB_POLLS) { attempt ->
++            if (attempt > 0) delay(LANRARAGI_JOB_POLL_MILLIS)
++            if (lanraragiJobFinished(task)) {
++                response = source.client.newCall(request).awaitSuccessOrAccepted()
++                if (response.code != 202) return response
++                response.close()
++            }
++        }
++        throw IOException("LANraragi did not finish generating the page thumbnail")
++    }
++
++    private suspend fun nhentaiPage(manga: SManga, page: Int): EnhancedPagePreviewPage {
++        val response = source.client.newCall(source.originalSource.mangaDetailsRequest(manga)).awaitSuccess()
++        val body = response.use { it.body.stringBounded(MAX_METADATA_BYTES) }
++        val config = nhentaiConfig ?: loadNhentaiConfig().also { nhentaiConfig = it }
++        val servers = config.thumbServers.ifEmpty { FALLBACK_NHENTAI_THUMB_SERVERS }
++        val all = EnhancedPagePreviewParser.nhentai(body, source.baseUrl, servers)
++        return EnhancedPagePreviewParser.paginate(all, page)
++    }
++
++    private suspend fun loadNhentaiConfig(): NHentaiConfig = try {
++        source.client.newCall(GET("https://nhentai.net/api/v2/config", headers = source.headers)).awaitSuccess().use {
++            NHentaiConfig(EnhancedPagePreviewParser.nhentaiConfig(it.body.stringBounded(MAX_METADATA_BYTES)))
++        }
++    } catch (cancelled: CancellationException) {
++        throw cancelled
++    } catch (_: Exception) {
++        NHentaiConfig(thumbServers = FALLBACK_NHENTAI_THUMB_SERVERS)
++    }
++
++    private suspend fun lanraragiPage(manga: SManga, page: Int): EnhancedPagePreviewPage {
++        val response = source.client.newCall(source.originalSource.mangaDetailsRequest(manga)).awaitSuccess()
++        val all = response.use {
++            EnhancedPagePreviewParser.lanraragi(it.body.stringBounded(MAX_METADATA_BYTES), source.baseUrl)
++        }
++        return EnhancedPagePreviewParser.paginate(all, page)
++    }
++
++    private suspend fun lanraragiJobFinished(jobId: Int): Boolean {
++        require(jobId >= 0) { "LANraragi returned an invalid thumbnail job" }
++        val url = "${source.baseUrl.trimEnd('/')}/api/minion/$jobId"
++        return source.client.newCall(GET(url, headers = source.headers)).awaitSuccess().use {
++            EnhancedPagePreviewParser.lanraragiJobFinished(it.body.stringBounded(MAX_METADATA_BYTES))
++        }
++    }
++
++    private suspend fun okhttp3.Call.awaitSuccessOrAccepted(): Response {
++        val response = awaitSuccess()
++        if (response.code in 200..299) return response
++        response.close()
++        throw IOException("Preview request failed with HTTP ${response.code}")
++    }
++
++    private fun okhttp3.ResponseBody.stringBounded(limit: Long): String {
++        val declared = contentLength()
++        require(declared < 0 || declared <= limit) { "Preview metadata exceeded the size limit" }
++        val bytes = byteStream().use { input ->
++            val output = java.io.ByteArrayOutputStream(minOf(limit, 16 * 1024L).toInt())
++            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
++            var total = 0L
++            while (true) {
++                val count = input.read(buffer)
++                if (count < 0) break
++                total += count
++                require(total <= limit) { "Preview metadata exceeded the size limit" }
++                output.write(buffer, 0, count)
++            }
++            output.toByteArray()
++        }
++        return bytes.toString(Charsets.UTF_8)
++    }
++
++    private data class NHentaiConfig(val thumbServers: List<String>)
++
++    companion object {
++        const val PREVIEWS_PER_PAGE = 12
++        private const val MAX_METADATA_BYTES = 4L * 1024L * 1024L
++        private const val LANRARAGI_JOB_POLLS = 4
++        private const val LANRARAGI_JOB_POLL_MILLIS = 200L
++        private val PREVIEW_FAMILIES = setOf(
++            dev.ahmedmohamed.hayai.source.SourceFamily.NHentai,
++            dev.ahmedmohamed.hayai.source.SourceFamily.Lanraragi,
++        )
++        private val FALLBACK_NHENTAI_THUMB_SERVERS = (1..4).map { "https://t$it.nhentai.net" }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceActions.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceActions.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..c903e59a9031efa201cd94cf85b6aab48bab9c9c
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceActions.kt
+@@ -0,0 +1,63 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchFailure
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchEntry
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedImportTarget
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedResolveResult
++import eu.kanade.tachiyomi.source.model.SManga
++
++sealed interface EnhancedSourceAction {
++    data class OpenInApp(val target: EnhancedImportTarget) : EnhancedSourceAction
++    data class OpenPagePreviews(val sourceId: Long, val mangaUrl: String) : EnhancedSourceAction
++    data class OpenSourceSettings(val sourceId: Long) : EnhancedSourceAction
++    data object OpenBatchAdd : EnhancedSourceAction
++}
++
++object EnhancedSourceActionCatalog {
++    fun forManga(
++        source: HayaiEnhancedHttpSource,
++        manga: SManga,
++    ): List<EnhancedSourceAction> {
++        val features = EnhancedSourceFeatureRegistry.features(source) ?: return emptyList()
++        return buildList {
++            if (EnhancedSourceFeature.OpenInApp in features) {
++                val external = runCatching { source.getMangaUrl(manga) }.getOrNull()
++                val mapped = external?.let { EnhancedSourceUrlMapper.map(source.definition, source.baseUrl, it) }
++                if (mapped != null) {
++                    add(
++                        EnhancedSourceAction.OpenInApp(
++                            EnhancedImportTarget(source.id, source.name, source.definition.family, mapped, external),
++                        ),
++                    )
++                }
++            }
++            if (EnhancedSourceFeature.PagePreview in features) {
++                add(EnhancedSourceAction.OpenPagePreviews(source.id, manga.url))
++            }
++            if (EnhancedSourceFeature.SourceSettings in features) {
++                add(EnhancedSourceAction.OpenSourceSettings(source.id))
++            }
++            if (EnhancedSourceFeature.BatchAdd in features) add(EnhancedSourceAction.OpenBatchAdd)
++        }
++    }
++}
++
++class EnhancedSourceLinkRouter(
++    private val sources: () -> Iterable<HayaiEnhancedHttpSource>,
++) {
++    fun resolve(entry: EnhancedBatchEntry): EnhancedResolveResult {
++        val matches = sources().mapNotNull { source ->
++            val features = EnhancedSourceFeatureRegistry.features(source) ?: return@mapNotNull null
++            if (EnhancedSourceFeature.DirectUrlImport !in features) return@mapNotNull null
++            val mapped = EnhancedSourceUrlMapper.map(source.definition, source.baseUrl, entry.url) ?: return@mapNotNull null
++            EnhancedImportTarget(source.id, source.name, source.definition.family, mapped, entry.url)
++        }.distinctBy { it.sourceId }
++        return when (matches.size) {
++            0 -> EnhancedResolveResult.Failure(EnhancedBatchFailure.UnsupportedSource())
++            1 -> EnhancedResolveResult.Match(matches.single())
++            else -> EnhancedResolveResult.Failure(
++                EnhancedBatchFailure.AmbiguousSource(matches.map { it.sourceName }.distinct().sorted()),
++            )
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceFeatures.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceFeatures.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4e189b760b8e4ba0abf1c95abbf6c73766fde59e
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceFeatures.kt
+@@ -0,0 +1,47 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.SourceFamily
++import eu.kanade.tachiyomi.source.ConfigurableSource
++import eu.kanade.tachiyomi.source.online.HttpSource
++
++enum class EnhancedSourceFeature {
++    DirectUrlImport,
++    BatchAdd,
++    CustomDescription,
++    OpenInApp,
++    PagePreview,
++    SourceSettings,
++}
++
++data class EnhancedSourceFeatures(
++    val family: SourceFamily,
++    val features: Set<EnhancedSourceFeature>,
++) {
++    operator fun contains(feature: EnhancedSourceFeature): Boolean = feature in features
++}
++
++object EnhancedSourceFeatureRegistry {
++    fun features(source: HttpSource): EnhancedSourceFeatures? {
++        val enhanced = source as? HayaiEnhancedHttpSource ?: return null
++        val family = enhanced.definition.family
++        val features = buildSet {
++            add(EnhancedSourceFeature.CustomDescription)
++            add(EnhancedSourceFeature.OpenInApp)
++            if (family in URL_IMPORT_FAMILIES) {
++                add(EnhancedSourceFeature.DirectUrlImport)
++                add(EnhancedSourceFeature.BatchAdd)
++            }
++            if (family in PAGE_PREVIEW_FAMILIES) add(EnhancedSourceFeature.PagePreview)
++            if (enhanced.originalSource is ConfigurableSource) add(EnhancedSourceFeature.SourceSettings)
++        }
++        return EnhancedSourceFeatures(family, features)
++    }
++
++    private val URL_IMPORT_FAMILIES = setOf(
++        SourceFamily.EightMuses,
++        SourceFamily.HBrowse,
++        SourceFamily.NHentai,
++        SourceFamily.Pururin,
++    )
++    private val PAGE_PREVIEW_FAMILIES = setOf(SourceFamily.NHentai, SourceFamily.Lanraragi)
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapper.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapper.kt
+index 0defc4712dfea5d63e1b0fcf2483d173a02b1e52..fbeb55600d031a3c6ee313c632a0fd794dcb7df9 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapper.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapper.kt
+@@ -4,6 +4,20 @@ import dev.ahmedmohamed.hayai.source.SourceFamily
+ import java.net.URI
+ 
+ object EnhancedSourceUrlMapper {
++    fun mapQuery(
++        definition: EnhancedSourceDefinition,
++        sourceBaseUrl: String,
++        input: String,
++    ): String? {
++        val query = input.trim()
++        if (definition.family == SourceFamily.Pururin) {
++            val id = query.removePrefix("id:").takeIf { it != query || query.all(Char::isDigit) }
++                ?.takeIf(::isNumericId)
++            if (id != null) return "/gallery/$id/-"
++        }
++        return query.takeIf { "://" in it }?.let { map(definition, sourceBaseUrl, it) }
++    }
++
+     fun map(
+         definition: EnhancedSourceDefinition,
+         sourceBaseUrl: String,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt
+index 73884bece4ce0a2082869aa697d5c1f1bd724763..34f7e9bde536e2e1a7d61382eb5f6e6a922cb34e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt
+@@ -18,7 +18,8 @@ import timber.log.Timber
+ open class HayaiEnhancedHttpSource(
+     val originalSource: HttpSource,
+     val definition: EnhancedSourceDefinition,
+-) : HttpSource() {
++) : HttpSource(), EnhancedPagePreviewSource {
++    private val pagePreviewGateway = EnhancedPagePreviewGateway(this)
+     private val detailsCache = object : LinkedHashMap<String, EnhancedDetails>(16, 0.75f, true) {
+         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, EnhancedDetails>?): Boolean = size > MAX_CACHED_DETAILS
+     }
+@@ -41,7 +42,7 @@ open class HayaiEnhancedHttpSource(
+     override suspend fun getLatestUpdates(page: Int): MangasPage = originalSource.getLatestUpdates(page)
+ 
+     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
+-        val mapped = query.takeIf { "://" in it }?.let { EnhancedSourceUrlMapper.map(definition, baseUrl, it) }
++        val mapped = EnhancedSourceUrlMapper.mapQuery(definition, baseUrl, query)
+             ?: return originalSource.getSearchManga(page, query, filters)
+         if (page > 1) return MangasPage(emptyList(), false)
+         val manga = SManga.create().apply { url = mapped }
+@@ -93,10 +94,28 @@ open class HayaiEnhancedHttpSource(
+     override fun getFilterList(): FilterList = originalSource.getFilterList()
+     override fun mangaDetailsRequest(manga: SManga) = originalSource.mangaDetailsRequest(manga)
+ 
++    override suspend fun getPagePreviews(
++        manga: SManga,
++        chapters: List<SChapter>,
++        page: Int,
++    ): EnhancedPagePreviewPage {
++        check(pagePreviewGateway.supportsPreviews()) { "$name does not expose page previews" }
++        return pagePreviewGateway.page(manga, page)
++    }
++
++    override suspend fun fetchPreviewImage(page: EnhancedPagePreview, cacheControl: okhttp3.CacheControl?): Response {
++        check(pagePreviewGateway.supportsPreviews()) { "$name does not expose page previews" }
++        return pagePreviewGateway.image(page, cacheControl)
++    }
++
+     override fun fetchPopularManga(page: Int): Observable<MangasPage> = originalSource.fetchPopularManga(page)
+     override fun fetchLatestUpdates(page: Int): Observable<MangasPage> = originalSource.fetchLatestUpdates(page)
+     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> =
+-        if (query.contains("://")) runAsObservable { getSearchManga(page, query, filters) } else originalSource.fetchSearchManga(page, query, filters)
++        if (EnhancedSourceUrlMapper.mapQuery(definition, baseUrl, query) != null) {
++            runAsObservable { getSearchManga(page, query, filters) }
++        } else {
++            originalSource.fetchSearchManga(page, query, filters)
++        }
+     override fun fetchMangaDetails(manga: SManga): Observable<SManga> = runAsObservable { getMangaDetails(manga) }
+     override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> = originalSource.fetchChapterList(manga)
+     override fun fetchPageList(chapter: SChapter): Observable<List<Page>> = originalSource.fetchPageList(chapter)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddActivity.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..497619edc69ffd9de326f0263ad85be24eb0852a
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddActivity.kt
+@@ -0,0 +1,141 @@
++package dev.ahmedmohamed.hayai.source.enhanced.batch
++
++import android.content.Context
++import android.content.Intent
++import android.os.Bundle
++import android.text.Editable
++import android.text.TextWatcher
++import android.view.ViewGroup
++import android.widget.EditText
++import android.widget.LinearLayout
++import android.widget.ScrollView
++import android.widget.TextView
++import androidx.core.view.setPadding
++import androidx.activity.viewModels
++import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.lifecycleScope
++import androidx.lifecycle.repeatOnLifecycle
++import androidx.viewbinding.ViewBinding
++import com.google.android.material.appbar.MaterialToolbar
++import com.google.android.material.button.MaterialButton
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
++import eu.kanade.tachiyomi.util.system.dpToPx
++import kotlinx.coroutines.launch
++
++class EnhancedBatchAddActivity : BaseActivity<ViewBinding>() {
++    private val viewModel by viewModels<EnhancedBatchAddViewModel>()
++    private lateinit var input: EditText
++    private lateinit var start: MaterialButton
++    private lateinit var cancel: MaterialButton
++    private lateinit var output: TextView
++    private var rendering = false
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        title = getString(R.string.hayai_enhanced_batch_title)
++        setContentView(buildContent())
++        savedInstanceState?.getString(STATE_INPUT)?.let(viewModel::updateInput)
++        lifecycleScope.launch {
++            repeatOnLifecycle(Lifecycle.State.STARTED) {
++                viewModel.state.collect(::render)
++            }
++        }
++    }
++
++    override fun onSaveInstanceState(outState: Bundle) {
++        outState.putString(STATE_INPUT, input.text.toString())
++        super.onSaveInstanceState(outState)
++    }
++
++    private fun buildContent(): LinearLayout {
++        val root = LinearLayout(this).apply {
++            orientation = LinearLayout.VERTICAL
++            setPadding(16.dpToPx)
++        }
++        root.addView(MaterialToolbar(this).apply {
++            title = getString(R.string.hayai_enhanced_batch_title)
++            setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
++            setNavigationOnClickListener { finish() }
++        }, matchWidth())
++        root.addView(TextView(this).apply {
++            text = getString(R.string.hayai_enhanced_batch_instructions)
++        }, matchWidth())
++        input = EditText(this).apply {
++            hint = getString(R.string.hayai_enhanced_batch_hint)
++            minLines = 6
++            maxLines = 14
++            addTextChangedListener(object : TextWatcher {
++                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
++                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
++                    if (!rendering) viewModel.updateInput(s?.toString().orEmpty())
++                }
++                override fun afterTextChanged(s: Editable?) = Unit
++            })
++        }
++        root.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
++        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
++        start = MaterialButton(this).apply {
++            text = getString(R.string.hayai_enhanced_batch_start)
++            setOnClickListener { viewModel.start() }
++        }
++        cancel = MaterialButton(this).apply {
++            text = getString(R.string.hayai_enhanced_batch_cancel)
++            setOnClickListener { viewModel.cancel() }
++        }
++        actions.addView(start, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
++        actions.addView(cancel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
++        root.addView(actions, matchWidth())
++        val scroll = ScrollView(this)
++        output = TextView(this).apply { setPadding(8.dpToPx) }
++        scroll.addView(output, matchWidth())
++        root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
++        return root
++    }
++
++    private fun render(state: EnhancedBatchAddUiState) {
++        if (input.text.toString() != state.input) {
++            rendering = true
++            input.setText(state.input)
++            input.setSelection(input.text.length)
++            rendering = false
++        }
++        input.isEnabled = !state.running
++        start.isEnabled = !state.running && state.input.isNotBlank()
++        cancel.isEnabled = state.running
++        output.text = buildString {
++            state.error?.let { appendLine(it) }
++            state.progress?.let { progress ->
++                appendLine(getString(R.string.hayai_enhanced_batch_progress, progress.completed, progress.total))
++                progress.currentUrl?.let { appendLine(getString(R.string.hayai_enhanced_batch_loading, it)) }
++                progress.results.forEach { appendLine(it.displayText()) }
++            }
++            state.report?.let { report ->
++                appendLine()
++                append(
++                    getString(
++                        R.string.hayai_enhanced_batch_summary,
++                        report.added,
++                        report.alreadyPresent,
++                        report.duplicates,
++                        report.failed,
++                    ),
++                )
++            }
++        }
++    }
++
++    private fun EnhancedBatchItemResult.displayText(): String = when (this) {
++        is EnhancedBatchItemResult.Added -> getString(R.string.hayai_enhanced_batch_added, title, target.sourceName)
++        is EnhancedBatchItemResult.AlreadyInLibrary -> getString(R.string.hayai_enhanced_batch_present, title)
++        is EnhancedBatchItemResult.Duplicate -> getString(R.string.hayai_enhanced_batch_duplicate, submittedUrl)
++        is EnhancedBatchItemResult.Failed -> getString(R.string.hayai_enhanced_batch_failed, submittedUrl, reason.message)
++    }
++
++    private fun matchWidth() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
++
++    companion object {
++        private const val STATE_INPUT = "hayai.enhanced.batch.input"
++        fun newIntent(context: Context): Intent = Intent(context, EnhancedBatchAddActivity::class.java)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddService.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddService.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..1632c39cf33f8d01cedd3d0c1394e0e05cf4a397
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddService.kt
+@@ -0,0 +1,83 @@
++package dev.ahmedmohamed.hayai.source.enhanced.batch
++
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import java.io.IOException
++
++interface EnhancedBatchLibraryGateway {
++    suspend fun resolve(entry: EnhancedBatchEntry): EnhancedResolveResult
++    suspend fun addToLibrary(target: EnhancedImportTarget): EnhancedBatchItemResult
++}
++
++sealed interface EnhancedResolveResult {
++    data class Match(val target: EnhancedImportTarget) : EnhancedResolveResult
++    data class Failure(val reason: EnhancedBatchFailure) : EnhancedResolveResult
++}
++
++class EnhancedBatchAddService(
++    private val library: EnhancedBatchLibraryGateway,
++    private val maxNetworkAttempts: Int = 3,
++    private val retryDelayMillis: Long = 300,
++) {
++    private val mutableProgress = MutableStateFlow<EnhancedBatchProgress?>(null)
++    private val runMutex = Mutex()
++    val progress: StateFlow<EnhancedBatchProgress?> = mutableProgress.asStateFlow()
++
++    init {
++        require(maxNetworkAttempts in 1..5)
++        require(retryDelayMillis >= 0)
++    }
++
++    suspend fun run(plan: EnhancedBatchPlan): EnhancedBatchReport = runMutex.withLock {
++        val results = ArrayList<EnhancedBatchItemResult>(plan.entries.size)
++        val canonicalTargets = hashSetOf<Pair<Long, String>>()
++        mutableProgress.value = EnhancedBatchProgress(0, plan.entries.size, null, emptyList())
++        plan.entries.forEach { entry ->
++            currentCoroutineContext().ensureActive()
++            mutableProgress.value = EnhancedBatchProgress(results.size, plan.entries.size, entry.url, results.toList())
++            val resolved = library.resolve(entry)
++            val result = when (resolved) {
++                is EnhancedResolveResult.Failure -> EnhancedBatchItemResult.Failed(entry.url, resolved.reason)
++                is EnhancedResolveResult.Match -> {
++                    val key = resolved.target.sourceId to resolved.target.mangaUrl
++                    if (!canonicalTargets.add(key)) {
++                        EnhancedBatchItemResult.Duplicate(entry.url, resolved.target)
++                    } else {
++                        addWithRetry(resolved.target)
++                    }
++                }
++            }
++            results += result
++            mutableProgress.value = EnhancedBatchProgress(results.size, plan.entries.size, null, results.toList())
++        }
++        EnhancedBatchReport(results)
++    }
++
++    private suspend fun addWithRetry(target: EnhancedImportTarget): EnhancedBatchItemResult {
++        var lastFailure: EnhancedBatchItemResult.Failed? = null
++        repeat(maxNetworkAttempts) { attempt ->
++            currentCoroutineContext().ensureActive()
++            try {
++                val result = library.addToLibrary(target)
++                if (result !is EnhancedBatchItemResult.Failed || result.reason !is EnhancedBatchFailure.Network) return result
++                lastFailure = result
++            } catch (cancelled: CancellationException) {
++                throw cancelled
++            } catch (error: IOException) {
++                lastFailure = EnhancedBatchItemResult.Failed(
++                    target.submittedUrl,
++                    EnhancedBatchFailure.Network(error.message ?: "Network request failed"),
++                )
++            }
++            if (attempt + 1 < maxNetworkAttempts && retryDelayMillis > 0) delay(retryDelayMillis)
++        }
++        return requireNotNull(lastFailure)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..22fddc0ddb1129a0db1e3dc7c1b3a318400075d7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt
+@@ -0,0 +1,86 @@
++package dev.ahmedmohamed.hayai.source.enhanced.batch
++
++import androidx.lifecycle.ViewModel
++import androidx.lifecycle.viewModelScope
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.source.SourceManager
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.SharingStarted
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.stateIn
++import kotlinx.coroutines.launch
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++
++data class EnhancedBatchAddUiState(
++    val input: String = "",
++    val running: Boolean = false,
++    val progress: EnhancedBatchProgress? = null,
++    val report: EnhancedBatchReport? = null,
++    val error: String? = null,
++)
++
++class EnhancedBatchAddViewModel(
++    sourceManager: SourceManager = Injekt.get(),
++    database: DatabaseHelper = Injekt.get(),
++) : ViewModel() {
++    private val service = EnhancedBatchAddService(J2kEnhancedBatchLibraryGateway(sourceManager, database))
++    private val mutableInput = MutableStateFlow("")
++    private val mutableResult = MutableStateFlow<ResultState>(ResultState.Idle)
++    @Volatile private var runJob: Job? = null
++
++    val state: StateFlow<EnhancedBatchAddUiState> = combine(mutableInput, mutableResult, service.progress) { input, result, progress ->
++        EnhancedBatchAddUiState(
++            input = input,
++            running = result is ResultState.Running,
++            progress = progress.takeIf { result is ResultState.Running || result is ResultState.Finished },
++            report = (result as? ResultState.Finished)?.report,
++            error = (result as? ResultState.Error)?.message,
++        )
++    }.stateIn(viewModelScope, SharingStarted.Eagerly, EnhancedBatchAddUiState())
++
++    fun updateInput(value: String) {
++        if (runJob == null) mutableInput.value = value
++    }
++
++    fun start() {
++        if (runJob != null) return
++        val plan = runCatching { EnhancedBatchInputParser.parse(mutableInput.value) }.getOrElse {
++            mutableResult.value = ResultState.Error(it.message ?: "Invalid batch input")
++            return
++        }
++        mutableResult.value = ResultState.Running
++        runJob = viewModelScope.launch(Dispatchers.IO) {
++            try {
++                val report = service.run(plan)
++                mutableResult.value = ResultState.Finished(report)
++            } catch (cancelled: CancellationException) {
++                mutableResult.value = ResultState.Error("Batch add cancelled after the current atomic operation")
++                throw cancelled
++            } catch (error: Exception) {
++                mutableResult.value = ResultState.Error(error.message ?: "Batch add failed")
++            } finally {
++                runJob = null
++            }
++        }
++    }
++
++    fun cancel() {
++        runJob?.cancel()
++    }
++
++    fun clearReport() {
++        if (runJob == null) mutableResult.value = ResultState.Idle
++    }
++
++    private sealed interface ResultState {
++        data object Idle : ResultState
++        data object Running : ResultState
++        data class Finished(val report: EnhancedBatchReport) : ResultState
++        data class Error(val message: String) : ResultState
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchModels.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..5d1d2c153e24609b82c5e97e8a1816389aea0658
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchModels.kt
+@@ -0,0 +1,119 @@
++package dev.ahmedmohamed.hayai.source.enhanced.batch
++
++import dev.ahmedmohamed.hayai.source.SourceFamily
++
++@JvmInline
++value class EnhancedBatchEntry private constructor(val url: String) {
++    companion object {
++        fun parse(value: String): EnhancedBatchEntry {
++            val normalized = value.trim()
++            require(normalized.length in 1..MAX_URL_LENGTH) { "Gallery URL is too long" }
++            val uri = runCatching { java.net.URI(normalized) }.getOrNull()
++                ?: throw IllegalArgumentException("Invalid gallery URL")
++            require(uri.scheme?.lowercase() in setOf("http", "https") && !uri.host.isNullOrBlank()) {
++                "Only HTTP gallery URLs are supported"
++            }
++            require(uri.userInfo == null) { "Gallery URLs must not contain credentials" }
++            return EnhancedBatchEntry(uri.normalize().toASCIIString())
++        }
++
++        private const val MAX_URL_LENGTH = 4_096
++    }
++}
++
++data class EnhancedBatchPlan(val entries: List<EnhancedBatchEntry>) {
++    init {
++        require(entries.isNotEmpty()) { "Add at least one gallery URL" }
++        require(entries.size <= MAX_BATCH_ENTRIES) { "A batch can contain at most $MAX_BATCH_ENTRIES galleries" }
++    }
++
++    companion object {
++        const val MAX_BATCH_ENTRIES = 500
++    }
++}
++
++object EnhancedBatchInputParser {
++    fun parse(input: String): EnhancedBatchPlan {
++        require(input.toByteArray(Charsets.UTF_8).size <= MAX_INPUT_BYTES) { "Batch input is larger than 1 MiB" }
++        val entries = linkedMapOf<String, EnhancedBatchEntry>()
++        input.lineSequence().forEachIndexed { index, line ->
++            val value = line.trim()
++            if (value.isEmpty()) return@forEachIndexed
++            val entry = runCatching { EnhancedBatchEntry.parse(value) }.getOrElse { cause ->
++                throw IllegalArgumentException("Line ${index + 1}: ${cause.message}", cause)
++            }
++            entries.putIfAbsent(entry.url, entry)
++            require(entries.size <= EnhancedBatchPlan.MAX_BATCH_ENTRIES) {
++                "A batch can contain at most ${EnhancedBatchPlan.MAX_BATCH_ENTRIES} galleries"
++            }
++        }
++        return EnhancedBatchPlan(entries.values.toList())
++    }
++
++    private const val MAX_INPUT_BYTES = 1024 * 1024
++}
++
++data class EnhancedImportTarget(
++    val sourceId: Long,
++    val sourceName: String,
++    val family: SourceFamily,
++    val mangaUrl: String,
++    val submittedUrl: String,
++)
++
++sealed interface EnhancedBatchItemResult {
++    val submittedUrl: String
++
++    data class Added(
++        override val submittedUrl: String,
++        val target: EnhancedImportTarget,
++        val mangaId: Long,
++        val title: String,
++    ) : EnhancedBatchItemResult
++
++    data class AlreadyInLibrary(
++        override val submittedUrl: String,
++        val target: EnhancedImportTarget,
++        val mangaId: Long,
++        val title: String,
++    ) : EnhancedBatchItemResult
++
++    data class Duplicate(
++        override val submittedUrl: String,
++        val target: EnhancedImportTarget,
++    ) : EnhancedBatchItemResult
++
++    data class Failed(
++        override val submittedUrl: String,
++        val reason: EnhancedBatchFailure,
++    ) : EnhancedBatchItemResult
++}
++
++sealed interface EnhancedBatchFailure {
++    val message: String
++
++    data class UnsupportedSource(override val message: String = "No enabled enhanced source accepts this URL") : EnhancedBatchFailure
++    data class AmbiguousSource(val sourceNames: List<String>) : EnhancedBatchFailure {
++        override val message: String = "More than one enabled source accepts this URL: ${sourceNames.joinToString()}"
++    }
++    data class Network(override val message: String) : EnhancedBatchFailure
++    data class InvalidGallery(override val message: String) : EnhancedBatchFailure
++    data class Persistence(override val message: String) : EnhancedBatchFailure
++}
++
++data class EnhancedBatchProgress(
++    val completed: Int,
++    val total: Int,
++    val currentUrl: String?,
++    val results: List<EnhancedBatchItemResult>,
++) {
++    val succeeded: Int get() = results.count { it is EnhancedBatchItemResult.Added || it is EnhancedBatchItemResult.AlreadyInLibrary }
++    val failed: Int get() = results.count { it is EnhancedBatchItemResult.Failed }
++}
++
++data class EnhancedBatchReport(val results: List<EnhancedBatchItemResult>) {
++    val added: Int get() = results.count { it is EnhancedBatchItemResult.Added }
++    val alreadyPresent: Int get() = results.count { it is EnhancedBatchItemResult.AlreadyInLibrary }
++    val duplicates: Int get() = results.count { it is EnhancedBatchItemResult.Duplicate }
++    val failed: Int get() = results.count { it is EnhancedBatchItemResult.Failed }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/J2kEnhancedBatchLibraryGateway.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/J2kEnhancedBatchLibraryGateway.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a34417859fd454414dc151c65081f67d4b8b67ef
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/J2kEnhancedBatchLibraryGateway.kt
+@@ -0,0 +1,117 @@
++package dev.ahmedmohamed.hayai.source.enhanced.batch
++
++import dev.ahmedmohamed.hayai.source.enhanced.EnhancedSourceLinkRouter
++import dev.ahmedmohamed.hayai.source.enhanced.HayaiEnhancedHttpSource
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.source.model.SChapter
++import eu.kanade.tachiyomi.source.model.SManga
++import eu.kanade.tachiyomi.util.chapter.syncChaptersWithSource
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
++import java.io.IOException
++
++class J2kEnhancedBatchLibraryGateway(
++    private val sourceManager: SourceManager,
++    private val database: DatabaseHelper,
++) : EnhancedBatchLibraryGateway {
++    private val linkRouter = EnhancedSourceLinkRouter {
++        sourceManager.getDiscoverableOnlineSources().filterIsInstance<HayaiEnhancedHttpSource>()
++    }
++
++    override suspend fun resolve(entry: EnhancedBatchEntry): EnhancedResolveResult {
++        return linkRouter.resolve(entry)
++    }
++
++    override suspend fun addToLibrary(target: EnhancedImportTarget): EnhancedBatchItemResult {
++        val source = sourceManager.get(target.sourceId) as? HayaiEnhancedHttpSource
++            ?: return EnhancedBatchItemResult.Failed(
++                target.submittedUrl,
++                EnhancedBatchFailure.UnsupportedSource("${target.sourceName} is no longer installed or enabled"),
++            )
++        val existing = database.getManga(target.mangaUrl, target.sourceId).executeAsBlocking()
++        if (existing?.favorite == true) {
++            return EnhancedBatchItemResult.AlreadyInLibrary(
++                target.submittedUrl,
++                target,
++                requireNotNull(existing.id),
++                existing.title,
++            )
++        }
++
++        val seed = SManga.create().apply {
++            url = target.mangaUrl
++            title = existing?.title.orEmpty()
++            if (existing != null) copyFrom(existing)
++        }
++        val knownChapters: List<SChapter> = existing?.let { database.getChapters(it).executeAsBlocking() }.orEmpty()
++        val remote = try {
++            source.getMangaUpdate(seed, knownChapters, fetchDetails = true, fetchChapters = true)
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (network: IOException) {
++            return EnhancedBatchItemResult.Failed(
++                target.submittedUrl,
++                EnhancedBatchFailure.Network(network.message ?: "Could not load gallery"),
++            )
++        } catch (invalid: IllegalArgumentException) {
++            return EnhancedBatchItemResult.Failed(
++                target.submittedUrl,
++                EnhancedBatchFailure.InvalidGallery(invalid.message ?: "The gallery response was invalid"),
++            )
++        } catch (error: Exception) {
++            return EnhancedBatchItemResult.Failed(
++                target.submittedUrl,
++                EnhancedBatchFailure.InvalidGallery(error.message ?: "The source could not parse this gallery"),
++            )
++        }
++        if (remote.manga.title.isBlank()) {
++            return EnhancedBatchItemResult.Failed(target.submittedUrl, EnhancedBatchFailure.InvalidGallery("The source returned no title"))
++        }
++        if (remote.chapters.isEmpty()) {
++            return EnhancedBatchItemResult.Failed(target.submittedUrl, EnhancedBatchFailure.InvalidGallery("The source returned no chapters"))
++        }
++
++        currentCoroutineContext().ensureActive()
++        return try {
++            database.inTransactionReturn {
++                val latest = database.getManga(target.mangaUrl, target.sourceId).executeAsBlocking()
++                if (latest?.favorite == true) {
++                    return@inTransactionReturn EnhancedBatchItemResult.AlreadyInLibrary(
++                        target.submittedUrl,
++                        target,
++                        requireNotNull(latest.id),
++                        latest.title,
++                    )
++                }
++                val manga = latest ?: existing ?: Manga.create(target.mangaUrl, remote.manga.title, target.sourceId)
++                manga.title = remote.manga.title
++                manga.copyFrom(remote.manga)
++                manga.url = target.mangaUrl
++                manga.initialized = true
++                manga.favorite = true
++                if (manga.date_added == 0L) manga.date_added = System.currentTimeMillis()
++                val result = database.insertManga(manga).executeAsBlocking()
++                if (manga.id == null) manga.id = requireNotNull(result.insertedId())
++                database.updateMangaFavorite(manga).executeAsBlocking()
++                database.updateMangaAdded(manga).executeAsBlocking()
++                syncChaptersWithSource(database, remote.chapters, manga, source)
++                EnhancedBatchItemResult.Added(
++                    target.submittedUrl,
++                    target,
++                    requireNotNull(manga.id),
++                    manga.title,
++                )
++            }
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (error: Exception) {
++            EnhancedBatchItemResult.Failed(
++                target.submittedUrl,
++                EnhancedBatchFailure.Persistence(error.message ?: "Could not save gallery atomically"),
++            )
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..c6013d455760bcd65d153adb8772fd083859a490
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
+@@ -0,0 +1,51 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import android.graphics.Bitmap
++import eu.kanade.tachiyomi.data.database.models.Manga
++import okhttp3.CacheControl
++import java.io.Closeable
++
++data class SourceRenderedPreview(
++    val index: Int,
++    val pageUrl: String?,
++    val bitmap: Bitmap,
++)
++
++data class SourceRenderedPreviewPage(
++    val page: Int,
++    val previews: List<SourceRenderedPreview>,
++    val hasNextPage: Boolean,
++    val totalPages: Int,
++) : Closeable {
++    override fun close() {
++        previews.forEach { rendered ->
++            if (!rendered.bitmap.isRecycled) rendered.bitmap.recycle()
++        }
++    }
++}
++
++interface SourceDetailsPreviewProvider {
++    fun owns(manga: Manga): Boolean
++
++    suspend fun load(
++        manga: Manga,
++        page: Int = 1,
++        cacheControl: CacheControl? = null,
++    ): SourceRenderedPreviewPage
++}
++
++class SourceDetailsPreviewRegistry(
++    private val providers: List<SourceDetailsPreviewProvider>,
++) : SourceDetailsPreviewProvider {
++    override fun owns(manga: Manga): Boolean = providers.any { it.owns(manga) }
++
++    override suspend fun load(
++        manga: Manga,
++        page: Int,
++        cacheControl: CacheControl?,
++    ): SourceRenderedPreviewPage {
++        val provider = providers.singleOrNull { it.owns(manga) }
++            ?: error("No unique page-preview provider is registered for source ${manga.source}")
++        return provider.load(manga, page, cacheControl)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..c3e6fddac72d69d7aaf0b63f65d1b5a43cbee084
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt
+@@ -0,0 +1,93 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import eu.kanade.tachiyomi.data.database.models.Manga
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.launch
++import java.io.Closeable
++
++sealed interface SourcePreviewState {
++    data object Hidden : SourcePreviewState
++    data class Loading(val identity: String, val page: Int) : SourcePreviewState
++    data class Ready(val identity: String, val previews: SourceRenderedPreviewPage) : SourcePreviewState
++    data class Failed(val identity: String, val page: Int, val message: String) : SourcePreviewState
++}
++
++class SourceDetailsPreviewSession(
++    private val previews: SourceDetailsPreviewProvider,
++    private val scope: CoroutineScope,
++) : Closeable {
++    private val lock = Any()
++    private val mutableState = MutableStateFlow<SourcePreviewState>(SourcePreviewState.Hidden)
++    val state: StateFlow<SourcePreviewState> = mutableState.asStateFlow()
++    private var loadJob: Job? = null
++    private var identity: String? = null
++
++    init {
++        scope.coroutineContext[Job]?.invokeOnCompletion { close() }
++    }
++
++    fun bind(manga: Manga, page: Int = 1) {
++        require(page > 0)
++        if (!previews.owns(manga)) {
++            unbind()
++            return
++        }
++        val nextIdentity = "${manga.source}:${manga.url}:$page"
++        synchronized(lock) {
++            if (identity == nextIdentity && loadJob?.isActive == true) return
++            if (identity == nextIdentity && mutableState.value is SourcePreviewState.Ready) return
++            releaseCurrentLocked()
++            identity = nextIdentity
++            mutableState.value = SourcePreviewState.Loading(nextIdentity, page)
++            loadJob = scope.launch(Dispatchers.IO) {
++                try {
++                    val loaded = previews.load(manga, page)
++                    synchronized(lock) {
++                        if (identity == nextIdentity) {
++                            (mutableState.value as? SourcePreviewState.Ready)?.previews?.close()
++                            mutableState.value = SourcePreviewState.Ready(nextIdentity, loaded)
++                            loadJob = null
++                        } else {
++                            loaded.close()
++                        }
++                    }
++                } catch (cancelled: CancellationException) {
++                    throw cancelled
++                } catch (error: Exception) {
++                    synchronized(lock) {
++                        if (identity == nextIdentity) {
++                            mutableState.value = SourcePreviewState.Failed(
++                                nextIdentity,
++                                page,
++                                error.message ?: "Page previews could not be loaded",
++                            )
++                            loadJob = null
++                        }
++                    }
++                }
++            }
++        }
++    }
++
++    fun unbind() {
++        synchronized(lock) {
++            identity = null
++            releaseCurrentLocked()
++            mutableState.value = SourcePreviewState.Hidden
++        }
++    }
++
++    override fun close() = unbind()
++
++    private fun releaseCurrentLocked() {
++        loadJob?.cancel()
++        loadJob = null
++        (mutableState.value as? SourcePreviewState.Ready)?.previews?.close()
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+index 88ded18efca45159b2df07137b8b09fa3e62e017..a673a7f2a49ad2c1cd8d8cc85a142497e9a101fa 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+@@ -14,11 +14,15 @@ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsRemote
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUConfigHttpRemote
++import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateStateStore
++import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateWorker
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesHttpRemote
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesRemote
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncService
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.J2kEhFavoritesLocal
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.source.enhanced.EnhancedDetailsPreviewLoader
++import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
+ import eu.kanade.tachiyomi.data.cache.ChapterCache
+@@ -84,6 +88,15 @@ class AppModule(
+         addSingletonFactory { EhFavoritesSyncService(get(), get(), get(), get()) }
+         addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
+         addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
++        addSingletonFactory { EnhancedDetailsPreviewLoader(get(), get()) }
++        addSingletonFactory {
++            SourceDetailsPreviewRegistry(
++                listOf(
++                    get<EhDetailsPreviewLoader>(),
++                    get<EnhancedDetailsPreviewLoader>(),
++                ),
++            )
++        }
+         addSingletonFactory { SourceManager(app, get(), get(), get()) }
+         addSingletonFactory { NovelJ2kIntegration(get(), get()) }
+         addSingletonFactory { NovelMigrationPolicy(get(), get()) }
+@@ -125,6 +138,12 @@ class AppModule(
+             get<DownloadManager>()
+ 
+             get<CustomMangaManager>()
++
++            if (HayaiPreferences(get()).hentaiFeaturesEnabled.get()) {
++                EhGalleryUpdateWorker.schedule(app, EhGalleryUpdateStateStore(app, get()).policy())
++            } else {
++                EhGalleryUpdateWorker.cancel(app)
++            }
+         }
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+index c079b1c4d6832be869f8c516c9cefcd88db5a5ca..cf5b1c5fefc1b116f43e05f896e990befe1e8296 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+@@ -50,12 +50,14 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
+ import com.bluelinelabs.conductor.ControllerChangeType
+ import com.google.android.material.chip.Chip
+ import com.google.android.material.chip.ChipGroup
++import com.google.android.material.button.MaterialButton
+ import com.google.android.material.snackbar.BaseTransientBottomBar
+ import com.google.android.material.snackbar.Snackbar
+ import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
+ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
+-import dev.ahmedmohamed.hayai.adult.eh.ui.EhDetailsPreviewLoader
++import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
++import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.SelectableAdapter
+@@ -223,12 +225,13 @@ class MangaDetailsController :
+     private var chapterPopupMenu: Pair<Int, PopupMenu>? = null
+     private var isPushing = true
+     private val novelIntegration: NovelJ2kIntegration by injectLazy()
+-    private val ehDetailsPreviewLoader: EhDetailsPreviewLoader by injectLazy()
++    private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
+     private val novelOfflineManager by lazy {
+         NovelOfflineManager(activity!!, Injekt.get(), Injekt.get(), Injekt.get<NetworkHelper>())
+     }
+     private var novelPresentationJob: Job? = null
+     private var sourceDetailsFeaturesJob: Job? = null
++    private var sourceDetailsPreviewPage: SourceRenderedPreviewPage? = null
+ 
+     // Prevents the favorite button's drag-to-open popup from firing underneath
+     // the categories sheet when a long press opens it mid-gesture
+@@ -471,6 +474,8 @@ class MangaDetailsController :
+     override fun onDestroyView(view: View) {
+         novelPresentationJob?.cancel()
+         sourceDetailsFeaturesJob?.cancel()
++        sourceDetailsPreviewPage?.close()
++        sourceDetailsPreviewPage = null
+         novelPresentationJob = null
+         snack?.dismiss()
+         adapter = null
+@@ -1419,33 +1424,51 @@ class MangaDetailsController :
+     override fun bindSourceDetailsFeatures(container: LinearLayout) {
+         val manga = presenter.manga
+         val featureRoot = container.parent?.parent as? View ?: return
+-        if (!ehDetailsPreviewLoader.owns(manga)) {
++        if (!sourceDetailsPreviewRegistry.owns(manga)) {
+             sourceDetailsFeaturesJob?.cancel()
+             container.removeAllViews()
++            sourceDetailsPreviewPage?.close()
++            sourceDetailsPreviewPage = null
+             container.tag = null
+             featureRoot.visibility = View.GONE
+             return
+         }
+-        val identity = "${manga.source}:${manga.url}"
++        loadSourceDetailsPreview(container, featureRoot, manga, page = 1)
++    }
++
++    private fun loadSourceDetailsPreview(
++        container: LinearLayout,
++        featureRoot: View,
++        manga: Manga,
++        page: Int,
++    ) {
++        val identity = "${manga.source}:${manga.url}:$page"
+         if (container.tag == identity) return
+         container.tag = identity
+         container.removeAllViews()
++        sourceDetailsPreviewPage?.close()
++        sourceDetailsPreviewPage = null
+         featureRoot.visibility = View.GONE
+         sourceDetailsFeaturesJob?.cancel()
+         sourceDetailsFeaturesJob = viewScope.launchIO {
+-            val result = runCatching { ehDetailsPreviewLoader.load(manga) }
++            val result = runCatching { sourceDetailsPreviewRegistry.load(manga, page) }
+             withUIContext {
+-                if (container.tag != identity) return@withUIContext
+-                val previews = result.getOrDefault(emptyList())
++                val loaded = result.getOrNull()
++                if (container.tag != identity) {
++                    loaded?.close()
++                    return@withUIContext
++                }
+                 container.removeAllViews()
++                sourceDetailsPreviewPage?.close()
++                sourceDetailsPreviewPage = loaded
+                 val density = container.resources.displayMetrics.density
+-                previews.forEach { rendered ->
++                loaded?.previews.orEmpty().forEach { rendered ->
+                     val image =
+                         ImageView(container.context).apply {
+                             scaleType = ImageView.ScaleType.CENTER_CROP
+-                            contentDescription = "Gallery page ${rendered.preview.index}"
++                            contentDescription = "Gallery page ${rendered.index}"
+                             setImageBitmap(rendered.bitmap)
+-                            setOnClickListener { openEhPreview(rendered.preview.pageUrl) }
++                            rendered.pageUrl?.let { pageUrl -> setOnClickListener { openSourcePreview(pageUrl) } }
+                         }
+                     container.addView(
+                         image,
+@@ -1454,12 +1477,32 @@ class MangaDetailsController :
+                         },
+                     )
+                 }
+-                featureRoot.visibility = if (previews.isEmpty()) View.GONE else View.VISIBLE
++                if (loaded != null && (loaded.page > 1 || loaded.hasNextPage)) {
++                    container.addView(
++                        LinearLayout(container.context).apply {
++                            orientation = LinearLayout.VERTICAL
++                            if (loaded.page > 1) {
++                                addView(MaterialButton(context).apply {
++                                    text = "Previous previews"
++                                    setOnClickListener { loadSourceDetailsPreview(container, featureRoot, manga, loaded.page - 1) }
++                                })
++                            }
++                            if (loaded.hasNextPage) {
++                                addView(MaterialButton(context).apply {
++                                    text = "Next previews"
++                                    setOnClickListener { loadSourceDetailsPreview(container, featureRoot, manga, loaded.page + 1) }
++                                })
++                            }
++                        },
++                    )
++                }
++                featureRoot.visibility =
++                    if (loaded != null && (loaded.previews.isNotEmpty() || loaded.page > 1)) View.VISIBLE else View.GONE
+             }
+         }
+     }
+ 
+-    private fun openEhPreview(pageUrl: String) {
++    private fun openSourcePreview(pageUrl: String) {
+         val activity = activity ?: return
+         startActivity(
+             WebViewActivity.newIntent(
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+index 5dfe938684ee53905423655cd42422f6cb6f774a..2ca8f6db5961eba59fdb8fbe263cc41dd3d2b73a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+@@ -18,6 +18,7 @@ import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+ import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.cache.ChapterCache
+@@ -116,6 +117,18 @@ class SettingsAdvancedController : SettingsController() {
+                     onClick { startActivity(Intent(context, EhSettingsActivity::class.java)) }
+                 }
+ 
++                preference {
++                    titleRes = R.string.hayai_enhanced_batch_settings_title
++                    summaryRes = R.string.hayai_enhanced_batch_settings_summary
++                    onClick {
++                        if (hayaiPreferences.hentaiFeaturesEnabled.get()) {
++                            startActivity(EnhancedBatchAddActivity.newIntent(context))
++                        } else {
++                            context.toast(R.string.hayai_hentai_features_summary)
++                        }
++                    }
++                }
++
+                 preference {
+                     titleRes = R.string.hayai_retry_legacy_migration
+                     summaryRes = R.string.hayai_retry_legacy_migration_summary
+diff --git a/app/src/main/res/values/strings_hayai_enhanced.xml b/app/src/main/res/values/strings_hayai_enhanced.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..c031dc34c775842673e459884d690e8c6a43691a
+--- /dev/null
++++ b/app/src/main/res/values/strings_hayai_enhanced.xml
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="hayai_enhanced_batch_title">Batch add galleries</string>
++    <string name="hayai_enhanced_batch_instructions">Paste one supported gallery URL per line. Duplicate galleries are skipped. Each successful gallery is committed to the library atomically.</string>
++    <string name="hayai_enhanced_batch_hint">https://nhentai.net/g/123/</string>
++    <string name="hayai_enhanced_batch_start">Add to library</string>
++    <string name="hayai_enhanced_batch_cancel">Cancel</string>
++    <string name="hayai_enhanced_batch_progress">%1$d of %2$d processed</string>
++    <string name="hayai_enhanced_batch_loading">Loading %1$s</string>
++    <string name="hayai_enhanced_batch_added">Added %1$s from %2$s</string>
++    <string name="hayai_enhanced_batch_present">Already in library: %1$s</string>
++    <string name="hayai_enhanced_batch_duplicate">Skipped duplicate: %1$s</string>
++    <string name="hayai_enhanced_batch_failed">Failed %1$s. %2$s</string>
++    <string name="hayai_enhanced_batch_summary">Added %1$d. Already present %2$d. Duplicates %3$d. Failed %4$d.</string>
++    <string name="hayai_enhanced_batch_settings_title">Batch add supported galleries</string>
++    <string name="hayai_enhanced_batch_settings_summary">Import multiple 8Muses, HBrowse, NHentai, or Pururin gallery links into the J2K library.</string>
++</resources>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinatorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinatorTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..1c6ed0511d1b42fa5f8c00483c94ec0fd46f1a50
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdateCoordinatorTest.kt
+@@ -0,0 +1,59 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhGalleryUpdateCoordinatorTest {
++    @Test
++    fun `coordinator stops after five transient failures and records deterministic stats`() = kotlinx.coroutines.runBlocking {
++        val candidates = (1L..8L).map(::candidate)
++        val operations = FakeOperations(candidates) {
++            EhGalleryUpdateResult(EhGalleryUpdateDisposition.TransientFailure, it.title, failure = "offline")
++        }
++        var now = 100L
++        val run = EhGalleryUpdateCoordinator(operations) { now++ }.run()
++
++        assertEquals(5, run.stats.attempted)
++        assertEquals(5, run.stats.transientFailures)
++        assertTrue(run.stats.stoppedAtFailureCutoff)
++        assertTrue(run.shouldRetry)
++    }
++
++    @Test
++    fun `authentication is a no-op and successful revisions aggregate`() = kotlinx.coroutines.runBlocking {
++        val candidates = listOf(candidate(1), candidate(2))
++        val operations = FakeOperations(candidates) {
++            if (it.mangaId == 1L) {
++                EhGalleryUpdateResult(EhGalleryUpdateDisposition.AuthenticationSkipped, it.title)
++            } else {
++                EhGalleryUpdateResult(EhGalleryUpdateDisposition.Updated, it.title, newRevisionCount = 3)
++            }
++        }
++        val run = EhGalleryUpdateCoordinator(operations) { 100 }.run()
++
++        assertEquals(1, run.stats.authenticationSkipped)
++        assertEquals(1, run.stats.updated)
++        assertEquals(3, run.stats.newRevisions)
++        assertFalse(run.shouldRetry)
++    }
++
++    private fun candidate(id: Long) = EhGalleryUpdateCandidate(
++        mangaId = id,
++        sourceId = EhSite.EHentai.sourceId,
++        title = "Gallery $id",
++        mangaUrl = "/g/$id/token$id/",
++        state = EhGalleryUpdateState(),
++    )
++
++    private class FakeOperations(
++        private val candidates: List<EhGalleryUpdateCandidate>,
++        private val updateResult: (EhGalleryUpdateCandidate) -> EhGalleryUpdateResult,
++    ) : EhGalleryUpdateOperations {
++        override suspend fun candidates() = candidates
++        override suspend fun update(candidate: EhGalleryUpdateCandidate) = updateResult(candidate)
++    }
++}
++
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdaterStatsCodecTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdaterStatsCodecTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..e1ed53493b4d61401c546d9ba1745b43bf1dd290
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhGalleryUpdaterStatsCodecTest.kt
+@@ -0,0 +1,21 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class EhGalleryUpdaterStatsCodecTest {
++    @Test
++    fun `statistics round trip without dropping failure or cutoff state`() {
++        val stats = EhGalleryUpdaterStats(1, 2, 50, 5, 2, 3, 1, 1, 4, 5, 6, true)
++        assertEquals(stats, EhGalleryUpdaterStatsCodec.decode(EhGalleryUpdaterStatsCodec.encode(stats)))
++    }
++
++    @Test
++    fun `policy rejects intervals WorkManager cannot represent`() {
++        listOf(-1, 169).forEach { value ->
++            runCatching { EhGalleryUpdatePolicy(intervalHours = value) }
++                .onSuccess { throw AssertionError("Expected interval $value to be rejected") }
++        }
++        assertEquals(0, EhGalleryUpdatePolicy(intervalHours = 0).intervalHours)
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhRevisionMergerTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhRevisionMergerTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..08105a8b59bca7ea8ddb0ca886249d10243c15bc
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/update/EhRevisionMergerTest.kt
+@@ -0,0 +1,71 @@
++package dev.ahmedmohamed.hayai.adult.eh.update
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhRevisionMergerTest {
++    @Test
++    fun `merge preserves progress history bookmarks and downloaded identity`() {
++        val key = GalleryKey.parse("/g/100/old-token/")
++        val result = EhRevisionMerger.merge(
++            remote = listOf(EhRemoteRevision(key, "Remote title", 1000)),
++            local = listOf(
++                local(7, key, read = true, lastPage = 4, history = 50),
++                local(3, key, bookmark = true, lastPage = 8, downloaded = true, history = 100),
++            ),
++        )
++
++        val mutation = result.mutations.single()
++        assertEquals(3, mutation.localId)
++        assertTrue(mutation.read)
++        assertTrue(mutation.bookmark)
++        assertTrue(mutation.downloaded)
++        assertEquals(8, mutation.lastPageRead)
++        assertEquals(100, mutation.historyLastRead)
++        assertEquals(0, result.newRevisionCount)
++    }
++
++    @Test
++    fun `merge inserts missing revisions and retains chronological numbering order`() {
++        val old = GalleryKey.parse("/g/100/old-token/")
++        val newest = GalleryKey.parse("/g/101/new-token/")
++        val result = EhRevisionMerger.merge(
++            remote = listOf(EhRemoteRevision(newest, "New", 2000), EhRemoteRevision(old, "Old", 1000)),
++            local = listOf(local(2, old)),
++        )
++
++        assertEquals(listOf(old, newest), result.mutations.map { it.remote.key })
++        assertEquals(1, result.newRevisionCount)
++        assertFalse(result.mutations.last().read)
++    }
++
++    @Test(expected = IllegalArgumentException::class)
++    fun `empty remote chains are rejected`() {
++        EhRevisionMerger.merge(emptyList(), emptyList())
++    }
++
++    private fun local(
++        id: Long,
++        key: GalleryKey,
++        read: Boolean = false,
++        bookmark: Boolean = false,
++        lastPage: Int = 0,
++        downloaded: Boolean = false,
++        history: Long = 0,
++    ) = EhLocalRevision(
++        id = id,
++        url = key.normalizedPath,
++        title = "Local",
++        read = read,
++        bookmark = bookmark,
++        lastPageRead = lastPage,
++        pagesLeft = 0,
++        downloaded = downloaded,
++        historyLastRead = history,
++        historyTimeRead = history,
++    )
++}
++
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedBatchAddServiceTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedBatchAddServiceTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..cce84a49e0dfbc970609e0bd72206b79dcb443be
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedBatchAddServiceTest.kt
+@@ -0,0 +1,124 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.SourceFamily
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddService
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchEntry
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchFailure
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchInputParser
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchItemResult
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchLibraryGateway
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedImportTarget
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedResolveResult
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.launch
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EnhancedBatchAddServiceTest {
++    @Test
++    fun `input parser trims and deduplicates without accepting credentials`() {
++        val plan = EnhancedBatchInputParser.parse(
++            """
++                https://nhentai.net/g/1/
++                https://nhentai.net/g/1/
++                https://pururin.me/gallery/2/title
++            """.trimIndent(),
++        )
++
++        assertEquals(2, plan.entries.size)
++    }
++
++    @Test(expected = IllegalArgumentException::class)
++    fun `input parser rejects credential-bearing URLs`() {
++        EnhancedBatchInputParser.parse("https://user:secret@nhentai.net/g/1/")
++    }
++
++    @Test
++    fun `service deduplicates canonical galleries across different submitted links`() = runBlocking {
++        val gateway = FakeBatchGateway()
++        val report = EnhancedBatchAddService(gateway, retryDelayMillis = 0).run(
++            EnhancedBatchInputParser.parse(
++                """
++                    https://nhentai.net/g/1/
++                    https://nhentai.net/g/1/2/
++                """.trimIndent(),
++            ),
++        )
++
++        assertEquals(1, report.added)
++        assertEquals(1, report.duplicates)
++        assertEquals(1, gateway.addCalls)
++    }
++
++    @Test
++    fun `service retries only network failures and reports the final success`() = runBlocking {
++        val gateway = FakeBatchGateway(networkFailures = 2)
++        val report = EnhancedBatchAddService(gateway, maxNetworkAttempts = 3, retryDelayMillis = 0).run(
++            EnhancedBatchInputParser.parse("https://nhentai.net/g/1/"),
++        )
++
++        assertEquals(1, report.added)
++        assertEquals(3, gateway.addCalls)
++    }
++
++    @Test
++    fun `service preserves unsupported source failures`() = runBlocking {
++        val gateway = FakeBatchGateway(unsupported = true)
++        val report = EnhancedBatchAddService(gateway, retryDelayMillis = 0).run(
++            EnhancedBatchInputParser.parse("https://example.com/gallery/1"),
++        )
++
++        assertTrue((report.results.single() as EnhancedBatchItemResult.Failed).reason is EnhancedBatchFailure.UnsupportedSource)
++    }
++
++    @Test
++    fun `cancellation interrupts an in-flight item without reporting a false failure`() = runBlocking {
++        val started = CompletableDeferred<Unit>()
++        val gateway = object : EnhancedBatchLibraryGateway {
++            override suspend fun resolve(entry: EnhancedBatchEntry) = EnhancedResolveResult.Match(
++                EnhancedImportTarget(1, "NHentai", SourceFamily.NHentai, "/g/1/", entry.url),
++            )
++
++            override suspend fun addToLibrary(target: EnhancedImportTarget): EnhancedBatchItemResult {
++                started.complete(Unit)
++                awaitCancellation()
++            }
++        }
++        val job = launch {
++            EnhancedBatchAddService(gateway, retryDelayMillis = 0).run(
++                EnhancedBatchInputParser.parse("https://nhentai.net/g/1/"),
++            )
++        }
++
++        started.await()
++        job.cancelAndJoin()
++
++        assertTrue(job.isCancelled)
++    }
++}
++
++private class FakeBatchGateway(
++    private var networkFailures: Int = 0,
++    private val unsupported: Boolean = false,
++) : EnhancedBatchLibraryGateway {
++    var addCalls = 0
++
++    override suspend fun resolve(entry: EnhancedBatchEntry): EnhancedResolveResult {
++        if (unsupported) return EnhancedResolveResult.Failure(EnhancedBatchFailure.UnsupportedSource())
++        return EnhancedResolveResult.Match(
++            EnhancedImportTarget(1, "NHentai", SourceFamily.NHentai, "/g/1/", entry.url),
++        )
++    }
++
++    override suspend fun addToLibrary(target: EnhancedImportTarget): EnhancedBatchItemResult {
++        addCalls++
++        if (networkFailures-- > 0) {
++            return EnhancedBatchItemResult.Failed(target.submittedUrl, EnhancedBatchFailure.Network("temporary"))
++        }
++        return EnhancedBatchItemResult.Added(target.submittedUrl, target, 10, "Gallery")
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedPagePreviewParserTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedPagePreviewParserTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f3c40026b074bf953b4a31b1f0aff4279d10e935
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedPagePreviewParserTest.kt
+@@ -0,0 +1,70 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EnhancedPagePreviewParserTest {
++    @Test
++    fun `nhentai parser retains page order and creates tappable page links`() {
++        val body = """
++            {"id":123,"media_id":"55","pages":[
++              {"thumbnail":"galleries/55/1t.jpg"},
++              {"thumbnail":"https://cdn.example/2t.jpg"},
++              {"thumbnail":null}
++            ]}
++        """.trimIndent()
++
++        val previews = EnhancedPagePreviewParser.nhentai(body, "https://nhentai.net", listOf("https://t1.nhentai.net"))
++
++        assertEquals(listOf(1, 2), previews.map { it.index })
++        assertEquals("https://t1.nhentai.net/galleries/55/1t.jpg", previews[0].imageUrl)
++        assertEquals("https://nhentai.net/g/123/2/", previews[1].pageUrl)
++    }
++
++    @Test
++    fun `nhentai config ignores insecure thumbnail servers`() {
++        val servers = EnhancedPagePreviewParser.nhentaiConfig(
++            """{"thumb_servers":["http://unsafe.example","https://safe.example"]}""",
++        )
++
++        assertEquals(listOf("https://safe.example"), servers)
++    }
++
++    @Test
++    fun `lanraragi parser paginates every archive page with thumbnail flags`() {
++        val id = "a".repeat(40)
++        val previews = EnhancedPagePreviewParser.lanraragi(
++            """{"arcid":"$id","pagecount":3}""",
++            "https://lanraragi.local/",
++        )
++
++        assertEquals(3, previews.size)
++        assertFalse(previews[0].imageUrl.contains("no_fallback"))
++        assertTrue(previews[2].imageUrl.endsWith("?page=3&no_fallback=true"))
++        assertEquals("https://lanraragi.local/reader?id=$id#page=3", previews[2].pageUrl)
++    }
++
++    @Test(expected = IllegalArgumentException::class)
++    fun `lanraragi parser rejects unbounded page counts`() {
++        EnhancedPagePreviewParser.lanraragi(
++            """{"arcid":"${"a".repeat(40)}","pagecount":10001}""",
++            "https://lanraragi.local",
++        )
++    }
++
++    @Test
++    fun `preview pagination is bounded and reports navigation metadata`() {
++        val previews = (1..25).map { EnhancedPagePreview(it, "https://safe.example/$it", null) }
++
++        val second = EnhancedPagePreviewParser.paginate(previews, page = 2, pageSize = 12)
++        val beyond = EnhancedPagePreviewParser.paginate(previews, page = 4, pageSize = 12)
++
++        assertEquals((13..24).toList(), second.previews.map { it.index })
++        assertTrue(second.hasNextPage)
++        assertEquals(3, second.totalPages)
++        assertTrue(beyond.previews.isEmpty())
++        assertFalse(beyond.hasNextPage)
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceActionsTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceActionsTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..23c292ea86a32c8833ca076730ef989ac9a6aa91
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceActionsTest.kt
+@@ -0,0 +1,43 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchEntry
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedResolveResult
++import eu.kanade.tachiyomi.source.model.SManga
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EnhancedSourceActionsTest {
++    @Test
++    fun `nhentai details expose in-app import batch and preview actions`() {
++        val source = EnhancedSourceRegistry.wrap(EnhancedTestHttpSource(1, "NHentai", "https://nhentai.net")) as HayaiEnhancedHttpSource
++        val manga = SManga.create().apply { url = "/g/123/"; title = "Gallery" }
++
++        val actions = EnhancedSourceActionCatalog.forManga(source, manga)
++
++        assertTrue(actions.any { it is EnhancedSourceAction.OpenInApp })
++        assertTrue(actions.any { it is EnhancedSourceAction.OpenBatchAdd })
++        assertTrue(actions.any { it is EnhancedSourceAction.OpenPagePreviews })
++        assertFalse(actions.any { it is EnhancedSourceAction.OpenSourceSettings })
++    }
++
++    @Test
++    fun `link router rejects ambiguity instead of selecting an arbitrary extension`() {
++        val first = EnhancedSourceRegistry.wrap(EnhancedTestHttpSource(1, "NHentai", "https://nhentai.net")) as HayaiEnhancedHttpSource
++        val second = EnhancedSourceRegistry.wrap(EnhancedTestHttpSource(2, "NHentai mirror", "https://nhentai.net")) as HayaiEnhancedHttpSource
++        val result = EnhancedSourceLinkRouter { listOf(first, second) }.resolve(
++            EnhancedBatchEntry.parse("https://nhentai.net/g/123/"),
++        )
++
++        assertTrue(result is EnhancedResolveResult.Failure)
++    }
++
++    @Test
++    fun `pururin numeric search maps without treating ordinary text as a URL`() {
++        val definition = EnhancedSourceDefinitions.all.single { it.family == dev.ahmedmohamed.hayai.source.SourceFamily.Pururin }
++
++        assertEquals("/gallery/123/-", EnhancedSourceUrlMapper.mapQuery(definition, "https://pururin.me", "id:123"))
++        assertEquals(null, EnhancedSourceUrlMapper.mapQuery(definition, "https://pururin.me", "artist name"))
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceFeaturesTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceFeaturesTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..16f6781a24effd9d0b352d6d7c68360e0c07dae3
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceFeaturesTest.kt
+@@ -0,0 +1,41 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import eu.kanade.tachiyomi.source.ConfigurableSource
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertSame
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EnhancedSourceFeaturesTest {
++    @Test
++    fun `url import and previews match actual SY source capabilities`() {
++        val nhentai = EnhancedSourceRegistry.wrap(EnhancedTestHttpSource(1, "NHentai", "https://nhentai.net")) as HayaiEnhancedHttpSource
++        val lanraragi = HayaiEnhancedHttpSource(
++            EnhancedTestHttpSource(2, "LANraragi", "https://lanraragi.local"),
++            EnhancedSourceDefinitions.all.single { it.family == dev.ahmedmohamed.hayai.source.SourceFamily.Lanraragi },
++        )
++        val hBrowse = EnhancedSourceRegistry.wrap(EnhancedTestHttpSource(3, "HBrowse", "https://hbrowse.com")) as HayaiEnhancedHttpSource
++
++        assertTrue(EnhancedSourceFeature.BatchAdd in requireNotNull(EnhancedSourceFeatureRegistry.features(nhentai)))
++        assertTrue(EnhancedSourceFeature.PagePreview in requireNotNull(EnhancedSourceFeatureRegistry.features(nhentai)))
++        assertTrue(EnhancedSourceFeature.PagePreview in requireNotNull(EnhancedSourceFeatureRegistry.features(lanraragi)))
++        assertFalse(EnhancedSourceFeature.BatchAdd in requireNotNull(EnhancedSourceFeatureRegistry.features(lanraragi)))
++        assertFalse(EnhancedSourceFeature.PagePreview in requireNotNull(EnhancedSourceFeatureRegistry.features(hBrowse)))
++    }
++
++    @Test
++    fun `installed extension preferences and authentication settings remain authoritative`() {
++        val original = EnhancedConfigurableTestSource(4, "LANraragi", "https://lanraragi.local")
++        val wrapped = ConfigurableHayaiEnhancedHttpSource(
++            original,
++            EnhancedSourceDefinitions.all.single { it.family == dev.ahmedmohamed.hayai.source.SourceFamily.Lanraragi },
++        )
++
++        assertTrue(wrapped is ConfigurableSource)
++        assertSame(original.preferences, (wrapped as ConfigurableSource).getSourcePreferences())
++        assertTrue(
++            EnhancedSourceFeature.SourceSettings in
++                requireNotNull(EnhancedSourceFeatureRegistry.features(wrapped as HayaiEnhancedHttpSource)),
++        )
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedTestSources.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedTestSources.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f6e366c2610799014851de4fab3ed872dbd2e9e4
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedTestSources.kt
+@@ -0,0 +1,60 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import android.content.SharedPreferences
++import androidx.preference.PreferenceScreen
++import eu.kanade.tachiyomi.source.ConfigurableSource
++import eu.kanade.tachiyomi.source.model.FilterList
++import eu.kanade.tachiyomi.source.model.MangasPage
++import eu.kanade.tachiyomi.source.model.SChapter
++import eu.kanade.tachiyomi.source.model.SManga
++import eu.kanade.tachiyomi.source.model.SMangaUpdate
++import eu.kanade.tachiyomi.source.online.HttpSource
++import java.lang.reflect.Proxy
++
++open class EnhancedTestHttpSource(
++    override val id: Long,
++    override val name: String,
++    override val baseUrl: String,
++) : HttpSource() {
++    override val lang: String = "all"
++    override val supportsLatest: Boolean = true
++
++    override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage = MangasPage(emptyList(), false)
++
++    override suspend fun getMangaDetails(manga: SManga): SManga = manga.apply {
++        if (title.isBlank()) title = "Gallery"
++        initialized = true
++    }
++
++    override suspend fun getMangaUpdate(
++        manga: SManga,
++        chapters: List<SChapter>,
++        fetchDetails: Boolean,
++        fetchChapters: Boolean,
++    ): SMangaUpdate = SMangaUpdate(getMangaDetails(manga), chapters)
++
++    override fun getMangaUrl(manga: SManga): String = baseUrl.trimEnd('/') + manga.url
++}
++
++class EnhancedConfigurableTestSource(
++    id: Long,
++    name: String,
++    baseUrl: String,
++) : EnhancedTestHttpSource(id, name, baseUrl), ConfigurableSource {
++    val preferences: SharedPreferences = Proxy.newProxyInstance(
++        SharedPreferences::class.java.classLoader,
++        arrayOf(SharedPreferences::class.java),
++    ) { _, method, _ ->
++        when (method.returnType) {
++            Boolean::class.javaPrimitiveType -> false
++            Int::class.javaPrimitiveType -> 0
++            Long::class.javaPrimitiveType -> 0L
++            Float::class.javaPrimitiveType -> 0f
++            Set::class.java -> emptySet<String>()
++            else -> null
++        }
++    } as SharedPreferences
++
++    override fun getSourcePreferences(): SharedPreferences = preferences
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = Unit
++}
+diff --git a/docs/development/emulator-verification.md b/docs/development/emulator-verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..564302897401b531575c21ef5d947cff73499cd8
+--- /dev/null
++++ b/docs/development/emulator-verification.md
+@@ -0,0 +1,36 @@
++# Hayai emulator verification
++
++`tools/verify-hayai-emulator.ps1` verifies migration and the coupled novel and adult workflows against a disposable debug installation. It refuses the production application ID. It also refuses an AVD whose name does not explicitly contain both `Hayai` and `Test`.
++
++## Prerequisites
++
++- A dedicated API 35 AVD such as `Hayai_API_35_Test`.
++- A previously built universal dev-debug APK. The harness never builds the app.
++- Android SDK `adb` and `emulator` on `PATH`.
++- SQLite 3 on `PATH`.
++- A dedicated E-Hentai test account. Do not use a personal account.
++- Controlled E-Hentai and ExHentai gallery URLs that the test account may access.
++
++Copy `tools/fixtures/hayai-emulator/eh-secrets.example.json` outside the repository. Fill it with the dedicated account cookie values and controlled gallery URLs. The harness does not print these values. It writes the temporary preference XML under the operating-system temporary directory and removes it in `finally`.
++
++Run the non-mutating prerequisite check first.
++
++```powershell
++.\tools\verify-hayai-emulator.ps1 `
++  -AvdName Hayai_API_35_Test `
++  -ApkPath .\app\build\outputs\apk\dev\debug\app-dev-universal-debug.apk `
++  -EhSecretsPath C:\secure\hayai-eh-test.json `
++  -DryRun
++```
++
++Then run the workflow with the same arguments and without `-DryRun`. Evidence is written under `artifacts/emulator-verification/<UTC timestamp>`.
++
++## Verified behavior
++
++The harness creates a sanitized v36 database from source SQL. It installs only `dev.ahmedmohamed.hayai.debug`, places the legacy database before first launch, and checks migration state plus table counts. It opens the controlled local novel directly, checks the selection actions for highlights, translation, and dictionary lookup, stores an offline chapter, restarts the process, and confirms offline recovery.
++
++It stages dedicated test credentials, asks the app to verify them with ExHentai, uploads remote settings, previews and runs favorites sync, starts the gallery updater, opens the controlled gallery details, and checks page previews. It captures screenshots, UI hierarchy files, database snapshots, count reports, and Logcat. Any captured Hayai fatal exception fails the run.
++
++Cleanup uninstalls only the debug application and removes only the fixed controlled local-novel fixture directory. It never clears, installs over, or uninstalls production Hayai. Use `-KeepTestApp` only when inspecting a failed dedicated AVD manually.
++
++The harness expects stable user-facing labels from the production features. A label mismatch fails at the affected workflow instead of silently skipping it.
+diff --git a/tools/fixtures/hayai-emulator/chapter-1.html b/tools/fixtures/hayai-emulator/chapter-1.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..63194be275aaf0a83294397ced76437a3e3e4bd2
+--- /dev/null
++++ b/tools/fixtures/hayai-emulator/chapter-1.html
+@@ -0,0 +1,2 @@
++<!doctype html><html><head><title>Chapter 1</title></head><body><h1>Chapter 1</h1><p>The verification lantern stayed lit after every restart.</p><p>This controlled paragraph exists for highlights, translation, dictionary lookup, offline storage, and reading progress.</p></body></html>
++
+diff --git a/tools/fixtures/hayai-emulator/eh-secrets.example.json b/tools/fixtures/hayai-emulator/eh-secrets.example.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..587d0c368f3e780a485b29c8b98b1962f6b3545d
+--- /dev/null
++++ b/tools/fixtures/hayai-emulator/eh-secrets.example.json
+@@ -0,0 +1,7 @@
++{
++  "memberId": "copy from a dedicated test account",
++  "passHash": "copy from a dedicated test account",
++  "igneous": "copy from a dedicated test account",
++  "ehGalleryUrl": "https://e-hentai.org/g/123/token/",
++  "exhGalleryUrl": "https://exhentai.org/g/123/token/"
++}
+diff --git a/tools/fixtures/hayai-emulator/expected-counts.json b/tools/fixtures/hayai-emulator/expected-counts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b724306ac513ac2cd8d0a3c7733a547adf70f18
+--- /dev/null
++++ b/tools/fixtures/hayai-emulator/expected-counts.json
+@@ -0,0 +1,11 @@
++{
++  "categories": 1,
++  "mangas": 3,
++  "chapters": 1,
++  "history": 1,
++  "hayai_quotes": 1,
++  "hayai_novel_repos": 1,
++  "hayai_novel_chapter_stats": 1,
++  "hayai_eh_favorites": 1
++}
++
+diff --git a/tools/fixtures/hayai-emulator/legacy-v36.sql b/tools/fixtures/hayai-emulator/legacy-v36.sql
+new file mode 100644
+index 0000000000000000000000000000000000000000..45b18af0241080ba7769bfcde6b176e9ae55a925
+--- /dev/null
++++ b/tools/fixtures/hayai-emulator/legacy-v36.sql
+@@ -0,0 +1,30 @@
++PRAGMA user_version = 36;
++PRAGMA foreign_keys = ON;
++
++CREATE TABLE categories(_id INTEGER PRIMARY KEY, name TEXT NOT NULL, sort INTEGER NOT NULL, flags INTEGER NOT NULL, manga_order TEXT NOT NULL);
++CREATE TABLE mangas(_id INTEGER PRIMARY KEY, source INTEGER NOT NULL, url TEXT NOT NULL, artist TEXT, author TEXT, description TEXT, genre TEXT, title TEXT NOT NULL, status INTEGER NOT NULL, thumbnail_url TEXT, favorite INTEGER NOT NULL, last_update INTEGER NOT NULL, initialized INTEGER NOT NULL, viewer INTEGER NOT NULL, hide_title INTEGER NOT NULL, chapter_flags INTEGER NOT NULL, date_added INTEGER NOT NULL, filtered_scanlators TEXT, update_strategy INTEGER NOT NULL, memo TEXT NOT NULL);
++CREATE TABLE chapters(_id INTEGER PRIMARY KEY, manga_id INTEGER NOT NULL, url TEXT NOT NULL, name TEXT NOT NULL, scanlator TEXT, read INTEGER NOT NULL, bookmark INTEGER NOT NULL, last_page_read INTEGER NOT NULL, pages_left INTEGER NOT NULL, chapter_number REAL NOT NULL, source_order INTEGER NOT NULL, date_fetch INTEGER NOT NULL, date_upload INTEGER NOT NULL, memo TEXT NOT NULL);
++CREATE TABLE mangas_categories(_id INTEGER PRIMARY KEY, manga_id INTEGER NOT NULL, category_id INTEGER NOT NULL);
++CREATE TABLE history(history_id INTEGER PRIMARY KEY, history_chapter_id INTEGER NOT NULL, history_last_read INTEGER NOT NULL, history_time_read INTEGER NOT NULL);
++CREATE TABLE search_metadata(manga_id INTEGER PRIMARY KEY, uploader TEXT, extra TEXT NOT NULL, indexed_extra TEXT, extra_version INTEGER NOT NULL);
++CREATE TABLE series_quotes(quote_id TEXT PRIMARY KEY, manga_id INTEGER NOT NULL, novel_name TEXT NOT NULL, chapter_name TEXT NOT NULL, displayed_content TEXT NOT NULL, original_content TEXT NOT NULL, translated_content TEXT, language TEXT, timestamp INTEGER NOT NULL);
++CREATE TABLE novel_repos(base_url TEXT PRIMARY KEY, name TEXT NOT NULL);
++CREATE TABLE novel_chapter_stats(chapter_id INTEGER PRIMARY KEY, word_count INTEGER NOT NULL);
++CREATE TABLE eh_favorites(gid TEXT NOT NULL, token TEXT NOT NULL, title TEXT NOT NULL, category INTEGER NOT NULL);
++
++INSERT INTO categories VALUES(1, 'Verification', 0, 0, '');
++INSERT INTO mangas VALUES(100, 1, 'Verification Novel', NULL, 'Hayai Verification', 'Controlled local novel fixture', 'novel', 'Verification Novel', 1, NULL, 1, 0, 1, 0, 0, 0, 1700000000000, NULL, 0, '{}');
++INSERT INTO mangas VALUES(200, 6901, '{{EH_PATH}}', NULL, NULL, 'Controlled E-Hentai verification gallery', 'adult', 'Verification E-Hentai Gallery', 0, NULL, 1, 0, 1, 0, 0, 0, 1700000000000, NULL, 0, '{}');
++INSERT INTO mangas VALUES(201, 6902, '{{EXH_PATH}}', NULL, NULL, 'Controlled ExHentai verification gallery', 'adult', 'Verification ExHentai Gallery', 0, NULL, 1, 0, 1, 0, 0, 0, 1700000000000, NULL, 0, '{}');
++INSERT INTO chapters VALUES(1000, 100, 'Verification Novel/chapter-1.html', 'Chapter 1', NULL, 0, 1, 25, 0, 1, 0, 1700000000000, 1700000000000, '{}');
++INSERT INTO mangas_categories VALUES(1, 100, 1);
++INSERT INTO mangas_categories VALUES(2, 200, 1);
++INSERT INTO mangas_categories VALUES(3, 201, 1);
++INSERT INTO history VALUES(1, 1000, 1700000000000, 120000);
++INSERT INTO search_metadata VALUES(200, 'fixture', '{"gid":"{{EH_GID}}","token":"{{EH_TOKEN}}"}', '{{EH_GID}}', 1);
++INSERT INTO search_metadata VALUES(201, 'fixture', '{"gid":"{{EXH_GID}}","token":"{{EXH_TOKEN}}"}', '{{EXH_GID}}', 1);
++INSERT INTO series_quotes VALUES('fixture-quote', 100, 'Verification Novel', 'Chapter 1', 'A migrated quote.', 'A migrated quote.', NULL, 'en', 1700000000000);
++INSERT INTO novel_repos VALUES('https://fixture.invalid/novels', 'Sanitized fixture');
++INSERT INTO novel_chapter_stats VALUES(1000, 42);
++INSERT INTO eh_favorites VALUES('{{EH_GID}}', '{{EH_TOKEN}}', 'Verification E-Hentai Gallery', 0);
++
+diff --git a/tools/verify-hayai-emulator.ps1 b/tools/verify-hayai-emulator.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..360a5a356ff0b76fd6570737e177a13956836e5f
+--- /dev/null
++++ b/tools/verify-hayai-emulator.ps1
+@@ -0,0 +1,203 @@
++[CmdletBinding()]
++param(
++    [Parameter(Mandatory)] [string] $AvdName,
++    [Parameter(Mandatory)] [string] $ApkPath,
++    [Parameter(Mandatory)] [string] $EhSecretsPath,
++    [string] $ApplicationId = "dev.ahmedmohamed.hayai.debug",
++    [string] $Serial = "emulator-5554",
++    [string] $EvidenceRoot = (Join-Path $PSScriptRoot "..\artifacts\emulator-verification"),
++    [string] $Adb = "adb",
++    [string] $Emulator = "emulator",
++    [string] $Sqlite = "sqlite3",
++    [switch] $KeepTestApp,
++    [switch] $DryRun
++)
++
++$ErrorActionPreference = "Stop"
++Set-StrictMode -Version Latest
++$productionId = "dev.ahmedmohamed.hayai"
++if ($ApplicationId -eq $productionId -or !$ApplicationId.EndsWith(".debug")) { throw "Only the debug test application ID is allowed." }
++if ($AvdName -notmatch '(?i)(hayai.*test|test.*hayai)') { throw "The AVD name must explicitly contain both Hayai and Test." }
++$fixtureRoot = Join-Path $PSScriptRoot "fixtures\hayai-emulator"
++$required = @($ApkPath, $EhSecretsPath, (Join-Path $fixtureRoot "legacy-v36.sql"), (Join-Path $fixtureRoot "chapter-1.html"), (Join-Path $fixtureRoot "expected-counts.json"))
++$required | ForEach-Object { if (!(Test-Path -LiteralPath $_ -PathType Leaf)) { throw "Required verification input is missing: $_" } }
++$secrets = Get-Content -Raw -LiteralPath $EhSecretsPath | ConvertFrom-Json
++@("memberId", "passHash", "igneous", "ehGalleryUrl", "exhGalleryUrl") | ForEach-Object {
++    if ([string]::IsNullOrWhiteSpace($secrets.$_)) { throw "The dedicated test account file is missing $_." }
++}
++
++function Invoke-Adb([Parameter(ValueFromRemainingArguments)] [string[]] $Arguments) {
++    $output = & $Adb -s $Serial @Arguments 2>&1
++    if ($LASTEXITCODE -ne 0) { throw "adb failed: $($Arguments -join ' ')`n$output" }
++    return $output
++}
++function Wait-Device {
++    & $Adb -s $Serial wait-for-device | Out-Null
++    $deadline = [DateTime]::UtcNow.AddMinutes(3)
++    do {
++        $booted = (& $Adb -s $Serial shell getprop sys.boot_completed 2>$null).Trim()
++        if ($booted -eq "1") { return }
++        Start-Sleep -Seconds 2
++    } while ([DateTime]::UtcNow -lt $deadline)
++    throw "The dedicated test AVD did not finish booting."
++}
++function Assert-TestAvd {
++    $actual = (Invoke-Adb emu avd name | Select-Object -First 1).Trim()
++    if ($actual -ne $AvdName) { throw "Connected emulator is '$actual', expected dedicated AVD '$AvdName'." }
++}
++function Dump-Window([string] $Name) {
++    Invoke-Adb shell uiautomator dump /sdcard/hayai-window.xml | Out-Null
++    $path = Join-Path $script:evidence "$Name.xml"
++    Invoke-Adb pull /sdcard/hayai-window.xml $path | Out-Null
++    return [xml](Get-Content -Raw -LiteralPath $path)
++}
++function Find-Node([xml] $Window, [string] $Pattern) {
++    $node = $Window.SelectNodes("//node") | Where-Object { $_.text -match $Pattern -or $_.'content-desc' -match $Pattern } | Select-Object -First 1
++    if ($null -eq $node) { throw "UI node was not found: $Pattern" }
++    return $node
++}
++function Tap-Node([string] $Pattern, [string] $EvidenceName) {
++    $node = Find-Node (Dump-Window $EvidenceName) $Pattern
++    if ($node.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "UI node has invalid bounds: $Pattern" }
++    $x = ([int]$Matches[1] + [int]$Matches[3]) / 2
++    $y = ([int]$Matches[2] + [int]$Matches[4]) / 2
++    Invoke-Adb shell input tap ([int]$x) ([int]$y) | Out-Null
++    Start-Sleep -Milliseconds 800
++}
++function Assert-Node([string] $Pattern, [string] $EvidenceName) { [void](Find-Node (Dump-Window $EvidenceName) $Pattern) }
++function Capture([string] $Name) {
++    $remote = "/sdcard/$Name.png"
++    Invoke-Adb shell screencap -p $remote | Out-Null
++    Invoke-Adb pull $remote (Join-Path $script:evidence "$Name.png") | Out-Null
++}
++function Pull-Database([string] $Name) {
++    $remote = "/sdcard/Android/data/$ApplicationId/files/$Name.db"
++    Invoke-Adb shell run-as $ApplicationId cp "databases/hayai-j2k.db" $remote | Out-Null
++    $local = Join-Path $script:evidence "$Name.db"
++    Invoke-Adb pull $remote $local | Out-Null
++    return $local
++}
++function Database-Report([string] $Name) {
++    Invoke-Adb shell am force-stop $ApplicationId | Out-Null
++    $db = Pull-Database $Name
++    $expected = Get-Content -Raw -LiteralPath (Join-Path $fixtureRoot "expected-counts.json") | ConvertFrom-Json
++    $report = [ordered]@{}
++    $expected.PSObject.Properties | ForEach-Object {
++        $actual = [int](& $Sqlite $db "SELECT COUNT(*) FROM $($_.Name);")
++        if ($actual -lt [int]$_.Value) { throw "Database count $($_.Name)=$actual, expected at least $($_.Value)." }
++        $report[$_.Name] = $actual
++    }
++    $state = & $Sqlite $db "SELECT status FROM hayai_migration_state WHERE plan_id='hayai-v36-to-j2k-v20';"
++    if ($state -ne "complete") { throw "Legacy migration did not complete." }
++    $report["migration"] = $state
++    $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $script:evidence "$Name-counts.json") -Encoding utf8
++}
++function GalleryParts([string] $Url) {
++    if ($Url -notmatch '^https://(e-hentai\.org|exhentai\.org)/g/([1-9][0-9]*)/([A-Za-z0-9_-]+)/?') { throw "Invalid controlled gallery URL." }
++    return @{ Path = "/g/$($Matches[2])/$($Matches[3])/?nw=always"; Gid = $Matches[2]; Token = $Matches[3] }
++}
++function XmlEscape([string] $Value) { return [Security.SecurityElement]::Escape($Value) }
++
++if ($DryRun) {
++    $avds = & $Emulator -list-avds
++    if ($AvdName -notin $avds) { throw "Dedicated AVD '$AvdName' is not installed." }
++    Write-Output "Dry run passed. Inputs, dedicated AVD name, debug application ID, fixture, and secret fields are valid."
++    exit 0
++}
++
++$script:evidence = Join-Path $EvidenceRoot ([DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss"))
++New-Item -ItemType Directory -Path $script:evidence -Force | Out-Null
++$temporary = Join-Path ([IO.Path]::GetTempPath()) ("hayai-emulator-" + [guid]::NewGuid().ToString("N"))
++New-Item -ItemType Directory -Path $temporary | Out-Null
++$startedEmulator = $false
++try {
++    $connected = & $Adb devices | Select-String "^$([regex]::Escape($Serial))\s+device$"
++    if (!$connected) {
++        Start-Process -FilePath $Emulator -ArgumentList @("-avd", $AvdName, "-no-snapshot-save", "-no-boot-anim") -WindowStyle Hidden | Out-Null
++        $startedEmulator = $true
++    }
++    Wait-Device
++    Assert-TestAvd
++    & $Adb -s $Serial uninstall $ApplicationId 2>$null | Out-Null
++    Invoke-Adb install $ApkPath | Out-Null
++    $installed = (Invoke-Adb shell dumpsys package $ApplicationId | Select-String "debuggable").ToString()
++    if (!$installed) { throw "Installed APK is not debuggable." }
++
++    $eh = GalleryParts $secrets.ehGalleryUrl
++    $exh = GalleryParts $secrets.exhGalleryUrl
++    $sqlText = Get-Content -Raw -LiteralPath (Join-Path $fixtureRoot "legacy-v36.sql")
++    $sqlText = $sqlText.Replace("{{EH_PATH}}", $eh.Path).Replace("{{EH_GID}}", $eh.Gid).Replace("{{EH_TOKEN}}", $eh.Token)
++    $sqlText = $sqlText.Replace("{{EXH_PATH}}", $exh.Path).Replace("{{EXH_GID}}", $exh.Gid).Replace("{{EXH_TOKEN}}", $exh.Token)
++    $fixtureSql = Join-Path $temporary "fixture.sql"
++    $fixtureDb = Join-Path $temporary "tachiyomi.db"
++    Set-Content -LiteralPath $fixtureSql -Value $sqlText -Encoding utf8
++    & $Sqlite $fixtureDb ".read '$($fixtureSql.Replace("'", "''"))'"
++    if ($LASTEXITCODE -ne 0) { throw "Unable to create sanitized migration fixture." }
++    Invoke-Adb push $fixtureDb /data/local/tmp/hayai-tachiyomi.db | Out-Null
++    Invoke-Adb shell run-as $ApplicationId mkdir -p databases shared_prefs | Out-Null
++    Invoke-Adb shell run-as $ApplicationId cp /data/local/tmp/hayai-tachiyomi.db databases/tachiyomi.db | Out-Null
++
++    $prefs = "<?xml version=`"1.0`" encoding=`"utf-8`" standalone=`"yes`" ?><map><string name=`"__PRIVATE_eh_ipb_member_id`">$(XmlEscape $secrets.memberId)</string><string name=`"__PRIVATE_eh_ipb_pass_hash`">$(XmlEscape $secrets.passHash)</string><string name=`"__PRIVATE_eh_igneous`">$(XmlEscape $secrets.igneous)</string></map>"
++    $prefsFile = Join-Path $temporary "$ApplicationId`_preferences.xml"
++    Set-Content -LiteralPath $prefsFile -Value $prefs -Encoding utf8
++    Invoke-Adb push $prefsFile /data/local/tmp/hayai-preferences.xml | Out-Null
++    Invoke-Adb shell run-as $ApplicationId cp /data/local/tmp/hayai-preferences.xml "shared_prefs/$ApplicationId`_preferences.xml" | Out-Null
++    Invoke-Adb shell mkdir -p "/sdcard/Hayai/localnovels/Verification Novel" | Out-Null
++    Invoke-Adb push (Join-Path $fixtureRoot "chapter-1.html") "/sdcard/Hayai/localnovels/Verification Novel/chapter-1.html" | Out-Null
++
++    Invoke-Adb logcat -c | Out-Null
++    Invoke-Adb shell monkey -p $ApplicationId 1 | Out-Null
++    Start-Sleep -Seconds 5
++    Capture "01-migrated-library"
++    Database-Report "01-migrated"
++
++    Invoke-Adb shell run-as $ApplicationId am start -n "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity" --el hayai.manga_id 100 --el hayai.chapter_id 1000 | Out-Null
++    Start-Sleep -Seconds 3
++    Assert-Node "Verification Novel" "02-novel-reader"
++    Capture "02-novel-reader"
++    Invoke-Adb shell input swipe 300 700 650 700 1200 | Out-Null
++    Start-Sleep -Seconds 1
++    Assert-Node "Highlight|Translate|Dictionary|Look up" "03-novel-selection-actions"
++    Capture "03-novel-selection-actions"
++    Invoke-Adb shell input keyevent BACK | Out-Null
++    Tap-Node "Aa" "04-reader-menu-button"
++    Tap-Node "Save chapter offline" "05-save-offline"
++    Start-Sleep -Seconds 2
++    Invoke-Adb shell am force-stop $ApplicationId | Out-Null
++    Invoke-Adb shell run-as $ApplicationId am start -n "$ApplicationId/dev.ahmedmohamed.hayai.novel.reader.NovelReaderActivity" --el hayai.manga_id 100 --el hayai.chapter_id 1000 | Out-Null
++    Start-Sleep -Seconds 2
++    Assert-Node "Offline" "06-offline-after-restart"
++    Capture "06-offline-after-restart"
++
++    Invoke-Adb shell run-as $ApplicationId am start -n "$ApplicationId/dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity" | Out-Null
++    Start-Sleep -Seconds 2
++    Tap-Node "Recheck current credentials" "07-eh-recheck"
++    Start-Sleep -Seconds 5
++    Assert-Node "Verified|verified" "08-eh-verified"
++    Tap-Node "Apply to E-Hentai and ExHentai" "09-eh-settings-upload"
++    Tap-Node "Preview favorites sync" "10-eh-favorites-preview"
++    Tap-Node "Start or resume favorites sync" "11-eh-favorites-sync"
++    Tap-Node "Run gallery updater now" "12-eh-updater"
++    Start-Sleep -Seconds 10
++    Capture "12-eh-updater"
++
++    Invoke-Adb shell monkey -p $ApplicationId 1 | Out-Null
++    Start-Sleep -Seconds 2
++    Tap-Node "Verification E-Hentai Gallery" "13-eh-details"
++    Start-Sleep -Seconds 5
++    Assert-Node "Gallery page 1" "14-eh-previews"
++    Capture "14-eh-previews"
++    Database-Report "15-final"
++    Invoke-Adb logcat -d -v threadtime | Set-Content -LiteralPath (Join-Path $script:evidence "logcat.txt") -Encoding utf8
++    $fatal = Get-Content -LiteralPath (Join-Path $script:evidence "logcat.txt") | Select-String "FATAL EXCEPTION|AndroidRuntime: Process: $ApplicationId"
++    if ($fatal) { throw "The verification run captured an application crash. See logcat.txt." }
++    Write-Output "Hayai emulator verification passed. Evidence: $script:evidence"
++} finally {
++    Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
++    if (!$KeepTestApp) {
++        & $Adb -s $Serial shell am force-stop $ApplicationId 2>$null | Out-Null
++        & $Adb -s $Serial uninstall $ApplicationId 2>$null | Out-Null
++        & $Adb -s $Serial shell rm -rf "/sdcard/Hayai/localnovels/Verification Novel" 2>$null | Out-Null
++    }
++    if ($startedEmulator) { & $Adb -s $Serial emu kill 2>$null | Out-Null }
++}
+-- 
+2.54.0.windows.1
+

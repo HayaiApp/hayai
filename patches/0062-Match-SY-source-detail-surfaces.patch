@@ -1,0 +1,1014 @@
+From 0c32894d66a81090d2bb837b0be1074fc9c577e2 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 14:15:56 +0300
+Subject: [PATCH] Match SY source detail surfaces
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 63b2e8d11127661ba7b65173829d90e02137e38e..750c7b2b1636d4d19aec06b0f0af0e8eb23bfc78 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -93,3 +93,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T13:45:00+03:00	j2k-novel-plugin-navigation	replaced the standalone novel plugin manager activity and hand-built cards with a J2K SettingsController catalog	preserved repository add, enable, remove, refresh errors, search, install, update, uninstall, trust warning, and in-progress gating while removing the duplicate app shell	NovelPluginManagerController.kt; SettingsAdvancedController.kt	COMPILED
+ 2026-08-22T14:02:00+03:00	j2k-novel-data-navigation	replaced the standalone novel data-tools activity with a J2K SettingsController and controller-owned document results	preserved Tsundoku and LNReader dry-run import, warnings, atomic apply, EPUB export with bounded assets, destination cleanup, cancellation, and progress while deleting the duplicate activity shell	NovelDataToolsController.kt; NovelSettingsController.kt; MangaDetailsController.kt	COMPILED
+ 2026-08-22T14:25:00+03:00	j2k-eh-settings-navigation	replaced the standalone E-Hentai settings activity with a native J2K SettingsController	preserved login results, session verification, the remote settings matrix and retry, watched tags, favorites planning and sync, category mapping, updater policy, statistics, immediate run, and cancellation while deleting the duplicate toolbar and activity shell	EhSettingsController.kt; BrowseSourceController.kt; SettingsAdvancedController.kt; SourcePreviewController.kt	IMPLEMENTED_UNVERIFIED
++2026-08-22T15:10:00+03:00	sy-source-details-ui	replaced the custom horizontal preview strip and generic enhanced-source summaries with their SY presentation contracts	used adaptive full-width preview rows, fit-width 120 by 200 dp cells, J2K text actions and empty state, plus source-specific E-Hentai, ExHentai, 8Muses, HBrowse, NHentai, Pururin, and LANraragi description layouts reconstructed from pinned SY while retaining typed Hayai data and loaders	SourceMetadataUi.kt; SourcePreviewController.kt; MangaDetailsController.kt; hayai_sy_description_*.xml; manga_header_item.xml	IMPLEMENTED_UNVERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
+index 3f82bbca682119f46479fd71f81d37df16269e9f..cda4f4c86846d1af5496a091535472f5ed3ffcb1 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
+@@ -6,20 +6,27 @@ import android.graphics.Color
+ import android.graphics.Typeface
+ import android.text.format.Formatter
+ import android.view.Gravity
++import android.view.LayoutInflater
+ import android.view.ViewGroup
+ import android.widget.LinearLayout
+ import android.widget.RatingBar
+ import android.widget.TextView
+ import androidx.annotation.StringRes
++import androidx.appcompat.content.res.AppCompatResources
++import androidx.cardview.widget.CardView
+ import androidx.core.graphics.ColorUtils
++import androidx.core.graphics.drawable.DrawableCompat
+ import com.google.android.material.button.MaterialButton
+ import com.google.android.material.card.MaterialCardView
+ import com.google.android.material.chip.Chip
+ import com.google.android.material.chip.ChipGroup
++import dev.ahmedmohamed.hayai.source.SourceFamily
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.util.system.clipboardManager
++import eu.kanade.tachiyomi.util.system.getResourceColor
+ import java.text.DateFormat
+ import java.util.Date
++import java.util.Locale
+ 
+ object SourceMetadataUi {
+     data class Row(val title: String, val value: String)
+@@ -32,6 +39,19 @@ object SourceMetadataUi {
+     ) {
+         container.removeAllViews()
+         container.orientation = LinearLayout.VERTICAL
++        when (document.family) {
++            SourceFamily.EHentai, SourceFamily.ExHentai -> renderEhSummary(container, document, onMoreInfo, onSearch)
++            SourceFamily.EightMuses -> renderEightMusesSummary(container, document, onMoreInfo)
++            SourceFamily.HBrowse -> renderHBrowseSummary(container, document, onMoreInfo)
++            SourceFamily.Lanraragi -> renderLanraragiSummary(container, document, onMoreInfo)
++            SourceFamily.NHentai -> renderNHentaiSummary(container, document, onMoreInfo)
++            SourceFamily.Pururin -> renderPururinSummary(container, document, onMoreInfo)
++            else -> null
++        }?.let {
++            container.setPadding(0, 0, 0, dp(container.context, 8))
++            container.addView(it, matchWrap())
++            return
++        }
+         container.setPadding(dp(container.context, 16), dp(container.context, 4), dp(container.context, 16), dp(container.context, 8))
+ 
+         val primary = LinearLayout(container.context).apply {
+@@ -69,7 +89,7 @@ object SourceMetadataUi {
+                             addView(
+                                 metadataText(context, key, value).apply {
+                                     if (key == SourceMetadataKey.Uploader) {
+-                                        setOnClickListener { onSearch("uploader:\"$value\"") }
++                                        setOnClickListener { onSearch(uploaderSearch(value)) }
+                                     }
+                                 },
+                                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+@@ -144,6 +164,153 @@ object SourceMetadataUi {
+         }
+     }
+ 
++    private fun renderEhSummary(
++        container: LinearLayout,
++        document: SourceMetadataDocument,
++        onMoreInfo: () -> Unit,
++        onSearch: (String) -> Unit,
++    ) = LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_eh, container, false).apply {
++        val context = container.context
++        val genre = findViewById<TextView>(R.id.hayai_sy_genre)
++        val genreCard = findViewById<CardView>(R.id.hayai_sy_genre_card)
++        val pages = findViewById<TextView>(R.id.hayai_sy_pages)
++        val ratingBar = findViewById<RatingBar>(R.id.hayai_sy_rating_bar)
++        val rating = findViewById<TextView>(R.id.hayai_sy_rating)
++        val language = findViewById<TextView>(R.id.hayai_sy_language)
++        val size = findViewById<TextView>(R.id.hayai_sy_size)
++        val favorites = findViewById<TextView>(R.id.hayai_sy_favorites)
++        val visible = findViewById<TextView>(R.id.hayai_sy_visible)
++        val uploader = findViewById<TextView>(R.id.hayai_sy_uploader)
++        val moreInfo = findViewById<TextView>(R.id.hayai_sy_more_info)
++
++        val category = document.value(SourceMetadataKey.Category).orEmpty()
++        val categoryColor = typeColor(category)
++        genre.text = typeLabel(context, category)
++        genre.setTextColor(contrastingTextColor(categoryColor))
++        genreCard.setCardBackgroundColor(categoryColor)
++
++        val pageCount = document.value(SourceMetadataKey.Pages)?.toIntOrNull() ?: 0
++        pages.text = context.resources.getQuantityString(R.plurals.num_pages, pageCount, pageCount)
++        pages.bindIcon(R.drawable.ic_book_24dp)
++
++        val ratingValue = document.value(SourceMetadataKey.Rating)?.toFloatOrNull()?.coerceIn(0f, 5f) ?: 0f
++        ratingBar.rating = ratingValue
++        rating.text = ratingValue.toString()
++
++        val languageValue = document.value(SourceMetadataKey.Language).orEmpty()
++        val translated = document.value(SourceMetadataKey.Translated)?.toBooleanStrictOrNull() == true
++        language.text = if (translated) context.getString(R.string.hayai_eh_language_translated, languageValue) else languageValue
++
++        size.text = document.value(SourceMetadataKey.FileSize)?.let { formatValue(context, SourceMetadataKey.FileSize, it) }.orEmpty()
++        favorites.text = document.value(SourceMetadataKey.Favorites).orEmpty()
++        favorites.bindIcon(R.drawable.ic_book_24dp)
++        visible.text = context.getString(
++            R.string.hayai_source_metadata_field,
++            context.getString(label(SourceMetadataKey.Visibility)),
++            document.value(SourceMetadataKey.Visibility).orEmpty(),
++        )
++        uploader.text = document.value(SourceMetadataKey.Uploader).orEmpty()
++        uploader.setOnClickListener { uploader.text.toString().takeIf(String::isNotBlank)?.let { onSearch(uploaderSearch(it)) } }
++        moreInfo.bindIcon(R.drawable.ic_info_24dp)
++        moreInfo.setOnClickListener { onMoreInfo() }
++
++        listOf(genre, pages, rating, language, size, favorites, visible, uploader).forEach { value ->
++            value.copyOnLongClick()
++        }
++    }
++
++    private fun renderEightMusesSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
++        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_8m, container, false).apply {
++            findViewById<TextView>(R.id.hayai_sy_8m_title).apply {
++                text = document.titles.firstOrNull() ?: context.getString(R.string.unknown)
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_8m_more_info).bindMoreInfo(onMoreInfo)
++        }
++
++    private fun renderHBrowseSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
++        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_hb, container, false).apply {
++            findViewById<TextView>(R.id.hayai_sy_hb_pages).apply {
++                text = pagesText(document.value(SourceMetadataKey.Length) ?: document.value(SourceMetadataKey.Pages))
++                bindIcon(R.drawable.ic_book_24dp)
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_hb_more_info).bindMoreInfo(onMoreInfo)
++        }
++
++    private fun renderLanraragiSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
++        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_la, container, false).apply {
++            findViewById<TextView>(R.id.hayai_sy_la_extension).apply {
++                text = document.value(SourceMetadataKey.ArchiveType).orEmpty().uppercase(Locale.ROOT)
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_la_pages).apply {
++                text = pagesText(document.value(SourceMetadataKey.Pages))
++                bindIcon(R.drawable.ic_book_24dp)
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_la_more_info).bindMoreInfo(onMoreInfo)
++        }
++
++    private fun renderNHentaiSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
++        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_nh, container, false).apply {
++            val category = document.value(SourceMetadataKey.Category) ?: document.tags.firstOrNull()?.name.orEmpty()
++            bindGenre(
++                findViewById(R.id.hayai_sy_nh_genre_card),
++                findViewById(R.id.hayai_sy_nh_genre),
++                category,
++            )
++            findViewById<TextView>(R.id.hayai_sy_nh_pages).apply {
++                text = pagesText(document.value(SourceMetadataKey.Pages) ?: document.value(SourceMetadataKey.Length))
++                bindIcon(R.drawable.ic_book_24dp)
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_nh_id).apply {
++                text = document.value(SourceMetadataKey.GalleryId)?.let { context.getString(R.string.hayai_enhanced_id_format, it) }.orEmpty()
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_nh_favorites).apply {
++                text = document.value(SourceMetadataKey.Favorites).orEmpty()
++                bindIcon(R.drawable.ic_book_24dp)
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_nh_posted).apply {
++                text = document.value(SourceMetadataKey.Posted)?.let { formatValue(context, SourceMetadataKey.Posted, it) }.orEmpty()
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_nh_more_info).bindMoreInfo(onMoreInfo)
++        }
++
++    private fun renderPururinSummary(container: LinearLayout, document: SourceMetadataDocument, onMoreInfo: () -> Unit) =
++        LayoutInflater.from(container.context).inflate(R.layout.hayai_sy_description_pu, container, false).apply {
++            val category = document.value(SourceMetadataKey.Category) ?: document.tags.firstOrNull()?.name.orEmpty()
++            bindGenre(
++                findViewById(R.id.hayai_sy_pu_genre_card),
++                findViewById(R.id.hayai_sy_pu_genre),
++                category,
++            )
++            findViewById<TextView>(R.id.hayai_sy_pu_pages).apply {
++                text = pagesText(document.value(SourceMetadataKey.Pages))
++                bindIcon(R.drawable.ic_book_24dp)
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_pu_uploader).apply {
++                text = document.value(SourceMetadataKey.Uploader).orEmpty()
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_pu_size).apply {
++                text = document.value(SourceMetadataKey.FileSize)?.let { formatValue(context, SourceMetadataKey.FileSize, it) }.orEmpty()
++                copyOnLongClick()
++            }
++            val ratingValue = document.value(SourceMetadataKey.Rating)?.toFloatOrNull()?.coerceIn(0f, 5f) ?: 0f
++            findViewById<RatingBar>(R.id.hayai_sy_pu_rating_bar).rating = ratingValue
++            findViewById<TextView>(R.id.hayai_sy_pu_rating).apply {
++                text = ratingValue.toString()
++                copyOnLongClick()
++            }
++            findViewById<TextView>(R.id.hayai_sy_pu_more_info).bindMoreInfo(onMoreInfo)
++        }
++
+     fun fullRows(context: Context, document: SourceMetadataDocument): List<Row> = buildList {
+         document.titles.forEachIndexed { index, title ->
+             val key = if (index == 0) SourceMetadataKey.EnglishTitle else SourceMetadataKey.AlternativeTitle
+@@ -291,6 +458,42 @@ object SourceMetadataUi {
+     private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+     private fun dp(context: Context, value: Int): Int = (value * context.resources.displayMetrics.density).toInt()
+     private const val INLINE_TAG_LIMIT = 12
++
++    private fun TextView.bindIcon(drawableRes: Int) {
++        val icon = AppCompatResources.getDrawable(context, drawableRes)?.mutate() ?: return
++        DrawableCompat.setTint(icon, context.getResourceColor(R.attr.colorAccent))
++        icon.setBounds(0, 0, dp(context, 20), dp(context, 20))
++        compoundDrawablePadding = dp(context, 4)
++        setCompoundDrawablesRelative(icon, null, null, null)
++    }
++
++    private fun TextView.bindMoreInfo(onMoreInfo: () -> Unit) {
++        bindIcon(R.drawable.ic_info_24dp)
++        setOnClickListener { onMoreInfo() }
++    }
++
++    private fun TextView.copyOnLongClick() {
++        setOnLongClickListener {
++            context.copyMetadata(text.toString(), text.toString())
++            true
++        }
++    }
++
++    private fun bindGenre(card: CardView, label: TextView, category: String) {
++        val value = category.ifBlank { label.context.getString(R.string.unknown) }
++        val background = typeColor(value)
++        label.text = typeLabel(label.context, value)
++        label.setTextColor(contrastingTextColor(background))
++        card.setCardBackgroundColor(background)
++        label.copyOnLongClick()
++    }
++
++    private fun TextView.pagesText(raw: String?): String {
++        val count = raw?.toIntOrNull() ?: 0
++        return resources.getQuantityString(R.plurals.num_pages, count, count)
++    }
++
++    private fun uploaderSearch(value: String) = "uploader:\"$value\""
+ }
+ 
+ private fun Context.copyMetadata(label: String, value: String) {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+index 5f5b0daa8e0a6271c5853f9eb67a5edd6cd35efd..741059d6b06ba77ee2e284b6bb840d15725a84b0 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+@@ -210,13 +210,14 @@ class SourcePreviewController(
+             val column = LinearLayout(parent.context).apply {
+                 orientation = LinearLayout.VERTICAL
+                 gravity = Gravity.CENTER_HORIZONTAL
+-                setPadding(dp(4), dp(4), dp(4), dp(8))
++                setPadding(dp(8), dp(4), dp(8), dp(8))
+             }
+             val previewFrame = FrameLayout(parent.context).apply {
+                 layoutParams = LinearLayout.LayoutParams(dp(120), dp(200))
+             }
+             val image = ImageView(parent.context).apply {
+-                scaleType = ImageView.ScaleType.CENTER_CROP
++                scaleType = ImageView.ScaleType.FIT_CENTER
++                adjustViewBounds = true
+             }
+             previewFrame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+             val loading = LoadingIndicator(parent.context)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+index 40075d278c026e94df567b9ec86c6c7a06dbfd4b..823434438351cc2db9254936419f28ca65775e69 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+@@ -151,6 +151,7 @@ import eu.kanade.tachiyomi.util.view.setTextColorAlpha
+ import eu.kanade.tachiyomi.util.view.snack
+ import eu.kanade.tachiyomi.util.view.toolbarHeight
+ import eu.kanade.tachiyomi.util.view.withFadeTransaction
++import eu.kanade.tachiyomi.widget.EmptyView
+ import eu.kanade.tachiyomi.widget.LinearLayoutManagerAccurateOffset
+ import kotlinx.coroutines.runBlocking
+ import kotlinx.coroutines.Job
+@@ -1539,39 +1540,57 @@ class MangaDetailsController :
+                         featureRoot.visibility = View.GONE
+                         return@withUIContext
+                     }
+-                    val visible = loaded.previews.take(rows * INLINE_COLUMNS)
+-                    visible.chunked(INLINE_COLUMNS).forEach { rowItems ->
++                    val columns = previewColumns(container)
++                    val visible = loaded.previews.take(rows * columns)
++                    visible.chunked(columns).forEach { rowItems ->
+                         container.addView(
+                             LinearLayout(container.context).apply {
+                                 orientation = LinearLayout.HORIZONTAL
+-                                rowItems.forEach { preview -> addView(createPreviewCell(this, manga, preview, density)) }
++                                gravity = android.view.Gravity.CENTER_VERTICAL
++                                setPadding((8 * density).toInt(), 0, (8 * density).toInt(), (8 * density).toInt())
++                                rowItems.forEachIndexed { index, preview ->
++                                    addView(
++                                        createPreviewCell(this, manga, preview, density),
++                                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
++                                            if (index > 0) marginStart = (16 * density).toInt()
++                                        },
++                                    )
++                                }
+                             },
++                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                         )
+                     }
+                     if (visible.isEmpty()) {
+                         container.addView(TextView(container.context).apply { setText(R.string.no_results_found) })
+                     }
+                     container.addView(
+-                        MaterialButton(container.context).apply {
+-                            text = context.getString(R.string.hayai_more_previews)
++                        (LayoutInflater.from(container.context).inflate(R.layout.material_text_button, container, false) as MaterialButton).apply {
++                            setText(R.string.hayai_more_previews)
+                             setOnClickListener {
+                                 router.pushController(SourcePreviewController(requireNotNull(manga.id)).withFadeTransaction())
+                             }
+                         },
++                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
++                            gravity = android.view.Gravity.CENTER_HORIZONTAL
++                        },
+                     )
+                     featureRoot.visibility = View.VISIBLE
+                 } else {
+                     val error = result.exceptionOrNull()
+-                    container.addView(TextView(container.context).apply {
+-                        text = error?.message ?: context.getString(R.string.hayai_page_previews_failed)
+-                    })
+-                    container.addView(MaterialButton(container.context).apply {
+-                        text = context.getString(R.string.retry)
+-                        setOnClickListener {
+-                            container.tag = null
+-                            loadSourceDetailsPreview(container, featureRoot, manga, page)
+-                        }
+-                    })
++                    container.addView(
++                        EmptyView(container.context).apply {
++                            show(
++                                R.drawable.ic_search_off_24dp,
++                                error?.message ?: context.getString(R.string.hayai_page_previews_failed),
++                                listOf(
++                                    EmptyView.Action(R.string.retry) {
++                                        container.tag = null
++                                        loadSourceDetailsPreview(container, featureRoot, manga, page)
++                                    },
++                                ),
++                            )
++                        },
++                    )
+                     featureRoot.visibility = View.VISIBLE
+                 }
+             }
+@@ -1593,12 +1612,13 @@ class MangaDetailsController :
+                 if (chapter != null) startActivity(ReaderLauncher.newIntent(context, manga, chapter, preview.index - 1))
+             }
+         }
+-        val image = ImageView(parent.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
++        val image = ImageView(parent.context).apply {
++            scaleType = ImageView.ScaleType.FIT_CENTER
++            adjustViewBounds = true
++        }
+         cell.addView(
+             image,
+-            LinearLayout.LayoutParams((120 * density).toInt(), (200 * density).toInt()).apply {
+-                marginEnd = (8 * density).toInt()
+-            },
++            LinearLayout.LayoutParams((120 * density).toInt(), (200 * density).toInt()),
+         )
+         cell.addView(TextView(parent.context).apply { text = preview.index.toString() })
+         sourceDetailsImageJobs += viewScope.launchIO {
+@@ -1617,6 +1637,15 @@ class MangaDetailsController :
+         return cell
+     }
+ 
++    private fun previewColumns(container: View): Int {
++        val width = container.width.takeIf { it > 0 } ?: container.resources.displayMetrics.widthPixels
++        val density = container.resources.displayMetrics.density
++        val horizontalPadding = (16 * density).toInt()
++        val minimumCell = (120 * density).toInt()
++        val spacing = (16 * density).toInt()
++        return ((width - horizontalPadding + spacing) / (minimumCell + spacing)).coerceAtLeast(1)
++    }
++
+     private fun containerTagMatches(manga: Manga): Boolean =
+         view != null && manga.id == presenter.manga.id
+ 
+@@ -2417,7 +2446,6 @@ class MangaDetailsController :
+ 
+         private const val MENU_COPY_COVER = 1
+         private const val MENU_PASTE_COVER = 2
+-        private const val INLINE_COLUMNS = 3
+ 
+         private enum class RangeMode {
+             Download,
+diff --git a/app/src/main/res/drawable/hayai_sy_metadata_badge_background.xml b/app/src/main/res/drawable/hayai_sy_metadata_badge_background.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..32a29d3d9c662cc3e539fd908e6c70772c8270c6
+--- /dev/null
++++ b/app/src/main/res/drawable/hayai_sy_metadata_badge_background.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle">
++    <corners android:radius="4dp" />
++    <solid android:color="?attr/colorSurface" />
++</shape>
+diff --git a/app/src/main/res/layout/hayai_sy_description_8m.xml b/app/src/main/res/layout/hayai_sy_description_8m.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..c39d155378e307ce4a0a3cda26f4270b0331b74b
+--- /dev/null
++++ b/app/src/main/res/layout/hayai_sy_description_8m.xml
+@@ -0,0 +1,27 @@
++<?xml version="1.0" encoding="utf-8"?>
++<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content">
++
++    <com.google.android.material.textview.MaterialTextView
++        android:id="@+id/hayai_sy_8m_title"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginStart="16dp"
++        android:textAppearance="?attr/textAppearanceBodyMedium"
++        android:textColor="?android:attr/textColorSecondary"
++        app:layout_constraintBottom_toBottomOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++
++    <Button
++        android:id="@+id/hayai_sy_8m_more_info"
++        style="?attr/borderlessButtonStyle"
++        android:layout_width="wrap_content"
++        android:layout_height="36dp"
++        android:layout_marginEnd="16dp"
++        android:text="@string/hayai_source_metadata_more_info"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++</androidx.constraintlayout.widget.ConstraintLayout>
+diff --git a/app/src/main/res/layout/hayai_sy_description_eh.xml b/app/src/main/res/layout/hayai_sy_description_eh.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..320d27c0391fe1429c9f86e345a6702366f792a6
+--- /dev/null
++++ b/app/src/main/res/layout/hayai_sy_description_eh.xml
+@@ -0,0 +1,142 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:orientation="vertical">
++
++    <androidx.constraintlayout.widget.ConstraintLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content">
++
++        <androidx.cardview.widget.CardView
++            android:id="@+id/hayai_sy_genre_card"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="16dp"
++            android:background="@drawable/hayai_sy_metadata_badge_background"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent">
++
++            <com.google.android.material.textview.MaterialTextView
++                android:id="@+id/hayai_sy_genre"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:paddingStart="8dp"
++                android:paddingTop="4dp"
++                android:paddingEnd="8dp"
++                android:paddingBottom="4dp"
++                android:textAppearance="?attr/textAppearanceBodyMedium" />
++        </androidx.cardview.widget.CardView>
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_pages"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++
++        <Button
++            android:id="@+id/hayai_sy_more_info"
++            style="?attr/borderlessButtonStyle"
++            android:layout_width="wrap_content"
++            android:layout_height="36dp"
++            android:layout_marginEnd="16dp"
++            android:text="@string/hayai_source_metadata_more_info"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++    </androidx.constraintlayout.widget.ConstraintLayout>
++
++    <androidx.constraintlayout.widget.ConstraintLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content">
++
++        <LinearLayout
++            android:id="@+id/hayai_sy_rating_layout"
++            android:layout_width="wrap_content"
++            android:layout_height="match_parent"
++            android:layout_marginStart="16dp"
++            android:layout_marginTop="8dp"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent">
++
++            <RatingBar
++                android:id="@+id/hayai_sy_rating_bar"
++                style="?android:attr/ratingBarStyleSmall"
++                android:layout_width="wrap_content"
++                android:layout_height="20dp"
++                android:focusable="false"
++                android:isIndicator="true"
++                android:numStars="5"
++                android:stepSize="0.5" />
++
++            <com.google.android.material.textview.MaterialTextView
++                android:id="@+id/hayai_sy_rating"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_horizontal"
++                android:layout_marginStart="8dp"
++                android:textAppearance="?attr/textAppearanceBodySmall" />
++        </LinearLayout>
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_language"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="16dp"
++            android:layout_marginTop="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toBottomOf="@id/hayai_sy_rating_layout" />
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_size"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginEnd="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="@id/hayai_sy_rating_layout"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintTop_toTopOf="@id/hayai_sy_rating_layout" />
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_favorites"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginEnd="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="@id/hayai_sy_language"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintTop_toTopOf="@id/hayai_sy_language" />
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_visible"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="16dp"
++            android:layout_marginTop="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toBottomOf="@id/hayai_sy_language" />
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_uploader"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginEnd="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="@id/hayai_sy_visible"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintTop_toTopOf="@id/hayai_sy_visible" />
++    </androidx.constraintlayout.widget.ConstraintLayout>
++</LinearLayout>
+diff --git a/app/src/main/res/layout/hayai_sy_description_hb.xml b/app/src/main/res/layout/hayai_sy_description_hb.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..44a13dca4eb88fb23a342a54aff0050964ebd40a
+--- /dev/null
++++ b/app/src/main/res/layout/hayai_sy_description_hb.xml
+@@ -0,0 +1,27 @@
++<?xml version="1.0" encoding="utf-8"?>
++<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content">
++
++    <com.google.android.material.textview.MaterialTextView
++        android:id="@+id/hayai_sy_hb_pages"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginStart="16dp"
++        android:textAppearance="?attr/textAppearanceBodyMedium"
++        android:textColor="?android:attr/textColorSecondary"
++        app:layout_constraintBottom_toBottomOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++
++    <Button
++        android:id="@+id/hayai_sy_hb_more_info"
++        style="?attr/borderlessButtonStyle"
++        android:layout_width="wrap_content"
++        android:layout_height="36dp"
++        android:layout_marginEnd="16dp"
++        android:text="@string/hayai_source_metadata_more_info"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++</androidx.constraintlayout.widget.ConstraintLayout>
+diff --git a/app/src/main/res/layout/hayai_sy_description_la.xml b/app/src/main/res/layout/hayai_sy_description_la.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..b689282f28c88e4732ccd1724b9c15ee8cc1f66d
+--- /dev/null
++++ b/app/src/main/res/layout/hayai_sy_description_la.xml
+@@ -0,0 +1,38 @@
++<?xml version="1.0" encoding="utf-8"?>
++<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content">
++
++    <com.google.android.material.textview.MaterialTextView
++        android:id="@+id/hayai_sy_la_extension"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginStart="16dp"
++        android:textAppearance="?attr/textAppearanceBodyMedium"
++        android:textColor="?android:attr/textColorSecondary"
++        app:layout_constraintBottom_toBottomOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++
++    <com.google.android.material.textview.MaterialTextView
++        android:id="@+id/hayai_sy_la_pages"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:textAppearance="?attr/textAppearanceBodyMedium"
++        android:textColor="?android:attr/textColorSecondary"
++        app:layout_constraintBottom_toBottomOf="parent"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++
++    <Button
++        android:id="@+id/hayai_sy_la_more_info"
++        style="?attr/borderlessButtonStyle"
++        android:layout_width="wrap_content"
++        android:layout_height="36dp"
++        android:layout_marginEnd="16dp"
++        android:text="@string/hayai_source_metadata_more_info"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++</androidx.constraintlayout.widget.ConstraintLayout>
+diff --git a/app/src/main/res/layout/hayai_sy_description_nh.xml b/app/src/main/res/layout/hayai_sy_description_nh.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..d512a166e078b482cc7addeb0c1b843a4c2c8b1d
+--- /dev/null
++++ b/app/src/main/res/layout/hayai_sy_description_nh.xml
+@@ -0,0 +1,92 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:orientation="vertical">
++
++    <androidx.constraintlayout.widget.ConstraintLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content">
++
++        <androidx.cardview.widget.CardView
++            android:id="@+id/hayai_sy_nh_genre_card"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="16dp"
++            android:background="@drawable/hayai_sy_metadata_badge_background"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent">
++
++            <com.google.android.material.textview.MaterialTextView
++                android:id="@+id/hayai_sy_nh_genre"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:paddingStart="8dp"
++                android:paddingTop="4dp"
++                android:paddingEnd="8dp"
++                android:paddingBottom="4dp"
++                android:textAppearance="?attr/textAppearanceBodyMedium" />
++        </androidx.cardview.widget.CardView>
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_nh_pages"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++
++        <Button
++            android:id="@+id/hayai_sy_nh_more_info"
++            style="?attr/borderlessButtonStyle"
++            android:layout_width="wrap_content"
++            android:layout_height="36dp"
++            android:layout_marginEnd="16dp"
++            android:text="@string/hayai_source_metadata_more_info"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++    </androidx.constraintlayout.widget.ConstraintLayout>
++
++    <androidx.constraintlayout.widget.ConstraintLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content">
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_nh_id"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_nh_favorites"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_nh_posted"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginEnd="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++    </androidx.constraintlayout.widget.ConstraintLayout>
++</LinearLayout>
+diff --git a/app/src/main/res/layout/hayai_sy_description_pu.xml b/app/src/main/res/layout/hayai_sy_description_pu.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..0e6228387ee1bed71cb326d2c623cc0a2c40544a
+--- /dev/null
++++ b/app/src/main/res/layout/hayai_sy_description_pu.xml
+@@ -0,0 +1,109 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:orientation="vertical">
++
++    <androidx.constraintlayout.widget.ConstraintLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content">
++
++        <androidx.cardview.widget.CardView
++            android:id="@+id/hayai_sy_pu_genre_card"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="16dp"
++            android:background="@drawable/hayai_sy_metadata_badge_background"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent">
++
++            <com.google.android.material.textview.MaterialTextView
++                android:id="@+id/hayai_sy_pu_genre"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:paddingStart="8dp"
++                android:paddingTop="4dp"
++                android:paddingEnd="8dp"
++                android:paddingBottom="4dp"
++                android:textAppearance="?attr/textAppearanceBodyMedium" />
++        </androidx.cardview.widget.CardView>
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_pu_pages"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++
++        <Button
++            android:id="@+id/hayai_sy_pu_more_info"
++            style="?attr/borderlessButtonStyle"
++            android:layout_width="wrap_content"
++            android:layout_height="36dp"
++            android:layout_marginEnd="16dp"
++            android:text="@string/hayai_source_metadata_more_info"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++    </androidx.constraintlayout.widget.ConstraintLayout>
++
++    <androidx.constraintlayout.widget.ConstraintLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content">
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_pu_uploader"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintBottom_toBottomOf="@id/hayai_sy_pu_size"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="@id/hayai_sy_pu_size" />
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/hayai_sy_pu_size"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="8dp"
++            android:layout_marginEnd="16dp"
++            android:textAppearance="?attr/textAppearanceBodyMedium"
++            android:textColor="?android:attr/textColorSecondary"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintTop_toTopOf="parent" />
++
++        <LinearLayout
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="8dp"
++            app:layout_constraintEnd_toEndOf="parent"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toBottomOf="@id/hayai_sy_pu_uploader">
++
++            <RatingBar
++                android:id="@+id/hayai_sy_pu_rating_bar"
++                style="?android:attr/ratingBarStyleSmall"
++                android:layout_width="wrap_content"
++                android:layout_height="20dp"
++                android:focusable="false"
++                android:isIndicator="true"
++                android:numStars="5"
++                android:stepSize="0.5" />
++
++            <com.google.android.material.textview.MaterialTextView
++                android:id="@+id/hayai_sy_pu_rating"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_gravity="center_horizontal"
++                android:layout_marginStart="8dp"
++                android:textAppearance="?attr/textAppearanceBodyMedium"
++                android:textColor="?android:attr/textColorSecondary" />
++        </LinearLayout>
++    </androidx.constraintlayout.widget.ConstraintLayout>
++</LinearLayout>
+diff --git a/app/src/main/res/layout/manga_header_item.xml b/app/src/main/res/layout/manga_header_item.xml
+index 6538aa4496eb8666c550d8a6d623013e8b3c9f51..2733a88f52e4ec251bbb9b4957eb9986f66e87bd 100644
+--- a/app/src/main/res/layout/manga_header_item.xml
++++ b/app/src/main/res/layout/manga_header_item.xml
+@@ -382,15 +382,6 @@
+             android:orientation="vertical"
+             android:visibility="gone">
+ 
+-            <com.google.android.material.textview.MaterialTextView
+-                style="?textAppearanceTitleSmall"
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                android:paddingStart="16dp"
+-                android:paddingEnd="16dp"
+-                android:paddingBottom="6dp"
+-                android:text="@string/hayai_source_metadata_title" />
+-
+             <LinearLayout
+                 android:id="@+id/hayai_source_metadata_content"
+                 android:layout_width="match_parent"
+@@ -405,32 +396,11 @@
+             android:orientation="vertical"
+             android:visibility="gone">
+ 
+-            <com.google.android.material.textview.MaterialTextView
+-                android:id="@+id/hayai_source_details_features_title"
+-                style="?textAppearanceTitleSmall"
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                android:paddingStart="16dp"
+-                android:paddingEnd="16dp"
+-                android:paddingBottom="6dp"
+-                android:text="@string/hayai_gallery_previews" />
+-
+-            <HorizontalScrollView
++            <LinearLayout
++                android:id="@+id/hayai_source_details_features_content"
+                 android:layout_width="match_parent"
+                 android:layout_height="wrap_content"
+-                android:clipToPadding="false"
+-                android:fillViewport="false"
+-                android:paddingStart="16dp"
+-                android:paddingEnd="16dp"
+-                android:scrollbars="none">
+-
+-                <LinearLayout
+-                    android:id="@+id/hayai_source_details_features_content"
+-                    android:layout_width="wrap_content"
+-                    android:layout_height="wrap_content"
+-                    android:gravity="center_vertical"
+-                    android:orientation="horizontal" />
+-            </HorizontalScrollView>
++                android:orientation="vertical" />
+         </LinearLayout>
+     </LinearLayout>
+ 
+diff --git a/app/src/main/res/values/strings_hayai_misc.xml b/app/src/main/res/values/strings_hayai_misc.xml
+index ac804af5819145aa947c27cdd4c83f4b45981a49..5afcf2d50d3a49703569ceba252b8adb1fc873b6 100644
+--- a/app/src/main/res/values/strings_hayai_misc.xml
++++ b/app/src/main/res/values/strings_hayai_misc.xml
+@@ -203,6 +203,7 @@
+     <string name="hayai_enhanced_label_file">File</string>
+     <string name="hayai_enhanced_label_file_size">File size</string>
+     <string name="hayai_enhanced_label_id" translatable="false">ID</string>
++    <string name="hayai_enhanced_id_format" translatable="false">#%1$s</string>
+     <string name="hayai_enhanced_label_japanese_title">Japanese title</string>
+     <string name="hayai_enhanced_label_media_id">Media ID</string>
+     <string name="hayai_enhanced_label_pages">Pages</string>
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 9d7e20fc3f5a25145eed64881336758d18afbdf8..6d94e35a82df51e7ac1e648dcdff5cfb1cc0c57c 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -54,7 +54,7 @@ Novel integration uses a small set of presentation adapters rather than parallel
+ 
+ The novel reader inflates J2K's existing `reader_activity` and binds its existing app bar, toolbar, viewer container, navigation controls, chapter sheet, and slider. Hayai applies system-bar and display-cutout insets at that shared layout boundary. While reader chrome is visible, the novel viewer starts after the system inset and toolbar height; when chrome visibility changes, the same inset binding recalculates the viewer margin. This avoids a second novel-specific safe-area model and keeps the image-reader activity unchanged.
+ 
+-Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. `SettingsAppearanceController` exposes only the inline-row preference adapter; the cache, loaders, metadata documents, and UI state remain Hayai-owned. Full metadata and previews are Hayai controllers hosted by J2K's existing `MainActivity`, `BaseController`, toolbar, navigation, theme, and safe-area lifecycle. Tapping a preview routes through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
++Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. `SettingsAppearanceController` exposes only the inline-row preference adapter; the cache, loaders, metadata documents, and UI state remain Hayai-owned. Full metadata and previews are Hayai controllers hosted by J2K's existing `MainActivity`, `BaseController`, toolbar, navigation, theme, and safe-area lifecycle. Inline preview rows follow SY's adaptive 120 by 200 dp grid, 16 dp spacing, fit-width images, centered text action, and J2K empty state instead of a custom horizontal strip. E-Hentai, ExHentai, 8Muses, HBrowse, NHentai, Pururin, and LANraragi metadata inflate the corresponding SY description layout reconstructed from `sy/master` at `14648c7c`, while values still come only from typed Hayai documents. Tapping a preview routes through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
+ 
+ The browse-source presenter and its existing list item/holder form one approved presentation seam for E-Hentai's SY-style rich result rows. The presenter asks a source for an optional immutable `SourceBrowsePresentation`; the item selects J2K's list layout when that presentation exists; and the holder renders its category badge, uploader, rating, language, page count, and date. Parsing, category colors, localization, caching, and source-family recognition remain under `dev.ahmedmohamed.hayai`. Normal sources still take the original grid/list paths without extra work. The same presenter has one generic typed-filter branch for Hayai tag completion, while the E-Hentai catalog, chip state, validation, and suggestions remain Hayai-owned.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 385b1bb860cb4f6342a59263d3b171556ddaa0a9..2510985da17fdd2ae68a4a832df7142f83619f5e 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -16,7 +16,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
+ | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, SY-style inline/full metadata UI, lazy cached preview pages, a J2K-hosted preview controller, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | port; fixture details, metadata, rich browse, autocomplete, empty previews, and cache recovery verified on emulator; authenticated ExHentai remains pending |
+ | 8Muses/EroMuse, HBrowse, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | implemented unverified for the source-specific behavior SY exposes |
+-| Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions plus bounded listing/image caches and a J2K-hosted preview controller | port; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not; live authenticated source verification remains pending |
++| Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions, source-specific SY description layouts, adaptive SY preview rows, bounded listing/image caches, and a J2K-hosted preview controller | port; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not; live authenticated source verification remains pending |
+ | Raised metadata, titles, and tags | Additive schema, typed source documents, durable enhanced-source cache, inline summary, and a full metadata controller hosted by J2K navigation | port; E-Hentai fixture verified on emulator |
+ | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
+ | Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | source-supported preview and settings behavior implemented unverified |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index b2b773497840c67dc6b9ac3e6deb2e6116c04196..7a406205a7945410b3549600ef666fc328954d66 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -2925,7 +2925,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"no
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"non-h", "non-hentai" -> R.string.hayai_source_type_non_h
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"western" -> Color.rgb(139, 195, 74)
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	"western" -> R.string.hayai_source_type_western
+-app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	setOnClickListener { onSearch("uploader:\"$value\"") }
++app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt	private fun uploaderSearch(value: String) = "uploader:\"$value\""
+ app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt	badges(source).takeIf { it.isNotEmpty() }?.joinToString(" · ") { context.getString(it.labelRes) }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	?: error("No unique page-preview provider is registered for source ${manga.source}")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	fun cacheIdentity(sourceId: Long): String = "$sourceId:$imageUrl:${crop ?: "full"}"
+-- 
+2.54.0.windows.1
+
