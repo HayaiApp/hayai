@@ -1,0 +1,52 @@
+From 2a98e581a257a5957d7e902ad600273014068e14 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 22:17:20 +0300
+Subject: [PATCH] Record final parity review
+
+
+diff --git a/.audit/final-parity-review.md b/.audit/final-parity-review.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..9e062d4b46355cd8a18ff5505ba4385974b7439b
+--- /dev/null
++++ b/.audit/final-parity-review.md
+@@ -0,0 +1,18 @@
++# Final parity review
++
++- Reviewer: GPT-5.4, read-only static review
++- Range reviewed: `04e31263f3..d55c6cfbe5`
++- Review date: 2026-08-21
++
++## Findings resolved
++
++1. Novel reader completion did not advance J2K tracking rows. Commit `6cc6c5d7fa` now delegates completed novel chapters to J2K's existing monotonic and offline-retry tracking path.
++2. An E-Hentai 404 was incorrectly stored as permanent age. Commit `7027b48e05` now retries missing galleries weekly and allows an explicit manual refresh while retaining permanent age only for galleries whose posted date exceeds the configured age threshold.
++3. NovelList and RanobeDB accepted locally plausible credentials without remote verification. Commit `6cc6c5d7fa` now performs bounded authenticated account requests before credentials are persisted.
++
++## Residual verification gaps
++
++- The dedicated authenticated emulator workflow has not run because the only installed AVD is not a dedicated Hayai test device and no repository-owned credentials are permitted.
++- EPUB output still needs opening in independent real-world EPUB readers.
++- Tsundoku and LNReader imports still need on-device runs against sanitized exports from each application.
++- Third-party tracker protocols require live-service verification because their APIs can change independently of Hayai.
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 18622db215eb683f402b90202659406229fcb4f8..3164fcff846a4d7fefb27ffe9741b21b57094afe 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -61,3 +61,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T22:05:00Z	novel-parity	added narrow J2K seams for novel export, remote extension ownership, and concrete tracking services	kept novel state and network behavior Hayai-owned while J2K remains authoritative for library, chapters, history, tracking, extensions, and backup order	AppModule.kt; BackupRestorer.kt; MangaDetailsController.kt; TrackManager.kt; SettingsTrackingController.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T22:12:00Z	novel-tracking-seam	superseded the earlier tracking seam record to include manga-details service filtering	novel-only trackers must remain hidden for image sources while the normal J2K tracking presenter stays authoritative	TrackManager.kt; SettingsTrackingController.kt; MangaDetailsPresenter.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T22:02:00Z	validation	compiled the integrated parity batch and ran 241 focused tests with one Gradle worker	confirmed the new Hayai modules and their narrow J2K adapter seams compile together without parallel validation load	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin with focused Hayai test filters	VERIFIED
++2026-08-21T22:16:00Z	independent-review	resolved all three medium findings without adding a protected J2K seam	used J2K's existing public tracker helper and kept E-Hentai retry state plus tracker protocol validation in Hayai-owned modules	.audit/final-parity-review.md; commits 7027b48e05 and 6cc6c5d7fa	IMPLEMENTED_UNVERIFIED
+diff --git a/.audit/parity-completion.tsv b/.audit/parity-completion.tsv
+index ed2da6a93f7b1e9df1eaad19a6bacb98e08556fc..583ce8da2840d154d44e7fc1480992526f53d891 100644
+--- a/.audit/parity-completion.tsv
++++ b/.audit/parity-completion.tsv
+@@ -10,3 +10,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T22:05:00Z	novel-persistence	added schema v4 and backup v4 for highlights, visual source definitions, and tagged novel APK repositories	durable user-created data must survive database ID remapping without backing up secrets, downloads, trust fingerprints, or import completion markers	HayaiSchema.kt; HayaiBackupData.kt; HayaiBackupService.kt	implemented-unverified
+ 2026-08-21T22:12:00Z	novel-trackers	implemented NovelUpdates, NovelList, and RanobeDB as J2K tracking services	durable remote keys and bounded typed protocol adapters preserve J2K tracking rows and automatic progress updates without a parallel tracker store	app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services; TrackManager.kt; MangaDetailsPresenter.kt	implemented-unverified
+ 2026-08-21T22:02:00Z	validation	compiled the integrated parity batch and ran its focused unit suite with one Gradle worker	verified novel persistence, language tools, imports, EPUB export, trackers, enhanced sources, details previews, E-Hentai updater, migration, and backup without parallel CPU load	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin with focused Hayai test filters	verified-241-tests
++2026-08-21T22:16:00Z	independent-review	resolved all three medium findings from the read-only GPT-5.4 review	reader-driven tracker sync, retryable gallery 404 state, and remotely verified tracker credentials were required for honest parity	.audit/final-parity-review.md; commits 7027b48e05 and 6cc6c5d7fa	implemented-pending-regression-validation
++2026-08-21T22:17:00Z	emulator-gate	refused to run the authenticated workflow on the only installed general-purpose AVD	the harness requires a dedicated AVD containing Hayai and Test plus an external test-account file; Pixel_10_Pro_XL does not satisfy that safety boundary	tools/verify-hayai-emulator.ps1	blocked-by-dedicated-test-environment
+-- 
+2.54.0.windows.1
+

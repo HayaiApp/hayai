@@ -1,0 +1,42 @@
+From 70c194510ebe11a444f335461bde36c0c8d3fd19 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 17:16:34 +0300
+Subject: [PATCH] docs: record J2K 7eea baseline
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index f632e398e9bbafc77a3f0effb9e1d00c3af2bf3f..79c3a7f1cdeee31f683344c3ad397d23923b0c17 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -114,3 +114,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T17:12:00+03:00	novel-repository-bootstrap-race	made repository save atomic after device logs exposed concurrent first-run LNReader seeding against a migrated identical base URL	prevents the asynchronous UNIQUE constraint crash while keeping the canonical base URL authoritative	NovelPluginStore.kt; artifacts/emulator-verification/20260823-134936/logcat.txt; artifacts/emulator-verification/20260823-135641/logcat.txt	VERIFIED
+ 2026-08-23T17:40:00+03:00	novel-repository-bootstrap-preservation	superseded replace-on-conflict for first-run defaults with an atomic insert-if-absent operation	prevents the startup uniqueness crash without overwriting a concurrently imported or user-edited repository row	NovelPluginStore.kt; NovelPluginManager.kt	TESTED
+ 2026-08-23T17:40:00+03:00	novel-reader-fullscreen-inset-modes	made the stable reader content inset reserve the status bar only while system bars are overlaid	prevents a second status-bar gap in non-fullscreen mode while retaining the verified fullscreen toolbar clearance	J2kNovelReaderChrome.kt; J2kNovelReaderChromeTest.kt	TESTED
++2026-08-23T18:00:00+03:00	upstream-rebase	replayed the complete 115-commit Hayai stack onto J2K 7eea215da1 and retained the pre-rebase head on codex/pre-j2k-7eea-c58d	makes current J2K master the architectural parent without allowlisting new upstream files or mixing SY and Tsundoku histories	j2k/master 7eea215da1; backup branch codex/pre-j2k-7eea-c58d	IMPLEMENTED_UNVERIFIED
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index b11fa099980ee6209bf433cb38dd4ca33e223015..c2ad914a853218ce9f9218e3d077edfee2ef20f8 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -1,6 +1,6 @@
+ # Hayai on TachiyomiJ2K
+ 
+-Hayai is rooted directly at TachiyomiJ2K commit `cdae5f2d77d63529c974d97c4a37c0c8ac188397`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the new baseline.
++Hayai is rooted directly at TachiyomiJ2K commit `7eea215da1a32b7198aabfc3e94ecd71d76f4df7`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the current baseline.
+ 
+ ## Boundaries
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 0ce03cfda7c609819b41b172ce57ecec41985ac8..01d7a16be5b8d09f990a7fcd2cc959fea82b14cb 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -1,6 +1,6 @@
+ # TachiyomiSY and Tsundoku feature audit
+ 
+-Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `547ddea3ce3e2a4943a1279b517e14b7af422467`, and J2K `cdae5f2d77d63529c974d97c4a37c0c8ac188397`.
++Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `f166f2672d9a01a3c84a5d920af144598089a4be`, and J2K `7eea215da1a32b7198aabfc3e94ecd71d76f4df7`.
+ 
+ **Foundation** means a boundary or partial implementation exists. **Port** means the end-to-end production behavior is implemented and verified. **Audit** means upstream behavior is mapped but production work remains. This distinction prevents the clean baseline from being mistaken for the full multi-upstream port.
+ 
+-- 
+2.54.0.windows.1
+

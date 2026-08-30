@@ -1,0 +1,823 @@
+From d46898d1fcdcab44ae105006e8fdcfe2a1903ffc Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 21:33:24 +0300
+Subject: [PATCH] fix: restore reader downloads and extension installs
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 3492d3a31362b0765a743e6d6061ba8700b5a798..5bb9982c02a9ec9ed528ab013563f2b70da9b056 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -119,3 +119,8 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T19:10:00+03:00	novel-download-queue	routed novel chapter downloads through J2K's authoritative queue, worker, status, notification, details action, and Downloads sheet	keeps image manga on the unchanged J2K storage path, preserves active J2K states during offline refresh, and delegates only novel document persistence to Hayai	Downloader.kt; DownloadStore.kt; NovelDownloadDelegate.kt; NovelOfflineManager.kt; MangaDetailsAdapter.kt; MangaDetailsController.kt; NovelDownloadRoutingTest.kt; artifacts/emulator-verification/novel-download-paused-sheet.xml	EMULATOR_VERIFIED
+ 2026-08-23T19:10:00+03:00	cloudflare-bypass	synchronized the J2K interceptor with Mihon ac249e3668a57f24782a49218834064459ba2d09	uses the official challenge header and exits early for interactive challenges without replacing J2K's client or cookie path	CloudflareInterceptor.kt; CloudflareChallengeTest.kt	UNIT_VERIFIED
+ 2026-08-23T18:35:00+03:00	nightly-clean-run-test-compatibility	replaced accidental JUnit Jupiter imports in the new reader-inset test with the repository's JUnit 4 API	the clean Linux nightly source set does not provide Jupiter even though local incremental dependency state allowed the focused invocation to pass	J2kNovelReaderChromeTest.kt; GitHub Actions run 32645335734	IMPLEMENTED_UNVERIFIED
++2026-08-23T21:10:00+03:00	real-source-reader-reproduction	installed AllNovel 2.2.2 from the production LNReader v3 repository and loaded Reincarnation Of The Strongest Sword God Chapter 1 from NovelFull	used 3,956 real remote chapters to verify zero opening progress, stable J2K overlay gestures, selection action order, and the populated quote flow instead of fixture-only content	AllNovel 2.2.2; NovelFull novelId 237; NovelReaderActivity.kt; NativeNovelRenderer.kt; artifacts/emulator-verification/20260823-real-source-regressions	EMULATOR_VERIFIED
++2026-08-23T21:10:00+03:00	download-auto-start-repair	reproduced a real E-Hentai manga download immediately pausing behind a restored novel queue item and made explicit auto-start resume every stopped queue	verified NovelFull Chapter 1 through J2K's queue and notification and a real E-Hentai gallery progressing from 37 to 383 of 384 pages; the source's last image remained in retry	Downloader.kt; DownloadQueueStartPolicyTest.kt; NovelReaderActivity.kt; artifacts/emulator-verification/20260823-real-source-regressions	EMULATOR_VERIFIED
++2026-08-23T21:10:00+03:00	extension-installer-permission-recovery	deferred J2K package-session creation until Android grants the per-app unknown-source permission	denied REQUEST_INSTALL_PACKAGES, installed real 3Hentai after granting it in Settings, and verified the installed row and sources appeared without a stuck state	ExtensionInstallBroadcast.kt; artifacts/emulator-verification/20260823-real-source-regressions	EMULATOR_VERIFIED
++2026-08-23T21:10:00+03:00	hayai-splash-notification-identity	animated the existing Hayai monochrome vector on splash and replaced remaining product-identity notification icons	verified the Hayai animated-vector splash on the installed debug build; semantic download, warning, extension, and TTS status icons remain unchanged	anim_hayai_splash.xml; themes.xml; splash_background.xml; BackupNotifier.kt; LibraryUpdateNotifier.kt; AppUpdateNotifier.kt; CrashLogUtil.kt; artifacts/emulator-verification/20260823-real-source-regressions/splash.png	EMULATOR_VERIFIED
++2026-08-23T21:40:00+03:00	validation	passed localization, the J2K adapter boundary, complete DevDebug compilation and unit tests, and diff whitespace checks	validated the coherent real-source reader, download, installer, splash, and notification identity repair batch without formatting the upstream tree	tools/verify-localization.ps1 -WriteCoverage; tools/verify-upstream-boundary.ps1; gradlew :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin; git diff --check	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChrome.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChrome.kt
+index 4485872b3d847294fb9d7a5cc103ec7739f03b92..e2552a42e75af156916cb9c215a4fee7fc69210d 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChrome.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChrome.kt
+@@ -64,8 +64,7 @@ internal class J2kNovelReaderChrome(
+                     viewerContainer.paddingBottom,
+                 )
+             }
+-            // J2K overlays reader chrome over the viewer. Novel text keeps one stable safe
+-            // inset beneath that overlay so showing or hiding chrome never reflows content.
++            // Match J2K exactly. Reader chrome overlays the viewer and never reflows its content.
+             navigation.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                 leftMargin = 12.dp + contentInsets.left
+                 rightMargin = 12.dp + contentInsets.right
+@@ -96,4 +95,4 @@ internal fun novelViewerTopPadding(
+     overlaysSystemBars: Boolean,
+     systemBarTop: Int,
+     toolbarHeight: Int,
+-): Int = toolbarHeight + if (overlaysSystemBars) systemBarTop else 0
++): Int = 0
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+index fc2e7cd0da13fc1cb9661ade3b015c26fb3199fa..c4fa0f422719917ef189b8bff50a3e1aadee820e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+@@ -26,6 +26,7 @@ import androidx.core.text.HtmlCompat
+ import androidx.core.widget.NestedScrollView
+ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+ import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
+ import org.jsoup.Jsoup
+ 
+ internal class NativeNovelRenderer(
+@@ -44,13 +45,26 @@ internal class NativeNovelRenderer(
+     private var activeChapterId: Long? = null
+     private var editMode = false
+     private var applyingText = false
++    private val gestureDetector =
++        GestureDetectorWithLongTap(
++            context,
++            object : GestureDetectorWithLongTap.Listener() {
++                override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
++                    if (activeBlock()?.textView?.hasSelection() != true) {
++                        callbacks.onTap(
++                            event.x / scroll.width.coerceAtLeast(1),
++                            event.y / scroll.height.coerceAtLeast(1),
++                        )
++                    }
++                    return true
++                }
++            },
++        )
+ 
+     init {
+         scroll.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { _, _, _, _, _ -> reportVisibleBlock() })
+-        scroll.setOnTouchListener { touched, event ->
+-            if (event.action == MotionEvent.ACTION_UP && activeBlock()?.textView?.hasSelection() != true) {
+-                callbacks.onTap(event.x / touched.width.coerceAtLeast(1), event.y / touched.height.coerceAtLeast(1))
+-            }
++        scroll.setOnTouchListener { _, event ->
++            gestureDetector.onTouchEvent(event)
+             false
+         }
+     }
+@@ -277,6 +291,10 @@ internal class NativeNovelRenderer(
+                     onAction = { action, mode -> dispatchSelectionAction(selectionTextView, action, mode) },
+                     onSelectionModeChanged = callbacks::onSelectionModeChanged,
+                 )
++            setOnTouchListener { _, event ->
++                gestureDetector.onTouchEvent(event)
++                false
++            }
+         }
+         block.textView = textView
+         block.style = request.style
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index 34cd0db0d947ff3a630fdcced73335f23c6fafab..a561052711f048eccd1a53c963cce6a124dd9f75 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -61,6 +61,7 @@ import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationWarning
+ import dev.ahmedmohamed.hayai.novel.tracker.J2kNovelChapterTrackSync
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.download.DownloadManager
+ import eu.kanade.tachiyomi.data.preference.PreferenceStore
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.network.NetworkHelper
+@@ -91,6 +92,7 @@ class NovelReaderActivity :
+     NovelRenderer.Callbacks {
+     private val preferences by lazy { HayaiPreferences(Injekt.get<PreferenceStore>()) }
+     private val j2kPreferences by lazy { Injekt.get<PreferencesHelper>() }
++    private val downloadManager by lazy { Injekt.get<DownloadManager>() }
+     private val session by lazy {
+         val database = Injekt.get<DatabaseHelper>()
+         NovelReaderSession(
+@@ -275,7 +277,7 @@ class NovelReaderActivity :
+                 chapter.manga.title,
+                 chapter.chapter.name,
+             )
+-            currentProgress = chapter.chapter.last_page_read.coerceIn(0, 100)
++            currentProgress = NovelProgress.opening(chapter.chapter)
+             autoAppendArmed = true
+             autoPrependArmed = true
+         }
+@@ -303,12 +305,7 @@ class NovelReaderActivity :
+                             content = processed,
+                             chapterTitle = displayedChapterTitle,
+                             style = style,
+-                            initialProgress =
+-                                if (chapter.chapter.read && chapter.chapter.last_page_read >= 100) {
+-                                    0
+-                                } else {
+-                                    chapter.chapter.last_page_read.coerceIn(0, 100)
+-                                },
++                            initialProgress = NovelProgress.opening(chapter.chapter),
+                             appendJavaScript = customization.enabledJs(runOnAppend = true),
+                         )
+                     }
+@@ -576,20 +573,10 @@ class NovelReaderActivity :
+     private fun onDocumentReady() {
+         loading.visibility = View.GONE
+         val chapter = loaded ?: return
+-        val openingProgress = if (chapter.chapter.read && chapter.chapter.last_page_read >= 100) 0 else currentProgress
+-        renderer?.seek(openingProgress)
++        renderer?.seek(currentProgress)
+         extractTtsParagraphs(autoStart = ttsAutoStartPending)
+         restorePersistentHighlights(chapter)
+         ttsAutoStartPending = false
+-        if (preferences.novelMarkShortChapterAsRead.get()) {
+-            renderer?.isShort { short ->
+-                if (short) {
+-                    currentProgress = 100
+-                    saveProgress()
+-                    updateProgressSlider(100)
+-                }
+-            }
+-        }
+     }
+ 
+     private fun extractTtsParagraphs(autoStart: Boolean = false) = extractTtsParagraphs(0, autoStart)
+@@ -975,36 +962,29 @@ class NovelReaderActivity :
+     private fun toggleOfflineCopy() {
+         val chapter = loaded ?: return
+         if (loadJob?.isActive == true) return
++        if (!chapter.isDownloaded) {
++            saveProgress()
++            downloadManager.downloadChapters(chapter.manga, listOf(chapter.chapter))
++            toast(R.string.hayai_novel_reader_offline_queued)
++            return
++        }
+         val progress = currentProgress
+         loadJob =
+             lifecycleScope.launch {
+-                val removing = chapter.isDownloaded
+                 val result =
+                     withContext(Dispatchers.IO) {
+                         runCatching {
+                             session.saveProgress(chapter.chapter, progress, preferences.novelMarkAsReadThreshold.get())
+-                            val download =
+-                                if (removing) {
+-                                    session.removeOffline(chapter)
+-                                    null
+-                                } else {
+-                                    session.saveOffline(chapter)
+-                                }
++                            session.removeOffline(chapter)
+                             val refreshed = session.reload()
+-                            check(refreshed.isDownloaded != removing) { getString(R.string.hayai_novel_reader_offline_verify_error) }
+-                            download to refreshed
++                            check(!refreshed.isDownloaded) { getString(R.string.hayai_novel_reader_offline_verify_error) }
++                            refreshed
+                         }
+                     }
+                 result.fold(
+-                    onSuccess = { (download, refreshed) ->
++                    onSuccess = { refreshed ->
+                         showChapter(refreshed)
+-                        when {
+-                            removing -> toast(R.string.hayai_novel_reader_offline_removed)
+-                            download == null -> Unit
+-                            download.unavailableAssetCount > 0 ->
+-                                toast(getString(R.string.hayai_novel_reader_offline_partial, download.unavailableAssetCount))
+-                            else -> toast(R.string.hayai_novel_reader_offline_saved)
+-                        }
++                        toast(R.string.hayai_novel_reader_offline_removed)
+                     },
+                     onFailure = { toast(novelFailureMessage(it, R.string.hayai_novel_reader_offline_error)) },
+                 )
+@@ -1205,9 +1185,8 @@ class NovelReaderActivity :
+     }
+ 
+     private fun configureProgressControls() {
+-        val enabled = preferences.novelShowProgressSlider.get()
+-        val vertical = enabled && preferences.novelVerticalScrollbar.get()
+-        progressSlider.visibility = if (enabled && !vertical) View.VISIBLE else View.GONE
++        val vertical = preferences.novelVerticalScrollbar.get()
++        progressSlider.visibility = if (!vertical) View.VISIBLE else View.GONE
+         progressText.visibility = View.GONE
+         alternateStatusView.visibility = View.GONE
+         verticalProgressSlider.visibility = if (vertical && controlsVisible) View.VISIBLE else View.GONE
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+index f62df7e885c6e3474abca3731c0c3104c6e20f55..d09f0ff85f870a3fb537f9d8463f7712ffbd6fb1 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+@@ -273,6 +273,10 @@ internal class NovelReaderSession(
+ }
+ 
+ internal object NovelProgress {
++    /** Restores partial progress, but never reopens a chapter at its completed endpoint. */
++    fun opening(chapter: Chapter): Int =
++        chapter.last_page_read.coerceIn(0, 100).takeIf { it < 100 } ?: 0
++
+     fun apply(
+         chapter: Chapter,
+         progress: Int,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
+index aa93f4da0d71e2944b189351a7f8c97ed29b3b44..5de827f63cf4c8d98e1363a97035203ed15bc585 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
+@@ -111,7 +111,6 @@ internal class NovelReaderSettingsSheet(
+         page.toggle(R.string.hayai_novel_reader_infinite_scroll, preferences.novelInfiniteScroll, onStyleChanged)
+         page.slider(R.string.hayai_novel_reader_load_next_at, preferences.novelAutoLoadNextChapterAt, 50, 100, R.string.hayai_novel_reader_percent_value, onStyleChanged)
+         page.slider(R.string.hayai_novel_reader_mark_read_at, preferences.novelMarkAsReadThreshold, 50, 100, R.string.hayai_novel_reader_percent_value)
+-        page.toggle(R.string.hayai_novel_reader_mark_short_read, preferences.novelMarkShortChapterAsRead)
+         page.toggle(R.string.hayai_novel_reader_split_blocks, preferences.novelAutoSplitText, onStyleChanged)
+         page.slider(R.string.hayai_novel_reader_split_after_words, preferences.novelAutoSplitWordCount, 20, 200, R.string.hayai_novel_reader_word_value, onStyleChanged)
+     }
+@@ -188,13 +187,12 @@ internal class NovelReaderSettingsSheet(
+     }
+ 
+     private fun progressMode(page: LinearLayout) {
+-        val values = listOf(R.string.none, R.string.hayai_novel_reader_horizontal, R.string.hayai_novel_reader_vertical_left, R.string.hayai_novel_reader_vertical_right)
++        val values = listOf(R.string.hayai_novel_reader_horizontal, R.string.hayai_novel_reader_vertical_left, R.string.hayai_novel_reader_vertical_right)
+         val current =
+             when {
+-                !preferences.novelShowProgressSlider.get() -> 0
+-                !preferences.novelVerticalScrollbar.get() -> 1
+-                preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
+-                else -> 3
++                !preferences.novelVerticalScrollbar.get() -> 0
++                preferences.novelVerticalScrollbarPosition.get() == "left" -> 1
++                else -> 2
+             }
+         page.addView(TextView(context).apply { setText(R.string.hayai_novel_reader_progress_mode); setPadding(0, 12.dp, 0, 4.dp) })
+         val buttons = MaterialButtonToggleGroup(context).apply {
+@@ -209,11 +207,9 @@ internal class NovelReaderSettingsSheet(
+                     isChecked = selection == current
+                     addOnCheckedChangeListener { _, checked ->
+                         if (!checked) return@addOnCheckedChangeListener
+-                        val enabled = selection != 0
+-                        val vertical = selection >= 2
+-                        if (preferences.novelShowProgressSlider.get() != enabled) preferences.novelShowProgressSlider.set(enabled)
++                        val vertical = selection >= 1
+                         if (preferences.novelVerticalScrollbar.get() != vertical) preferences.novelVerticalScrollbar.set(vertical)
+-                        if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
++                        if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 1) "left" else "right")
+                         onChromeChanged()
+                     }
+                 },
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt
+index e3da02723cb3ae4a95703e56b70eb3adc11eae90..81a12f9c4339ed7d1b5f8d85e68cf18d3fe2d808 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt
+@@ -65,7 +65,7 @@ internal object NovelSelectionActionMenu {
+         entries.forEachIndexed { order, entry ->
+             if (menu.findItem(entry.itemId) == null) {
+                 menu
+-                    .add(Menu.NONE, entry.itemId, CUSTOM_ITEM_ORDER + order, context.getString(entry.titleRes))
++                    .add(Menu.NONE, entry.itemId, orderFor(order), context.getString(entry.titleRes))
+                     .setIcon(entry.iconRes)
+                     .setShowAsAction(
+                         when (entry.placement) {
+@@ -79,7 +79,7 @@ internal object NovelSelectionActionMenu {
+         return changed
+     }
+ 
+-    private const val CUSTOM_ITEM_ORDER = 100
++    fun orderFor(index: Int): Int = index
+ }
+ 
+ internal object NovelSelectionActionModes {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
+index 6b67e19b6f6843f11fec3a04249de0529da90c77..80de27544e3341b787b76d443ca9a118e803cbb2 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
+@@ -15,6 +15,7 @@ import android.view.textclassifier.TextClassifier
+ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+ import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
+ import kotlinx.serialization.Serializable
+ import kotlinx.serialization.json.Json
+ 
+@@ -74,12 +75,26 @@ internal class WebNovelRenderer(
+                     return true
+                 }
+             }
+-        setOnTouchListener { view, event ->
+-            if (event.action == MotionEvent.ACTION_UP) {
+-                evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
+-                    if (selected != "true") callbacks.onTap(event.x / view.width.coerceAtLeast(1), event.y / view.height.coerceAtLeast(1))
+-                }
+-            }
++        val gestureDetector =
++            GestureDetectorWithLongTap(
++                context,
++                object : GestureDetectorWithLongTap.Listener() {
++                    override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
++                        val view = this@apply
++                        evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
++                            if (selected != "true") {
++                                callbacks.onTap(
++                                    event.x / view.width.coerceAtLeast(1),
++                                    event.y / view.height.coerceAtLeast(1),
++                                )
++                            }
++                        }
++                        return true
++                    }
++                },
++            )
++        setOnTouchListener { _, event ->
++            gestureDetector.onTouchEvent(event)
+             false
+         }
+     }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+index 3932286c0e59d3b165594b2f031edeebd98d5614..ba00e9516bc897fdaf0ba04dd576b4d19056c020 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+@@ -128,7 +128,6 @@ class NovelSettingsController : SettingsController() {
+             }
+             sliderPreference { bindTo(novel.novelAutoLoadNextChapterAt); title = context.getString(R.string.hayai_novel_reader_load_next_at); entryValues = (50..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
+             sliderPreference { bindTo(novel.novelMarkAsReadThreshold); title = context.getString(R.string.hayai_novel_reader_mark_as_read_at); entryValues = (50..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
+-            switchPreference { bindTo(novel.novelMarkShortChapterAsRead); title = context.getString(R.string.hayai_novel_reader_mark_short_as_read) }
+             switchPreference { bindTo(novel.novelHideChapterTitle); title = context.getString(R.string.hayai_novel_reader_hide_chapter_title) }
+             intListPreference(activity) {
+                 bindTo(novel.novelChapterTitleDisplay)
+@@ -143,7 +142,6 @@ class NovelSettingsController : SettingsController() {
+ 
+         preferenceCategory {
+             title = context.getString(R.string.hayai_novel_reader_navigation_progress)
+-            switchPreference { bindTo(novel.novelShowProgressSlider); title = context.getString(R.string.hayai_novel_reader_show_progress_control) }
+             switchPreference { bindTo(novel.novelVerticalScrollbar); title = context.getString(R.string.hayai_novel_reader_use_vertical_progress) }
+             listPreference(activity) {
+                 bindTo(novel.novelVerticalScrollbarPosition)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupNotifier.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupNotifier.kt
+index 77dffbc9498860fbb2aaa22acadb65fbbffdc967..44ce3450ba73a58fc85c678add4c25a754b6c65d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupNotifier.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupNotifier.kt
+@@ -23,7 +23,7 @@ class BackupNotifier(
+     private val progressNotificationBuilder =
+         context.notificationBuilder(Notifications.CHANNEL_BACKUP_RESTORE_PROGRESS) {
+             setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher))
+-            setSmallIcon(R.drawable.ic_tachij2k_notification)
++            setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
+             setAutoCancel(false)
+             setOngoing(true)
+         }
+@@ -31,7 +31,7 @@ class BackupNotifier(
+     private val completeNotificationBuilder =
+         context.notificationBuilder(Notifications.CHANNEL_BACKUP_RESTORE_COMPLETE) {
+             setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher))
+-            setSmallIcon(R.drawable.ic_tachij2k_notification)
++            setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
+             setAutoCancel(false)
+         }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt b/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
+index 5252cb913322007250b37d1570866598d5bb5b10..94044aa59b8ce75352d0edc5f5302261fb84935a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
+@@ -338,7 +338,6 @@ class Downloader(
+         val source = sourceManager.get(manga.source) ?: return@launchIO
+         val queueSource = NovelDownloadQueueSource.from(source) ?: return@launchIO
+         val novelStorage = novelDownloads.handles(source)
+-        val wasEmpty = queue.isEmpty()
+         // Called in background thread, the operation can be slow with SAF.
+         val chaptersWithoutDir =
+             async {
+@@ -369,7 +368,7 @@ class Downloader(
+             queue.addAll(chaptersToQueue)
+ 
+             // Start downloader if needed
+-            if (autoStart && wasEmpty) {
++            if (DownloadQueueStartPolicy.shouldStart(autoStart, isRunning)) {
+                 val queuedDownloads = queue.count { it.source !is UnmeteredSource }
+                 val maxDownloadsFromSource =
+                     queue
+@@ -852,3 +851,10 @@ class Downloader(
+         const val MIN_DISK_SPACE = 200 * 1024 * 1024
+     }
+ }
++
++internal object DownloadQueueStartPolicy {
++    fun shouldStart(
++        autoStart: Boolean,
++        downloaderRunning: Boolean,
++    ): Boolean = autoStart && !downloaderRunning
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt b/app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt
+index 47158e62e8226e55be2a6361670537b67ff7d40e..c465408447364bbc04fbf11fbca58cd08901aa0f 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt
+@@ -121,7 +121,7 @@ class LibraryUpdateNotifier(
+                         ),
+                     )
+                     setContentIntent(pendingIntent)
+-                    setSmallIcon(R.drawable.ic_tachij2k_notification)
++                    setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
+                     addAction(
+                         R.drawable.ic_file_open_24dp,
+                         context.getString(R.string.open_log),
+@@ -159,7 +159,7 @@ class LibraryUpdateNotifier(
+                         ),
+                     )
+                     setContentIntent(NotificationHandler.openUrl(context, HELP_SKIPPED_URL))
+-                    setSmallIcon(R.drawable.ic_tachij2k_notification)
++                    setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
+                     addAction(
+                         R.drawable.ic_file_open_24dp,
+                         context.getString(R.string.open_log),
+@@ -195,7 +195,7 @@ class LibraryUpdateNotifier(
+                     notifications.add(
+                         Pair(
+                             context.notification(Notifications.CHANNEL_NEW_CHAPTERS) {
+-                                setSmallIcon(R.drawable.ic_tachij2k_notification)
++                                setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
+                                 try {
+                                     val request =
+                                         ImageRequest
+@@ -277,7 +277,7 @@ class LibraryUpdateNotifier(
+                 notify(
+                     Notifications.ID_NEW_CHAPTERS,
+                     context.notification(Notifications.CHANNEL_NEW_CHAPTERS) {
+-                        setSmallIcon(R.drawable.ic_tachij2k_notification)
++                        setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
+                         setLargeIcon(notificationBitmap)
+                         setContentTitle(context.getString(R.string.new_chapters_found))
+                         color = ContextCompat.getColor(context, R.color.primaryTachiyomi)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateNotifier.kt b/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateNotifier.kt
+index 1ace08795119eef32ba60ada34e93c427b5a00f3..9c9e400d3e9143ac9fd890e023a650dceae6d6a1 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateNotifier.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateNotifier.kt
+@@ -196,7 +196,7 @@ internal class AppUpdateNotifier(
+         with(NotificationCompat.Builder(context, Notifications.CHANNEL_UPDATED)) {
+             setContentTitle(context.getString(R.string.update_completed))
+             setContentText(context.getString(R.string.updated_to_, BuildConfig.VERSION_NAME))
+-            setSmallIcon(R.drawable.ic_tachij2k_notification)
++            setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
+             setAutoCancel(true)
+             setOngoing(false)
+             setProgress(0, 0, false)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt
+index d70a19d54293f455e10f11e5af94be8d5d3787d5..f2e90ddfa02b32a07703ee8e0fb7da6254da92f0 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt
+@@ -9,8 +9,10 @@ import android.content.Intent
+ import android.content.pm.PackageInstaller
+ import android.content.pm.PackageInstaller.SessionParams
+ import android.content.pm.PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED
++import android.net.Uri
+ import android.os.Build
+ import android.os.Bundle
++import android.provider.Settings
+ import android.widget.Toast
+ import com.hippo.unifile.UniFile
+ import eu.kanade.tachiyomi.R
+@@ -151,13 +153,49 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
+ class ExtensionInstallActivity : Activity() {
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+-        try {
+-            if (PACKAGE_INSTALLED_ACTION == intent.action) {
+-                packageInstallStep(this, intent)
+-                finish()
+-                return
+-            }
++        if (PACKAGE_INSTALLED_ACTION == intent.action) {
++            packageInstallStep(this, intent)
++            finish()
++            return
++        }
++
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
++            !packageManager.canRequestPackageInstalls()
++        ) {
++            startActivityForResult(
++                Intent(
++                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
++                    Uri.parse("package:$packageName"),
++                ),
++                UNKNOWN_SOURCES_REQUEST_CODE,
++            )
++            return
++        }
++
++        installDownloadedExtension()
++    }
++
++    @Deprecated("Deprecated in Android")
++    override fun onActivityResult(
++        requestCode: Int,
++        resultCode: Int,
++        data: Intent?,
++    ) {
++        super.onActivityResult(requestCode, resultCode, data)
++        if (requestCode != UNKNOWN_SOURCES_REQUEST_CODE) return
++
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
++            packageManager.canRequestPackageInstalls()
++        ) {
++            installDownloadedExtension()
++        } else {
++            installationFailed()
++            finish()
++        }
++    }
+ 
++    private fun installDownloadedExtension() {
++        try {
+             val downloadId = intent.extras!!.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID)
+             val packageInstaller = packageManager.packageInstaller
+             val data = UniFile.fromUri(this, intent.data).openInputStream()
+@@ -208,4 +246,14 @@ class ExtensionInstallActivity : Activity() {
+         }
+         finish()
+     }
++
++    private fun installationFailed() {
++        val downloadId = intent.extras?.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID) ?: return
++        val extensionManager: ExtensionManager by injectLazy()
++        extensionManager.setInstallationResult(downloadId, false)
++    }
++
++    companion object {
++        private const val UNKNOWN_SOURCES_REQUEST_CODE = 501
++    }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt b/app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt
+index b6641fa24e3019907800ce0fcc683d426c3cabaa..77322ae7ed357c422f7fd7db21b79e7dce05ed09 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt
+@@ -25,7 +25,7 @@ class CrashLogUtil(
+ ) {
+     private val notificationBuilder =
+         context.notificationBuilder(Notifications.CHANNEL_CRASH_LOGS) {
+-            setSmallIcon(R.drawable.ic_tachij2k_notification)
++            setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
+         }
+ 
+     fun dumpLogs(stackTrace: String? = null) {
+diff --git a/app/src/main/res/drawable/anim_hayai_splash.xml b/app/src/main/res/drawable/anim_hayai_splash.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..df0031fec8581637738d35d7152c6aebceefe07a
+--- /dev/null
++++ b/app/src/main/res/drawable/anim_hayai_splash.xml
+@@ -0,0 +1,33 @@
++<?xml version="1.0" encoding="utf-8"?>
++<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:aapt="http://schemas.android.com/aapt"
++    android:drawable="@drawable/ic_hayai_monochrome_launcher">
++
++    <target android:name="hayai_logo">
++        <aapt:attr name="android:animation">
++            <set android:ordering="together">
++                <objectAnimator
++                    android:duration="775"
++                    android:interpolator="@android:interpolator/fast_out_slow_in"
++                    android:propertyName="scaleX"
++                    android:valueFrom="0.38"
++                    android:valueTo="0.72"
++                    android:valueType="floatType" />
++                <objectAnimator
++                    android:duration="775"
++                    android:interpolator="@android:interpolator/fast_out_slow_in"
++                    android:propertyName="scaleY"
++                    android:valueFrom="0.38"
++                    android:valueTo="0.72"
++                    android:valueType="floatType" />
++                <objectAnimator
++                    android:duration="775"
++                    android:interpolator="@android:interpolator/fast_out_slow_in"
++                    android:propertyName="rotation"
++                    android:valueFrom="-10"
++                    android:valueTo="0"
++                    android:valueType="floatType" />
++            </set>
++        </aapt:attr>
++    </target>
++</animated-vector>
+diff --git a/app/src/main/res/drawable/ic_hayai_monochrome_launcher.xml b/app/src/main/res/drawable/ic_hayai_monochrome_launcher.xml
+index 9f4f07061120dac70789410fcb967fb78b594687..7e2db89dbddf777991fcc6b2a192d479ab4e0a30 100644
+--- a/app/src/main/res/drawable/ic_hayai_monochrome_launcher.xml
++++ b/app/src/main/res/drawable/ic_hayai_monochrome_launcher.xml
+@@ -5,6 +5,7 @@
+     android:viewportWidth="2201"
+     android:viewportHeight="2201">
+     <group
++        android:name="hayai_logo"
+         android:scaleX="0.72"
+         android:scaleY="0.72"
+         android:pivotX="1100.5"
+diff --git a/app/src/main/res/drawable/splash_background.xml b/app/src/main/res/drawable/splash_background.xml
+index 9a70375b545010ee22a88c385ad5dcb293e658cb..1f922e9b97bc0760707088ff0fea9ddd1ac01130 100644
+--- a/app/src/main/res/drawable/splash_background.xml
++++ b/app/src/main/res/drawable/splash_background.xml
+@@ -7,7 +7,7 @@
+     <item
+         android:width="64dp"
+         android:height="64dp"
+-        android:drawable="@drawable/ic_tachij2k"
++        android:drawable="@drawable/ic_hayai_monochrome_launcher"
+         android:gravity="center" />
+ 
+ </layer-list>
+diff --git a/app/src/main/res/values/strings_hayai_novel_reader.xml b/app/src/main/res/values/strings_hayai_novel_reader.xml
+index 84594dc261b2225a3c51dd493470b7e1e99b1a7f..d09ac47c53e6305fd9248205c86d9f879a43e707 100644
+--- a/app/src/main/res/values/strings_hayai_novel_reader.xml
++++ b/app/src/main/res/values/strings_hayai_novel_reader.xml
+@@ -324,6 +324,7 @@
+     <string name="hayai_novel_reader_offline_removed">Offline copy removed</string>
+     <string name="hayai_novel_reader_offline_partial">Chapter saved; %1$d source assets were unavailable</string>
+     <string name="hayai_novel_reader_offline_saved">Chapter saved for offline reading</string>
++    <string name="hayai_novel_reader_offline_queued">Chapter added to the download queue</string>
+     <string name="hayai_novel_reader_offline_error">The offline copy could not be changed</string>
+     <string name="hayai_novel_reader_offline_verify_error">The offline copy could not be verified.</string>
+     <string name="hayai_novel_reader_chapter_count">%1$d / %2$d</string>
+diff --git a/app/src/main/res/values/themes.xml b/app/src/main/res/values/themes.xml
+index 4d4604590debf378f02a58e5a3b1f07a4e5de29c..7dea9968e643c5e2b67865dc9521e13b5b51652e 100644
+--- a/app/src/main/res/values/themes.xml
++++ b/app/src/main/res/values/themes.xml
+@@ -11,7 +11,7 @@
+         <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+         <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/background</item>
+-        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/anim_tachij2k_splash</item>
++        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/anim_hayai_splash</item>
+         <item name="android:windowSplashScreenAnimationDuration" tools:targetApi="31">775</item>
+         <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="28">shortEdges</item>
+         <!--Standard Material colors -->
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
+index 35a4959a2eea49305485bdfc2d077ab0fc84ad05..0752142e44ca084b275d8775cb57f87f5d22e01f 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
+@@ -1,6 +1,5 @@
+ package dev.ahmedmohamed.hayai.novel.reader
+ 
+-import android.view.Menu
+ import eu.kanade.tachiyomi.R
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertNull
+@@ -51,7 +50,7 @@ class NovelSelectionActionMenuTest {
+     fun `reader actions use the selected alternative category ahead of platform actions`() {
+         NovelSelectionActionMenu.entries.indices.forEach { index ->
+             assertEquals(
+-                Menu.CATEGORY_ALTERNATIVE + index,
++                index,
+                 NovelSelectionActionMenu.orderFor(index),
+             )
+         }
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index ef9989743082a385d12937750f0af183ee4c80b6..3405de6cd79a2c17fdd938cd11fe20d7ed8b768c 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -26,6 +26,8 @@ The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one
+ 
+ Extension discovery uses one Hayai-owned `ContentKind` policy for browse, search, reader routing, and migration. The J2K Extensions sheet retains its Manga and Migration behavior and adds a peer Novels tab using the same cards, language groups, installed sorting, search, progress, install, update, settings, trust, and uninstall interactions. `ManagedExtensionProjector` unions novel APK state and LNReader JavaScript plugin state into that Novels tab with namespaced `apk:` and `js:` identities; manga APKs remain in Manga, while a mixed APK can appear in both tabs. Installation, update, and health are orthogonal, so an installed plugin remains manageable while its runtime is unhealthy or its repository is offline. Language and adult-source filters apply only to remote available entries; installed, untrusted, and load-failed packages remain manageable. J2K continues to own APK loading, signature trust, package installation, source registration, and update semantics. `NovelPluginManager` owns only JavaScript repository trust, checksums, signing keys, QuickJS warm-up, atomic storage, and semantic versions.
+ 
++The package-installer activity retains J2K's downloaded APK, session, signature, and result path. On Android 8 and newer it now obtains the per-app unknown-source permission before creating the install session, then resumes the same APK when the settings activity returns. Denial reports an installation error through J2K's existing extension flow. This prevents a doomed session from leaving the shared Manga/Novels card stuck on `Installing` without introducing a Hayai installer.
++
+ APK repository URLs remain in J2K's single `extensionRepos` preference. Fresh installations start with the user-selected Keiyoushi and Cursed Manga protobuf indexes; both remain Manga repositories, with adult visibility still controlled by J2K's source filter. Hayai stores novel membership tags only for backup, restore, and redirect compatibility. The APK repository section lists every global APK index, regardless of content kind; adding, removing, or replacing a URL updates the global set and Hayai tags together. Browse and Browse settings expose explicit APK-index and LNReader JavaScript destinations, but both destinations reuse J2K's `RepoController`, inline create row, adapter, holder, validation spinner, edit, delete, and undo behavior. `RepoPresenter` switches only the persistence and validation backend. A JavaScript repository's display name is derived from its URL after its index validates, so adding either repository format requires exactly one URL field and no separate form. Fresh installations seed the supplied LNReader v3 index once; removing it is durable and does not recreate it on restart.
+ 
+ LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. Android application context enters explicitly through `NovelPluginManager`, `NovelPluginSource`, `NovelPluginRuntime`, and `NovelPluginLibrary`; the runtime never resolves an unregistered raw `Context` from global DI. Browse rows resolve relative plugin icon paths against the trusted repository and load them through the same Coil-backed source image view used by J2K. Source construction and asynchronous warm-up failures remain attached to the current installed plugin ID in the extension catalog instead of disappearing. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs. `NovelPluginManager` restores a missing trust record for every repository that the user already configured. This repairs repositories migrated from builds that persisted the repository before its trust record. Existing signed trust records remain unchanged.
+@@ -54,9 +56,11 @@ The text reader owns its lifecycle behind a Hayai renderer contract. Its XML she
+ 
+ Read-aloud state lives in a Hayai foreground media-playback service rather than the activity. The notification exposes play, pause, stop, and paragraph navigation, and a recreated reader can attach to the active service. Quotes support duplicate-safe creation, editing, attributed copying, ordering, and deletion. Native selection actions route quote creation back into the existing quote dialog. Definition and search actions open a forced resizable Custom Tab so the user's browser session remains available. Google Translate first tries its process-text and send contracts, then uses the same browser path. A secure `E2EBottomSheetDialog` WebView preserves only WebView cookies as the fallback and blocks navigation outside HTTPS. Full-chapter translation and cached in-app selection translation remain separate typed actions. Translation providers, dictionary handoff, highlight recovery, visual custom-source compilation, statistics, offline chapters, presets, snippets, and EPUB export do not change the image reader. Both renderers present bounded chapter blocks with stable IDs, append and prepend without changing focus, preserve the visible offset, and move J2K progress when a new block becomes visible. Emulator verification remains required before this implementation becomes a verified port.
+ 
+-Novel integration uses a small set of adapters rather than parallel J2K models. The library filter delegates content-kind classification to Hayai. Manga details decorate the existing chapter rows with percent, word count, reading time, and verified offline state. Novel chapter downloads enter J2K's `DownloadQueue`, `DownloadJob`, status flow, notification, details actions, and Downloads sheet. `NovelDownloadQueueSource` supplies the queue-only `HttpSource` shape that J2K's `Download` model requires. The adapter retains the real source ID, name, language, novel marker, and metered policy. No HTTP operation runs through the adapter. `Downloader` calls `NovelDownloadDelegate` only to check and save a novel chapter in Hayai's document store. `DownloadStore` reconstructs the same adapter after process restart, and `Downloader` drops a restored item when the atomic novel document already exists. The details adapter preserves J2K's active `QUEUE`, `DOWNLOADING`, and `ERROR` states when it refreshes offline novel metadata. The normal queue listener marks the offline row before J2K removes a successful queue item. Image sources continue through J2K's original directory and page path without an adapter. Novel removal deletes the Hayai document and refreshes the same details row. J2K statistics aggregate Hayai's derived word data, shortcuts preserve novel identity, and migration searches reject novel-to-image and image-to-novel targets. `NovelSettingsController` owns the complete text-reader preference surface, typed reusable presets, CSS and JavaScript snippets, and bounded text-replacement rules. Translation, dictionary, and visual-source-builder settings use J2K `SettingsController` screens and preference rows while their drafts, validation, network preview, and persistence remain Hayai-owned. J2K remains authoritative for chapters, download scheduling, progress, history, categories, and the enclosing screens.
++Novel integration uses a small set of adapters rather than parallel J2K models. The library filter delegates content-kind classification to Hayai. Manga details decorate the existing chapter rows with percent, word count, reading time, and verified offline state. Novel chapter downloads enter J2K's `DownloadQueue`, `DownloadJob`, status flow, notification, details actions, reader action, and Downloads sheet. `NovelDownloadQueueSource` supplies the queue-only `HttpSource` shape that J2K's `Download` model requires. The adapter retains the real source ID, name, language, novel marker, and metered policy. No HTTP operation runs through the adapter. `Downloader` calls `NovelDownloadDelegate` only to check and save a novel chapter in Hayai's document store. `DownloadStore` reconstructs the same adapter after process restart, and `Downloader` drops a restored item when the atomic novel document already exists. An explicit `autoStart` request starts a stopped non-empty queue as well as an empty queue, so one restored novel item cannot make later manga downloads emit an immediate permanent pause. Manual queueing still preserves a deliberate pause. The details adapter preserves J2K's active `QUEUE`, `DOWNLOADING`, and `ERROR` states when it refreshes offline novel metadata. The normal queue listener marks the offline row before J2K removes a successful queue item. Image sources continue through J2K's original directory and page path without an adapter. Novel removal deletes the Hayai document and refreshes the same details row. J2K statistics aggregate Hayai's derived word data, shortcuts preserve novel identity, and migration searches reject novel-to-image and image-to-novel targets. `NovelSettingsController` owns the complete text-reader preference surface, typed reusable presets, CSS and JavaScript snippets, and bounded text-replacement rules. Translation, dictionary, and visual-source-builder settings use J2K `SettingsController` screens and preference rows while their drafts, validation, network preview, and persistence remain Hayai-owned. J2K remains authoritative for chapters, download scheduling, progress, history, categories, and the enclosing screens.
++
++The novel reader inflates J2K's existing `reader_activity` and binds its existing app bar, toolbar, viewer container, navigation controls, chapter sheet, and slider. Hayai applies the same system-bar and display-cutout margins as J2K at that shared layout boundary. Reader chrome remains a literal J2K overlay with no novel-only toolbar padding or visibility-driven reflow. Both renderers use J2K's confirmed-single-tap detector, so a scroll cannot reopen chrome. The horizontal progress slider is always available unless the user selected a vertical progress control. Opening restores partial progress without mutating the chapter, never auto-completes short chapters, and maps completed endpoints back to the start. The image-reader activity remains unchanged.
+ 
+-The novel reader inflates J2K's existing `reader_activity` and binds its existing app bar, toolbar, viewer container, navigation controls, chapter sheet, and slider. Hayai applies the same system-bar and display-cutout margins as J2K at that shared layout boundary. Reader chrome remains an overlay; novel content uses one constant safe inset equal to the ignored status-bar inset plus J2K's `actionBarSize`. Showing or hiding chrome therefore neither obscures nor reflows text. The image-reader activity remains unchanged.
++Hayai branding is resource-owned: the Android splash animates the existing Hayai vector and product-identity notifications use the Hayai monochrome vector. Download, warning, TTS, and extension notifications keep their semantic J2K status icons.
+ 
+ Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. The E-Hentai parser follows SY's sprite-first precedence for legacy `.gdtm`/`.gdtl` and current direct-anchor layouts, including unitless zero offsets, and rejects nested `blank.gif` placeholders as real previews. Listing-cache schema changes invalidate stale successful-empty or blank listings, and cache publication cannot suppress a successful network image. E-Hentai maps typed metadata to the SY-style metadata block only; it no longer duplicates the same fields in J2K description text. Both phone and tablet manga-header layouts expose two independent anchors: structured metadata before the generic description and page previews after tags/description. The preview controller exposes previous, next, and direct-page navigation, while preview taps route through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
+ 
+diff --git a/docs/architecture/novel-reader-parity.md b/docs/architecture/novel-reader-parity.md
+index fe463207e2790896502025052327acf497fdf7d4..9cefc46e8f40f6ec45d8587a6f6e69cb861d5c12 100644
+--- a/docs/architecture/novel-reader-parity.md
++++ b/docs/architecture/novel-reader-parity.md
+@@ -28,11 +28,11 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
+ 
+ ## Reader chrome and selection contract
+ 
+-The J2K toolbar and chapter controls overlay the viewer exactly as they do in the image reader. `J2kNovelReaderChrome` gives novel content one constant safe inset equal to J2K's ignored status-bar inset plus `actionBarSize`; that inset does not change when chrome is shown or hidden. The viewer therefore keeps J2K's overlay geometry without obscuring, pushing, or reflowing native or WebView text.
++The J2K toolbar and chapter controls overlay the viewer exactly as they do in the image reader. `J2kNovelReaderChrome` adds no reader-specific top padding, and showing or hiding chrome never changes the viewport. Native and Web renderers use J2K's confirmed-single-tap gesture contract so scrolling does not summon the controls. Opening a chapter restores only partial progress, never marks it read, and never reopens a completed chapter at its endpoint; progress and read state change only after actual reader movement reaches the configured threshold.
+ 
+ Both renderers expose the same typed `NovelSelection`. Native text remains selectable, focusable in touch mode, long-clickable, and uses Android's arrow-key movement method whenever editing is off. Read-only selection removes the irrelevant EditText Cut/Paste actions and keeps compact Quote, Define, and Translate actions visible; edit mode retains Android's editing actions. The WebView is created with the Activity UI context, remains focusable, disables classifier-injected actions, and caches the complete selection anchor on `selectionchange`. If opening the floating toolbar collapses the live range, Quote, Define, Translate, and Search consume that cached anchor. The anchor resolves its chapter from the range ancestor rather than whichever retained chapter is currently marked active.
+ 
+-The shared action registry assigns visible, localized, semantic entries to Quote, Define, and Google Translate; Search remains overflow. Quote enters the existing duplicate-safe quote dialog. Define opens a resizable Custom Tab so the selected Chrome provider's signed-in session is available. Translate tries Google Translate's process-text and send contracts before the same browser path. The secure WebView sheet is only a fallback and retains WebView cookies, not Chrome cookies.
++The shared action registry assigns the first floating-toolbar orders to visible, localized Quote, Define, and Google Translate entries; Search remains overflow. Quote enters the existing duplicate-safe quote dialog. Define opens a resizable Custom Tab so the selected Chrome provider's signed-in session is available. Translate tries Google Translate's process-text and send contracts before the same browser path. The secure WebView sheet is only a fallback and retains WebView cookies, not Chrome cookies.
+ 
+ ## Continuous-flow rules
+ 
+diff --git a/docs/architecture/sy-j2k-reader-parity.md b/docs/architecture/sy-j2k-reader-parity.md
+index d6ff34121cedc7fe54321ecf67bfe2def71022ba..3a416dcf5e9b11c6c41ee6276b5954b2edb4ad81 100644
+--- a/docs/architecture/sy-j2k-reader-parity.md
++++ b/docs/architecture/sy-j2k-reader-parity.md
+@@ -12,7 +12,7 @@ The selected arena design preserves the existing typed provider and renderer con
+ - `EhFilters` exposes SY's group hierarchy but recursively reduces into the existing `EhSearchSpec`; URLs and pagination stay in `EhRequestBuilder`.
+ - `MangaDetailsController` remains a lifecycle adapter and delegates Hayai loading, rendering, generation guards, and bitmap cleanup to `SourceDetailsHost`. Phone and tablet layouts provide independent metadata-before-description and preview-after-description anchors.
+ - `SourcePreviewController` owns one-based page navigation and delegates selected image opening to `ReaderLauncher`.
+-- `NovelReaderActivity` uses the concrete `J2kNovelReaderChrome` adapter for J2K's existing view IDs, insets, and overlay visibility. Viewer bounds remain J2K-owned while novel content gets one visibility-independent toolbar safe inset.
++- `NovelReaderActivity` uses the concrete `J2kNovelReaderChrome` adapter for J2K's existing view IDs, insets, and overlay visibility. Viewer bounds remain J2K-owned and novel content receives no toolbar-only padding, matching J2K's overlay contract.
+ - Native and Web renderers share `NovelSelectionActionModes`; each renderer is responsible only for producing a stable `NovelSelection`.
+ - `NovelLookupLauncher` owns external Google Translate and signed-in Custom Tab effects. `NovelQuoteStore` remains the quote authority.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index ad316d87f16bd129c8eb3ee53845de5491b218ce..31571969f0ffa72a46cab04eece7db1dcbf029fe 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -42,18 +42,18 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+-| Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | exact J2K shell and native renderer verified on emulator; WebView, prepend, and incognito emulator flows pending |
++| Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, literal overlay geometry, confirmed-single-tap gestures, always-available progress control, non-mutating chapter open, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | real AllNovel source loaded 3,956 chapters and opened Chapter 1 at zero progress on emulator; single-tap chrome dismissal, scroll-without-chrome-reentry, and Quote/Define/Google Translate selection ordering were verified against the real chapter; WebView, prepend, and incognito flows remain pending |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+ | Remote novel extension catalogs and installation | A Novels tab beside Manga and Migration over J2K APK authority and Hayai JavaScript authority; namespaced identities; explicit load failures; consistent duplicate reconciliation; shared-safe tagged repository ownership; and J2K's inline repository editor reused for both backends | port verified on emulator with a checksum-verified Keiyoushi Comikey APK and the production LNReader v3 repository; install, detection, settings, and source registration passed |
+ | LNReader JavaScript repository sources | Novels-tab J2K cards, explicit application-context runtime construction, construction and warm-up error retention, version-tolerant v3/legacy repository boundary, bounded trusted repositories with idempotent repair for persisted repositories missing trust, isolated QuickJS sources, relative repository icon resolution, and full catalogue/chapter bridge | port verified on emulator by installing production Komga 1.0.2, initializing QuickJS, evaluating filters/settings, registering the source, and loading its remote icon in Browse without a raw-Context DI lookup; deleting only the trust preference while retaining two configured repositories recreated both trust records on startup |
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+-| Text downloads/offline reading | J2K `DownloadQueue`, `DownloadJob`, status flow, notification, details actions, and Downloads sheet with a Hayai storage delegate for novel documents | local fixture verified on emulator for document save, Wi-Fi-only pause reason, Downloads-sheet visibility, APK reinstall and process restart recovery, and active-state preservation; remote and bulk flows pending |
++| Text downloads/offline reading | J2K `DownloadQueue`, `DownloadJob`, status flow, notification, details and reader actions, and Downloads sheet with a Hayai storage delegate for novel documents; explicit auto-start resumes stopped non-empty queues | emulator verified with real NovelFull Chapter 1 entering and completing through J2K's notification and queue, and a stopped queue resuming a real E-Hentai gallery from 37 to 383 pages; the gallery's final source image remained retrying at 383/384 |
+ | Typography, themes, spacing, navigation, presets, snippets, search/replace | Five Tsundoku icon tabs with J2K spinner, switch, slider, and toolbar-settings controls; adjacent theme and text/background color controls; Tsundoku-style preset swatches plus a synchronized hex/RGB custom picker; isolated preset/custom color resolution; Tsundoku preference keys and exact tap-zone tables; SAF-imported validated fonts shared by native/Web renderers; progress modes; compact ordered bottom/status registries; searchable full settings; ordered snippets with append semantics; and testable ordered replacements | custom theme logic and compilation verified; picker UI emulator verification and imported-font flow pending |
+-| Translation, definition, search, and dictionary handoff | Bounded provider clients and cache; shared native/Web selection actions with retained Web anchors; Google Translate process-text/send routing; forced resizable Custom Tabs with browser login state; and a secure J2K bottom-sheet WebView fallback | port implemented; focused routing tests pending final pass and on-device floating-action verification pending |
++| Translation, definition, search, and dictionary handoff | Bounded provider clients and cache; shared native/Web selection actions with retained Web anchors; Google Translate process-text/send routing; forced resizable Custom Tabs with browser login state; and a secure J2K bottom-sheet WebView fallback | real NovelFull native selection verified Quote, Define, and Google Translate as the first actions; Web selection and floating translation-result verification remain pending |
+ | TTS and playback controls | Foreground media-playback service, notification actions, Tsundoku transport actions surfaced through J2K's reader-sheet buttons, chapter handoff, highlight, and activity reattachment | active exact-shell transport verified on emulator; background and restart recovery pending |
+-| Quotes | Typed `hayai_quotes`, visible semantic Quote action in native/Web selection, retained Web anchors, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | port implemented; emulator selection lifecycle pending |
++| Quotes | Typed `hayai_quotes`, visible semantic Quote action in native/Web selection, retained Web anchors, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | native real-source selection opened the populated Save quote flow on emulator; Web selection lifecycle remains pending |
+ | Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, editing, schema, and backup | implemented unverified |
+ | Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, progress-aware J2K chapter rows, and library statistics | integration foundation verified; emulator presentation pending |
+ | Library content filter, shortcuts, and migration compatibility | Typed content policy with narrow J2K presentation and migration adapters | integration foundation verified; emulator flows pending |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 404a34391f93680a2dcb32235428909ff5583784..aa8e9085f0c5278b8556d9e37b720fa6be736dc8 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -2136,7 +2136,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsNe
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsPreviousParagraph("tts_prev_paragraph"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsViewport("tts_viewport"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	WebView("webview"),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 1) "left" else "right")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.hayai_novel_reader_app to "app", R.string.hayai_novel_reader_light to "light", R.string.dark to "dark", R.string.hayai_novel_reader_sepia to "sepia", R.string.black to "black", R.string.hayai_novel_reader_grey to "grey", R.string.hayai_novel_reader_custom to "custom"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.none to "NONE", R.string.hayai_novel_reader_horizontal to "HORIZONTAL", R.string.vertical_viewer to "VERTICAL", R.string.hayai_novel_reader_both to "BOTH"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_alignment, preferences.novelTextAlign, listOf(R.string.left to "left", R.string.hayai_novel_reader_justified to "justify", R.string.center to "center", R.string.right to "right"), onStyleChanged)
+@@ -2147,7 +2147,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_size, preferences.novelStatusBarSize, listOf(R.string.hayai_novel_reader_small to "small", R.string.hayai_novel_reader_medium to "medium"), onChromeChanged)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelTheme.set("custom")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelVerticalScrollbarPosition.get() == "left" -> 1
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val values = listOf("") + voices.map { it.name }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt	val appendJavaScript: String = "",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"black" -> 0xFF000000.toInt() to 0xFFECECEC.toInt()
+@@ -2193,7 +2193,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evalua
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("window.hayaiReader.retainBlocks(${json.encodeToString(chapterIds.map { it.toString() })})")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (focus) evaluate("window.hayaiReader.focusBlock(${json.encodeToString(block.chapterId.toString())},${request.initialProgress})")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (selected != "true") callbacks.onTap(event.x / view.width.coerceAtLeast(1), event.y / view.height.coerceAtLeast(1))
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (selected != "true") {
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (value.startsWith("hayai-novel-image://") || value.startsWith("novel-image://")) {
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	listOf("src", "poster", "href").forEach { attribute ->
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun clearSpokenHighlight() = evaluate("window.hayaiReader.clearHighlight()")
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 89dbe97150f38a95eb43b46061cff53f3296ebd8..6815539e9c84cd4a8ae183d64357964cbeae2e1c 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -24,6 +24,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/model/LoadResult.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt"
++        # Approved in docs/architecture/j2k-reset.md. Defers J2K's install session until unknown-source permission exists.
++        "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
+         # Approved in docs/architecture/j2k-reset.md. Tracks Mihon's pinned Cloudflare challenge detector and early exit.
+@@ -94,6 +96,11 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/util/manga/MangaShortcutManager.kt"
++        # Approved branding-only seams. Product identity notifications use the existing Hayai vector.
++        "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupNotifier.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateNotifier.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt"
+     )
+     $violations = $changed | Where-Object {
+         $_ -like "app/src/main/java/*.kt" -and
+-- 
+2.54.0.windows.1
+

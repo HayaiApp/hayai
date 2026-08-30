@@ -1,0 +1,1115 @@
+From 7e6b54984b91b05a4d0b8d86f36e8426fc2f1faa Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 03:59:23 +0300
+Subject: [PATCH] Split browse and extensions by content type
+
+
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
+index c5b541dd5c1eaf88f298b92b0aea0093cd0251b9..1704f17f3957423d820e9660ef18fde0f4a22ca6 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
+@@ -1,6 +1,7 @@
+ package eu.kanade.tachiyomi.ui.extension
+ 
+ import android.content.pm.PackageInstaller
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.extension.ExtensionInstallerJob
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+@@ -27,7 +28,7 @@ typealias ExtensionIntallInfo = Pair<InstallStep, PackageInstaller.SessionInfo?>
+  * Presenter of [ExtensionBottomSheet].
+  */
+ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() {
+-    private var extensions = emptyList<ExtensionItem>()
++    private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
+ 
+     private var currentDownloads = hashMapOf<String, ExtensionIntallInfo>()
+ 
+@@ -39,15 +40,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+             val extensionJob =
+                 async {
+                     extensionManager.findAvailableExtensions()
+-                    extensions =
+-                        toItems(
+-                            Triple(
+-                                extensionManager.installedExtensionsFlow.value,
+-                                extensionManager.untrustedExtensionsFlow.value,
+-                                extensionManager.availableExtensionsFlow.value,
+-                            ),
+-                        )
+-                    withContext(Dispatchers.Main) { view?.setExtensions(extensions, false) }
++                    rebuildExtensions(updateController = false)
+                 }
+             val migrationJob = async { firstTimeMigration() }
+             listOf(migrationJob, extensionJob).awaitAll()
+@@ -60,19 +53,11 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+                             firstLoad = true
+                             currentDownloads.clear()
+                         }
+-                        extensions =
+-                            toItems(
+-                                Triple(
+-                                    extensionManager.installedExtensionsFlow.value,
+-                                    extensionManager.untrustedExtensionsFlow.value,
+-                                    extensionManager.availableExtensionsFlow.value,
+-                                ),
+-                            )
+-                        withContext(NonCancellable + Dispatchers.Main) { view?.setExtensions(extensions) }
++                        rebuildExtensions()
+                         return@collect
+                     }
+                     val extension =
+-                        extensions.find { item ->
++                        extensions.values.flatten().find { item ->
+                             it.first == item.extension.pkgName
+                         } ?: return@collect
+                     when (it.second.first) {
+@@ -93,20 +78,31 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+ 
+     fun refreshExtensions() {
+         presenterScope.launch {
+-            extensions =
+-                toItems(
+-                    Triple(
+-                        extensionManager.installedExtensionsFlow.value,
+-                        extensionManager.untrustedExtensionsFlow.value,
+-                        extensionManager.availableExtensionsFlow.value,
+-                    ),
+-                )
+-            withContext(Dispatchers.Main) { view?.setExtensions(extensions, false) }
++            rebuildExtensions(updateController = false)
++        }
++    }
++
++    private suspend fun rebuildExtensions(updateController: Boolean = true) {
++        val tuple =
++            Triple(
++                extensionManager.installedExtensionsFlow.value,
++                extensionManager.untrustedExtensionsFlow.value,
++                extensionManager.availableExtensionsFlow.value,
++            )
++        val rebuilt = ContentKind.entries.associateWith { kind -> toItems(tuple, kind) }
++        extensions = rebuilt
++        withContext(NonCancellable + Dispatchers.Main) {
++            ContentKind.entries.forEachIndexed { index, kind ->
++                view?.setExtensions(kind, rebuilt.getValue(kind), updateController && index == 0)
++            }
+         }
+     }
+ 
+     @Synchronized
+-    private fun toItems(tuple: ExtensionTuple): List<ExtensionItem> {
++    private fun toItems(
++        tuple: ExtensionTuple,
++        contentKind: ContentKind,
++    ): List<ExtensionItem> {
+         val context = view?.context ?: return emptyList()
+         val activeLangs = preferences.enabledLanguages().get()
+         val showNsfwSources = preferences.showNsfwSources().get()
+@@ -124,11 +120,11 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+             firstLoad = false
+         }
+ 
+-        val updatesSorted = installed.filter { it.hasUpdate && (showNsfwSources || !it.isNsfw) }.sortedBy { it.name }
++        val updatesSorted = installed.filter { contentKind.accepts(it) && it.hasUpdate && (showNsfwSources || !it.isNsfw) }.sortedBy { it.name }
+         val sortOrder = InstalledExtensionsOrder.fromPreference(preferences)
+         val installedSorted =
+             installed
+-                .filter { !it.hasUpdate && (showNsfwSources || !it.isNsfw) }
++                .filter { contentKind.accepts(it) && !it.hasUpdate && (showNsfwSources || !it.isNsfw) }
+                 .sortedWith(
+                     compareBy(
+                         { !it.isObsolete },
+@@ -147,11 +143,12 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+                         { it.name },
+                     ),
+                 )
+-        val untrustedSorted = untrusted.sortedBy { it.name }
++        val untrustedSorted = untrusted.filter(contentKind::accepts).sortedBy { it.name }
+         val availableSorted =
+             available
+                 // Filter out already installed extensions and disabled languages
+                 .filter { avail ->
++                    contentKind.accepts(avail) &&
+                     installed.none { it.pkgName == avail.pkgName } &&
+                         untrusted.none { it.pkgName == avail.pkgName } &&
+                         (avail.lang in activeLangs) &&
+@@ -206,7 +203,6 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+                 }
+         }
+ 
+-        this.extensions = items
+         return items
+     }
+ 
+@@ -218,22 +214,18 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         state: InstallStep?,
+         session: PackageInstaller.SessionInfo?,
+     ): ExtensionItem? {
+-        val extensions = extensions.toMutableList()
+-        val position = extensions.indexOfFirst { it.extension.pkgName == extension.pkgName }
+-
+-        return if (position != -1) {
+-            val item =
+-                extensions[position].copy(
+-                    installStep = state,
+-                    session = session,
+-                )
+-            extensions[position] = item
+-
+-            this.extensions = extensions
+-            item
+-        } else {
+-            null
++        var updatedItem: ExtensionItem? = null
++        ContentKind.entries.filter { it.accepts(extension) }.forEach { kind ->
++            val kindItems = extensions.getValue(kind).toMutableList()
++            val position = kindItems.indexOfFirst { it.extension.pkgName == extension.pkgName }
++            if (position != -1) {
++                val item = kindItems[position].copy(installStep = state, session = session)
++                kindItems[position] = item
++                extensions = extensions + (kind to kindItems)
++                updatedItem = updatedItem ?: item
++            }
+         }
++        return updatedItem
+     }
+ 
+     fun cancelExtensionInstall(extItem: ExtensionItem) {
+@@ -275,8 +267,8 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         installExtension(availableExt)
+     }
+ 
+-    fun updateAllPendingExtensions() {
+-        updateExtensions(extensionManager.installedExtensionsFlow.value.filter { it.hasUpdate })
++    fun updateAllPendingExtensions(contentKind: ContentKind) {
++        updateExtensions(extensionManager.installedExtensionsFlow.value.filter { contentKind.accepts(it) && it.hasUpdate })
+     }
+ 
+     fun updateExtensions(extensions: List<Extension.Installed>) {
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
+index 6254d5a0e8a1419e2161eb0f3b377627d0bf3c51..74faa5455f78a106ae3640dd9f65a3e80d3b5304 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
+@@ -12,6 +12,7 @@ import androidx.core.view.updatePaddingRelative
+ import androidx.recyclerview.widget.RecyclerView
+ import com.google.android.material.bottomsheet.BottomSheetBehavior
+ import com.google.android.material.tabs.TabLayout
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+@@ -64,16 +65,17 @@ class ExtensionBottomSheet
+         /**
+          * Adapter containing the list of extensions
+          */
+-        private var extAdapter: ExtensionAdapter? = null
++        private var mangaExtAdapter: ExtensionAdapter? = null
++        private var novelExtAdapter: ExtensionAdapter? = null
+         private var migAdapter: FlexibleAdapter<IFlexible<*>>? = null
+ 
+         val adapters
+-            get() = listOf(extAdapter, migAdapter)
++            get() = listOf(mangaExtAdapter, novelExtAdapter, migAdapter)
+ 
+         val presenter = ExtensionBottomPresenter()
+         var currentSourceTitle: String? = null
+ 
+-        private var extensions: List<ExtensionItem> = emptyList()
++        private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
+         var canExpand = false
+         private lateinit var binding: ExtensionsBottomSheetBinding
+ 
+@@ -82,8 +84,10 @@ class ExtensionBottomSheet
+ 
+         val extensionFrameLayout: RecyclerWithScrollerView?
+             get() = binding.pager.findViewWithTag("TabbedRecycler0") as? RecyclerWithScrollerView
+-        val migrationFrameLayout: RecyclerWithScrollerView?
++        val novelExtensionFrameLayout: RecyclerWithScrollerView?
+             get() = binding.pager.findViewWithTag("TabbedRecycler1") as? RecyclerWithScrollerView
++        val migrationFrameLayout: RecyclerWithScrollerView?
++            get() = binding.pager.findViewWithTag("TabbedRecycler2") as? RecyclerWithScrollerView
+ 
+         var isExpanding = false
+ 
+@@ -95,8 +99,11 @@ class ExtensionBottomSheet
+         fun onCreate(controller: BrowseController) {
+             // Initialize adapter, scroll listener and recycler views
+             presenter.attachView(this)
+-            extAdapter = ExtensionAdapter(this)
+-            extAdapter?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
++            mangaExtAdapter = ExtensionAdapter(this)
++            novelExtAdapter = ExtensionAdapter(this)
++            listOf(mangaExtAdapter, novelExtAdapter).forEach {
++                it?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
++            }
+             if (migAdapter == null) {
+                 migAdapter = SourceAdapter(this)
+             }
+@@ -111,6 +118,7 @@ class ExtensionBottomSheet
+                 val bottomBar = controller.activityBinding?.bottomNav
+                 val bottomH = bottomBar?.height ?: insets.getInsets(systemBars()).bottom
+                 extensionFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
++                novelExtensionFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
+                 migrationFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
+             }
+             binding.tabs.addOnTabSelectedListener(
+@@ -123,21 +131,25 @@ class ExtensionBottomSheet
+                         this@ExtensionBottomSheet.controller.updateTitleAndMenu()
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
++                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = true
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
++                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.requestLayout()
+                         sheetBehavior?.isDraggable = true
++                        updateExtUpdateAllButton()
+                     }
+ 
+                     override fun onTabUnselected(tab: TabLayout.Tab?) {
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
++                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = false
+-                        if (tab?.position == 1) {
++                        if (tab?.position == 2) {
+                             presenter.deselectSource()
+                         }
+                     }
+@@ -147,12 +159,14 @@ class ExtensionBottomSheet
+                         this@ExtensionBottomSheet.sheetBehavior?.expand()
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
++                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = true
+                         sheetBehavior?.isDraggable = true
+                         if (!isExpanding) {
+                             when (tab?.position) {
+                                 0 -> extensionFrameLayout
++                                1 -> novelExtensionFrameLayout
+                                 else -> migrationFrameLayout
+                             }?.binding?.recycler?.smoothScrollToTop()
+                         }
+@@ -176,7 +190,7 @@ class ExtensionBottomSheet
+         fun isOnView(view: View): Boolean = "TabbedRecycler${binding.pager.currentItem}" == view.tag
+ 
+         fun updatedNestedRecyclers() {
+-            listOf(extensionFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
++            listOf(extensionFrameLayout, novelExtensionFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
+                 recyclerWithScrollerBinding?.binding?.recycler?.isNestedScrollingEnabled = binding.pager.currentItem == index
+             }
+         }
+@@ -189,20 +203,18 @@ class ExtensionBottomSheet
+         }
+ 
+         fun updateAllPendingExtensions() {
+-            presenter.updateAllPendingExtensions()
++            presenter.updateAllPendingExtensions(selectedContentKind() ?: ContentKind.Manga)
+         }
+ 
+         fun updateExtTitle() {
+-            val extCount = presenter.getExtensionUpdateCount()
+-            if (extCount > 0) {
+-                binding.tabs.getTabAt(0)?.orCreateBadge
+-            } else {
+-                binding.tabs.getTabAt(0)?.removeBadge()
++            ContentKind.entries.forEachIndexed { index, kind ->
++                val extCount = extensions.getValue(kind).count { (it.extension as? Extension.Installed)?.hasUpdate == true }
++                if (extCount > 0) binding.tabs.getTabAt(index)?.orCreateBadge?.number = extCount else binding.tabs.getTabAt(index)?.removeBadge()
+             }
+         }
+ 
+         override fun onButtonClick(position: Int) {
+-            val extension = (extAdapter?.getItem(position) as? ExtensionItem)?.extension ?: return
++            val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
+             when (extension) {
+                 is Extension.Installed -> {
+                     if (!extension.hasUpdate) {
+@@ -222,7 +234,7 @@ class ExtensionBottomSheet
+ 
+         override fun onWebViewClick(position: Int) {
+             val extension =
+-                (extAdapter?.getItem(position) as? ExtensionItem)?.extension as? Extension.Available ?: return
++                (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension as? Extension.Available ?: return
+             val source = extension.sources.firstOrNull { it.baseUrl.isNotBlank() } ?: return
+             val activity = controller.activity ?: return
+             activity.startActivity(
+@@ -231,7 +243,7 @@ class ExtensionBottomSheet
+         }
+ 
+         override fun onCancelClick(position: Int) {
+-            val extension = (extAdapter?.getItem(position) as? ExtensionItem) ?: return
++            val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem) ?: return
+             presenter.cancelExtensionInstall(extension)
+         }
+ 
+@@ -262,20 +274,21 @@ class ExtensionBottomSheet
+                 presenter.preferences.installedExtensionsOrder().get(),
+             ) {
+                 presenter.preferences.installedExtensionsOrder().set(itemId)
+-                extAdapter?.installedSortOrder = itemId
++                selectedExtensionAdapter()?.installedSortOrder = itemId
+                 view.setText(InstalledExtensionsOrder.fromValue(itemId).nameRes)
+                 presenter.refreshExtensions()
+             }
+         }
+ 
+         private fun updateAllExtensions(position: Int) {
+-            val header = (extAdapter?.getSectionHeader(position)) as? ExtensionGroupItem ?: return
+-            val items = extAdapter?.getSectionItemPositions(header)
++            val adapter = selectedExtensionAdapter() ?: return
++            val header = (adapter.getSectionHeader(position)) as? ExtensionGroupItem ?: return
++            val items = adapter.getSectionItemPositions(header)
+             val extensions =
+                 items
+                     ?.mapNotNull {
+-                        val extItem = (extAdapter?.getItem(it) as? ExtensionItem) ?: return
+-                        val extension = (extAdapter?.getItem(it) as? ExtensionItem)?.extension ?: return
++                        val extItem = (adapter.getItem(it) as? ExtensionItem) ?: return
++                        val extension = (adapter.getItem(it) as? ExtensionItem)?.extension ?: return
+                         if ((extItem.installStep == null || extItem.installStep == InstallStep.Error) &&
+                             extension is Extension.Installed &&
+                             extension.hasUpdate
+@@ -293,9 +306,9 @@ class ExtensionBottomSheet
+             position: Int,
+         ): Boolean {
+             when (binding.tabs.selectedTabPosition) {
+-                0 -> {
++                0, 1 -> {
+                     val extension =
+-                        (extAdapter?.getItem(position) as? ExtensionItem)?.extension ?: return false
++                        (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return false
+                     if (extension is Extension.Installed) {
+                         openDetails(extension)
+                     } else if (extension is Extension.Untrusted) {
+@@ -320,8 +333,8 @@ class ExtensionBottomSheet
+         }
+ 
+         override fun onItemLongClick(position: Int) {
+-            if (binding.tabs.selectedTabPosition == 0) {
+-                val extension = (extAdapter?.getItem(position) as? ExtensionItem)?.extension ?: return
++            if (binding.tabs.selectedTabPosition < 2) {
++                val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
+                 if (extension is Extension.Installed || extension is Extension.Untrusted) {
+                     uninstallExtension(extension.name, extension.pkgName)
+                 }
+@@ -360,10 +373,11 @@ class ExtensionBottomSheet
+         }
+ 
+         fun setExtensions(
++            contentKind: ContentKind,
+             extensions: List<ExtensionItem>,
+             updateController: Boolean = true,
+         ) {
+-            this.extensions = extensions
++            this.extensions = this.extensions + (contentKind to extensions)
+             if (updateController) {
+                 controller.presenter.updateSources()
+             }
+@@ -398,25 +412,22 @@ class ExtensionBottomSheet
+         }
+ 
+         fun drawExtensions() {
+-            if (controller.extQuery.isNotBlank()) {
+-                extAdapter?.updateDataSet(
+-                    extensions.filter {
+-                        it.extension.name.contains(controller.extQuery, ignoreCase = true)
+-                    },
++            ContentKind.entries.forEach { kind ->
++                val items = extensions.getValue(kind)
++                extensionAdapter(kind)?.updateDataSet(
++                    if (controller.extQuery.isBlank()) items else items.filter { it.extension.name.contains(controller.extQuery, ignoreCase = true) },
+                 )
+-            } else {
+-                extAdapter?.updateDataSet(extensions)
+             }
+             updateExtTitle()
+             updateExtUpdateAllButton()
+         }
+ 
+         fun canStillGoBack(): Boolean =
+-            (binding.tabs.selectedTabPosition == 1 && migAdapter is MangaAdapter) ||
+-                (binding.tabs.selectedTabPosition == 0 && binding.sheetToolbar.hasExpandedActionView())
++            (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) ||
++                (binding.tabs.selectedTabPosition < 2 && binding.sheetToolbar.hasExpandedActionView())
+ 
+         fun canGoBack(): Boolean =
+-            if (binding.tabs.selectedTabPosition == 1 && migAdapter is MangaAdapter) {
++            if (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) {
+                 presenter.deselectSource()
+                 false
+             } else if (binding.sheetToolbar.hasExpandedActionView()) {
+@@ -427,21 +438,24 @@ class ExtensionBottomSheet
+             }
+ 
+         fun downloadUpdate(item: ExtensionItem) {
+-            extAdapter?.updateItem(item, item.installStep)
++            ContentKind.entries.filter { it.accepts(item.extension) }.forEach { kind ->
++                extensionAdapter(kind)?.updateItem(item, item.installStep)
++            }
+             updateExtUpdateAllButton()
+         }
+ 
+         private fun updateExtUpdateAllButton() {
++            val adapter = selectedExtensionAdapter() ?: return
+             val updateHeader =
+-                extAdapter?.headerItems?.find { it is ExtensionGroupItem && it.canUpdate != null } as? ExtensionGroupItem
++                adapter.headerItems.find { it is ExtensionGroupItem && it.canUpdate != null } as? ExtensionGroupItem
+                     ?: return
+-            val items = extAdapter?.getSectionItemPositions(updateHeader) ?: return
++            val items = adapter.getSectionItemPositions(updateHeader) ?: return
+             updateHeader.canUpdate =
+                 items.any {
+-                    val extItem = (extAdapter?.getItem(it) as? ExtensionItem) ?: return
++                    val extItem = (adapter.getItem(it) as? ExtensionItem) ?: return
+                     extItem.installStep == null || extItem.installStep == InstallStep.Error
+                 }
+-            extAdapter?.updateItem(updateHeader)
++            adapter.updateItem(updateHeader)
+         }
+ 
+         private fun trustExtension(
+@@ -474,7 +488,7 @@ class ExtensionBottomSheet
+         }
+ 
+         fun setCanInstallPrivately(installPrivately: Boolean) {
+-            extAdapter?.installPrivately = installPrivately
++            listOf(mangaExtAdapter, novelExtAdapter).forEach { it?.installPrivately = installPrivately }
+         }
+ 
+         fun onDestroy() {
+@@ -482,12 +496,13 @@ class ExtensionBottomSheet
+         }
+ 
+         private inner class TabbedSheetAdapter : RecyclerViewPagerAdapter() {
+-            override fun getCount(): Int = 2
++            override fun getCount(): Int = 3
+ 
+             override fun getPageTitle(position: Int): CharSequence =
+                 context.getString(
+                     when (position) {
+-                        0 -> R.string.extensions
++                        0 -> R.string.manga
++                        1 -> R.string.hayai_novels
+                         else -> R.string.migration
+                     },
+                 )
+@@ -554,4 +569,12 @@ class ExtensionBottomSheet
+                 return if (index == -1) POSITION_NONE else index
+             }
+         }
++
++        private fun selectedContentKind(): ContentKind? =
++            binding.tabs.selectedTabPosition.takeIf { it in 0..1 }?.let(ContentKind::fromPosition)
++
++        private fun extensionAdapter(kind: ContentKind): ExtensionAdapter? =
++            if (kind == ContentKind.Manga) mangaExtAdapter else novelExtAdapter
++
++        private fun selectedExtensionAdapter(): ExtensionAdapter? = selectedContentKind()?.let(::extensionAdapter)
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+index bcd738d89d1be22d29b907736f82ca50bec7e80a..79fac5430548f4dd01130da7f6c3669902be693a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+@@ -5,6 +5,8 @@ import android.content.Intent
+ import android.provider.Settings
+ import androidx.preference.PreferenceScreen
+ import androidx.preference.SwitchPreferenceCompat
++import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.notification.Notifications
+@@ -24,6 +26,7 @@ import uy.kohesive.injekt.injectLazy
+ 
+ class SettingsBrowseController : SettingsController() {
+     val sourceManager: SourceManager by injectLazy()
++    private val novelRepositories: NovelApkRepositoryRegistry by injectLazy()
+     var updatedExtNotifPref: SwitchPreferenceCompat? = null
+ 
+     override fun setupPreferenceScreen(screen: PreferenceScreen) =
+@@ -58,11 +61,20 @@ class SettingsBrowseController : SettingsController() {
+                 preference {
+                     key = "pref_edit_extension_repos"
+ 
+-                    val repoCount = preferences.extensionRepos().get().count()
++                    val repoCount = (preferences.extensionRepos().get() - novelRepositories.novelOnlyRepositoriesNow()).count()
+                     titleRes = R.string.extension_repos
+                     if (repoCount > 0) summary = context.resources.getQuantityString(R.plurals.num_repos, repoCount, repoCount)
+ 
+-                    onClick { router.pushController(RepoController().withFadeTransaction()) }
++                    onClick { router.pushController(RepoController(ContentKind.Manga).withFadeTransaction()) }
++                }
++                preference {
++                    key = "pref_edit_novel_extension_repos"
++
++                    val repoCount = novelRepositories.repositoriesNow().count()
++                    titleRes = R.string.hayai_novel_extension_repos
++                    if (repoCount > 0) summary = context.resources.getQuantityString(R.plurals.num_repos, repoCount, repoCount)
++
++                    onClick { router.pushController(RepoController(ContentKind.Novel).withFadeTransaction()) }
+                 }
+                 if (ExtensionManager.canAutoInstallUpdates()) {
+                     val intPref =
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
+index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9532951ba 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
+@@ -23,6 +23,8 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
+ import com.bluelinelabs.conductor.ControllerChangeType
+ import com.google.android.material.bottomsheet.BottomSheetBehavior
+ import com.google.android.material.snackbar.Snackbar
++import com.google.android.material.tabs.TabLayout
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+@@ -40,6 +42,7 @@ import eu.kanade.tachiyomi.ui.main.BottomSheetController
+ import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
+ import eu.kanade.tachiyomi.ui.main.MainActivity
+ import eu.kanade.tachiyomi.ui.main.RootSearchInterface
++import eu.kanade.tachiyomi.ui.main.TabbedInterface
+ import eu.kanade.tachiyomi.ui.setting.SettingsBrowseController
+ import eu.kanade.tachiyomi.ui.setting.SettingsSourcesController
+ import eu.kanade.tachiyomi.ui.source.browse.BrowseSourceController
+@@ -86,6 +89,7 @@ class BrowseController :
+     SourceAdapter.SourceListener,
+     RootSearchInterface,
+     FloatingSearchInterface,
++    TabbedInterface,
+     BottomSheetController {
+     /**
+      * Application preferences.
+@@ -126,6 +130,34 @@ class BrowseController :
+ 
+     val presenter = SourcePresenter(this)
+ 
++    private fun setupContentTabs(animate: Boolean) {
++        val tabs = activityBinding?.mainTabs ?: return
++        tabs.removeAllTabs()
++        tabs.clearOnTabSelectedListeners()
++        ContentKind.entries.forEach { kind ->
++            tabs.addTab(
++                tabs.newTab().setText(if (kind == ContentKind.Manga) R.string.manga else R.string.hayai_novels),
++                presenter.contentKind == kind,
++            )
++        }
++        tabs.addOnTabSelectedListener(
++            object : TabLayout.OnTabSelectedListener {
++                override fun onTabSelected(tab: TabLayout.Tab?) {
++                    presenter.selectContentKind(ContentKind.fromPosition(tab?.position ?: 0))
++                }
++
++                override fun onTabUnselected(tab: TabLayout.Tab?) = Unit
++
++                override fun onTabReselected(tab: TabLayout.Tab?) {
++                    binding.sourceRecycler.smoothScrollToPosition(0)
++                }
++            },
++        )
++        (activity as? MainActivity)?.showTabBar(true, animate)
++        activityBinding?.appBar?.useTabsInPreLayout = true
++        binding.sourceRecycler.requestApplyInsets()
++    }
++
+     override fun createBinding(inflater: LayoutInflater) = BrowseControllerBinding.inflate(inflater)
+ 
+     override fun onViewCreated(view: View) {
+@@ -184,6 +216,7 @@ class BrowseController :
+ 
+         requestFilePermissionsSafe(301, preferences)
+         binding.bottomSheet.root.onCreate(this)
++        setupContentTabs(false)
+ 
+         preferences
+             .extensionInstaller()
+@@ -304,14 +337,14 @@ class BrowseController :
+     }
+ 
+     private fun updateSheetMenu() {
++        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition < 2
+         binding.bottomSheet.sheetToolbar.title =
+-            if (binding.bottomSheet.tabs.selectedTabPosition != 0) {
++            if (!onExtensionTab) {
+                 binding.bottomSheet.root.currentSourceTitle
+                     ?: view?.context?.getString(R.string.source_migration)
+             } else {
+                 view?.context?.getString(R.string.extensions)
+             }
+-        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition == 0
+         if (binding.bottomSheet.sheetToolbar.menu
+                 .findItem(if (onExtensionTab) R.id.action_search else R.id.action_migration_guide) !=
+             null
+@@ -326,7 +359,7 @@ class BrowseController :
+         binding.bottomSheet.sheetToolbar.menu
+             .clear()
+         binding.bottomSheet.sheetToolbar.inflateMenu(
+-            if (binding.bottomSheet.tabs.selectedTabPosition == 0) {
++            if (onExtensionTab) {
+                 R.menu.extension_main
+             } else {
+                 R.menu.migration_main
+@@ -394,7 +427,8 @@ class BrowseController :
+                     router.pushController(SettingsBrowseController().withFadeTransaction())
+                 }
+                 R.id.action_ext_repos -> {
+-                    router.pushController(RepoController().withFadeTransaction())
++                    val kind = ContentKind.fromPosition(binding.bottomSheet.tabs.selectedTabPosition)
++                    router.pushController(RepoController(kind).withFadeTransaction())
+                 }
+             }
+             return@setOnMenuItemClickListener true
+@@ -490,6 +524,9 @@ class BrowseController :
+         binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+             bottomMargin = -pad.toInt()
+         }
++        binding.bottomSheet.root.novelExtensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
++            bottomMargin = -pad.toInt()
++        }
+         binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+             bottomMargin = -pad.toInt()
+         }
+@@ -607,7 +644,9 @@ class BrowseController :
+                 val searchView = searchItem.actionView as SearchView
+                 searchView.clearFocus()
+             }
++            (activity as? MainActivity)?.showTabBar(false)
+         } else {
++            setupContentTabs(true)
+             binding.bottomSheet.root.presenter
+                 .refreshMigrations()
+             updateTitleAndMenu()
+@@ -768,7 +807,7 @@ class BrowseController :
+     }
+ 
+     private fun performGlobalSearch(query: String) {
+-        router.pushController(GlobalSearchController(query).withFadeTransaction())
++        router.pushController(GlobalSearchController(query, contentKind = presenter.contentKind).withFadeTransaction())
+     }
+ 
+     /**
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+index f58ad1ee6ab4536b6e3bca0a24ab1250055cb536..8819c6af245e85c916e0d71a0a646784b028089a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.source
+ import android.content.res.ColorStateList
+ import android.view.View
+ import androidx.core.view.isVisible
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.databinding.SourceItemBinding
+@@ -68,6 +69,7 @@ class SourceHolder(
+             when {
+                 icon != null -> binding.sourceImage.setImageDrawable(icon)
+                 item.source.id == LocalSource.ID -> binding.sourceImage.setImageResource(R.mipmap.ic_local_source)
++                item.source.id == LocalNovelSource.ID -> binding.sourceImage.setImageResource(R.drawable.ic_local_novel_source)
+             }
+         }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt
+index 3b01f6c906044a337801aeb7fcf29afcbd556b0c..ac8079e72188ea598a79b9eea10e9cb628fb4714 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt
+@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.source
+ 
+ import android.view.View
+ import androidx.recyclerview.widget.RecyclerView
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.AbstractSectionableItem
+ import eu.davidea.flexibleadapter.items.IFlexible
+@@ -25,7 +26,11 @@ class SourceItem(
+      */
+     override fun getLayoutRes(): Int = R.layout.source_item
+ 
+-    override fun isSwipeable(): Boolean = source.id != LocalSource.ID && header != null && header.code != SourcePresenter.LAST_USED_KEY
++    override fun isSwipeable(): Boolean =
++        source.id != LocalSource.ID &&
++            source.id != LocalNovelSource.ID &&
++            header != null &&
++            header.code != SourcePresenter.LAST_USED_KEY
+ 
+     /**
+      * Creates a new view holder for this item.
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt
+index 9530de7996c7bca7b6c7dcc20b50a1bcc4abf704..680e1acc1bff43f12faf0c10576f2a7136d99ea5 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt
+@@ -1,10 +1,13 @@
+ package eu.kanade.tachiyomi.ui.source
+ 
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.source.CatalogueSource
+ import eu.kanade.tachiyomi.source.LocalSource
+ import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.source.isNovelSource
+ import eu.kanade.tachiyomi.util.system.withUIContext
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+@@ -31,15 +34,18 @@ class SourcePresenter(
+     private val preferences: PreferencesHelper = Injekt.get(),
+ ) {
+     private var scope = CoroutineScope(Job() + Dispatchers.Default)
++    var contentKind: ContentKind = ContentKind.Manga
++        private set
+     var sources = getEnabledSources()
+ 
+     var sourceItems = emptyList<SourceItem>()
+     var lastUsedItem: SourceItem? = null
+ 
++    private var sourceLoadJob: Job? = null
+     var lastUsedJob: Job? = null
+ 
+     fun onCreate() {
+-        if (lastSources != null) {
++        if (lastSources != null && lastContentKind == contentKind) {
+             if (sourceItems.isEmpty()) {
+                 sourceItems = lastSources ?: emptyList()
+             }
+@@ -56,7 +62,9 @@ class SourcePresenter(
+      * Unsubscribe and create a new subscription to fetch enabled sources.
+      */
+     private fun loadSources() {
+-        scope.launch {
++        sourceLoadJob?.cancel()
++        sourceLoadJob = scope.launch {
++            val enabledSources = sources
+             val pinnedSources = mutableListOf<SourceItem>()
+             val pinnedCatalogues = preferences.pinnedCatalogues().get()
+ 
+@@ -69,7 +77,7 @@ class SourcePresenter(
+                         else -> d1.compareTo(d2)
+                     }
+                 }
+-            val byLang = sources.groupByTo(map) { it.lang }
++            val byLang = enabledSources.groupByTo(map) { it.lang }
+             sourceItems =
+                 byLang.flatMap {
+                     val langItem = LangItem(it.key)
+@@ -112,6 +120,7 @@ class SourcePresenter(
+ 
+     private fun getLastUsedSource(value: Long): SourceItem? =
+         (sourceManager.get(value) as? CatalogueSource)?.let { source ->
++            if (!contentKind.accepts(source.isNovelSource())) return@let null
+             val pinnedCatalogues = preferences.pinnedCatalogues().get()
+             val isPinned = source.id.toString() in pinnedCatalogues
+             if (isPinned) {
+@@ -126,9 +135,16 @@ class SourcePresenter(
+         loadSources()
+     }
+ 
++    fun selectContentKind(kind: ContentKind) {
++        if (contentKind == kind) return
++        contentKind = kind
++        updateSources()
++    }
++
+     fun onDestroy() {
+         lastSources = sourceItems
+         lastUsedItemRem = lastUsedItem
++        lastContentKind = contentKind
+     }
+ 
+     /**
+@@ -142,7 +158,8 @@ class SourcePresenter(
+ 
+         return sourceManager
+             .getDiscoverableCatalogueSources()
+-            .filter { it.lang in languages || it.id == LocalSource.ID }
++            .filter { it.lang in languages || it.id == LocalSource.ID || it.id == LocalNovelSource.ID }
++            .filter { contentKind.accepts(it.isNovelSource()) }
+             .filterNot { it.id.toString() in hiddenCatalogues }
+             .sortedBy { "(${it.lang}) ${it.name}" }
+     }
+@@ -153,10 +170,12 @@ class SourcePresenter(
+ 
+         private var lastSources: List<SourceItem>? = null
+         private var lastUsedItemRem: SourceItem? = null
++        private var lastContentKind: ContentKind? = null
+ 
+         fun onLowMemory() {
+             lastSources = null
+             lastUsedItemRem = null
++            lastContentKind = null
+         }
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
+index 6cb8b4ec50ea0e1128832f0a8421a871d63ae77c..9cc032c277ec67ecb22d79390fbd978af7c18e42 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
+@@ -7,6 +7,7 @@ import androidx.core.net.toUri
+ import androidx.recyclerview.widget.LinearLayoutManager
+ import com.google.android.material.snackbar.BaseTransientBottomBar
+ import com.google.android.material.snackbar.Snackbar
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.databinding.CategoriesControllerBinding
+@@ -35,6 +36,12 @@ class RepoController(
+         },
+     )
+ 
++    constructor(contentKind: ContentKind) : this(
++        Bundle().apply { putString(CONTENT_KIND, contentKind.name) },
++    )
++
++    private val contentKind = bundle?.getString(CONTENT_KIND)?.let(ContentKind::valueOf) ?: ContentKind.Manga
++
+     /**
+      * URL to prefill into the "create repo" row once the list is first shown, awaiting the
+      * user's confirmation rather than being added automatically.
+@@ -54,12 +61,13 @@ class RepoController(
+     /**
+      * Creates the presenter for this controller. Not to be manually called.
+      */
+-    private val presenter = RepoPresenter(this)
++    private val presenter = RepoPresenter(this, contentKind)
+ 
+     /**
+      * Returns the toolbar title to show when this controller is attached.
+      */
+-    override fun getTitle(): String? = resources?.getString(R.string.extension_repos)
++    override fun getTitle(): String? =
++        resources?.getString(if (contentKind == ContentKind.Novel) R.string.hayai_novel_extension_repos else R.string.extension_repos)
+ 
+     override fun createBinding(inflater: LayoutInflater) = CategoriesControllerBinding.inflate(inflater)
+ 
+@@ -259,5 +267,6 @@ class RepoController(
+ 
+     companion object {
+         const val REPO_URL = "repo_url"
++        const val CONTENT_KIND = "content_kind"
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
+index 6abf504cf9c6f8c86ea5f7e7b14f2f331fd572ac..c23b5878d9ee8f65b5d5c3cab2ff63091bb23cf2 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
+@@ -1,5 +1,7 @@
+ package eu.kanade.tachiyomi.ui.source.browse.repos
+ 
++import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.api.ExtensionApi
+ import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
+@@ -17,7 +19,9 @@ import kotlin.coroutines.cancellation.CancellationException
+  */
+ class RepoPresenter(
+     private val controller: RepoController,
++    private val contentKind: ContentKind,
+     private val preferences: PreferencesHelper = Injekt.get(),
++    private val novelRepositories: NovelApkRepositoryRegistry = Injekt.get(),
+ ) : BaseCoroutinePresenter<RepoController>() {
+     private var scope = CoroutineScope(Job() + Dispatchers.Default)
+ 
+@@ -25,14 +29,36 @@ class RepoPresenter(
+      * List containing repos, keyed by their literal index URL (whatever the user entered or a
+      * repo.json pointer resolved to) - no filename or path pattern is assumed.
+      */
+-    private var repos: Set<String>
++    private val repos: Set<String>
+         get() =
+             preferences
+                 .extensionRepos()
+                 .get()
++                .let { all ->
++                    if (contentKind == ContentKind.Novel) {
++                        all.intersect(novelRepositories.repositoriesNow())
++                    } else {
++                        all - novelRepositories.novelOnlyRepositoriesNow()
++                    }
++                }
+                 .sorted()
+                 .toSet()
+-        set(value) = preferences.extensionRepos().set(value)
++
++    private suspend fun addRepo(url: String) {
++        if (contentKind == ContentKind.Novel) {
++            novelRepositories.add(url)
++        } else {
++            novelRepositories.addMangaOwnership(url)
++        }
++    }
++
++    private suspend fun removeRepo(url: String) {
++        if (contentKind == ContentKind.Novel) {
++            novelRepositories.remove(url)
++        } else {
++            novelRepositories.removeMangaOwnership(url)
++        }
++    }
+ 
+     /**
+      * Called when the presenter is created.
+@@ -64,8 +90,8 @@ class RepoPresenter(
+             try {
+                 val resolvedUrl = ExtensionApi().validateRepo(repo)
+                 if (resolvedUrl != repo) {
+-                    repos -= repo
+-                    repos += resolvedUrl
++                    removeRepo(repo)
++                    addRepo(resolvedUrl)
+                 }
+             } catch (e: CancellationException) {
+                 throw e
+@@ -133,10 +159,10 @@ class RepoPresenter(
+             try {
+                 val resolvedUrl = ExtensionApi().validateRepo(newName)
+                 oldRepo?.let {
+-                    repos -= it
+-                    preferences.extensionRepoMetadata().set(preferences.extensionRepoMetadata().get() - it)
++                    removeRepo(it)
++                    removeMetadataIfUnreferenced(it)
+                 }
+-                repos += resolvedUrl
++                addRepo(resolvedUrl)
+                 // validateRepo() above already fetched and saved metadata for resolvedUrl, but
+                 // re-fetching it fresh (mirroring what getRepos() does) is what reliably
+                 // surfaces it. Done before onResult so the row keeps its loading spinner
+@@ -162,9 +188,17 @@ class RepoPresenter(
+      */
+     fun deleteRepo(repo: String?) {
+         val safeRepo = repo ?: return
+-        repos -= safeRepo
+-        preferences.extensionRepoMetadata().set(preferences.extensionRepoMetadata().get() - safeRepo)
+-        controller.updateRepos()
++        scope.launch(Dispatchers.IO) {
++            removeRepo(safeRepo)
++            removeMetadataIfUnreferenced(safeRepo)
++            withContext(Dispatchers.Main) { controller.updateRepos() }
++        }
++    }
++
++    private fun removeMetadataIfUnreferenced(repo: String) {
++        if (preferences.extensionRepos().get().none { it.equals(repo, true) }) {
++            preferences.extensionRepoMetadata().set(preferences.extensionRepoMetadata().get() - repo)
++        }
+     }
+ 
+     /**
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt
+index 47de489372e3c276aa89a2a39b03023206cbecda..3143e6f276350daa0a753f360d9db0e956318c4f 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt
+@@ -11,6 +11,7 @@ import androidx.core.view.updatePaddingRelative
+ import com.bluelinelabs.conductor.ControllerChangeHandler
+ import com.bluelinelabs.conductor.ControllerChangeType
+ import com.google.android.material.snackbar.Snackbar
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+@@ -41,6 +42,7 @@ import uy.kohesive.injekt.injectLazy
+ open class GlobalSearchController(
+     protected val initialQuery: String? = null,
+     val extensionFilter: String? = null,
++    val contentKind: ContentKind? = null,
+     bundle: Bundle? = null,
+ ) : BaseCoroutineController<SourceGlobalSearchControllerBinding, GlobalSearchPresenter>(bundle),
+     SearchControllerInterface,
+@@ -75,7 +77,7 @@ open class GlobalSearchController(
+ 
+     override fun getSearchTitle(): String? = customTitle ?: presenter.query
+ 
+-    override val presenter = GlobalSearchPresenter(initialQuery, extensionFilter)
++    override val presenter = GlobalSearchPresenter(initialQuery, extensionFilter, contentKind = contentKind)
+ 
+     override fun onTitleClick(position: Int) {
+         val source = adapter?.getItem(position)?.source ?: return
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
+index 734a6f437e2f7d9a690c9b546e9f8990b578f2f4..34692a4cc92dec9f3ed861d6007b423a3b320f01 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
+@@ -1,5 +1,7 @@
+ package eu.kanade.tachiyomi.ui.source.globalsearch
+ 
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import eu.kanade.tachiyomi.data.cache.CoverCache
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Manga
+@@ -7,8 +9,10 @@ import eu.kanade.tachiyomi.data.download.DownloadManager
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.source.CatalogueSource
++import eu.kanade.tachiyomi.source.LocalSource
+ import eu.kanade.tachiyomi.source.Source
+ import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.source.isNovelSource
+ import eu.kanade.tachiyomi.source.model.MangasPage
+ import eu.kanade.tachiyomi.source.model.SManga
+ import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
+@@ -42,6 +46,7 @@ open class GlobalSearchPresenter(
+     private val initialQuery: String? = "",
+     private val initialExtensionFilter: String? = null,
+     private val sourcesToUse: List<CatalogueSource>? = null,
++    private val contentKind: ContentKind? = null,
+     val sourceManager: SourceManager = Injekt.get(),
+     val db: DatabaseHelper = Injekt.get(),
+     private val preferences: PreferencesHelper = Injekt.get(),
+@@ -97,7 +102,8 @@ open class GlobalSearchPresenter(
+         val list =
+             sourceManager
+                 .getDiscoverableCatalogueSources()
+-                .filter { it.lang in languages }
++                .filter { it.lang in languages || it.id == LocalSource.ID || it.id == LocalNovelSource.ID }
++                .filter { contentKind?.accepts(it.isNovelSource()) != false }
+                 .filterNot { it.id.toString() in hiddenCatalogues }
+                 .sortedBy { "(${it.lang}) ${it.name}" }
+ 
+@@ -123,6 +129,7 @@ open class GlobalSearchPresenter(
+                 .flatMap { it.sources }
+                 .filter { it.lang in languages }
+                 .filterIsInstance<CatalogueSource>()
++                .filter { contentKind?.accepts(it.isNovelSource()) != false }
+ 
+         if (filterSources.isEmpty()) {
+             return enabledSources
+diff --git a/app/src/main/res/drawable/ic_local_novel_source.xml b/app/src/main/res/drawable/ic_local_novel_source.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..ee13fa6c2def6431ac8272ee696703910b00e86e
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_local_novel_source.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="48dp"
++    android:height="48dp"
++    android:viewportWidth="48"
++    android:viewportHeight="48">
++    <path
++        android:fillColor="#C2184B"
++        android:pathData="M24,2A22,22 0,1 0,24 46A22,22 0,1 0,24 2" />
++    <path
++        android:fillColor="#FFFFFF"
++        android:pathData="M12,12C16.8,11.2 20.6,12.2 24,15C27.4,12.2 31.2,11.2 36,12V34C31.5,33.3 27.7,34.4 24,37C20.3,34.4 16.5,33.3 12,34ZM15,16V30.7C18,30.6 20.5,31.3 22,32.3V18.1C20.2,16.5 17.9,15.8 15,16ZM33,16C30.1,15.8 27.8,16.5 26,18.1V32.3C27.5,31.3 30,30.6 33,30.7Z" />
++</vector>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index c72ead3a76db2b4d8348ff4052a66d09e9311375..0bac9fee8e5c2738541a20e9ace0057ecc454e57 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -328,6 +328,8 @@
+     <string name="no_results_found">No results found</string>
+     <string name="local_source">Local source</string>
+     <string name="local_novel_source">Local novels</string>
++    <string name="hayai_novels">Novels</string>
++    <string name="hayai_novel_extension_repos">Novel extension repositories</string>
+     <string name="other">Other</string>
+     <string name="global_search">Global search…</string>
+     <string name="label_global_search">Global search</string>
+-- 
+2.54.0.windows.1
+

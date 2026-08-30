@@ -1,0 +1,3065 @@
+From bc3e141ded2dfd707c614f5b3b8c3e329e3543fc Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 04:09:33 +0300
+Subject: [PATCH] Complete enhanced source page previews
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/domain/EhModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/domain/EhModels.kt
+index 3536d35de77218f2a4cc49e40eba24c7c38df770..df3099c004e3b837a82786180f28bc8d026bdda6 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/domain/EhModels.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/domain/EhModels.kt
+@@ -209,6 +209,13 @@ data class EhPagePreview(
+     }
+ }
+ 
++data class EhPreviewPage(
++    val page: Int,
++    val previews: List<EhPagePreview>,
++    val hasNextPage: Boolean,
++    val totalPages: Int?,
++)
++
+ data class EhPreviewCrop(
+     val x: Int,
+     val y: Int,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
+index 0c46aa91a50670b00aabddccd627ba2a047bdc33..4768b35c7e382073f891ef0349a4042212464a76 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
+@@ -8,6 +8,7 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryMetadata
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryPage
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhPageBatch
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhPagePreview
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhPreviewPage
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhPreviewCrop
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhResolvedImage
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhRevision
+@@ -34,36 +35,58 @@ object EhHtmlParser {
+         location: String,
+         site: EhSite,
+         maxItems: Int = 40,
+-    ): List<EhPagePreview> {
++    ): List<EhPagePreview> = parsePreviewPage(html, location, site, maxItems).previews
++
++    fun parsePreviewPage(
++        html: String,
++        location: String,
++        site: EhSite,
++        maxItems: Int = 100,
++    ): EhPreviewPage {
+         require(maxItems in 1..100)
+         val document = parseDocument(html, location)
+         validateLocation(location, site)
+         guard(document)
+-        return document
+-            .select("#gdt .gdtm, #gdt .gdtl")
+-            .take(maxItems)
+-            .mapIndexedNotNull { index, cell ->
++        val listingPage = runCatching { URI(location).query.orEmpty().split('&').firstOrNull { it.startsWith("p=") }?.substringAfter('=')?.toInt() }.getOrNull() ?: 0
++        val cells = document.select("#gdt .gdtm, #gdt .gdtl")
++        if (cells.size > maxItems) throw EhFailure.BoundsExceeded("E-Hentai preview page exceeds $maxItems entries")
++        val previews = cells
++            .mapNotNull { cell ->
+                 val link = cell.selectFirst("a[href]")?.absUrl("href").orEmpty()
+-                if (!link.startsWith("https://")) return@mapIndexedNotNull null
++                if (!link.startsWith("https://")) return@mapNotNull null
++                val index = previewIndex(cell, link) ?: return@mapNotNull null
+                 val image = cell.selectFirst("img[src], img[data-src]")
+                 val direct = image?.absUrl(if (image.hasAttr("data-src")) "data-src" else "src").orEmpty()
+                 if (direct.startsWith("https://")) {
+-                    return@mapIndexedNotNull EhPagePreview(index + 1, link, direct)
++                    return@mapNotNull runCatching { EhPagePreview(index, link, direct) }.getOrNull()
+                 }
+                 val sprite = cell.select("div[style]").firstOrNull { it.attr("style").contains("url(", ignoreCase = true) }
+-                    ?: return@mapIndexedNotNull null
++                    ?: return@mapNotNull null
+                 val style = sprite.attr("style")
+                 val imageUrl = STYLE_URL.find(style)?.groupValues?.get(1)?.trim('\'', '"')?.let { sprite.absUrlFromStyle(it) }
+-                    ?: return@mapIndexedNotNull null
+-                val width = STYLE_WIDTH.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapIndexedNotNull null
+-                val height = STYLE_HEIGHT.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapIndexedNotNull null
++                    ?: return@mapNotNull null
++                val width = STYLE_WIDTH.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
++                val height = STYLE_HEIGHT.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
+                 val position = STYLE_POSITION.find(style)
+                 val x = position?.groupValues?.get(1)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
+                 val y = position?.groupValues?.get(2)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
+-                runCatching { EhPagePreview(index + 1, link, imageUrl, EhPreviewCrop(x, y, width, height)) }.getOrNull()
++                runCatching { EhPagePreview(index, link, imageUrl, EhPreviewCrop(x, y, width, height)) }.getOrNull()
+             }
++        val navigation = document.select("table.ptt td")
++        val totalPages = navigation.mapNotNull { it.text().trim().toIntOrNull() }.maxOrNull()
++        val hasNext = when {
++            totalPages != null -> listingPage + 1 < totalPages
++            navigation.isNotEmpty() -> !navigation.last().hasClass("ptdd")
++            else -> false
++        }
++        return EhPreviewPage(listingPage, previews, hasNext, totalPages)
+     }
+ 
++    private fun previewIndex(cell: Element, pageUrl: String): Int? =
++        cell.selectFirst("img[alt]")?.attr("alt")?.trim()?.toIntOrNull()
++            ?: cell.selectFirst("[title^=Page]")?.attr("title")?.removePrefix("Page")?.trim()?.substringBefore(':')?.toIntOrNull()
++            ?: PAGE_URL_INDEX.find(pageUrl)?.groupValues?.get(1)?.toIntOrNull()
++
+     private fun org.jsoup.nodes.Element.absUrlFromStyle(value: String): String =
+         runCatching { java.net.URI(baseUri()).resolve(value).toString() }.getOrDefault("").takeIf { it.startsWith("https://") }.orEmpty()
+ 
+@@ -71,6 +94,7 @@ object EhHtmlParser {
+     private val STYLE_WIDTH = Regex("width\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
+     private val STYLE_HEIGHT = Regex("height\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
+     private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)px\\s+(-?\\d+)px", RegexOption.IGNORE_CASE)
++    private val PAGE_URL_INDEX = Regex("-(\\d+)(?:[/?#]|$)")
+ 
+     fun parseBrowse(
+         html: String,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
+index f667a1daf5c5f29de9042678dbdd71cc28d45f7d..007417f0e9a239e41e6a9141d7c7761381edb3a5 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
+@@ -5,7 +5,7 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhDetailsPage
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryPage
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhResolvedImage
+-import dev.ahmedmohamed.hayai.adult.eh.domain.EhPagePreview
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhPreviewPage
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhRevision
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchCursor
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchSpec
+@@ -84,10 +84,10 @@ class EhHttpGateway(
+         site: EhSite,
+         key: GalleryKey,
+         page: Int = 0,
+-    ): List<EhPagePreview> {
++    ): EhPreviewPage {
+         require(page in 0..199)
+         val url = site.baseUrl + key.normalizedPath + "&p=$page"
+-        return getDocument(site, url) { html, location -> EhHtmlParser.parsePreviews(html, location, site) }
++        return getDocument(site, url) { html, location -> EhHtmlParser.parsePreviewPage(html, location, site) }
+     }
+ 
+     fun imageRequest(site: EhSite, imageUrl: String): Request = request(site, imageUrl)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
+index 12dd0ed7ad32b06cda51547293193c1be06a5352..c5285b4c2dab2610e3055c79c0ef604d681ffb34 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
+@@ -1,20 +1,18 @@
+ package dev.ahmedmohamed.hayai.adult.eh.ui
+ 
+ import android.graphics.Bitmap
+-import android.graphics.BitmapFactory
+ import android.graphics.BitmapRegionDecoder
+ import android.graphics.Rect
+-import dev.ahmedmohamed.hayai.adult.eh.domain.EhPagePreview
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
+ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewProvider
+-import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreview
+-import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
++import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
++import dev.ahmedmohamed.hayai.source.preview.SourcePreviewCrop
++import dev.ahmedmohamed.hayai.source.preview.SourcePreviewPage
+ import eu.kanade.tachiyomi.data.database.models.Manga
+-import kotlinx.coroutines.CancellationException
+ import okhttp3.CacheControl
+ import java.io.ByteArrayOutputStream
+ 
+@@ -28,110 +26,65 @@ class EhDetailsPreviewLoader(
+             ehPreferences.enhancedView.get() &&
+             EhSite.entries.any { it.sourceId == manga.source }
+ 
+-    override suspend fun load(
+-        manga: Manga,
+-        page: Int,
+-        cacheControl: CacheControl?,
+-    ): SourceRenderedPreviewPage {
++    override suspend fun load(manga: Manga, page: Int, cacheControl: CacheControl?): SourcePreviewPage {
+         require(page in 1..MAX_LISTING_PAGES)
+-        val site = EhSite.entries.firstOrNull { it.sourceId == manga.source }
+-            ?: error("The E-Hentai source is unavailable")
+-        val previews = gateway.previews(site, GalleryKey.parse(manga.url), page - 1).take(PREVIEWS_PER_PAGE)
+-        val spriteBytes = mutableMapOf<String, ByteArray>()
+-        var spriteByteCount = 0L
+-        var decodedByteCount = 0L
+-        val rendered = mutableListOf<SourceRenderedPreview>()
+-        try {
+-            previews.forEach { preview ->
+-                try {
+-                    val bytes =
+-                        if (preview.crop != null) {
+-                            spriteBytes[preview.imageUrl] ?: download(site, preview.imageUrl, cacheControl).also {
+-                                spriteByteCount += it.size
+-                                require(spriteByteCount <= MAX_ENCODED_SPRITE_BYTES) { "Preview sprites exceeded the memory budget" }
+-                                spriteBytes[preview.imageUrl] = it
+-                            }
+-                        } else {
+-                            download(site, preview.imageUrl, cacheControl)
+-                        }
+-                    val bitmap = decode(bytes, preview)
+-                    decodedByteCount += bitmap.byteCount
+-                    if (decodedByteCount > MAX_DECODED_BYTES_PER_PAGE) {
+-                        bitmap.recycle()
+-                        error("Preview page exceeded the decoded bitmap budget")
+-                    }
+-                    rendered += SourceRenderedPreview(preview.index, preview.pageUrl, bitmap)
+-                } catch (cancelled: CancellationException) {
+-                    throw cancelled
+-                } catch (_: Exception) {
+-                    // One malformed or unavailable thumbnail must not hide the usable previews.
+-                }
+-            }
+-        } catch (failure: Throwable) {
+-            rendered.forEach { if (!it.bitmap.isRecycled) it.bitmap.recycle() }
+-            throw failure
+-        }
+-        val hasNext = previews.size == PREVIEWS_PER_PAGE && page < MAX_LISTING_PAGES
+-        return SourceRenderedPreviewPage(page, rendered, hasNext, if (hasNext) page + 1 else page)
++        val result = gateway.previews(site(manga), GalleryKey.parse(manga.url), page - 1)
++        return SourcePreviewPage(
++            page = page,
++            previews = result.previews.map { preview ->
++                SourcePagePreview(
++                    index = preview.index,
++                    imageUrl = preview.imageUrl,
++                    pageUrl = preview.pageUrl,
++                    crop = preview.crop?.let { SourcePreviewCrop(it.x, it.y, it.width, it.height) },
++                )
++            },
++            hasNextPage = result.hasNextPage,
++            totalPages = result.totalPages,
++        )
+     }
+ 
+-    private suspend fun download(
+-        site: EhSite,
+-        url: String,
++    override suspend fun loadImage(
++        manga: Manga,
++        preview: SourcePagePreview,
+         cacheControl: CacheControl?,
+     ): ByteArray {
+-        val request = gateway.imageRequest(site, url).newBuilder().apply {
+-            cacheControl?.let { cacheControl(it) }
++        val request = gateway.imageRequest(site(manga), preview.imageUrl).newBuilder().apply {
++            cacheControl?.let(::cacheControl)
+         }.build()
+-        return gateway.executeImage(request).use { response ->
++        val bytes = gateway.executeImage(request).use { response ->
+             val declared = response.body.contentLength()
+             require(declared < 0 || declared <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
+             response.body.byteStream().readBytesBounded(MAX_IMAGE_BYTES)
+         }
+-    }
+-
+-    @Suppress("DEPRECATION")
+-    private fun decode(
+-        bytes: ByteArray,
+-        preview: EhPagePreview,
+-    ): Bitmap {
+-        val crop = preview.crop
+-        if (crop != null) {
+-            val decoder = requireNotNull(BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)) {
+-                "Preview sprite could not be decoded"
+-            }
+-            return decoder.useCompat {
+-                require(it.width in 1..MAX_SOURCE_DIMENSION && it.height in 1..MAX_SOURCE_DIMENSION)
+-                require(crop.x + crop.width <= it.width && crop.y + crop.height <= it.height) {
+-                    "Preview crop is outside the sprite"
+-                }
+-                requireNotNull(
+-                    it.decodeRegion(
+-                        Rect(crop.x, crop.y, crop.x + crop.width, crop.y + crop.height),
+-                        decodeOptions(sampleSize(crop.width, crop.height)),
+-                    ),
+-                ) { "Preview sprite region could not be decoded" }
+-            }
++        val crop = preview.crop ?: return bytes
++        val decoder = requireNotNull(BitmapRegionDecoder.newInstance(bytes, 0, bytes.size, false)) {
++            "Preview sprite could not be decoded"
+         }
+-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+-        require(bounds.outWidth in 1..MAX_SOURCE_DIMENSION && bounds.outHeight in 1..MAX_SOURCE_DIMENSION) {
+-            "Preview image dimensions are invalid"
++        return try {
++            require(crop.x + crop.width <= decoder.width && crop.y + crop.height <= decoder.height) {
++                "Preview crop is outside the sprite"
++            }
++            requireNotNull(
++                decoder.decodeRegion(Rect(crop.x, crop.y, crop.x + crop.width, crop.y + crop.height), null),
++            ) { "Preview sprite region could not be decoded" }.useBytes()
++        } finally {
++            @Suppress("DEPRECATION")
++            decoder.recycle()
+         }
+-        return requireNotNull(
+-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions(sampleSize(bounds.outWidth, bounds.outHeight))),
+-        ) { "Preview image could not be decoded" }
+     }
+ 
+-    private fun sampleSize(width: Int, height: Int): Int {
+-        var sample = 1
+-        while (width / sample > MAX_RENDER_DIMENSION || height / sample > MAX_RENDER_DIMENSION) sample *= 2
+-        return sample
+-    }
++    private fun site(manga: Manga): EhSite =
++        EhSite.entries.firstOrNull { it.sourceId == manga.source }
++            ?: error("The E-Hentai source is unavailable")
+ 
+-    private fun decodeOptions(sample: Int) = BitmapFactory.Options().apply {
+-        inSampleSize = sample
+-        inPreferredConfig = Bitmap.Config.RGB_565
++    private fun Bitmap.useBytes(): ByteArray = try {
++        ByteArrayOutputStream().use { output ->
++            check(compress(Bitmap.CompressFormat.JPEG, 92, output)) { "Preview crop could not be encoded" }
++            output.toByteArray()
++        }
++    } finally {
++        recycle()
+     }
+ 
+     private fun java.io.InputStream.readBytesBounded(limit: Long): ByteArray {
+@@ -148,23 +101,8 @@ class EhDetailsPreviewLoader(
+         return output.toByteArray()
+     }
+ 
+-    @Suppress("DEPRECATION")
+-    private inline fun <T> BitmapRegionDecoder.useCompat(block: (BitmapRegionDecoder) -> T): T =
+-        try {
+-            block(this)
+-        } finally {
+-            recycle()
+-        }
+-
+     private companion object {
+-        // E-Hentai's gallery preview endpoint is itself paginated in 20-item pages.
+-        // Keep that boundary intact so moving to the next UI page never skips thumbnails.
+-        const val PREVIEWS_PER_PAGE = 20
+         const val MAX_LISTING_PAGES = 200
+-        const val MAX_IMAGE_BYTES = 4L * 1024L * 1024L
+-        const val MAX_ENCODED_SPRITE_BYTES = 12L * 1024L * 1024L
+-        const val MAX_DECODED_BYTES_PER_PAGE = 16L * 1024L * 1024L
+-        const val MAX_SOURCE_DIMENSION = 16_384
+-        const val MAX_RENDER_DIMENSION = 512
++        const val MAX_IMAGE_BYTES = 12L * 1024L * 1024L
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
+index 068d2a534d56700e78d397f89628d456704a191e..86785e4b9abb2c361dd47ff86059cb29e4dc5e9f 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
+@@ -11,6 +11,8 @@ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+ 
+ object ReaderLauncher {
++    const val EXTRA_INITIAL_PAGE = "dev.ahmedmohamed.hayai.reader.INITIAL_PAGE"
++
+     fun isNovel(
+         manga: Manga,
+         sourceManager: SourceManager = Injekt.get(),
+@@ -27,4 +29,23 @@ object ReaderLauncher {
+         } else {
+             ReaderActivity.newIntent(context, manga, chapter)
+         }
++
++    fun newIntent(
++        context: Context,
++        manga: Manga,
++        chapter: Chapter,
++        initialPage: Int,
++        sourceManager: SourceManager = Injekt.get(),
++    ): Intent {
++        val page = requireInitialPage(initialPage)
++        check(!isNovel(manga, sourceManager)) { "Novel chapters do not use image-page indices" }
++        return ReaderActivity.newIntent(context, manga, chapter).putExtra(EXTRA_INITIAL_PAGE, page)
++    }
++
++    fun initialPage(intent: Intent): Int? =
++        intent.takeIf { it.hasExtra(EXTRA_INITIAL_PAGE) }
++            ?.getIntExtra(EXTRA_INITIAL_PAGE, 0)
++            ?.coerceAtLeast(0)
++
++    fun requireInitialPage(value: Int): Int = value.also { require(it >= 0) }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt
+index e19a66e9bbb075d6e3bb8fb5b52f01834023562b..1ad5647cda54301b9cce039c8a8a2d41369e01d2 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt
+@@ -1,24 +1,14 @@
+ package dev.ahmedmohamed.hayai.source.enhanced
+ 
+-import android.graphics.Bitmap
+-import android.graphics.BitmapFactory
+ import dev.ahmedmohamed.hayai.source.enhanced.EnhancedSourceFeature.PagePreview
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewProvider
+-import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreview
+-import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
++import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
++import dev.ahmedmohamed.hayai.source.preview.SourcePreviewPage
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.source.SourceManager
+-import kotlinx.coroutines.async
+-import kotlinx.coroutines.awaitAll
+-import kotlinx.coroutines.CancellationException
+-import kotlinx.coroutines.sync.Semaphore
+-import kotlinx.coroutines.sync.withPermit
+-import kotlinx.coroutines.supervisorScope
+ import okhttp3.CacheControl
+ import java.io.ByteArrayOutputStream
+-import java.util.Collections
+-import java.util.concurrent.atomic.AtomicLong
+ 
+ class EnhancedDetailsPreviewLoader(
+     private val sourceManager: SourceManager,
+@@ -29,96 +19,55 @@ class EnhancedDetailsPreviewLoader(
+         return EnhancedSourceFeatureRegistry.features(source)?.contains(PagePreview) == true
+     }
+ 
+-    override suspend fun load(
+-        manga: Manga,
+-        page: Int,
+-        cacheControl: CacheControl?,
+-    ): SourceRenderedPreviewPage {
++    override suspend fun load(manga: Manga, page: Int, cacheControl: CacheControl?): SourcePreviewPage {
+         require(page > 0)
+-        val source = sourceManager.get(manga.source) as? HayaiEnhancedHttpSource
+-            ?: error("The enhanced source is no longer installed")
+-        check(EnhancedSourceFeatureRegistry.features(source)?.contains(PagePreview) == true) {
+-            "${source.name} does not expose page previews"
+-        }
++        val source = source(manga)
+         val chapters = database.getChapters(manga).executeAsBlocking()
+-        val previews = source.getPagePreviews(manga, chapters, page)
+-        val semaphore = Semaphore(MAX_PARALLEL_IMAGES)
+-        val decodedBytes = AtomicLong(0)
+-        val allocated = Collections.synchronizedList(mutableListOf<SourceRenderedPreview>())
+-        val rendered = try {
+-            supervisorScope {
+-                previews.previews.map { preview ->
+-                    async {
+-                        semaphore.withPermit {
+-                            try {
+-                                source.fetchPreviewImage(preview, cacheControl).use { response ->
+-                                    val bitmap = response.body.readPreviewBitmap()
+-                                    val total = decodedBytes.addAndGet(bitmap.byteCount.toLong())
+-                                    if (total > MAX_DECODED_BYTES_PER_PAGE) {
+-                                        decodedBytes.addAndGet(-bitmap.byteCount.toLong())
+-                                        bitmap.recycle()
+-                                        error("Preview page exceeded the decoded bitmap budget")
+-                                    }
+-                                    SourceRenderedPreview(preview.index, preview.pageUrl, bitmap).also(allocated::add)
+-                                }
+-                            } catch (cancelled: CancellationException) {
+-                                throw cancelled
+-                            } catch (_: Exception) {
+-                                null
+-                            }
+-                        }
+-                    }
+-                }.awaitAll().filterNotNull()
+-            }
+-        } catch (error: Throwable) {
+-            allocated.forEach { if (!it.bitmap.isRecycled) it.bitmap.recycle() }
+-            throw error
+-        }
+-        check(rendered.isNotEmpty() || previews.previews.isEmpty()) { "No page preview images could be loaded" }
+-        return SourceRenderedPreviewPage(previews.page, rendered, previews.hasNextPage, previews.totalPages)
++        val result = source.getPagePreviews(manga, chapters, page)
++        return SourcePreviewPage(
++            page = result.page,
++            previews = result.previews.map { SourcePagePreview(it.index, it.imageUrl, it.pageUrl) },
++            hasNextPage = result.hasNextPage,
++            totalPages = result.totalPages,
++        )
+     }
+ 
+-    private fun okhttp3.ResponseBody.readPreviewBitmap(): Bitmap {
+-        val declared = contentLength()
+-        require(declared < 0 || declared <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
+-        val bytes = byteStream().use { input ->
+-            val output = ByteArrayOutputStream(minOf(MAX_IMAGE_BYTES, maxOf(16 * 1024L, declared)).toInt())
+-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+-            var total = 0L
+-            while (true) {
+-                val count = input.read(buffer)
+-                if (count < 0) break
+-                total += count
+-                require(total <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
+-                output.write(buffer, 0, count)
++    override suspend fun loadImage(
++        manga: Manga,
++        preview: SourcePagePreview,
++        cacheControl: CacheControl?,
++    ): ByteArray {
++        val source = source(manga)
++        val enhanced = EnhancedPagePreview(preview.index, preview.imageUrl, preview.pageUrl)
++        return source.fetchPreviewImage(enhanced, cacheControl).use { response ->
++            val declared = response.body.contentLength()
++            require(declared < 0 || declared <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
++            response.body.byteStream().use { input ->
++                val output = ByteArrayOutputStream(minOf(MAX_IMAGE_BYTES, maxOf(16 * 1024L, declared)).toInt())
++                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
++                var total = 0L
++                while (true) {
++                    val count = input.read(buffer)
++                    if (count < 0) break
++                    total += count
++                    require(total <= MAX_IMAGE_BYTES) { "Preview image exceeded the size limit" }
++                    output.write(buffer, 0, count)
++                }
++                output.toByteArray()
+             }
+-            output.toByteArray()
+         }
+-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+-        require(bounds.outWidth in 1..MAX_SOURCE_DIMENSION && bounds.outHeight in 1..MAX_SOURCE_DIMENSION) {
+-            "Preview image dimensions are invalid"
++    }
++
++    private fun source(manga: Manga): HayaiEnhancedHttpSource {
++        val source = sourceManager.get(manga.source) as? HayaiEnhancedHttpSource
++            ?: error("The enhanced source is no longer installed")
++        check(EnhancedSourceFeatureRegistry.features(source)?.contains(PagePreview) == true) {
++            "${source.name} does not expose page previews"
+         }
+-        var sample = 1
+-        while (bounds.outWidth / sample > MAX_RENDER_DIMENSION || bounds.outHeight / sample > MAX_RENDER_DIMENSION) sample *= 2
+-        return requireNotNull(
+-            BitmapFactory.decodeByteArray(
+-                bytes,
+-                0,
+-                bytes.size,
+-                BitmapFactory.Options().apply {
+-                    inSampleSize = sample
+-                    inPreferredConfig = Bitmap.Config.RGB_565
+-                },
+-            ),
+-        ) { "Preview image could not be decoded" }
++        return source
+     }
+ 
+-    companion object {
+-        private const val MAX_PARALLEL_IMAGES = 3
+-        private const val MAX_IMAGE_BYTES = 4L * 1024L * 1024L
+-        private const val MAX_SOURCE_DIMENSION = 16_384
+-        private const val MAX_RENDER_DIMENSION = 512
+-        private const val MAX_DECODED_BYTES_PER_PAGE = 12L * 1024L * 1024L
++    private companion object {
++        const val MAX_IMAGE_BYTES = 4L * 1024L * 1024L
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/BundledSourceIconResolver.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/BundledSourceIconResolver.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..1b22c90c9946419106e4080858c64da13f69e4cc
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/BundledSourceIconResolver.kt
+@@ -0,0 +1,22 @@
++package dev.ahmedmohamed.hayai.source.presentation
++
++import android.content.Context
++import android.graphics.drawable.Drawable
++import androidx.annotation.DrawableRes
++import androidx.appcompat.content.res.AppCompatResources
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
++import eu.kanade.tachiyomi.R
++
++object BundledSourceIconResolver {
++    @DrawableRes
++    fun resource(sourceId: Long): Int? = when (sourceId) {
++        EhSite.EHentai.sourceId -> R.mipmap.ic_ehentai_source
++        EhSite.ExHentai.sourceId -> R.mipmap.ic_exhentai_source
++        LocalNovelSource.ID -> R.drawable.ic_local_novel_source
++        else -> null
++    }
++
++    fun drawable(context: Context, sourceId: Long): Drawable? =
++        resource(sourceId)?.let { AppCompatResources.getDrawable(context, it) }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
+index c6013d455760bcd65d153adb8772fd083859a490..ab821665588949f3b920b3cd70dc2051bf9ffc4c 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
+@@ -1,26 +1,43 @@
+ package dev.ahmedmohamed.hayai.source.preview
+ 
+-import android.graphics.Bitmap
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Manga
++import kotlinx.serialization.Serializable
+ import okhttp3.CacheControl
+-import java.io.Closeable
+ 
+-data class SourceRenderedPreview(
+-    val index: Int,
+-    val pageUrl: String?,
+-    val bitmap: Bitmap,
++@Serializable
++data class SourcePreviewCrop(
++    val x: Int,
++    val y: Int,
++    val width: Int,
++    val height: Int,
+ )
+ 
+-data class SourceRenderedPreviewPage(
++@Serializable
++data class SourcePagePreview(
++    val index: Int,
++    val imageUrl: String,
++    val pageUrl: String? = null,
++    val crop: SourcePreviewCrop? = null,
++) {
++    init {
++        require(index > 0)
++        require(imageUrl.startsWith("https://") || imageUrl.startsWith("http://"))
++    }
++
++    fun cacheIdentity(sourceId: Long): String = "$sourceId:$imageUrl:${crop ?: "full"}"
++}
++
++@Serializable
++data class SourcePreviewPage(
+     val page: Int,
+-    val previews: List<SourceRenderedPreview>,
++    val previews: List<SourcePagePreview>,
+     val hasNextPage: Boolean,
+-    val totalPages: Int,
+-) : Closeable {
+-    override fun close() {
+-        previews.forEach { rendered ->
+-            if (!rendered.bitmap.isRecycled) rendered.bitmap.recycle()
+-        }
++    val totalPages: Int? = null,
++) {
++    init {
++        require(page > 0)
++        require(totalPages == null || totalPages > 0)
+     }
+ }
+ 
+@@ -31,11 +48,19 @@ interface SourceDetailsPreviewProvider {
+         manga: Manga,
+         page: Int = 1,
+         cacheControl: CacheControl? = null,
+-    ): SourceRenderedPreviewPage
++    ): SourcePreviewPage
++
++    suspend fun loadImage(
++        manga: Manga,
++        preview: SourcePagePreview,
++        cacheControl: CacheControl? = null,
++    ): ByteArray
+ }
+ 
+ class SourceDetailsPreviewRegistry(
+     private val providers: List<SourceDetailsPreviewProvider>,
++    private val database: DatabaseHelper,
++    private val cache: SourcePreviewCache,
+ ) : SourceDetailsPreviewProvider {
+     override fun owns(manga: Manga): Boolean = providers.any { it.owns(manga) }
+ 
+@@ -43,9 +68,29 @@ class SourceDetailsPreviewRegistry(
+         manga: Manga,
+         page: Int,
+         cacheControl: CacheControl?,
+-    ): SourceRenderedPreviewPage {
+-        val provider = providers.singleOrNull { it.owns(manga) }
+-            ?: error("No unique page-preview provider is registered for source ${manga.source}")
+-        return provider.load(manga, page, cacheControl)
++    ): SourcePreviewPage {
++        val chapterIds = database.getChapters(manga).executeAsBlocking().mapNotNull { it.id }
++        val key = cache.listingKey(manga, chapterIds, page)
++        if (cacheControl != CacheControl.FORCE_NETWORK) cache.readListing(key)?.let { return it }
++        return provider(manga).load(manga, page, cacheControl).also { cache.writeListing(key, it) }
++    }
++
++    override suspend fun loadImage(
++        manga: Manga,
++        preview: SourcePagePreview,
++        cacheControl: CacheControl?,
++    ): ByteArray {
++        val key = preview.cacheIdentity(manga.source)
++        if (cacheControl != CacheControl.FORCE_NETWORK) cache.readImage(key)?.let { return it }
++        return provider(manga).loadImage(manga, preview, cacheControl).also { cache.writeImage(key, it) }
+     }
++
++    fun clearCache(): Int = cache.clear()
++
++    val readableCacheSize: String
++        get() = cache.readableSize
++
++    private fun provider(manga: Manga): SourceDetailsPreviewProvider =
++        providers.singleOrNull { it.owns(manga) }
++            ?: error("No unique page-preview provider is registered for source ${manga.source}")
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt
+index c3e6fddac72d69d7aaf0b63f65d1b5a43cbee084..36e8d476cf77abd3908e2d29802fd31bb0004e73 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt
+@@ -9,12 +9,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+ import kotlinx.coroutines.launch
++import okhttp3.CacheControl
+ import java.io.Closeable
+ 
+ sealed interface SourcePreviewState {
+     data object Hidden : SourcePreviewState
+     data class Loading(val identity: String, val page: Int) : SourcePreviewState
+-    data class Ready(val identity: String, val previews: SourceRenderedPreviewPage) : SourcePreviewState
++    data class Ready(val identity: String, val previews: SourcePreviewPage) : SourcePreviewState
+     data class Failed(val identity: String, val page: Int, val message: String) : SourcePreviewState
+ }
+ 
+@@ -28,11 +29,7 @@ class SourceDetailsPreviewSession(
+     private var loadJob: Job? = null
+     private var identity: String? = null
+ 
+-    init {
+-        scope.coroutineContext[Job]?.invokeOnCompletion { close() }
+-    }
+-
+-    fun bind(manga: Manga, page: Int = 1) {
++    fun bind(manga: Manga, page: Int = 1, forceRefresh: Boolean = false) {
+         require(page > 0)
+         if (!previews.owns(manga)) {
+             unbind()
+@@ -40,21 +37,20 @@ class SourceDetailsPreviewSession(
+         }
+         val nextIdentity = "${manga.source}:${manga.url}:$page"
+         synchronized(lock) {
+-            if (identity == nextIdentity && loadJob?.isActive == true) return
+-            if (identity == nextIdentity && mutableState.value is SourcePreviewState.Ready) return
++            if (!forceRefresh && identity == nextIdentity && loadJob?.isActive == true) return
++            if (!forceRefresh && identity == nextIdentity && mutableState.value is SourcePreviewState.Ready) return
+             releaseCurrentLocked()
+             identity = nextIdentity
+             mutableState.value = SourcePreviewState.Loading(nextIdentity, page)
+             loadJob = scope.launch(Dispatchers.IO) {
+                 try {
+-                    val loaded = previews.load(manga, page)
++                    val loaded = previews.load(manga, page, CacheControl.FORCE_NETWORK.takeIf { forceRefresh })
+                     synchronized(lock) {
+                         if (identity == nextIdentity) {
+-                            (mutableState.value as? SourcePreviewState.Ready)?.previews?.close()
+                             mutableState.value = SourcePreviewState.Ready(nextIdentity, loaded)
+                             loadJob = null
+                         } else {
+-                            loaded.close()
++                            Unit
+                         }
+                     }
+                 } catch (cancelled: CancellationException) {
+@@ -88,6 +84,5 @@ class SourceDetailsPreviewSession(
+     private fun releaseCurrentLocked() {
+         loadJob?.cancel()
+         loadJob = null
+-        (mutableState.value as? SourcePreviewState.Ready)?.previews?.close()
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..0eb2e01ca066bb159a2dcd7f1b5a7b2b52a7c7cb
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt
+@@ -0,0 +1,287 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import android.content.Context
++import android.content.Intent
++import android.graphics.Bitmap
++import android.os.Bundle
++import android.text.InputType
++import android.view.Gravity
++import android.view.Menu
++import android.view.MenuItem
++import android.view.View
++import android.view.ViewGroup
++import android.widget.Button
++import android.widget.EditText
++import android.widget.ImageView
++import android.widget.LinearLayout
++import android.widget.ProgressBar
++import android.widget.TextView
++import androidx.appcompat.app.AlertDialog
++import androidx.appcompat.app.AppCompatActivity
++import androidx.core.view.isVisible
++import androidx.lifecycle.lifecycleScope
++import androidx.recyclerview.widget.GridLayoutManager
++import androidx.recyclerview.widget.RecyclerView
++import com.google.android.material.appbar.MaterialToolbar
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
++import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Manga
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++
++class SourcePreviewActivity : AppCompatActivity() {
++    private val database: DatabaseHelper by lazy { Injekt.get() }
++    private val previews: SourceDetailsPreviewRegistry by lazy { Injekt.get() }
++    private lateinit var manga: Manga
++    private lateinit var toolbar: MaterialToolbar
++    private lateinit var progress: ProgressBar
++    private lateinit var message: TextView
++    private lateinit var recycler: RecyclerView
++    private lateinit var previous: Button
++    private lateinit var next: Button
++    private lateinit var signIn: Button
++    private val adapter = PreviewAdapter(::openPage)
++    private var page = 1
++    private var totalPages: Int? = null
++    private var loadJob: Job? = null
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        val mangaId = intent.getLongExtra(EXTRA_MANGA_ID, -1L)
++        manga = database.getManga(mangaId).executeAsBlocking() ?: run {
++            finish()
++            return
++        }
++        title = getString(R.string.hayai_page_previews)
++        setContentView(createContent())
++        setSupportActionBar(toolbar)
++        page = savedInstanceState?.getInt(STATE_PAGE, 1) ?: 1
++        load(page)
++    }
++
++    override fun onSaveInstanceState(outState: Bundle) {
++        outState.putInt(STATE_PAGE, page)
++        super.onSaveInstanceState(outState)
++    }
++
++    override fun onDestroy() {
++        loadJob?.cancel()
++        if (::recycler.isInitialized) {
++            for (index in 0 until recycler.childCount) {
++                (recycler.getChildViewHolder(recycler.getChildAt(index)) as? PreviewHolder)?.recycle()
++            }
++            recycler.adapter = null
++        }
++        super.onDestroy()
++    }
++
++    override fun onCreateOptionsMenu(menu: Menu): Boolean {
++        menu.add(Menu.NONE, MENU_GO_TO, Menu.NONE, R.string.hayai_go_to_preview_page).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
++        menu.add(Menu.NONE, MENU_RETRY, Menu.NONE, R.string.hayai_retry).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
++        return true
++    }
++
++    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
++        MENU_GO_TO -> {
++            showGoToDialog()
++            true
++        }
++        MENU_RETRY -> {
++            load(page, forceRefresh = true)
++            true
++        }
++        else -> super.onOptionsItemSelected(item)
++    }
++
++    private fun createContent(): View {
++        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
++        toolbar = MaterialToolbar(this).apply {
++            title = getString(R.string.hayai_page_previews)
++            setNavigationIcon(R.drawable.ic_arrow_back_24dp)
++            setNavigationOnClickListener { finish() }
++        }
++        root.addView(toolbar, matchWrap())
++        progress = ProgressBar(this).apply { isIndeterminate = true }
++        root.addView(progress, centered(dp(48)))
++        message = TextView(this).apply {
++            gravity = Gravity.CENTER
++            setPadding(dp(24), dp(16), dp(24), dp(16))
++        }
++        root.addView(message, matchWrap())
++        signIn = Button(this).apply {
++            text = getString(R.string.hayai_open_ehentai_settings)
++            setOnClickListener { startActivity(Intent(this@SourcePreviewActivity, EhSettingsActivity::class.java)) }
++        }
++        root.addView(signIn, centered(ViewGroup.LayoutParams.WRAP_CONTENT))
++        recycler = RecyclerView(this).apply {
++            layoutManager = GridLayoutManager(this@SourcePreviewActivity, spanCount())
++            adapter = this@SourcePreviewActivity.adapter
++        }
++        root.addView(recycler, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
++        val navigation = LinearLayout(this).apply {
++            gravity = Gravity.CENTER
++            previous = Button(context).apply {
++                text = getString(R.string.hayai_previous_previews)
++                setOnClickListener { load(page - 1) }
++            }
++            addView(previous)
++            next = Button(context).apply {
++                text = getString(R.string.hayai_next_previews)
++                setOnClickListener { load(page + 1) }
++            }
++            addView(next)
++        }
++        root.addView(navigation, matchWrap())
++        return root
++    }
++
++    private fun load(targetPage: Int, forceRefresh: Boolean = false) {
++        if (targetPage < 1 || totalPages?.let { targetPage > it } == true) return
++        loadJob?.cancel()
++        progress.isVisible = true
++        message.isVisible = false
++        signIn.isVisible = false
++        previous.isEnabled = false
++        next.isEnabled = false
++        loadJob = lifecycleScope.launch {
++            val result = withContext(Dispatchers.IO) {
++                runCatching { previews.load(manga, targetPage, okhttp3.CacheControl.FORCE_NETWORK.takeIf { forceRefresh }) }
++            }
++            progress.isVisible = false
++            result.onSuccess { loaded ->
++                page = loaded.page
++                totalPages = loaded.totalPages
++                title = totalPages?.let { getString(R.string.hayai_page_previews_position, page, it) }
++                    ?: getString(R.string.hayai_page_previews_position_unknown, page)
++                adapter.submit(manga, loaded.previews)
++                recycler.scrollToPosition(0)
++                message.isVisible = loaded.previews.isEmpty()
++                message.text = getString(R.string.hayai_no_page_previews)
++                previous.isEnabled = page > 1
++                next.isEnabled = loaded.hasNextPage
++            }.onFailure { error ->
++                adapter.submit(manga, emptyList())
++                message.isVisible = true
++                message.text = error.message ?: getString(R.string.hayai_page_previews_failed)
++                previous.isEnabled = page > 1
++                signIn.isVisible = manga.source == EhSite.ExHentai.sourceId
++            }
++        }
++    }
++
++    private fun showGoToDialog() {
++        val input = EditText(this).apply {
++            inputType = InputType.TYPE_CLASS_NUMBER
++            setText(page.toString())
++            selectAll()
++            hint = totalPages?.let { "1-$it" } ?: getString(R.string.hayai_preview_page_number)
++        }
++        AlertDialog.Builder(this)
++            .setTitle(R.string.hayai_go_to_preview_page)
++            .setView(input)
++            .setPositiveButton(android.R.string.ok) { _, _ -> input.text.toString().toIntOrNull()?.let(::load) }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun openPage(preview: SourcePagePreview) {
++        val chapter = database.getChapters(manga).executeAsBlocking().minByOrNull { it.source_order } ?: return
++        startActivity(ReaderLauncher.newIntent(this, manga, chapter, preview.index - 1))
++    }
++
++    private fun spanCount(): Int = (resources.displayMetrics.widthPixels / dp(120)).coerceAtLeast(2)
++    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
++    private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
++    private fun centered(size: Int) = LinearLayout.LayoutParams(size, size).apply { gravity = Gravity.CENTER_HORIZONTAL }
++
++    private inner class PreviewAdapter(
++        private val onClick: (SourcePagePreview) -> Unit,
++    ) : RecyclerView.Adapter<PreviewHolder>() {
++        private var manga: Manga? = null
++        private var items = emptyList<SourcePagePreview>()
++
++        fun submit(manga: Manga, items: List<SourcePagePreview>) {
++            this.manga = manga
++            this.items = items
++            notifyDataSetChanged()
++        }
++
++        override fun getItemCount(): Int = items.size
++
++        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PreviewHolder {
++            val column = LinearLayout(parent.context).apply {
++                orientation = LinearLayout.VERTICAL
++                gravity = Gravity.CENTER_HORIZONTAL
++                setPadding(dp(4), dp(4), dp(4), dp(8))
++            }
++            val image = ImageView(parent.context).apply {
++                scaleType = ImageView.ScaleType.CENTER_CROP
++                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(200))
++            }
++            column.addView(image)
++            val label = TextView(parent.context).apply { gravity = Gravity.CENTER }
++            column.addView(label, matchWrap())
++            return PreviewHolder(column, image, label)
++        }
++
++        override fun onBindViewHolder(holder: PreviewHolder, position: Int) {
++            val item = items[position]
++            holder.bind(checkNotNull(manga), item)
++            holder.itemView.setOnClickListener { onClick(item) }
++        }
++
++        override fun onViewRecycled(holder: PreviewHolder) = holder.recycle()
++    }
++
++    private inner class PreviewHolder(
++        itemView: View,
++        private val image: ImageView,
++        private val label: TextView,
++    ) : RecyclerView.ViewHolder(itemView) {
++        private var job: Job? = null
++        private var bitmap: Bitmap? = null
++
++        fun bind(manga: Manga, preview: SourcePagePreview) {
++            recycle()
++            label.text = preview.index.toString()
++            image.contentDescription = getString(R.string.hayai_gallery_page, preview.index)
++            image.setImageDrawable(null)
++            job = lifecycleScope.launch {
++                val loaded = withContext(Dispatchers.IO) {
++                    runCatching { SourcePreviewBitmapDecoder.decode(previews.loadImage(manga, preview)) }.getOrNull()
++                }
++                if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
++                    bitmap = loaded
++                    image.setImageBitmap(loaded)
++                } else {
++                    loaded?.recycle()
++                }
++            }
++        }
++
++        fun recycle() {
++            job?.cancel()
++            job = null
++            image.setImageDrawable(null)
++            bitmap?.takeUnless(Bitmap::isRecycled)?.recycle()
++            bitmap = null
++        }
++    }
++
++    companion object {
++        private const val EXTRA_MANGA_ID = "manga_id"
++        private const val STATE_PAGE = "page"
++        private const val MENU_GO_TO = 1
++        private const val MENU_RETRY = 2
++
++        fun newIntent(context: Context, mangaId: Long): Intent =
++            Intent(context, SourcePreviewActivity::class.java).putExtra(EXTRA_MANGA_ID, mangaId)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecoder.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecoder.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..e32f3ad0f75c33e4a18694f2bb703ce9b082696a
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecoder.kt
+@@ -0,0 +1,30 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import android.graphics.Bitmap
++import android.graphics.BitmapFactory
++
++object SourcePreviewBitmapDecoder {
++    fun decode(bytes: ByteArray, maximumDimension: Int = 512): Bitmap {
++        require(maximumDimension in 64..2_048)
++        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
++        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
++        require(bounds.outWidth in 1..MAX_SOURCE_DIMENSION && bounds.outHeight in 1..MAX_SOURCE_DIMENSION) {
++            "Preview image dimensions are invalid"
++        }
++        var sample = 1
++        while (bounds.outWidth / sample > maximumDimension || bounds.outHeight / sample > maximumDimension) sample *= 2
++        return requireNotNull(
++            BitmapFactory.decodeByteArray(
++                bytes,
++                0,
++                bytes.size,
++                BitmapFactory.Options().apply {
++                    inSampleSize = sample
++                    inPreferredConfig = Bitmap.Config.RGB_565
++                },
++            ),
++        ) { "Preview image could not be decoded" }
++    }
++
++    private const val MAX_SOURCE_DIMENSION = 16_384
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..e56f2d624242ffc16c983a654ef63065277fdba8
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
+@@ -0,0 +1,87 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import android.content.Context
++import android.text.format.Formatter
++import eu.kanade.tachiyomi.data.database.models.Manga
++import kotlinx.serialization.json.Json
++import java.io.File
++import java.security.MessageDigest
++
++class SourcePreviewCache(private val context: Context) {
++    private val root = File(context.cacheDir, "hayai_source_previews").apply { mkdirs() }
++    private val listings = File(root, "listings").apply { mkdirs() }
++    private val images = File(root, "images").apply { mkdirs() }
++    private val json = Json { ignoreUnknownKeys = true }
++
++    val readableSize: String
++        get() = Formatter.formatFileSize(context, root.walkTopDown().filter(File::isFile).sumOf(File::length))
++
++    fun listingKey(manga: Manga, chapterIds: List<Long>, page: Int): String =
++        digest("${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
++
++    @Synchronized
++    fun readListing(key: String): SourcePreviewPage? = read(listings, key)?.let {
++        runCatching { json.decodeFromString<SourcePreviewPage>(it.toString(Charsets.UTF_8)) }.getOrNull()
++    }
++
++    @Synchronized
++    fun writeListing(key: String, page: SourcePreviewPage) {
++        write(listings, key, json.encodeToString(SourcePreviewPage.serializer(), page).toByteArray())
++        trim()
++    }
++
++    @Synchronized
++    fun readImage(key: String): ByteArray? = read(images, digest(key))
++
++    @Synchronized
++    fun writeImage(key: String, bytes: ByteArray) {
++        require(bytes.size <= MAX_IMAGE_BYTES)
++        write(images, digest(key), bytes)
++        trim()
++    }
++
++    @Synchronized
++    fun clear(): Int {
++        val files = root.walkBottomUp().filter(File::isFile).toList()
++        files.forEach(File::delete)
++        listings.mkdirs()
++        images.mkdirs()
++        return files.size
++    }
++
++    private fun read(directory: File, key: String): ByteArray? {
++        val file = File(directory, key)
++        if (!file.isFile) return null
++        file.setLastModified(System.currentTimeMillis())
++        return runCatching { file.readBytes() }.getOrNull()
++    }
++
++    private fun write(directory: File, key: String, bytes: ByteArray) {
++        val target = File(directory, key)
++        val temporary = File(directory, "$key.tmp")
++        temporary.writeBytes(bytes)
++        if (!temporary.renameTo(target)) {
++            target.delete()
++            check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
++        }
++    }
++
++    private fun trim() {
++        val files = root.walkTopDown().filter(File::isFile).filterNot { it.extension == "tmp" }.toList()
++        var size = files.sumOf(File::length)
++        files.sortedBy(File::lastModified).forEach { file ->
++            if (size <= MAX_CACHE_BYTES) return
++            val length = file.length()
++            if (file.delete()) size -= length
++        }
++    }
++
++    private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
++        .digest(value.toByteArray())
++        .joinToString("") { "%02x".format(it) }
++
++    private companion object {
++        const val MAX_IMAGE_BYTES = 4 * 1024 * 1024
++        const val MAX_CACHE_BYTES = 75L * 1024L * 1024L
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+index a19e21a87fce6f12f23f3a60e78a5930819255c6..fdae319977de3d7041512cc980a1836bf1c843c0 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+@@ -26,6 +26,7 @@ import dev.ahmedmohamed.hayai.adult.eh.favorites.J2kEhFavoritesLocal
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.source.enhanced.EnhancedDetailsPreviewLoader
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
++import dev.ahmedmohamed.hayai.source.preview.SourcePreviewCache
+ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
+ import eu.kanade.tachiyomi.data.cache.ChapterCache
+@@ -103,12 +104,15 @@ class AppModule(
+         addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
+         addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
+         addSingletonFactory { EnhancedDetailsPreviewLoader(get(), get()) }
++        addSingletonFactory { SourcePreviewCache(app) }
+         addSingletonFactory {
+             SourceDetailsPreviewRegistry(
+                 listOf(
+                     get<EhDetailsPreviewLoader>(),
+                     get<EnhancedDetailsPreviewLoader>(),
+                 ),
++                get(),
++                get(),
+             )
+         }
+         addSingletonFactory { SourceManager(app, get(), get(), get()) }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/source/Source.kt b/app/src/main/java/eu/kanade/tachiyomi/source/Source.kt
+index 64de2217ec110cac66c0ce42557297b5c586049f..51974eaa04d3cc9e504974382f479073091fe2b0 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/source/Source.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/source/Source.kt
+@@ -1,8 +1,7 @@
+ package eu.kanade.tachiyomi.source
+ 
+-import android.app.Application
+ import android.graphics.drawable.Drawable
+-import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.source.presentation.BundledSourceIconResolver
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.source.model.Page
+@@ -145,10 +144,7 @@ interface Source {
+ 
+ fun Source.icon(): Drawable? =
+     Injekt.get<ExtensionManager>().getAppIconForSource(this)
+-        ?: takeIf { source -> EhSite.entries.any { it.sourceId == source.id } }?.let {
+-            val app = Injekt.get<Application>()
+-            app.applicationInfo.loadIcon(app.packageManager)
+-        }
++        ?: BundledSourceIconResolver.drawable(Injekt.get(), id)
+ 
+ fun Source.pkgName() = Injekt.get<ExtensionManager>().getPackageName(id)
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+index 7c1bbd582bc0dc6b626f8a422e8ff075b66af04d..02e5c0793d8656f91164cc8d3aec52a3d05671c8 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+@@ -8,6 +8,7 @@ import android.content.ClipData
+ import android.content.Context
+ import android.content.Intent
+ import android.graphics.Color
++import android.graphics.Bitmap
+ import android.graphics.drawable.BitmapDrawable
+ import android.graphics.drawable.Icon
+ import android.net.Uri
+@@ -24,6 +25,7 @@ import android.view.ViewGroup
+ import android.view.inputmethod.InputMethodManager
+ import android.widget.ImageView
+ import android.widget.LinearLayout
++import android.widget.ProgressBar
+ import android.widget.TextView
+ import androidx.annotation.ColorInt
+ import androidx.annotation.FloatRange
+@@ -58,7 +60,10 @@ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
+ import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+-import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
++import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
++import dev.ahmedmohamed.hayai.source.preview.SourcePreviewActivity
++import dev.ahmedmohamed.hayai.source.preview.SourcePreviewBitmapDecoder
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.SelectableAdapter
+@@ -227,12 +232,14 @@ class MangaDetailsController :
+     private var isPushing = true
+     private val novelIntegration: NovelJ2kIntegration by injectLazy()
+     private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
++    private val hayaiPreferences by lazy { HayaiPreferences(Injekt.get()) }
+     private val novelOfflineManager by lazy {
+         NovelOfflineManager(activity!!, Injekt.get(), Injekt.get(), Injekt.get<NetworkHelper>())
+     }
+     private var novelPresentationJob: Job? = null
+     private var sourceDetailsFeaturesJob: Job? = null
+-    private var sourceDetailsPreviewPage: SourceRenderedPreviewPage? = null
++    private val sourceDetailsPreviewBitmaps = mutableListOf<Bitmap>()
++    private val sourceDetailsImageJobs = mutableListOf<Job>()
+ 
+     // Prevents the favorite button's drag-to-open popup from firing underneath
+     // the categories sheet when a long press opens it mid-gesture
+@@ -475,8 +482,7 @@ class MangaDetailsController :
+     override fun onDestroyView(view: View) {
+         novelPresentationJob?.cancel()
+         sourceDetailsFeaturesJob?.cancel()
+-        sourceDetailsPreviewPage?.close()
+-        sourceDetailsPreviewPage = null
++        releaseSourcePreviewImages()
+         novelPresentationJob = null
+         snack?.dismiss()
+         adapter = null
+@@ -1434,13 +1440,13 @@ class MangaDetailsController :
+     }
+ 
+     override fun bindSourceDetailsFeatures(container: LinearLayout) {
++        container.orientation = LinearLayout.VERTICAL
+         val manga = presenter.manga
+         val featureRoot = container.parent?.parent as? View ?: return
+         if (!sourceDetailsPreviewRegistry.owns(manga)) {
+             sourceDetailsFeaturesJob?.cancel()
+             container.removeAllViews()
+-            sourceDetailsPreviewPage?.close()
+-            sourceDetailsPreviewPage = null
++            releaseSourcePreviewImages()
+             container.tag = null
+             featureRoot.visibility = View.GONE
+             return
+@@ -1458,72 +1464,101 @@ class MangaDetailsController :
+         if (container.tag == identity) return
+         container.tag = identity
+         container.removeAllViews()
+-        sourceDetailsPreviewPage?.close()
+-        sourceDetailsPreviewPage = null
+-        featureRoot.visibility = View.GONE
++        releaseSourcePreviewImages()
++        featureRoot.visibility = View.VISIBLE
++        container.addView(ProgressBar(container.context).apply { isIndeterminate = true })
+         sourceDetailsFeaturesJob?.cancel()
+         sourceDetailsFeaturesJob = viewScope.launchIO {
+             val result = runCatching { sourceDetailsPreviewRegistry.load(manga, page) }
+             withUIContext {
+                 val loaded = result.getOrNull()
+                 if (container.tag != identity) {
+-                    loaded?.close()
+                     return@withUIContext
+                 }
+                 container.removeAllViews()
+-                sourceDetailsPreviewPage?.close()
+-                sourceDetailsPreviewPage = loaded
+                 val density = container.resources.displayMetrics.density
+-                loaded?.previews.orEmpty().forEach { rendered ->
+-                    val image =
+-                        ImageView(container.context).apply {
+-                            scaleType = ImageView.ScaleType.CENTER_CROP
+-                            contentDescription = "Gallery page ${rendered.index}"
+-                            setImageBitmap(rendered.bitmap)
+-                            rendered.pageUrl?.let { pageUrl -> setOnClickListener { openSourcePreview(pageUrl) } }
+-                        }
++                if (loaded != null) {
++                    val rows = hayaiPreferences.pagePreviewRows.get().coerceIn(0, 10)
++                    if (rows == 0) {
++                        featureRoot.visibility = View.GONE
++                        return@withUIContext
++                    }
++                    val visible = loaded.previews.take(rows * INLINE_COLUMNS)
++                    visible.chunked(INLINE_COLUMNS).forEach { rowItems ->
++                        container.addView(
++                            LinearLayout(container.context).apply {
++                                orientation = LinearLayout.HORIZONTAL
++                                rowItems.forEach { preview -> addView(createPreviewCell(this, manga, preview, density)) }
++                            },
++                        )
++                    }
+                     container.addView(
+-                        image,
+-                        LinearLayout.LayoutParams((96 * density).toInt(), (136 * density).toInt()).apply {
+-                            marginEnd = (8 * density).toInt()
++                        MaterialButton(container.context).apply {
++                            text = context.getString(R.string.hayai_more_previews)
++                            setOnClickListener { startActivity(SourcePreviewActivity.newIntent(context, requireNotNull(manga.id))) }
+                         },
+                     )
++                    featureRoot.visibility = if (visible.isNotEmpty()) View.VISIBLE else View.GONE
++                } else {
++                    val error = result.exceptionOrNull()
++                    container.addView(TextView(container.context).apply {
++                        text = error?.message ?: context.getString(R.string.hayai_page_previews_failed)
++                    })
++                    container.addView(MaterialButton(container.context).apply {
++                        text = context.getString(R.string.hayai_retry)
++                        setOnClickListener {
++                            container.tag = null
++                            loadSourceDetailsPreview(container, featureRoot, manga, page)
++                        }
++                    })
++                    featureRoot.visibility = View.VISIBLE
+                 }
+-                if (loaded != null && (loaded.page > 1 || loaded.hasNextPage)) {
+-                    container.addView(
+-                        LinearLayout(container.context).apply {
+-                            orientation = LinearLayout.VERTICAL
+-                            if (loaded.page > 1) {
+-                                addView(MaterialButton(context).apply {
+-                                    text = "Previous previews"
+-                                    setOnClickListener { loadSourceDetailsPreview(container, featureRoot, manga, loaded.page - 1) }
+-                                })
+-                            }
+-                            if (loaded.hasNextPage) {
+-                                addView(MaterialButton(context).apply {
+-                                    text = "Next previews"
+-                                    setOnClickListener { loadSourceDetailsPreview(container, featureRoot, manga, loaded.page + 1) }
+-                                })
+-                            }
+-                        },
+-                    )
++            }
++        }
++    }
++
++    private fun createPreviewCell(
++        parent: LinearLayout,
++        manga: Manga,
++        preview: SourcePagePreview,
++        density: Float,
++    ): View {
++        val cell = LinearLayout(parent.context).apply {
++            orientation = LinearLayout.VERTICAL
++            gravity = android.view.Gravity.CENTER_HORIZONTAL
++            contentDescription = context.getString(R.string.hayai_gallery_page, preview.index)
++            setOnClickListener {
++                val chapter = presenter.chapters.minByOrNull { it.source_order }
++                if (chapter != null) startActivity(ReaderLauncher.newIntent(context, manga, chapter, preview.index - 1))
++            }
++        }
++        val image = ImageView(parent.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
++        cell.addView(image, LinearLayout.LayoutParams((112 * density).toInt(), (168 * density).toInt()))
++        cell.addView(TextView(parent.context).apply { text = preview.index.toString() })
++        sourceDetailsImageJobs += viewScope.launchIO {
++            val bitmap = runCatching {
++                SourcePreviewBitmapDecoder.decode(sourceDetailsPreviewRegistry.loadImage(manga, preview))
++            }.getOrNull()
++            withUIContext {
++                if (containerTagMatches(manga) && bitmap != null) {
++                    sourceDetailsPreviewBitmaps += bitmap
++                    image.setImageBitmap(bitmap)
++                } else {
++                    bitmap?.recycle()
+                 }
+-                featureRoot.visibility =
+-                    if (loaded != null && (loaded.previews.isNotEmpty() || loaded.page > 1)) View.VISIBLE else View.GONE
+             }
+         }
++        return cell
+     }
+ 
+-    private fun openSourcePreview(pageUrl: String) {
+-        val activity = activity ?: return
+-        startActivity(
+-            WebViewActivity.newIntent(
+-                activity.applicationContext,
+-                pageUrl,
+-                presenter.manga.source,
+-                presenter.manga.title,
+-            ),
+-        )
++    private fun containerTagMatches(manga: Manga): Boolean =
++        view != null && manga.id == presenter.manga.id
++
++    private fun releaseSourcePreviewImages() {
++        sourceDetailsImageJobs.forEach(Job::cancel)
++        sourceDetailsImageJobs.clear()
++        sourceDetailsPreviewBitmaps.forEach { if (!it.isRecycled) it.recycle() }
++        sourceDetailsPreviewBitmaps.clear()
+     }
+ 
+     fun openChapterInWebView(item: ChapterItem) {
+@@ -2316,6 +2351,7 @@ class MangaDetailsController :
+ 
+         private const val MENU_COPY_COVER = 1
+         private const val MENU_PASTE_COVER = 2
++        private const val INLINE_COLUMNS = 3
+ 
+         private enum class RangeMode {
+             Download,
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
+index 6da635435f0def6a93e5638ed12f04aeb84d9d83..e0f3d7183f0f0da033fff8885ed80f50beb763ae 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
+@@ -81,6 +81,7 @@ import com.google.android.material.slider.SliderOrientation
+ import com.google.android.material.snackbar.Snackbar
+ import com.google.android.material.transition.platform.MaterialContainerTransform
+ import com.google.android.material.transition.platform.MaterialContainerTransformSharedElementCallback
++import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+@@ -296,6 +297,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+      * Called when the activity is created. Initializes the view model and configuration.
+      */
+     override fun onCreate(savedInstanceState: Bundle?) {
++        intentPageNumber = ReaderLauncher.initialPage(intent)
+         SubsamplingScaleImageView.setPreferredBitmapConfig(Bitmap.Config.ARGB_8888)
+ 
+         // Setup shared element transitions
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+index 2ca8f6db5961eba59fdb8fbe263cc41dd3d2b73a..dd91b74ba4f0868d30b699188db2d2e26759059c 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+@@ -19,6 +19,7 @@ import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity
++import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.cache.ChapterCache
+@@ -84,6 +85,8 @@ class SettingsAdvancedController : SettingsController() {
+ 
+     private val downloadManager: DownloadManager by injectLazy()
+ 
++    private val sourcePreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
++
+     val trustExtension: TrustExtension by injectLazy()
+ 
+     private val isUpdaterEnabled = BuildConfig.INCLUDE_UPDATER
+@@ -232,6 +235,17 @@ class SettingsAdvancedController : SettingsController() {
+                     onClick { clearChapterCache() }
+                 }
+ 
++                preference {
++                    key = "hayai_clear_page_preview_cache"
++                    titleRes = R.string.hayai_clear_preview_cache
++                    summary = sourcePreviewRegistry.readableCacheSize
++                    onClick {
++                        val deleted = sourcePreviewRegistry.clearCache()
++                        summary = sourcePreviewRegistry.readableCacheSize
++                        context.toast(context.getString(R.string.hayai_preview_cache_cleared, deleted))
++                    }
++                }
++
+                 preference {
+                     titleRes = R.string.force_download_cache_refresh
+                     summaryRes = R.string.force_download_cache_refresh_summary
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt
+index 2f77170c5f29d8ff6f1a8e08a3394991bbb707b7..37ac9e300df36470dabdc658378e9e46c763214d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt
+@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatDelegate
+ import androidx.core.view.doOnNextLayout
+ import androidx.core.view.isVisible
+ import androidx.preference.PreferenceScreen
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.preference.asImmediateFlow
+ import eu.kanade.tachiyomi.data.preference.asImmediateFlowIn
+@@ -23,6 +24,7 @@ import kotlin.math.max
+ import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
+ 
+ class SettingsAppearanceController : SettingsController() {
++    private val hayaiPreferences by lazy { HayaiPreferences(uy.kohesive.injekt.Injekt.get()) }
+     var lastThemeXLight: Int? = null
+     var lastThemeXDark: Int? = null
+     var themePreference: ThemePreference? = null
+@@ -137,6 +139,14 @@ class SettingsAppearanceController : SettingsController() {
+                     summaryRes = R.string.show_missing_chapters_summary
+                     defaultValue = true
+                 }
++                intListPreference(activity) {
++                    bindTo(hayaiPreferences.pagePreviewRows)
++                    titleRes = R.string.hayai_preview_rows
++                    summaryRes = R.string.hayai_preview_rows_summary
++                    entries = (0..10).map(Int::toString)
++                    entryRange = 0..10
++                    defaultValue = 4
++                }
+             }
+ 
+             preferenceCategory {
+diff --git a/app/src/main/res/mipmap-hdpi/ic_ehentai_source.png b/app/src/main/res/mipmap-hdpi/ic_ehentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..e80d36b398b72e830880b3442e32502c0745940f
+GIT binary patch
+literal 3646
+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
+QUH||907*qoM6N<$g17|H_W%F@
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-hdpi/ic_exhentai_source.png b/app/src/main/res/mipmap-hdpi/ic_exhentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..cd6ea6981ada514e4704e01c6bf78899561403d2
+GIT binary patch
+literal 5286
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-mdpi/ic_ehentai_source.png b/app/src/main/res/mipmap-mdpi/ic_ehentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..6c757e8b67f670298b6b9c01d6e583f18a508786
+GIT binary patch
+literal 2061
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-mdpi/ic_exhentai_source.png b/app/src/main/res/mipmap-mdpi/ic_exhentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..e832ab1d918dafa82ae03961f1490510f0a286f6
+GIT binary patch
+literal 2879
+zcmV-F3&8Y=P)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm000XHNkl<ZXhZE<
+zc~Di?8UFzfWJg(4Hiam-1qg_-RKx`ZYa50MZYVo7E>+@89k;ZuaT_N!{^6)3;?^Xs
+z#*L^Es|2g)ByBa|5<rkm!LSNEc6hJnJMZ1ceH*@4(s44Aqu2ZHx#ynq{l4$_E$3cM
+z@H1~FKXdu<3xL;c!Tu~j_e_<?>ylHhTv*1=bZ9l50H#l$ZadB|ct=l9ZzAOKA&RHu
+z{15*{C;n4;O=rbl)jz@=<q%cBAO)X8HJRE>d;#G;6R=TYYW8_`Rmu8m*RHi{BG3gu
+zlJedkKI-n4rKv9<5?*a#<NI|BuT%`FNi{&gD90cR^TU7pEMqn6=@Em_1VGo;38^b9
+z<uayu<wSz!MRE(Psar(@n6{w$!1f8Mm_jg5U%#n|N%Ps$C*4^OSwS^G7l0x0$t&tr
+zHdK<wSmBKuuOEN_hRzqh{Hqfi+1MWda$3juq~)~=I`?TpQ=8)ZbWhgXgYNDwFuzf0
+zP<Y<lOah6y1x!p8`V!Bj?h3l;BUpt2aACh2*r9T0O$(?1=oDVGx=b!pGj&r#4Jyi?
+zqN=J&t)DdK>FEiNk)vQ|uZ#zjepK`nw69c&4*D1kATDVcw}6_qL>Hv#s>%{Pdi03N
+zA;X|SgRpAVDkLT*!qwGPcvN*xNlC$_OP640XOA~V`@m(Grw#yue`xbxppn5AAOLEL
+z5M7XEI@;TjckeEooSa}|V}p{C5^UJ80ZW%Ig+wCZg7^0JV)^pr$ji&)zf)6F(bUw0
+zjAJJd82oERs8mx@|Ma1u1_M}<*k=J<&P)QmY^+CFNdZhuOwiieif!ArAvrmji&R%v
+zhdq1t;LMpb9H3Mx#n!D`Ikk4~+y(DZK5%k&{XYUocuz$k6_qp{nh8@~U5UcS4-g+8
+z$AvdDGh=<#@bdCPL_`FhJ$r`X!-u1>v5^VB6Vs+m!-*3o@a5Ta2nwDe0-&Eh0{@M(
+zfCzxtnRWTZH#e@}SjJJznKK6$E?mIHix)9__G~<S_z>yo>0Ik{?A^PUQ|#*1t4K^r
+zLeRv?u(fwo8u-=pF$%!qgr(XR5c`(MC%(CU8OM%gZ~#Y+9Kn_?Tj1yChs~Qe<LJ?&
+zoL&|d7D!@36R`XD?_>Aw-5lU}|F>0+t}A(owf{c@(1>cHAPye)bN_jr1Bi@_<QgYu
+zCf>WdyCXL@m(xnKk<<J8`(svQ6weR3nqWEcJ%gP%HeTBTVrQmFDGyYZ7P7eioNJ!6
+zd-CK-Y}~jJ9UUETaB#qrCr?ySNi0ZNSs6k@LwU$`AK?QtiMbjEarPZJ0L{drbUm3&
+zhO3v(A}A<`ud#adYD7mzgZhOggj7uplYpI_ojeSO&6opg8(S>^nv^n%La}kb?>7o@
+z3ot=%=Vb9LOTw&Mw+^wfu{!C{*4BoMj0~8Yn`7CsWqeFePY<`!)ajA1v9;6k1uXzn
+z3!VMUuu?({Kz|gHqoKYQm1V^&6I)=@rcIppnVFfK8f(_9;X>`&wF^Z>MLeOApHO}f
+z0NC5xa|;Ln^ifA}=8J{`SQMA4vOrT~9cpW97_Zy88(3Oe!o_7M90ogcL27=iLS1b&
+zd`6GrS|veAvomMT<oC0(vbZBRH#Z|DCWc2KDm`edE&v|PO2Jl^IN#K)Wfh|VNShn+
+z{8<^$*$rQ}5j+AFu<KrP2`2aj^99I4)m0UcHot_M>u~t^_^{~IjndLmR{PlTGx-7u
+zJZ{`Lmh|Eg9v-d*K+t{w%kqn5Jy<WXK)9VPa;2?kQ~H&`02VGuWwnqTKRoys#(Q|9
+zi-pUS@F))8VCLT$o-W8826F)|t*lv@Y>LjdW<*AWW5tRUJoe}0<e;LWf``(=!a|<R
+zOxd_elP2Nd!GjzCJwI*cZ#abn0DcXPh^;8c2LS;%Y9Yb#t{&WD&yqci1Rz7!<#V{Q
+z?+A9CJc1DKaa`k9?%l!Sut;n<{V6XQsIoL=^?p&|Bm8b|B=+sw$BVYdj~|1oP^z2i
+z>+AX1+S(d(=g!6P<Hywi2vLYY_&2^pTtyl7zv+h^`FUs_KOX58gYbh<02Zfk3*5Q&
+z4-6eT6fanPLj{?P^-=Lgnxkx+pP$dUO%aL4Q}wxa?OI+sQz1v%7s9HChX;3Z_QC+$
+zw{KSg5S&=B00DTv>?zEcPsx}yHo3at1@j9k1Pr$T13>KV?ULfoom_nK{$@l>4#lbL
+z%lP1vkGVFZqM~r)#tr7+wJKo<041m;OO_}AE4fR6)6&v-IYB^(N<<-BTU$;caUKY0
+zks^&zsHdv~mT$cUIUD;ImRj<R0kB|kGPgj^^($y^Z^P*gdr;rng7mBBkpHxZM-gfi
+z|Hq6O!>i4Ph6W@gB=G1nfBt-x@Dx(Jy1ICcM0)}ux#<Jo=IxBociu!zdjlSSnolVo
+zFKI1f0m#^cH*Z|#f`kW$z|6uN51H__jL&XvZYVA;hOe(L51HlV<*2EtL117YMvoqi
+zQ>RX;LLh}*Dlf<?l=Orq00^5wPTZG?&AhE(Iok<l*==ZgQm-0MKMbbO{8)trUQ|`0
+zth9(nA1f;>W{q}E4M#^uu1WF_YD6RIr%X%F(VjryG*zOMp(#2EWd~X8@ZrNeCxlF$
+z#hlxQ&*Q|j?-b&SIvXkK)1RsdZ!`d*cq?a_w!ZF1w6#h(fT0eK_-#lSELZ{d)qifI
+zlhK2!PYRtBZK!MzmjMKlz>?z<#b^#HsTVC;#Qh*3D1?V%Y7P@!;QT8$v^{J@RZjT;
+z04z#UtA)y*7GenFeJc~ro@wjD)HFORF2$L=TwJ-84X-!6xeq*l{#<QQ%E06U!WMJo
+z%9XrAJ#^?04jeeZGP(;!di%o3Wf+`2U0@PmgBHsU$TI2Gk9ISdLi02Le0TRIRz)x5
+zsXycE^YC`}fLTi?j_vpefeBHtbg<(9$Pb7z<g|29^dXCoAJLwfvT$~GHs6_1wx&k3
+zoA`Dprlf|$DPS0?A5@_{v+$<{@GS!{(rz%Eot;roUBNRf(c;0!Um$wldPwZ7x$qPg
+z$BrG#Gp~?+sgJ@Y<p2Ui<7huXp;%~>L#Dwh#)Dtl-%)?9B1U4c1!5Ko6jDq^7U*Vi
+zndlSd>yJOrOF{CXow)nxd-O0tC?mJDv~a3WqN6ZN5s4hTprC+<Tk0q4OqehMVPRp|
+zzkfgXmGFpncq!37Rk1U(zOAs#fG8BRFj3719(?~D<gCD2Fl83fX1xnXTYFT=+A!mf
+zsc?32<`yBU5XHzc^mdM{70BK^5LJXd5yJorR(e}mTJhXL&59|7EF`m3h-})SSAN68
+z=(`IN)Bv=wO0&N91zcIoALZhPG8Xsc5>wpF|2Nk*X__3?bA%V%JiO4(z(`od>gYuK
+z4~@5%q8D2FMIE38Gy%|bt<q-n_9)Ct;gTBP>?kQqnzyreVEY6|y>jW=CK?06U?0#0
+zKv+nZ5U&($09qFVGz0+I+cA1xTruP2V6J7Y_bPo;zEbd4Ja3Hl<uaKx^ZXZH>=|+%
+zy|32^fc@+_Q3q`891=AbFht<~EM<(qnqym}&7WsyeYKMH)80n!7aDrbl0_2_mRz>k
+z*w{v~?G~%F^v7mxkX-EpkyY(kw$qTdwY7eI@7r5{VxhW%-BgQHx<2wzpA|dkYXrUT
+zP=D+6lZj^VL=-usO6s(W=|eN<`%X;#^rD{*`fBq!8}XgKOwyrc+F$;w!Rs_le-wJ%
+dav8k-e*uhNii;RwG-Ln(002ovPDHLkV1l_yXh;A6
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-xhdpi/ic_ehentai_source.png b/app/src/main/res/mipmap-xhdpi/ic_ehentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..a198bc82c7e553ebe3ddadf476dcc0e03fc3cf05
+GIT binary patch
+literal 4360
+zcmV+j5%=ziP)<h;3K|Lk000e1NJLTq003YB003YJ1^@s6;+S_h000orNkl<ZcwX&Y
+z36K=k8Gf&aQ(!sV$RW#ps0gU5fGJ}XQ+SXSkQl5|q_irQF=|4B8pKpeQ^rJz0Yfx*
+zRK$um2x<%}CSH^V&>$d}BFhnuT|t3ej+xH?z1Q8-$LpT%p6QucGq0){cINdvzVAQY
+z@xN})DygIh@RHVEshm{^D6tS!2&fQHVgyQDeMJK*1e6$o5?5c*fEG-EN#6fEiMowL
+z`~O2x8x=g{$EDdmQBl-#LN%_;Gr57!P<wIV`_M#00S=&RQ^$>Kd+$THT-~m{b`96~
+z5GtT^g!<wOiypd9QTp%68>JQl=Kbl6zM;7}GylGMPtKn+=ivhe5g;RH3QGXMPc43W
+zZohNBI&1-F>9Zu+W{TA8hyWpbl=7qGMf<b)Bi-p~lg4zd_1b02R@F_ua%MdhoHmFE
+zBq0m|$djtAt?lsg!h2q6l}exKEHP5E69(T2Xio8SS&B$K@ezuQ-g@=)S-(2}(MMnX
+zoa#T8tHWUkNKqke)~<Ns+Fm`Y=H&-|RDhyNf7J4wkQaggv|#UNM{XZH{PH>U-y?=5
+z_{u^q0`Pk)y4vsjWbte5+qSA@hpEgXL@Zr;14stXWR4&a8C*W5FGW@i7o@IxS8*Hf
+z(3Y{bt%C)%9L<m5*`Kba=3^^+4VpZbavjR01-S?SVnC=<L;Z{EQz_n!ZQae-o_$Q;
+z*~r)nD+GA@X9orFdNYx8_-GbTdn1o)%Xp{u68NcT8>N$bGhS2ePe3H_MN5Lo^!ysr
+z{^uZontixi&4k{R4GtMv;Omfc5diZ;V#=!a?RaUYX#dt-M8N*s1h~O#PXttz69LJX
+zACu#*y(jdf|HDKarV9>PnZgjzj_&NTZ^w(<1o87<XZq`_r5S4cLKLcJsC>~M`p4{-
+zN_x4hj#nKgRG43PA>-pt_m|p88W2(XH*RO_izcRjOak@($J89Uf9y!vmXl6o{KVtc
+z?Skg-Xke`QDASj`C-a;!kg={E8KZmnNf3Pcv-gA(>0>`#&G`@j`)?9}p%v5ryp-un
+zKOnnLpdWyV1D3ANd;WIzg}0$%LBNgU8Nb9es4}xg0^cCtpGxm9>$XY)Htb;fyBp;1
+z7aMIER>OFouc%AgwwEznWN!7R-<Eks4Por~D#rR$Gk$7clYkof&pv|yjE0mcmj-wU
+z$o%dlrvH5<DHWNuBQ|^Q2b@AMIY}52pYk=v&pAcivV;lHpL~O{`n^owMHp?_C4H(P
+zy}WJ|<D&*U+Xcy|KI{M4!q^9&Fm{v%A^1e9A+kEOWBjbaj87PyFaf_=oK-zHbSlu?
+z1W+EWj^=SlV@EJPyq}kVgu#cM%-r!9V;^p%fddKA!6w;;HgZJ9zhB4rrK6nfTCq`R
+zy}oQU(_bSKOl{N;!MadNr5M*VaSxw9Az=a@AOc=6Y@fY}0Igjc8nD7=Bia0cE1x#*
+zH2DolKR+3o>Pp2RU=|Uu`ctN3)Mf(N8VXMY{NPeA0dK4k8n3^(j;^(mfF}4?g8=ex
+zkpAKmU;~R!J)ahfj3H*^A)(1zL}wbS9-XCc{-bcd?(sbQnKok*;}gd?q#`r**JRNT
+zN~v!)fH&mK%*ZE=p?fbYq6WAmHA_HL5aWXHLcps_if?4w5+Q&{({3pS0ZZOhc2yE^
+zekd4}nG!cWS;7PXt2R5DVUFfh8jzm!b2;qBOy54+x5*lxIGPBUoU{f!uXe)J5JAAz
+zF$staethY-G$0BAbw48ljHMToHkYE8h5)++#3i68;5!M6tO2<Qz`O=Npr{()mVh_}
+z!~#D*>6aSt2QoqAge~`z?Tpd{)!k*y{IfUNELhP9nCoMLs4cNfP%HxCIC<wi>6?fE
+zjDq44pqSqztN|~GrHIU2|A`o%dLH=za~K-J7Z(kDr^W!gjEw;IQc5TduoGbPBTIlz
+zYe5qWy%Z5ZfY|_Yz@Z6<1%4dU<Gm*`0o2y?rEtP>@lm9*AizBj2unbT!55lrXn<!S
+zk$&@NfSUjX_$ae@8nD=B9*~QG*uck?e6{ok5`dX7O{T1wu+e6R1_TmdPQ;QjL309}
+za1a4`fghIur>C_41r5+$^8jgDauA?!zNS@@8c+%XEFUnIY10%=xFq2FOTVcB9s-PZ
+zS{h($x1|9-(l1O9mLhH~CIKEF;36Pz;NwbuF!=a2ebet9^8i!&@##xIgUtyW+G06n
+zK>#g9+-fdGBx!<teSnRCG6r8sfUUiP0Bo!rpnZZ3v~>x>X3eJ^USr=t0lwJbg9%EW
+zfJIDStk@5L1kfBH_F9l#l%zO%z6t+@zwI~6@MwUFfX`{mb)A_0u=GzK7h9NCatl~l
+z5HO-2V<Y=JaN@_&CJo|&j_*X9)-nWz4?@5|P)Zhjj|RBFw1%PBviuuuU1A6AB?`eY
+zLvB>sT@nIJ=W9eesK(T+TSq1~;fGM9!I+aI0T%{DLL@Bt9t}`{X%e7g$Lw}8J(Ne^
+zM<G6DUWN3Feih9GJ@1?ca9;vQlDmKa3NISilkqbKNdhiA+eiFkNWLkRh|)lyfJSi!
+ztr5;dc!7AMZSo5$-^ic-(O=}|x`zPlh{<_?AmGQ3NCIGvkk?20lP6&N61f(Hd4S=B
+z1A%u#j7@90khGWYR1gpYd|-+Q4WtjZh$sgUpEG)>&?7!}xHI$-p(IBB%oAi<w(e23
+z!y<s@37H#dv}8{{(qAS71b~Q5Yl<H55)cn~6B7X_Kw0ytMSxBO2tXneAlqUQu#yPC
+zaMh|z(N-HF$(kUA2FP~h0MPUkJt-iU%#i5dT~`@hQrx?7hYbH%ThH`06g&m>{|q6P
+zs7jIF9Gf4c&2pF*n4d1>@KMkG*HBO;Md4u(0PQ0)l9};WSro+rG2D|ymtuR2&`HDv
+zQH+niiGsEse9@l(_dF<3A7BxHVW@g7$krPVSiIi}jE|5bB!qqVCM*veB?8|0i0RAM
+z%V4P86yX<Odp%_t;U(JRKa?g(L}n8)L}X^#T*IbQKr#G=jR4-6@*<r#obh3OnEvT*
+zra!jKpL{m~m<ivO)I@C6W6}p8H1U=9)%angGnAs<6ku_L?iulx{DKj_`0EQ^XN=-)
+z^!3{*Y>*~Fh%1HzbSFPT5S!G!i^#3b{SF<VA`O6Jh6WG;=_&Ua&X|Ih;j~3EG|Px-
+z;)8oJ*0Y;fezw9E18l!60u!;b6C_~a{gQx%%cW%6lWAtAT|jF=7x;i1&emtH|1E{I
+z9%4EsJ@$!@qCQm{SeFir*UGR$K7*pvI!d!5Fd{%R*xPm9=xuMnf}07p=cb|)pptSW
+z0pWl*JCu`vT&Bn(fFyFpL?;2{FEZFz2_hgD_=dDA1u#hsXdH8njE+7;l4(DLVQUF@
+z5D*P`OG=-mh~p+2F0R;2*CwT=DJ7o*YdL1xh)}-j>oN;`fo&e3dk9dCYTW#|@~8x_
+zb|B+j$?+pN*N7=C_?BdN0wU}QdzGK*&kz9^ue%AzCHavFC=B?*_MbT@c>)?n)XG&U
+zbH-_xd<59GqKVc;wTxd}tAI89SNg~QmClh);jldjgi>pgXW0Xz9fXK?q~i>5qDbOQ
+zS~g`hAO`pWrbqkUc*babi^KU3=piaBxCS%~9U%!YlT9KutnIX=(Z`sfjGryndkT|$
+zz>itDB!J?3+(}hUu2GMT5RA6?=>z0QtCgH=7M_41!<_`!I-y<j4GK#q0%+{aPw5jA
+zp4_O!^D1r)2p|9;isZKY^c4<f*yjy)0es*(g8&-t8ngZ467bCJjMJ)TVNzkG-l4Q~
+ztkyFMvQ?LQ>t3HOP*}=0i8yoC?a~hI!SB*SBb^hor4~v+a^Q<44a@`V!%$asY64`Y
+z@*=?1aP8TdqycjMC0<Gpc$=+u5TF?Er{1PnvLj_PSp+CXW5v;c!2v!XHUa)tJzslo
+z;b;TQBEZM#Itg%Q5(MmZg{K>pv`_*PmU^4yn`Ee$BH(jnTLK9fPkR{dsEC$FK(JgF
+zOzIWji?38`K{gG^65wq~`Vu0*9vf;iRmIf+l?{9jqo5!kP(<K;z*iFB>Wd^m-PY0*
+zFz8hOd4Mkg<pI3X1Ste5^|s$Iltw`%*MQIj<TfO^bHo@+sn&|zV;a*0`K&9Y-f@qD
+zvIUec0n{07;jB;-u|$9mFgb1-g%7}J#`A;Wgj)mwDj%@W-v=ZHx@A|w*PtZ8?u5&l
+zfPusOeSnLA@Q}nXH8Fs9_yD^GxSeoICV=HN6OKqk2z#$8(V+n<C)}b4uyuehf)B`N
+zDIz2RF@g7JfKNH)?Su!M;%kD6LO`D2Tk`<SXqD=rv()n0zLHS-QBbJ}C;;%524Feb
+zJqofr;V%sV*itm&E_KA$<6r~!3wlwk4JGrjUV(<EfWXUoXgL}?VnI&0r4Zmb*!=t*
+zP9H#z^I{ZNDZ0Isg1GQlFg$~8SYJuNB?0@!2>_qf02=`+CtS`1?CpQD|1k9KsWJxB
+zOxU`^Qwc%9zbUk&kzzZsVclPDSZmi`<Q4vc123iCo-7UUbHXi^01uj~4kA3=*s#`?
+z-JQK95#YVxi*I0p{G2fTUe-=HNCQGW-P}z;5rKD@pq5HNgAo;>r;U>+ULz9n8yfDt
+z>A&h2vJjtaIaXg=vIbZLz`pxEpj!!x7nH&i5N`3KMVp|8DHEg<{)8TKx*HFK4N3|?
+z5H#CEJ~dtY)6Mw_y3@6WFN;<~(`IxugvcEgQO-`d@fXu&aPGf86sK2gUNjT{ynlDb
+zN6Nq_PLGAmKZTQeM?F}Mo=6YhLq9N7b}z=2H34&OBh+a!LuUiT!HI|o&tjHQa}>;a
+z1I1G2m12O8`fx(#3c1{%<7v4tr-&alMrWyi-s9V<bg4Jx8|xR=o2Mf4!Y;3yV*+p1
+ziLm#l-V}e~pb6X2$b@DZA&K00%z&zinTa%XrumF&5R&AkJR(hT#H7p4O;4?D*RD+w
+zmONG6&lC6}6L93{vBTZ_e+!4A^L~0d2*Bg(JFi>$@ZugPbUh<40gilgfq*yb#aljb
+z;13BwR(J;j&Xggfos#b(>tV9yEg`c-rz+QNWBNz*Dg`<O&PUT@>v7-p7c*|00L9;X
+z8uouQWTZH&mG}DtKmfInb$({Soi~jA`e{FjjA7&(3JiMW`qek+Pm<}v!IAeiiVN?)
+z(Z(C^8@S?Ji#)88y|sMJy>*x0K@XeG{|y@EJ7hXmS9hvjx@h*Ietmn$Q_uxZ<q5pm
+zO>ta`j?Xe2UEM<O(V_Fm=Bh4E$e25V_1kxEo_6i*$*b0Ez#B*CENp)7kg?vPL<Ln%
+zsylbc%o$T2>esjDkk-b?A%7mq8~CvOOVbkkmaV%sKQQmPn;w1QAM}C&A^mv1P2ju4
+za=k$V^_yl0%blHSYO1SePQUWoBS#Lb>s-}wKuY5<Q8Ch&1NdXd(oF{rG;LeIaoelE
+zoW0<Yb(^-+5qtqY4maoh9x(tb-lRttfX0ZZ16?2ko(pe0fSC$IWDJtZ{uW3PPJ2Vj
+z@lpYR4zmNvH{YHVC~0AVGfBWZKJbbRTp*-EK$ZYVJ3z-LUanKHcS)LJ2ol6gJq_UT
+zi7PCLWiQS#8wd#p*tnnxCh(zbY#i`RlY@KBD`wlj6t@9r)fK99aR{&%obUai8rcFe
+zg_3qvKPmv0nB58i6#`0(K#8lbXh4O45+hLJ>i-8HPbc?Y4+$Uu0000<MNUMnLSTZ-
+CxdJ}`
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-xhdpi/ic_exhentai_source.png b/app/src/main/res/mipmap-xhdpi/ic_exhentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..61e2d9f4d0e20d1a42013c38b7bd916818ef71ba
+GIT binary patch
+literal 6937
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-xxhdpi/ic_ehentai_source.png b/app/src/main/res/mipmap-xxhdpi/ic_ehentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..b5850e8a4866561e1c89a4283808d8ac7ed7d64c
+GIT binary patch
+literal 7110
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-xxhdpi/ic_exhentai_source.png b/app/src/main/res/mipmap-xxhdpi/ic_exhentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..78868e7bb2f72c0d1a81ceac6399b5f97e889009
+GIT binary patch
+literal 11590
+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%0D8b0OGW&CmUm
+z1{x~}$rLxK33Tt!BcKYB5C-6gHHEOJ1gQ8-FaQ#uG4Wyxo?^~t9I#6ZtTONSP=$13
+zjR)D7Vh3w)Z~JnMXXd2wG<wd~e#{U7m}RD>8m1IaSUN|t0Nm(mGAqb?ddVv9Z$X;w
+zay}Mq%v9brnPg8#u)0b2uKjZ=d%rD)6DhuWM)|kO<A~%(gXpFV%zPvm3t8dxzyty;
+zo3e{?#U5F{hlfAAJ%$e4l%BtxHNj&DYxL)V@jmK?*=65I59u2OD*7rO4Rtzd@?AMe
+zN8`6&$$2q$Q2|){EB)Y~Q_W!9jaLmYwX1<UNCf>@xqY1dn6Qx24~^syb=O-m`&NzR
+zZyLHZo(U7%Q=hj#A4gXm)H=`Jj73|kwypbyFB2X{o~@|_gcHC8Hx#MB9N<VHagW}?
+zt@MoXI`<8}qB<27nGd0#<}O#?OEm^6hFlLN3pl^WZN4T|I8ehGHZ#*P&^0x!tbTKm
+zy)|3sWTb0YPsFAQ&`0v3pno4E)swlDJ91*wDy<7Msr5+2gVhR`i}x^BAU1O&Wn9s@
+z`yxkz09Sz(L=WJ#hr|I&&^Y@wqe3o|&S*}Ea(fg&4Jb)p5;1|a>MiDid#9^3^W0$|
+zSbHeRfXAlz<)U+dOYH8)#n0CYFLXf(n+jmo0D|wUnaT&htH#@c|2_zBm#+}<#H=@k
+zF}#|KN1?@u<%F=P-Z4e0ASym8zPeeN-sxjaW(zH@%^9U-ljHK74d3J-m>#mgo%L2!
+zW`F5l$1+vAFo4=*0wvwNCzo<(+?vx|wzGebbw{tyPo!NP>T^I0)Ltk&I>aCd-Xy)!
+z?y9-FE;&xjNgCQi!cZ*6BtGxWosLFC*kCI}uQ7LnD1J@YVq3*PiYZ}SsS(srEgqdB
+z$`8E67=2`cA>(U$WTje`zCbMkWeiGq?HhT|6vO-5)ra0A?IAuIP*K!SsF1S=`5!l$
+BY3%?2
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-xxxhdpi/ic_ehentai_source.png b/app/src/main/res/mipmap-xxxhdpi/ic_ehentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..53844b8a3ba2aa7f17e125be69d250788a66d455
+GIT binary patch
+literal 8393
+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
+S%H!8~fbwGv`LA-O!T$$f2_`K7
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/mipmap-xxxhdpi/ic_exhentai_source.png b/app/src/main/res/mipmap-xxxhdpi/ic_exhentai_source.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b8e5e68a827b3e35c86ab3c097a04204b2a22ca
+GIT binary patch
+literal 12661
+zcmWk#byyT%7oJ@f*hRV#ft41NE|FM5y4xR80)o<A0!xD+AT2E*DP2k~-Q5k+-Cf^)
+zf6UB%=DByCxpmI_zUSO9H5FMroToSd0N}~XNo$~=sQ+J3Ec9Jt-WnSK;DEfegqFME
+zzBjhJK}Yq0UV@E0hhzLaHC6=m1SvIj1Pmm34UIx>zoLLXpI3xOaW+uE1x3Kz(Zh<%
+z%*KVLBz0j@yjaxMTz~#8)-&lF)O=mKlTEIiinv(ht*1$2*za+pcN*OLF~j>PZdLq_
+z*J`#*s6%x4t5>EnyU*p-#44>ZH|PUl)edbaY`8E)+~+z8;KusTg`gc`InhSf{6z^#
+ziBVjK{Q+FHvl3+_#*B#Y(^<ga2K{$_)Wu0h0`Ei=9rz^y#hzEIiBT{@(@gD4gc4Fm
+z^zOK?3lhpbT<8T)gGQ^^e45CV8|kA{QWq_m;KSZZ&K`8$+WmvK=m}?n$dgfi68)T3
+z@HwFNAj&B(3p*8|(i{~BRS!^&v%8!sImn-j{VMTo*ZvShvvpkGP4b#33;YaI<YE6z
+zLbpTOQZ%j{LmaanXkIWn)7Tn?<AC#*hdx6*CRKesJ!*f3;EQpx2ww6$a2U*0^*rr9
+z&d7N77{GkEnch_mRX)b%zb~>&cfu?&-!;_NET3DQ6{t6}f2AAp)}{k5+b4P=@!4++
+zYL5%$YJUEV()Z;zzX-%r|0X_aEkWInbqNtu`sul`WiW(=Cm??O`mjN<?wgQfyMfJI
+zRpal9Lbm3H2LFkvsmj^e+4iO2^x<Y*W8`N)(!lr076w4Jw~KBxmStt`(n8p;B3<$H
+zd@*+R@M^2Xfr`q?ceX0{yYqiZii(T89p`cfRFyIwPHtrA0Y-nQ*4q<^Ykj{7F+$sE
+z_5^3{VW;Me%Km)8F8i&5LJX?brkWfx>6LTZ!6==&{}K{qYctj4$xDd9UJ9st7;lO@
+z)pOY%{oyh&WPy#ZWq7k@>gyA}`I|vHb4Pua5RrCGvix{X<F+tbV>9>0?SP|Kb@0qp
+zSzzloVwnJ{7SL5q+%E`nMub~xKqUd1*UtH5Lzf&cm$5$F52%Vgbcf&l_)ju$SdK6l
+zLTC;(5T{;lzMh<8uI@YFvN>!T?QSW>v>b;#0W@sJk_+~n;Xr3~rmm`r|7>4|&k462
+zSixUr;hjaqpRrdj!I{qp0bbvWKMr~4A|C&GmaHs%UO7@fUHWX{8}M-a>K&iCAO&bI
+zN7lqdq9>TYh-EPO{9;z-1wgNsf?&~l=1ZUe6y7k7(>{Fi-7P(Auv%)Wc=LXOHlT$c
+z)U3`8`Z$u`M?eqCN~P2=0p_gQl&yk)zE_*xt<IxO^JMVN%~dDP4=(2<4wOKD#w?1)
+z%dsVFwTp9BS7WxL`t9s@)u<V9RuI^)>PING*@fK}rvYrR+uoDBNa{V#GhU0q<|)1y
+z1b>943gB`Pa<FvJX>_-vt9`rcLpQ$l&EgRfGrt+l$A`?O2YUDC%U2H#@8-s$PJL-D
+z<G^Y`V5)WrMkE{<r<L=&xSBr-e@xbSr|q4)+D$cxU-yG|t3MSVGUoag07G8r3;Na%
+z97%lirSTAU+c{eae>@#u7g_RoOLnqP4OIYE_FDG{z|Maz#BHy0a&uh+UxBK!KjdD7
+zR#bOj0%~l~joF5e)?UKIKzr}Nz$@?bUz_-=rkV?Kz%<4<`O$BzYbIpc&6wX*y3@jt
+z-SrK^#^#av)kqe9BZ`h6RJHIu7cx9>RJXK1SQz`#reZd(>AF)<_K2tO=>(h*r~!o7
+z6W)q`hqHp(M=jp;KfqD^;?3qyYJ?bLU31niawX5X)qNw9X@H#B6O6cGrc%WjbYIeN
+zvZZn(0X@9r>&|eDr!e?9+ywVlBcK(IXuZO`I{y1FIYoe<{i-^<^pc&Dl&ILR@DtKD
+z1}a(N%na16XFMheggzEn#{sRB7yBeo1!UlA(Q$0w<Ax*HdbrqddH_-<K{f=Tnm418
+z&{4&uCXNqaBi$zZ4uNJpY~_TorjQuhGl1YA1Rw|e#M-`^gLs+{A>@z^>?KV^Z>~gs
+zIfH#EE1U6iB;<eZmcrKs6EXU~0dab%fD|b>bf0J-3k-uH$>8~jzlP9EYPnwe{miG&
+zbxR)t)m5!h?_GHR*vgD=KmPMjLH@j3BD-T?L{5`S4B>4RDn8IkgYy+L;Q%8_ICgf7
+z=uYMtkFlH*KmzIZ5FrKxfCR|`ykTny@+Lqv0M8hKjKFLLNjV?puB*lsi6>v|l3Hp;
+zdxkXMUclaB`a=M8FOELB!j{7TVWjlWi!EnI^*oY`&-hxEUn_{y2mIw69Jq^0WFBu*
+zdiD_XSaq4YoCyo~3$xL)F5M<+!t1hi>;lj$YWH94EotPrYoE3Jc%lG9q#f7De~q7p
+zkC|QS$uza!^<M1Fv*Dd|exrW(=~Dq;p)g_6gU{B_kk;KFFW(53^6qL+H+K-DNbk0y
+zBN&jdtK`9~U`am4qg^OAcyF=%?dLdM@D@tdVk8N0_K9Uulp)Ie+d`*xPSj?MHZ-Wl
+zJ6l;~deHrQ3(WoZgd?-QY!ev~-vJ+FX-W{8L7SZP_^CTJ_H{^Zov?XdC?3~r)pv?6
+z{Jju7HOBZ#^FDGNL&NmD!Enl2D-rLeva;xEyQui};JB2jFqhpKSx?+Ku;rWMFFNEp
+zzi2d+fVoJRDU}wFKWFm|R<^m??9=_dbp~F!Kc()1*auB(V=gW(*5^ADI;`Xm;WYM6
+z?(X=2QqF28ZI_Qz7mWt?#o<y0b#7Wj=obH25QSm4PRaWpUw-H2=7zP1+Akw$C3Bp3
+zRO>Hj^d#u^h`V2c-P43d4KYs?kohPA%02ekj$VauCNQ7}2ghh`wgF@iM7qOjXL<c$
+zlfL9+rbK{VBF90<VguM{O?)+ice=v7j}fe;g}OBT)e?ZsvMWnHcN(9ycwZ)I8T()N
+zUX-AfIwX|%P8j@WK*S%QS5*Q8TVj&eRY&~EB>+{FT~gsUX3dEU`xs!<)g~ooEDV4@
+zpWS5yLF8$ekdx&bi`9k^ZrKv_KN<?fsW?Hn4%RN;L$LR757XuZ%Ckh@#IFBrV`pb)
+zqDEpLe7G8}vRi6`Y)L2ceIoW+`!1U!vQY14QAXClxOGx#F|<K6wA^AR$Caa~uxwU2
+zYE|0Ud9gPWdj+;RSg03#vl2*>BXYViU^-W8r&{RXLGz}3g(2$GY$|!qgV{@v$g&XM
+zQFi9Jl}?3?z94g7py5)UDqRn1fB2^q3EcN~zjidjYw-1ES)!58%#%r*(+}j$H#<eK
+z<{0z(wYKKFlRdjwAE>nYqw`W7ac)=X9$Di(dYBT+YL|T8TpJ|bm015{Ov#?+2EFfk
+zHL49aLJ!VGM9W6aS|Kse7wmm|;lczUYAr{yx?yk>%?r?|-aXOiz^BZ#@$85)^xx_F
+z_(l=z+~LImc)M%wsHA{G!|Md#mG#9Clx(Y_sNoj$G~QtKojA7_WndsFgs?I!5}-F4
+zCq@bnr!pcV0Scop++Le$ZmHUt<U+T#N?`ZYbLEz(FX$z;iIrDvO0xTCrNbeA17cmx
+z?_L<n$o6X-6ggG8xH}#4qG#o4vqg@u6Gtq+cG{4W;Y$5fC~ndfNrUV0R`_<WaweRU
+z9#Ii*toY@q1-pmSxDS{1!!_tg%;3bUA~G%chRqo#*LGbtuPMnnE`uyHK^6&Zv9nMZ
+zpO`EQGV&hOb$@9O+G^!y#=<X>bWUlB^1U;?n0Ffb5m6Mk$?1Fj#B24NV9e6bbTW1w
+zx%2bA8Qz}>BUPU#*mSgmy6Nz?(N)d$sIs<atxDse$YK(%qZdN;=X(P^6OHoq0mP_4
+zxNX`x#oenAKn$5dsfST5>)c>K<_ZB=C%7Wji2%hS@w=k{b`XGXJr(*D5I#!jKi~#E
+z<)|T%rT^84C=o#5AngQCpJ-e$0X58b=cT@QFF`zhfUy0p&y-8dfyct(r)He-KtN0)
+zBeh4g|HgK?%kI1kq{F%DOYIt%RmslQtJfno-}8~_ciq}4yQj49PJZ_EfZ)>0^_emg
+zsZqZm$CHzjX_JuWpEKffRnn5r=->p5c<I^1c~(;;xSt7?Qv_^2lu1cfX!_B5?UlDX
+z7Rw!RzkF9AJ-akszXYEwN^A(%VgWe=<M*_I0JFITK1c)i3(Zvuu9E5PWT}2f0_VNT
+zjmN?KU+c52krLDEe%_(7!=_sf*dGuER$2W)oucPPy4Qic96op1mA;M+v!9mGzpZ7{
+z_|RD<SBM&Qt^4r@*MDIw3g%JIocO4P&yLI{GnXl1gYnmFo3Te8)opJ`mU|zM8fgC8
+z=i;nua-SqwlG{j-23+c;ry*QFe%|{p#l3%(j5e!>ZW|OBWPyMdrb7(ieBLb&M&Jyu
+z>4N_dWis_YywU;ZK(6qW${A3b8NP#^5mc*e+ZjGL+krTY8gUSmVa}A1??SbxnqL+p
+zVtB?#uq`EFDT@(lwCt6BZa}LBL;4}{G8s_lWutg;+(pMC0ka@?{Wj{{{XB##^%)6F
+zF{O6FRsVx*p`0F-#y#P_yBz6G2$Dg?C9uF63Hm*`lxHVyYfQno52iItJ>Qy1tbU%i
+z;Ebx$QcA;hsKxc)dB{2=mq5Z%1SEH?;lv2s7#Jv5=|}6L_vOM`{wglW)j<O_@3~uy
+zt4}U1Nl8Xo_~Dj!r)|=*ZX>GU2tWMQY`4?oJBxA(L-!Uk6U9Uh^Slh7x;Sk8n(cD=
+zRH}nF_Ik0EZFMucm-TPXsC~Y{kSa%iatd63vq()vzwif~k^aPpI5H9hfe+1VEnKr4
+z2o&dw)XP3^^KNoN;~8QrQJNsgbATy^8YC?y2!o$o#RCg<F0mI>GxET~UdgR!e5LqK
+zFC{n-<Y|Puyc(`^VV^l+QoaX-sS(<KWnLuM6EBQQ8cuoxZ|I4gAD8YA++un$z-oCE
+zC#?lC*&54ACykejyI-rTt)?odZU0F0Vq{=wm(JD<e3Zhc>6u`EzimuD$i)hB9@_O8
+z5`x)p$BPr}VIPH>81edM;XgD7;*f$tnU!vP)9RnY3j?HTGhRD=G+WWqDw}VS`inAs
+zsZsB`KeI-c(RVZz2pG0}>KZO{_EmSCRYYb&xW?ZnUsQKt2L<AU14-o*LK53({9>Q7
+zHd27#204q4U)9Ur-K3v)^mF1s0{}`hIb?z~GQY)+-fu5+>>ncnzI;0zuQkWW3WBIP
+zLl9yw<#PjY;?it_4Be75vY3%eC;GS`4ZJV7d>?`m_SRQq<kst5Z7lQ!^eOb|mt^U@
+z+hx8zU1zH=soP<@c(^@O^cZ)-jD~Vqb{Gc$_UR+l9#Wuf_BlJ>Tm6f1O;x50OnKQ;
+zJV!oUrQ1}Igei3~{tb%Ms_%6?&dqNc?K?@}Tu0vhH<J4xM6Jz#44C~vPM;4At={lq
+zZL|@Hn=!~nI%6)JPZ@Ehb^8k@qWjfmAGwl~Kxu7V{;*S2O8=xFUx1QbWk~GS`oyZ9
+zcf{bNzOqErQ!(lWGw%h+KQ04}J2B5dNKPynS%9018S>|#Zg=|kyUG~T18Kn8itq&q
+zln|2oPt?VH%f~IngC`jH>9@#o)bU&O&Db}<S*?{G_=3UL@8LuO+=kzr@3LG|YQfMg
+zm?6;rd}c|Ed&yR=K*VWO$hWSMLWIVB!P<AyI#SM-jHx*qQY3>(+yQuWVj@4Vg?Sq*
+zpyKn6eXn5p5{%kl<4g&lZi1>#JY7B>&wk1Kvb_26{_vZD2UmFuzAJ3OGI6OIdv~#D
+zMa@UeJ~@u4DsoZ+8STf3NQNq&9KWP>%y}-rf`#EANVGHmYUXW7u&yp%MG=09=SVOO
+zV8D)lW$NNmy=ETV=yZ47r5H%ZbH?S`o}aBDiOgJ<WzZJ@fdO%l<-o@`gv+rrhfGj7
+z76x0(@K4A0-sgzk_Aru}`^zOd!pMO~A^!(jpQ{yI-?vXayH~8&l1zC%Ty!Nh@~^I+
+zH8D>l;*fG56`--OW!Xy-uu>A&PkH;<jgZPqav>t)_O0wjijSw#(}qUXUlZOUk(q)&
+zjwkQ~Ay-#Mhs@gWy8{`3J2M*i?7X2y82e8WZOBv_NA7J$$zBBj&w(X^D|MS!y51W;
+z0{UNZr^1aCie)|q;7Fg}YO0FHi=GWjF`JSq(C!ibLeA9KP`7yle136fRX^lATp>t2
+zfQ;2rp<^#f;A1)tDe-a#uzmKW-j7rnA=e&sx+w=ismtu8<iR@W&v#VPMSh6hY-LMu
+zf4CE=;U2qjkfBm3HlsVD@Vr_HNqOcsuANB?WReLW58l--xm4C4xW(4JrTT%M5s5>K
+zPF0cYXQuqm0pb5JjfII2z;gp=CPwXn8|U&6F3kS={AVgQlxKC$k8WujJ<dh^gop+!
+zHCQIbpM%RJ0AF-jcESPNl;0W#Kvm^5>xhy5FY+Pi&HI1<dWrL(^Bi;sHo|@gULvR{
+z>~-ux%~yJ{%(ZZiWy7%FRa8<(;?Y0X*$N;KV_lcna++siCKgCG*<?}vb97TRrs70n
+zVO^gjV3QnYu{oGFdJi0F6<vm|9QbA2t+6muDr^u501I~%(%>zi<aQzF_%qeE9mbWK
+zpFeUDaurE404sOd#j3GAC(s~opULxb-%F4<Y&cc9n6b!U%BXxpfaI;CcyI5wE5vZn
+z?1{l->zgAe|KVDvk(ulgKh<r~gPAf0iUgWmBe_&D`Bj*0honJ1<5M4?grsK@ew<jG
+z%!mM%X~j`L{mc4K2CnO7e4tjq8@@az@{9y73R{-WLUS7YGkYPLX*&aKNQC5k(F&Nl
+zZ1-7usRZWtY@RBsj6Rp^&igC;A#$?)k8f)2zBB*&Er5549qQapBwMD)*{F4c{}U&X
+z(<uE8UjX@Zjr=*@gnQb~UI@R>Qxp8=Hf*FD*<rY{jh3BkdZMAHd<Cd%By#qZYvoI=
+zj7+xZG0L@*OL6)T*%bJF!{6M5{eN`gFHB+fJ?m2*|6#pifA#V9tE;?sjv<j5y~f0F
+zAZwXbl;k9po0-R%;>(*2MID{b3yb(Mg~ES?^O<c(hlU#fj&Gnqkw4J^Psi>1S3ck+
+z)B4^yydb4#1{MT%Sz%nEba&TMOOgepdHV}pALA3eI-B*4avLGgSilfrE{nW7z^qAZ
+z-<DaM3o<G@sTegApaC^hX%3{wL+rhVAfOvkIfLC0psvaK7=pmgCq`iF-Puy4k`tp2
+z5~TA^0_$olR}y6)!*~f{acI226D4-DRTT@=xzThdeme|+z+W&UL5@K<(r<*IAj{W=
+zP=pN`33_>$fPL0}qQ$2jDDsP{$gwml8=*kkH{lb#eYx#LL0s_G4uXOAKk&1)P6LM#
+zeAlw3mZXj+iShAejU8`C0o*l;`t|6xwSXr#6}(ZR^1ZxPEs54`gT+0EY?r!~bT!?c
+zC(lD@T58`AOcInhM(3K@aTgU=9uRMsoWFBTutv6_Xn4#*t!6@}!cvysf~Osx(~7>R
+zG4D$VY|joL@CvXEuH>~R3W+mZ3$a;%25lwmSp(?bMush6)8?C8I_A+Um!7avKJJXa
+zzShQmc$m7_>U5l4_8$p8!)xX>QSo?7Oi<U-YY7gO+CEb%d71#B;X2MQ|E*}4XJ+)Q
+z!=iwCs7`GsC2uKhuxZuL2GjM@G5fsnI>8j@hr_TbtMBBCZJqpfr~Qh#vdGs77L-d%
+z&ST0j(}`Ctnh{=pZ~e=|U-ge~btn)^{u&MpuP8rZARZ()ofE+PmoDm+gR0eAP#5j}
+zJf{WD6mj=oU_=vn^&#X}1=pd9UmEeHcu%`OQvCN^_vA|HWYfo+>ftMdfvPa3g!a4m
+zDilFs4BYLfOeutndXp@t$$<GTB6Pt?{&XF+(qJg612Ww6>~@KUv$yGrXVZMx8IGh_
+z4%Z#B?aO|#CQu4dJ0!-Z2aPu(REQCR>|;v-a>&H5>t4wV@E;e%sBZw;kyy7Sug~|G
+zzm|3M$Ujiocgk@)NS#y1SrT-ehPvKjCMtS7@U6bBv0txPbDQA5ow+Ga`6XiT<hCqw
+z!IQD6%~&Eaxbo}HvYxn|qCitY8Uf6;EPW2cB|*Vor1^TlZhE@h)F6-G{rf!I4{Zj3
+zWjH|KV^q`cNkIDN<G@pSOv#i9nxg2`Gegib*C~S>7A-gl*d5dyi*vSv^4nVy*$I~O
+z_%iz?hnIk&r%NJ-)7`g0*W3Un^04+a%G|HVAaw+S`raNzoy`+ERd?;LI74T5Q+<}O
+zYM0zfUTP2z>G|80)^FIjPoR<hg5Z(vVzBjZ&tdSzL09_KUu%fiX{q3hc=OH6clfAC
+zcX2*}k5b009@i?QY~!^w^O_Au>_r@R_+=|#tJ=VK$^LkquO!(%)blH|O}p+*f1k%?
+z300hnurQ%e8{(9FJ*s%SH;V~grsZ|vO=SZ)FH?}<6t}5>`JMwASG4aN0@uI8xQfb<
+z<_=lI&J=F#eYZ}<M*5hb&INaQw8U`Dj0)kMNl69he-I;Fo`uK*fm&Lop=hu3g&=HQ
+z23V8gTGApyMZ%S#sJSz?s9HvOARZ7=)j4cU0tz9PD&Xn;WN0`5h@n>)DBp8c1^{)I
+zK{HeC(|i)4!_#3U5X=6t&oH<!G21Xk^B)6ZzX1uLc3-l98R<!j3Inv*(6TMf)xH)T
+zw>>xL$`-On_19L$-sTm7;>osk50v)J2i)5c*eVlP1T9ut-=;61N0Riy+=7l*rT6rq
+z)~MqAO)XPX8_H#!n{!BLNBYIk#wdMFQS0nj0Nu6($(<W{GZzPY-+gQ7*RMP^PO?%4
+z^aTQdBvZ-zo_k`(7VI*#V3ULAUzg!^@R!*pb7<KB{yd)ncTU9f%#v&4ZL8Zj78k#N
+znl%!>ESnMof%Eq4Jb2G+q&LRc3~odYAK!5V?+IJg?iU^`OxL#SBKwU_g0N>4Di+^V
+zS_9_)1-ZGjh`fFYbLG;AVm2hB)!Ko^$fVz4)9}^rcVl4T8V3a>_&rf8)+?v~JMnaA
+z&OmcVi>`^n<)1V;zrTszKX(S@)6Jno9rv<=gWb|*TVhQukyVJ~8G%SMA05Y9_RlE?
+z_WLna@%_oOz+)>}AQppL*q;$v<{YNwE7`c+;<ox9o`uW&cE?QG-DlTLjy*CT$OPXn
+zaS%u2q{AC$N{IbaC?_OSqO^e!Ia$mAoV2znCJHS;m$A4MfbX2~kYPXZ7a%1llHZqy
+zyA#3{2h>S$JqPe-{!a~gnUMcAqluBBCU|R6nGm_rCkH<IA^sfnA1{dfSlJq?N>7aM
+zlV8hzu-KAK4;RT)tlDHdKoqR71<AnyZP<}$YdXW-Uv&9m(fvE%{37P-rwJ@p4vvp@
+zjpqrBJro@8li;ax`4qPS()TJT-L^so1xzi9<Y9}mWif$`=UQL&HMHU5zTIUjB^LfJ
+zYozBh*Psd<&vJqHU8*^Ovd8cu&Q)wPC`fFbWcjSb(M;^mvvppNNqzGwoWL|I{s}IH
+z;<Wf_JXqS21_?oh+vBZ+zz0IuyY%VE8J(wdk6%te7d=^}O!n&71U^C=Nv6ars22bl
+z_pk>&Yf;`QH2qqG`54SX{+#raKetyWl?7unxV%g%jybM)mPhz#)uaDv92L|>rOs;U
+zuZ&Pd&IFmO_aI<!<h~4`d6b>*_vLg^biPQLMC768ThvjzldKuGPXnp%+g2^THWtq0
+z2h<4X?U_Cy2!B#X0fJ%+tMla9{N7wXBGny%4USfka+^QuKAf@kaps=+F5(RRXo9o2
+z8u=!2MTB!8fcK9U*!Wy#^GEgE*CVt*AqUZ`bN&=diO}oQ)lC~FrztDjmmmZ@{_lHT
+zFBjYdpCjwsGr@~t!1$YeX~2MbqJjjX*KEiPT;5H!?am3UvOu{!tE7Q?0gD=z=?<vM
+zdy^44V59{O)I5%o1_I8@cZ4Y0<u<e>D1(5c7r9_u*3(>{*aK-mO0$+qK-NLcXE5K^
+z>D{AMvI3fWqL9zsN#g-ZI48uO`m79UjPsHZDg0MM9vBnoge;3OF2b%*;eo0F3=xU|
+z%PQIKQOe{!JPjKuv{<beiF4f1R)JIHZAX;SJc%RWKj^!$KQ)uZKWRcD0T$*8J(8&<
+z%6>S1uQV3T&Xqc0&#V@fpA5NA1{1q99<@H%`&~Jxpi^tsLmUis<ok)Mo=8%rCMZxd
+zk|Ps_x`!0{J!#YP9+bu$l?R$3tkz2j2I6w~ikjY;U-wHZT|G~{df)X#3Vd-Z_EKEh
+zbo%wHzt>}I5&AImYf9(_v}bEszWdd~_l8a&cp5M&dEe^u*m<g>gO4)bohr-H*ezkN
+z9}e7Ma$rU7OkUYVON-7zt0SJ44zEk#;NZ7!h-{`h#n`k?TD;HAW2VW>?9$}qJTWce
+zWrBw?+j@=r&F{NWw%9_3t0#*0?!*jcUeu;@n7=4^VX^L_)1Ozj^Iy%?_v<eff1C9r
+zSR2lXm(QCO(smPpoe~92Fc8Q0gAfH#iv#F=od{7m#oVCZwDuxI<YAC2lk%4!_cwQh
+zK)`Pq)iEMq$e5{%9i#+ef+9}yk^z(VF%*hO8ESNd2nf8^d}J;{fMAH0^&sHiYfcCk
+zW>b<P0@ym``xOI7v}TV9bV0b_z}f7zlX!wi%a$}5->Q3RGRK$7M7i5*=DL{AuYI;o
+z=yb|H*doFqQ9K5xvOoU3x4pEr(tR;bC)An$6vB|?sijWq>d+d-L_DkfNWH|s_gWw`
+z3?gOttv8ba!$($MON0J^_57|CCaCtBf4z%b%?21RJ%vzDjm2jCNT>I5p7YjitI&OC
+z=o{EpFgu_NTDVBJV(Yi01`z*o9rA7`YrFx&JMk7Kk-nyfPn3@uM$J{N@eoPGIKq^b
+zf2<`Lk^9{YQO>wew#>f*01?;!a{=ht(>pFO<AFli%bZvhh4<xbvjq0uXCty2)M&eT
+zG3Sr@gm@qKjXF5=ri~t9b1CrqjGp#cV$M9LmEPdLIyEB(G{owO6h**+g(sxsAOs=5
+zO4JLG7MJI9r2FI(kaNuQ&)_6?|He%6L(M4$c4pwPYCb$yh%+Eq8JR`To|PJn-fK!w
+zV{92s@bGPrGMf5{&(bl0GHXUeHBID@NkBW%h78iPiQ4JB@YfgL&~;crVPQ0Q1Pm0i
+zkP7ptAi@IivHxuM;-*SUg~Z@Fi||e!eA08uN9dh~WcT2OLf@(kt+o2eT%Ikzi<7$i
+zmq~jCw#;%7nh2@MkK_y#%R2;H&_;@QDnm>C2ZHH;e$zE@iFanE`biWLbyi~QLOq=3
+zvK14%*CkBbZMP)vc-37ubmiR_{<M`gI3689ab!Rmuvo7ji%b>Q)Zj7@oY{FY4%-&-
+zIy>&XtYD|+t$M1~YX(O=Tfn5@Dk=Xy$oTg=9@d|oFq!&ow<CyZn(#yp+Y18QTHp0}
+zU9^y`Dgm9Xy~oBiks_!Tz)jY1ydzuHJN)h)J7cwTZBB{32I!`IEH<g%=t+!9N;r%w
+z)kc$QY>1lfXANb5teqLcrS7H$UZ$d);s))#82$$XfN6O^9D<B}B4OUh%mzwD{QiF=
+zY=lDrI99470ro{!dXLK?%d1mnys5fmmVF!NGHlTlU?^N7{zwr>^F$*j&7&va{KJGn
+z2;m_)3Cct;KLPkkl2ce0qaD{L!S&VEZc~=N*dUM#F=4DR++6-wC8tG%?;nO>&v8&8
+z8~d~$8+)z=f0W7N(QRqPXTx+k)_{ZnP^Y>=p+9PRvEiLqHiY3_HAw?tG)^G(U$thL
+zl03{E&7ygQy5@;<nDIIyYecTsVy!p&fAn<Oj}zldd9GEIx%p1|Mz0S$6$LaI9b5;!
+zyd|_U@sFRVtjXxZvYRMTsA<-7HTI0}{QS_b;rGS!uEx%w%Pz7C8Q!8@tMmjMD)HKJ
+zdS$Q3Vk!E@s%xXzn&23sYu|P~+I8@eEXNw4S|4i>y_hy->Y`52p8#sA=*3Z8r|$T~
+zUpeyrd8I~WM*cY+63@6thjZ*Z@a2T<7DZkVs1%Pl^}1e?oUJ8(KU)tj<0v@PbNJ}x
+zYFy?LS8k&&y34bWtmnLbeJ^^CrpXiOwqaGfP!h1QeAM8)1T?c`!~Hpu?r6*+ITnC{
+zPv+d5A!S}&Nq`EQS}-93w=f!r3uT5JVSM4<9jiktl%ml9@5g?qHaPU63v$E~{;XEY
+z2rZxrl<2n*<mi2t$M%_VNlX<f_*EoWVsYE8o!jO?8b);~%Dg_)))tYtS3XFteOgQz
+z^>C|PlR-C0{%N;_#`>Q8HDzriAb~1Pmqm`L;(0+?GXBT{`)Cv{Szh#c^lW=<2CYjc
+zf6>iHU}9p%;0+hca_Xo}8|~Ca-WhU^s5Dr);xC0yC@+R<3vh(fl+6Rb2hxQnFSK`U
+z&3(&8#V7u0!>@=pzwm^|?^UL<Z7QesFS;+o3fydcwhS-qXiepERK9QybDNSzeS9sL
+zQ}ncD5SxdSC2_&`*5GB7dpw=j{^8z*_@j7%H47L55@SOihoz;BL#tyEg*jZ$QI|`;
+z8KJZiBoWSOKk+k*j^k8>J$QCwmiRwWw5$Ya(<Oh!kE_`6wECIlDEnIfVO&zwA7jJP
+z0TP|IiPuQN24X9gI8g-pOKfGz=8`l<lZX*a|LH->7|KXM!frjPO*%@*T!uYG%nFQp
+z8h0=WLQ88<Hzp9WOosLquEt|TDEU@256G+7huZ(U8Y3n~<Rk%NXhd+K2IKlq+wYDD
+zAX>NlBg09IQdUM=k2xm^*s@NI0<cELrltf~%p9<S9(18HWo)2G(Jzd*6K{1Dihmrh
+z%UVy=D39KFr*uB~^R`o<`usQEjK}QjQU<U6M-_9Lzr1oe6k<s|2Oh@-?Y=mf#+yvf
+zWawvzfDy7fmr50ciM-Cac3fN>pTlwi_0qUdrmKP2hxX8R4wYo%H^a&{LifQ2IeZe2
+zc^-ScHT4BP|8jVlV8cFovI)KtZ7X!&D-uro9=;a0ak#AW|F#VKqF$5odF!&asuq+5
+zM<ES^_Qtu_WMsq?ZCK~p6fX1)WrQNf0sS4FRgP4^>EY;QbKu;6BS{z6*n57yDzTjy
+zi7I3JQ?8ICbilUl9>ZT~IyEoYT`S70FaW>RkFbj4jq&u`5FODKci(v-PU2p2I+8N=
+z7Y;jXmG8u0ditWFb}nL4kxMh@M&~arvgLbLHa;~%D7{n1V@(JFP($v(j}F=|ec~X9
+zeFHH<#6lAI{cPk3&oGfKTBS)LM5%~=g=MnXC}_dCg`$Dje8}?t6G`NtbmOrius1?M
+z3@n%{0A%*UV0g2qR0K81@>&=yG=s$rN)7`)Ahf76eM`Xt4&&t-MFR0;l^R)Kn&p&D
+zSL^SG$F0x52|LoLvK(N$-_{aTa{Nv3d3;*SMC<+NQj8NQbtSpbvIHYxE_=9tg-r}a
+zXcMmaDQC+3){(HFNd8{PeI>{U2yBf&U<kqf7Ut<HdDkrylAmKGIwO(6Wl<to81gI`
+zCk#DU`LzAonRGAMhOJA$Hp3W9d(U1eU^*uIp>03P>kxd+v+LPZc?uUikrw`a2)`J8
+z<p@2d5c5uKJRP9u5pg+pv1Yo2ua?UFG0RSN4?b@EjDbqhw)@h>t?U^`beQ!t^<N~<
+zO*+7FZ$}8Jl^o5vc*3vsR*Z6+FBPYuM>ALHd+!f^E1iGI%={xKA-JM(G~7F^FBAnX
+z8#Gs+r7V_RhU7+8;+I`e^GS%c$%u1un!=WANb@dY6#!h<Snqpm_b>81^>ib?P_JEI
+zaaOYP@jbzr{?g*`3ai&9P5(WJwi(q*!;r24fDp?b|H?cU{(5L&g%%ivTC8&^itEau
+zb$A=IrEBf*2OVhtCA;KxD0<OBF$qD^O*o)_x}WE|S3e{H%ChYvSbvWG6@d@2l(E6X
+z-F-e#AaljI{spK(iI5VX5UGIH!KNpONKj^V@}}TWwLOL#2ble423Qe5wyR+B!~>*e
+zxsc57)Jh>38s86AMu<>h=oCgJulIu#1&}21O9tAL_Stv&g$T-iSes1wgMk;bzIM`5
+znt|`^Uk&zVz1q}QiysZ<G&}ItL-LxtRRiDM2JB_=<QtcV<9)66!a)eNTB2U?LEK2k
+z{$van)nB4)l}yzBY3zLs{A!*oJvVGyS4nyqMB{sRtie6q9C%AOpQA|7gc{DX3lML6
+zF>#!4haKD(?08G}`Q6+<_=C@wV8ZFIMm)k`oU?uZzoXppNabqKgL9Aa-uTM6`)WXo
+zXtTynH)ncxbwsU(kF?|H{uIw084RT!Fy?bQAQ*#9fyhfY5ecW#{eq30c@>bgFn;=E
+z_2kMS&vD{c+C@5-?@@HdNuf@Vy2ZG8)l+a>Y~uq!49IE{g5$J~iiD|25-9J9k)HO-
+zFs_RnO=3u>aJBSN_RxPXL0iZfd1M*Xey6nbJ0p?~oLQ`9*FX&H?n{ED<&g<E59Ct7
+z0`Q9+WLe)xh!Bz0&di5q?#|`!C~N<vVglXa%V?YbUDGODW9uuSany@Z4|&$<86&zI
+zuN`mQ!NcDEA<K52GeXtWU)O!VW+29mGC0RmiOA}FydY>@hF|2?q)pZ-U=pV;=#DR)
+zwJ>l*kwzh`jFIMz{8A9+vu1A^o%;edmVMaKScU=BG(o28$4~Oyb7hltL>l~($4jBq
+zRrV%-WKSUZdj~9(+&7eymAZCa4ysIW&3C$m$OA1^C1hthQ4!aNBMIR5V&HczgvWD4
+zVN24^P3zVY+`P&YtTrWXkc_JU2*Q65!Y2?)F5VId>W#|c7$Ba^d>*UpqAydb{B2T6
+zxha+7{%m#n?JPvDjA&f3;FjQ7tDBOmVvlFjjRv#L#XJ$!38IJ*L261uDlL(5d8#s?
+zo|oY&bFHL=1RANakgcq3L+pIIjXtwa*Lk@?A{VxLC|J?6r~y?oyTQ8qD#2ch4`534
+z+f4M^wvUQ4$(6R^`^p{Yy6-(-E1?44CFmOSSu7aNCGXsQQbj)DsQZv6|2u_Cn8P|V
+z&>%g-O({g+>XTbxx;zWmI7&kQp+&}F@AZaP)VoCw@w5}srPI;Zh4^7$xO&|7`Tf{W
+zJj1!vox5q<lfjhIe;n`M4~0={5nd-{d^4ZMj*8mEz?qbxva<`=+=E7Y4PI0D4mU}K
+ztSo+Y8l)lP%3_-u^2*cHzpE109y$t;*B5uUxPchb;X5yD#liu64~)A38Nk{;1kx>f
+zn))PtsBc$f#x749FF3#N@?>#)oSbvtwxnSqKK_Z=-SR*NzXCuA&>@>=pvX#ZHNO}L
+zrMSt7d64%_59pG{^QAT*r!AU`lB>N)s;U2bN=CNt`Qae1(&31jEjk+bBmqRjpM!4B
+zsMOr|V5{Wl#G~gkMg!c-=o!F=Z%;EDq>Qa!KBcYywBOqi>v5+ILA+JdBLt=bai}xj
+zX~E?H6LkCvMjVmhelzahDz=$dcREUCyggr|6%{*mGwkMdN$z`h%~EM=4H0Jo7?E85
+zjpS)uX7|iQRFZ^%rkL2@prCu4u4mr!4Jv8%SFh%_{we|5%vB@#l_}hsZ{NO~xfq}>
+zc~@h7OfL!aKU_h<?gGeT1qoPY3B=?zX)ViU<TKuntw>N?dLPrz?zXKqC6HEb6>kK0
+zSVhGBor*;h$yK@?#h@&p+kbau4AaUNZ^BzHgQAlmDO+3V0OGZ0Zg)LXuDgq?HSiet
+z7&7kD{x{+ViC!6TonzAyre9u0*Eiuq2P`P;tDlcjmjpSF*i1k=_EiuY1iZ|k^)pbJ
+z>%(~dvG)zW2U|#pz|Y`vgH1CYcb>od63C|=mDP8`bG=``p8U%)An<Lr1aZh=ZFOK<
+zJv!eTK>`&1;xIxPp~!gn3K@9}Tq3y18yo+r&{{P0HLRpk!rxV-kSZ&CWUE)**^I3>
+z!jJBE;)w6n_-W_@bUku{)<^a%i)OAyq{?=n_t&?|#-wxYO<njo3oZ;U(%MRnlz7Pq
+zl7r`f9u_#nn`JLeLTG$!Rcsd_v<!I!EXdP>6XW}*+hg2YZM%yB*t>nNANqE8tZFf?
+zyuvTP)cFjsz3&8Q=y)6L-NSwuQ8tm@HGO>Kf@Ug!Rwzkg5c$%rVuTuCX`&qxCUtjF
+z>cqG~Q8>Upd2mco7-9c8jEolKdH1VG%z3>_@T!dw=p{yC{plFZkH-2}3P*CKY9C?0
+zi&xkLMa_LY2QYurfC3%Do55!vI%FvuKU~Nb45$FdpTYe=Z8XFm3ck8xhti*fZCbwO
+zHvaD;LB25=gfQ~ubI_4)zOdFh5sJX<YP1B;sgulnB>p+b^+vb<K?@T{@oBZvbX9+?
+z#svHgF;p^isXf8s#yWEm77G+IX1YN`XVM36xIth%gHG{1Gi<doS*$zO2|Nk5!X?cD
+zM6)hBKay_Z3RC0~sK&@wV8k`Osb>|5UZji1$!YpaLo|Mv#hA7EJ(Nz)gJ7Dfy|wHc
+z=~V%Q7E^TMJX@_<L(JbH=;t{y&5$m+<Z!%K%U`XSJ>DfmK*2%c`#Cc9Ka%7+)2WjU
+zh>6oA%?xWN=Iw!>oL@RVG0JVIouE^cP@AB=(q0QavMEHOgd}i=;1{-LTK_K<rhn@j
+z2t^+{h$d<y733*Imk70oI@do+qfZ`mhnjq)rb4%cgce$?I`U?rj~|$|b9H=+C`6Z}
+iCn_EOQjK6d(k;tTuquj{RiKYk0P=5Dq)Q}?{r?9xdz?G~
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
+index 46ac87c4ad7af5fe0692c4f9458aade7bf601193..dec17cb17114d6a7d893cf3f275a9155a7fd820b 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
+@@ -27,6 +27,39 @@ class EhHtmlParserTest {
+         assertEquals(5, previews[1].crop?.y)
+         assertEquals(100, previews[1].crop?.width)
+         assertEquals(140, previews[1].crop?.height)
++        assertEquals(listOf(1, 2), previews.map { it.index })
++    }
++
++    @Test
++    fun `preview page keeps absolute indices and parses navigation`() {
++        val html = """
++            <html><body><div id="gdt">
++              <div class="gdtl"><a href="https://e-hentai.org/s/one/100-41"><img alt="41" src="https://ehgt.org/41.jpg"></a></div>
++              <div class="gdtl"><a href="https://e-hentai.org/s/two/100-42"><img alt="42" src="https://ehgt.org/42.jpg"></a></div>
++            </div><table class="ptt"><tr><td><a>1</a></td><td class="ptds">2</td><td><a>3</a></td></tr></table></body></html>
++        """.trimIndent()
++
++        val page = EhHtmlParser.parsePreviewPage(html, "https://e-hentai.org/g/100/token/?p=1", EhSite.EHentai)
++
++        assertEquals(listOf(41, 42), page.previews.map { it.index })
++        assertEquals(3, page.totalPages)
++        assertEquals(true, page.hasNextPage)
++    }
++
++    @Test
++    fun `preview page rejects an oversized response instead of silently truncating it`() {
++        val cells = (1..3).joinToString("") { index ->
++            "<div class='gdtl'><a href='https://e-hentai.org/s/hash/100-$index'><img alt='$index' src='https://ehgt.org/$index.jpg'></a></div>"
++        }
++
++        assertThrows(EhFailure.BoundsExceeded::class.java) {
++            EhHtmlParser.parsePreviewPage(
++                "<div id='gdt'>$cells</div>",
++                "https://e-hentai.org/g/100/token/?p=0",
++                EhSite.EHentai,
++                maxItems = 2,
++            )
++        }
+     }
+ 
+     @Test
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncherPageTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncherPageTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..67286e3dec2c67d7b847cec4f82fe1bab31e6e4a
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncherPageTest.kt
+@@ -0,0 +1,15 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertThrows
++import org.junit.Test
++
++class ReaderLauncherPageTest {
++    @Test
++    fun `reader launch page key is stable for activity handoff`() {
++        assertEquals("dev.ahmedmohamed.hayai.reader.INITIAL_PAGE", ReaderLauncher.EXTRA_INITIAL_PAGE)
++        assertEquals(0, ReaderLauncher.requireInitialPage(0))
++        assertEquals(41, ReaderLauncher.requireInitialPage(41))
++        assertThrows(IllegalArgumentException::class.java) { ReaderLauncher.requireInitialPage(-1) }
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/presentation/BundledSourceIconResolverTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/presentation/BundledSourceIconResolverTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..e7ad102c9af90c14e285c0687fbbfebc2b0822fe
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/presentation/BundledSourceIconResolverTest.kt
+@@ -0,0 +1,18 @@
++package dev.ahmedmohamed.hayai.source.presentation
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
++import eu.kanade.tachiyomi.R
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class BundledSourceIconResolverTest {
++    @Test
++    fun `bundled source ids resolve their dedicated artwork`() {
++        assertEquals(R.mipmap.ic_ehentai_source, BundledSourceIconResolver.resource(EhSite.EHentai.sourceId))
++        assertEquals(R.mipmap.ic_exhentai_source, BundledSourceIconResolver.resource(EhSite.ExHentai.sourceId))
++        assertEquals(R.drawable.ic_local_novel_source, BundledSourceIconResolver.resource(LocalNovelSource.ID))
++        assertNull(BundledSourceIconResolver.resource(Long.MAX_VALUE))
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewModelTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewModelTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..aefea101e96b843bf01d6f937513b7f2e352b1fd
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewModelTest.kt
+@@ -0,0 +1,40 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import kotlinx.serialization.json.Json
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotEquals
++import org.junit.Assert.assertThrows
++import org.junit.Test
++
++class SourcePreviewModelTest {
++    @Test
++    fun `serialized listing retains pagination and crop identity`() {
++        val page = SourcePreviewPage(
++            page = 2,
++            previews = listOf(
++                SourcePagePreview(41, "https://ehgt.org/sprite.jpg", "https://e-hentai.org/s/a/1-41", SourcePreviewCrop(10, 4, 100, 140)),
++            ),
++            hasNextPage = true,
++            totalPages = 4,
++        )
++
++        val restored = Json.decodeFromString<SourcePreviewPage>(Json.encodeToString(SourcePreviewPage.serializer(), page))
++
++        assertEquals(page, restored)
++    }
++
++    @Test
++    fun `cache identity separates source and sprite crop`() {
++        val first = SourcePagePreview(1, "https://ehgt.org/sprite.jpg", crop = SourcePreviewCrop(0, 0, 100, 140))
++        val second = first.copy(index = 2, crop = SourcePreviewCrop(100, 0, 100, 140))
++
++        assertNotEquals(first.cacheIdentity(6901), second.cacheIdentity(6901))
++        assertNotEquals(first.cacheIdentity(6901), first.cacheIdentity(6902))
++    }
++
++    @Test
++    fun `invalid preview pages are rejected at the boundary`() {
++        assertThrows(IllegalArgumentException::class.java) { SourcePreviewPage(0, emptyList(), false) }
++        assertThrows(IllegalArgumentException::class.java) { SourcePagePreview(0, "https://example.com/preview.jpg") }
++    }
++}
+diff --git a/docs/architecture/ehentai-port.md b/docs/architecture/ehentai-port.md
+index 9e0005e8f7173b486187279ff5030795aa1a8829..5d1d0582ba7a82dbbcaa83bf854aa4b8612f6a71 100644
+--- a/docs/architecture/ehentai-port.md
++++ b/docs/architecture/ehentai-port.md
+@@ -2,6 +2,8 @@
+ 
+ Hayai rebuilds the E-Hentai feature set behind `dev.ahmedmohamed.hayai.adult.eh`. TachiyomiJ2K continues to own manga, chapters, history, categories, downloads, and image reading. TachiyomiSY commit `14648c7cf0aa84e5a35d48de9dbf1386df6cca42` is the behavior reference, not an architectural parent.
+ 
++The bundled source artwork is copied unchanged from TachiyomiSY. The E-Hentai density assets trace to commit `5499404267f6a197de322318500f40c51e5f38b4`; the ExHentai density assets trace to `21a4a935232df32444a11d2dbef640deff71869a`.
++
+ ## Domain boundaries
+ 
+ - `domain` validates gallery IDs, tokens, normalized URLs, sites, cursors, search modes, and failure classes.
+@@ -35,4 +37,4 @@ Legacy `search_metadata`, `search_tags`, and `search_titles` are promoted once t
+ 
+ ## Completion gate
+ 
+-The port is complete only when browse, search filters, details, revisions, pages, URL import, login/logout, remote configuration, metadata backup, batch import, favorites synchronization, and gallery updates work end to end. Pure fixtures cover compact and extended result layouts, malformed/challenge pages, revision cycles, page quota, filter encoding, cookies, metadata promotion, backup compatibility, sync conflicts, interruption, and retry. The final boundary check must leave `App.kt`, `MainActivity.kt`, and J2K's image `ReaderActivity.kt` unchanged.
++The port is complete only when browse, search filters, details, revisions, pages, URL import, login/logout, remote configuration, metadata backup, batch import, favorites synchronization, and gallery updates work end to end. Pure fixtures cover compact and extended result layouts, malformed/challenge pages, revision cycles, page quota, filter encoding, cookies, metadata promotion, backup compatibility, sync conflicts, interruption, and retry. The final boundary check must leave `App.kt` and `MainActivity.kt` unchanged. The only approved `ReaderActivity` change is the documented initial-page extra read owned by `ReaderLauncher`.
+-- 
+2.54.0.windows.1
+

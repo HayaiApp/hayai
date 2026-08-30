@@ -1,0 +1,1007 @@
+From 58b7301614ca8e20bc05b002e1e735ef2929789e Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Mon, 24 Aug 2026 12:02:45 +0300
+Subject: [PATCH] Restore legacy quotes and fix E-Hentai settings row
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index b693cf03d83a8723492cbeecc01f8f4c1529b075..8b1d7b6433ddad932cea8d6eeef569ec99dfc6d3 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -120,6 +120,8 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T19:10:00+03:00	cloudflare-bypass	synchronized the J2K interceptor with Mihon ac249e3668a57f24782a49218834064459ba2d09	uses the official challenge header and exits early for interactive challenges without replacing J2K's client or cookie path	CloudflareInterceptor.kt; CloudflareChallengeTest.kt	UNIT_VERIFIED
+ 2026-08-23T18:35:00+03:00	nightly-clean-run-test-compatibility	replaced accidental JUnit Jupiter imports in the new reader-inset test with the repository's JUnit 4 API	the clean Linux nightly source set does not provide Jupiter even though local incremental dependency state allowed the focused invocation to pass	J2kNovelReaderChromeTest.kt; GitHub Actions run 32645335734	IMPLEMENTED_UNVERIFIED
+ 2026-08-23T21:10:00+03:00	real-source-reader-reproduction	installed AllNovel 2.2.2 from the production LNReader v3 repository and loaded Reincarnation Of The Strongest Sword God Chapter 1 from NovelFull	used 3,956 real remote chapters to verify zero opening progress, stable J2K overlay gestures, selection action order, and the populated quote flow instead of fixture-only content	AllNovel 2.2.2; NovelFull novelId 237; NovelReaderActivity.kt; NativeNovelRenderer.kt; artifacts/emulator-verification/20260823-real-source-regressions	EMULATOR_VERIFIED
++2026-08-24T10:23:24+03:00	legacy-quote-json-recovery	reset the superseded quote markers and rebuilt typed quotes from both retained legacy stores	replays archived series_quotes plus retained JSON files; scoped-storage devices can select all files through SAF; validates ID and title together and only performs an unambiguous exact-title remap; emulator displayed the archived database quote and safely remapped JSON quote together	LegacyQuoteJsonMigration.kt; LegacyQuoteJsonImportTest.kt; NovelQuoteStore.kt; NovelReaderActivity.kt; artifacts/emulator-verification/2026-08-24-quote-recovery-settings-row/safe-result.png; legacy/hayai-pre-j2k@c1aab40f664dd2eec09774b653535021302f8e86	EMULATOR_VERIFIED
++2026-08-24T10:23:24+03:00	eh-settings-row	made the dedicated E-Hentai settings destination match J2K's single-line settings rows	removed the descriptive subtitle and adapted SY's intrinsic 24dp EhLogo instead of tinting a square launcher/source bitmap; verified its normal-height row on emulator	SettingsMainController.kt; ic_ehentai_24dp.xml; artifacts/emulator-verification/2026-08-24-quote-recovery-settings-row/eh-settings-final.png; sy/master@14648c7cf0aa84e5a35d48de9dbf1386df6cca42	EMULATOR_VERIFIED
+ 2026-08-23T21:10:00+03:00	download-auto-start-repair	reproduced a real E-Hentai manga download immediately pausing behind a restored novel queue item and made explicit auto-start resume every stopped queue	verified NovelFull Chapter 1 through J2K's queue and notification and a real E-Hentai gallery progressing from 37 to 383 of 384 pages; the source's last image remained in retry	Downloader.kt; DownloadQueueStartPolicyTest.kt; NovelReaderActivity.kt; artifacts/emulator-verification/20260823-real-source-regressions	EMULATOR_VERIFIED
+ 2026-08-23T21:10:00+03:00	extension-installer-permission-recovery	deferred J2K package-session creation until Android grants the per-app unknown-source permission	denied REQUEST_INSTALL_PACKAGES, installed real 3Hentai after granting it in Settings, and verified the installed row and sources appeared without a stuck state	ExtensionInstallBroadcast.kt; artifacts/emulator-verification/20260823-real-source-regressions	EMULATOR_VERIFIED
+ 2026-08-23T21:10:00+03:00	hayai-splash-notification-identity	animated the existing Hayai monochrome vector on splash and replaced remaining product-identity notification icons	verified the Hayai animated-vector splash on the installed debug build; semantic download, warning, extension, and TTS status icons remain unchanged	anim_hayai_splash.xml; themes.xml; splash_background.xml; BackupNotifier.kt; LibraryUpdateNotifier.kt; AppUpdateNotifier.kt; CrashLogUtil.kt; artifacts/emulator-verification/20260823-real-source-regressions/splash.png	EMULATOR_VERIFIED
+@@ -128,3 +130,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T22:45:00+03:00	eh-preview-pagination-and-layout	removed the one-shot nw query from paginated gallery requests, invalidated poisoned listing caches, and matched SY's 120x200 preview grid and single page slider	verified a live six-listing gallery moved from indices 1-20 to the final listing indices 101-106 instead of silently returning page one	EhRequestBuilder.kt; SourcePreviewCache.kt; SourcePreviewController.kt; EhProtocolCodecTest.kt; artifacts/emulator-verification/2026-08-23-eh-sy-parity/result/hayai-preview-pagination-final.png	EMULATOR_VERIFIED
+ 2026-08-23T22:45:00+03:00	webview-cloudflare-help-and-user-agent	ported Mihon's two-marker WebView challenge detector and help destination and set the requested Chrome 151 Android mobile default identity	keeps J2K's HTTP client, cookies, per-source headers, and user overrides authoritative while making interactive challenge recovery discoverable	Mihon ac249e3668a57f24782a49218834064459ba2d09; CloudflareHelpDetector.kt; WebViewActivity.kt; NetworkHelper.kt	UNIT_VERIFIED
+ 2026-08-23T22:50:00+03:00	validation	passed localization, the J2K adapter boundary, complete DevDebug compilation and unit tests, and diff whitespace checks	validated the conditional settings, SY browse/preview presentation, preview request repair, default user agent, and Cloudflare help batch without formatting the upstream tree	tools/verify-localization.ps1 -WriteCoverage; tools/verify-upstream-boundary.ps1; gradlew :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin; git diff --check	VERIFIED
++2026-08-24T11:55:00+03:00	validation	passed localization, the J2K adapter boundary, complete DevDebug compilation and unit tests, device quote recovery, and settings-row inspection	validated archived and JSON quote convergence across an ID collision plus the compact E-Hentai destination without formatting the upstream tree	tools/verify-localization.ps1 -WriteCoverage; tools/verify-upstream-boundary.ps1; gradlew :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin; artifacts/emulator-verification/2026-08-24-quote-recovery-settings-row	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt b/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..54090bcfdc1ad64fe8f8ec7aed4aee45cd6d80d5
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt
+@@ -0,0 +1,286 @@
++package dev.ahmedmohamed.hayai.migration
++
++import android.content.ContentValues
++import android.content.Context
++import android.database.sqlite.SQLiteDatabase
++import android.os.Environment
++import androidx.core.net.toUri
++import androidx.preference.PreferenceManager
++import androidx.sqlite.db.SupportSQLiteDatabase
++import com.hippo.unifile.UniFile
++import kotlinx.serialization.SerialName
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
++import timber.log.Timber
++import java.io.File
++
++/** Rebuilds typed quotes from every retained legacy store without mutating the source data. */
++class LegacyQuoteJsonMigration(
++    private val context: Context,
++) {
++    fun runIfNeeded(db: SupportSQLiteDatabase) {
++        invalidateSupersededMarkers(db)
++        if (isComplete(db)) return
++        val roots = legacyStorageRoots()
++        var unreadableFiles = 0
++        val quoteFiles =
++            roots
++                .orEmpty()
++                .mapNotNull { root -> root.findFile(QUOTES_DIRECTORY)?.takeIf { it.isDirectory } }
++                .flatMap { directory -> directory.listFiles().orEmpty().asIterable() }
++                .filter { file -> file.isFile && FILE_NAME.matches(file.name.orEmpty()) }
++                .distinctBy { file -> file.uri.toString() }
++                .mapNotNull { file ->
++                    runCatching {
++                        LegacyQuoteJsonFile(file.name.orEmpty(), file.openInputStream().bufferedReader().use { it.readText() })
++                    }.onFailure { error ->
++                        unreadableFiles++
++                        Timber.e(error, "Could not read legacy quote file %s", file.name)
++                    }.getOrNull()
++                }
++
++        db.beginTransaction()
++        try {
++            val archivedResult = restoreArchivedQuotes(db)
++            val jsonResult =
++                LegacyQuoteJsonImporter.import(
++                    files = quoteFiles,
++                    resolveMangaId = { mangaId, novelNames -> resolveMangaId(db, mangaId, novelNames) },
++                    insertIfAbsent = { quote -> insertIfAbsent(db, quote) },
++                )
++            val complete = archivedResult.pendingRows == 0 && roots != null && jsonResult.complete && unreadableFiles == 0
++            if (complete) {
++                db.execSQL(
++                    "INSERT OR REPLACE INTO hayai_novel_import_runs(plan_id, status, completed_at) VALUES (?, 'complete', ?)",
++                    arrayOf<Any?>(PLAN_ID, System.currentTimeMillis()),
++                )
++            } else {
++                Timber.w(
++                    "Legacy quote recovery remains pending: %d archive row(s), %d JSON file(s), storage available=%s",
++                    archivedResult.pendingRows,
++                    jsonResult.pendingFiles + unreadableFiles,
++                    roots != null,
++                )
++            }
++            db.setTransactionSuccessful()
++        } finally {
++            db.endTransaction()
++        }
++    }
++
++    private fun restoreArchivedQuotes(db: SupportSQLiteDatabase): ArchivedQuoteRecoveryResult {
++        var discoveredRows = 0
++        var insertedRows = 0
++        var pendingRows = 0
++        db.query(
++            "SELECT payload_json FROM hayai_legacy_rows WHERE table_name = 'series_quotes' ORDER BY legacy_key",
++        ).use { cursor ->
++            while (cursor.moveToNext()) {
++                discoveredRows++
++                val quote = runCatching { LegacyQuoteJsonCodec.decodeArchivedRow(cursor.getString(0)) }.getOrNull()
++                val mangaId = quote?.let { resolveMangaId(db, it.mangaId, listOf(it.novelName)) }
++                if (quote == null || mangaId == null) {
++                    pendingRows++
++                    continue
++                }
++                runCatching { insertIfAbsent(db, quote.copy(mangaId = mangaId)) }
++                    .onSuccess { inserted -> if (inserted) insertedRows++ }
++                    .onFailure {
++                        pendingRows++
++                        Timber.e(it, "Could not recover archived quote %s", quote.id)
++                    }
++            }
++        }
++        return ArchivedQuoteRecoveryResult(discoveredRows, insertedRows, pendingRows)
++    }
++
++    private fun legacyStorageRoots(): List<UniFile>? {
++        if (Environment.getExternalStorageState() != Environment.MEDIA_MOUNTED) return null
++        val persistedUri =
++            PreferenceManager
++                .getDefaultSharedPreferences(context)
++                .getString(LEGACY_STORAGE_PREFERENCE, null)
++                ?.takeIf(String::isNotBlank)
++        val roots = mutableListOf<UniFile>()
++        if (persistedUri != null) {
++            val persistedRoot = UniFile.fromUri(context, persistedUri.toUri())?.takeIf { it.exists() && it.isDirectory } ?: return null
++            roots += persistedRoot
++        }
++        val defaultRoot = UniFile.fromFile(File(Environment.getExternalStorageDirectory(), LEGACY_ROOT_DIRECTORY))
++        if (defaultRoot?.exists() == true && defaultRoot.isDirectory) roots.add(defaultRoot)
++        return roots.distinctBy { root -> root.uri.toString() }.takeIf(List<UniFile>::isNotEmpty)
++    }
++
++    private fun isComplete(db: SupportSQLiteDatabase): Boolean =
++        db.query("SELECT 1 FROM hayai_novel_import_runs WHERE plan_id = ?", arrayOf(PLAN_ID)).use { cursor -> cursor.moveToFirst() }
++
++    private fun invalidateSupersededMarkers(db: SupportSQLiteDatabase) {
++        db.execSQL(
++            "DELETE FROM hayai_novel_import_runs WHERE plan_id IN (?, ?, ?)",
++            arrayOf<Any?>("legacy-quote-json-v1", "legacy-quote-json-v2", "legacy-quote-recovery-v3"),
++        )
++    }
++
++    private fun resolveMangaId(
++        db: SupportSQLiteDatabase,
++        legacyMangaId: Long,
++        novelNames: List<String>,
++    ): Long? {
++        val normalizedNames = novelNames.map(String::trim).filter(String::isNotEmpty).distinctBy { it.lowercase() }
++        if (normalizedNames.size != 1) return null
++        val novelName = normalizedNames.single()
++        db.query("SELECT title FROM mangas WHERE _id = ?", arrayOf(legacyMangaId)).use { cursor ->
++            if (cursor.moveToFirst() && cursor.getString(0).equals(novelName, ignoreCase = true)) return legacyMangaId
++        }
++        return db.query("SELECT _id FROM mangas WHERE title = ? COLLATE NOCASE ORDER BY _id", arrayOf(novelName)).use { cursor ->
++            if (!cursor.moveToFirst()) return@use null
++            val match = cursor.getLong(0)
++            if (cursor.moveToNext()) null else match
++        }
++    }
++
++    private fun insertIfAbsent(
++        db: SupportSQLiteDatabase,
++        quote: LegacyQuoteJsonRow,
++    ): Boolean {
++        val values =
++            ContentValues(9).apply {
++                put("quote_id", quote.id)
++                put("manga_id", quote.mangaId)
++                put("novel_name", quote.novelName)
++                put("chapter_name", quote.chapterName)
++                put("displayed_content", quote.displayedContent)
++                put("original_content", quote.originalContent)
++                put("translated_content", quote.translatedContent)
++                put("language", quote.language)
++                put("timestamp", quote.timestamp)
++            }
++        val inserted = db.insert("hayai_quotes", SQLiteDatabase.CONFLICT_IGNORE, values)
++        if (inserted >= 0) return true
++        val alreadyPresent =
++            db.query("SELECT 1 FROM hayai_quotes WHERE quote_id = ?", arrayOf(quote.id)).use { cursor -> cursor.moveToFirst() }
++        check(alreadyPresent) { "Failed to restore legacy quote ${quote.id}" }
++        return false
++    }
++
++    private companion object {
++        const val PLAN_ID = "legacy-quote-recovery-v4"
++        const val LEGACY_STORAGE_PREFERENCE = "__APP_STATE_storage_dir"
++        const val LEGACY_ROOT_DIRECTORY = "Hayai"
++        const val QUOTES_DIRECTORY = "quotes"
++        val FILE_NAME = Regex("novel_[0-9]+\\.json")
++    }
++}
++
++internal data class ArchivedQuoteRecoveryResult(
++    val discoveredRows: Int,
++    val insertedRows: Int,
++    val pendingRows: Int,
++)
++
++internal data class LegacyQuoteJsonFile(
++    val name: String,
++    val json: String,
++)
++
++internal data class LegacyQuoteJsonImportResult(
++    val complete: Boolean,
++    val discoveredQuotes: Int,
++    val insertedQuotes: Int,
++    val pendingFiles: Int,
++)
++
++@Serializable
++internal data class LegacyQuoteJsonDocument(
++    val novelId: Long,
++    val quotes: List<LegacyQuoteJsonRow> = emptyList(),
++)
++
++@Serializable
++internal data class LegacyQuoteJsonRow(
++    val id: String,
++    val novelName: String,
++    val chapterName: String,
++    @SerialName("content") val displayedContent: String,
++    val originalContent: String? = null,
++    val translatedContent: String? = null,
++    val language: String? = null,
++    val timestamp: Long = 0L,
++    @kotlinx.serialization.Transient val mangaId: Long = 0L,
++)
++
++@Serializable
++private data class ArchivedLegacyQuoteRow(
++    @SerialName("quote_id") val id: String,
++    @SerialName("manga_id") val mangaId: Long,
++    @SerialName("novel_name") val novelName: String,
++    @SerialName("chapter_name") val chapterName: String,
++    @SerialName("displayed_content") val displayedContent: String,
++    @SerialName("original_content") val originalContent: String? = null,
++    @SerialName("translated_content") val translatedContent: String? = null,
++    val language: String? = null,
++    val timestamp: Long = 0L,
++) {
++    fun toQuote() =
++        LegacyQuoteJsonRow(
++            id = id,
++            mangaId = mangaId,
++            novelName = novelName,
++            chapterName = chapterName,
++            displayedContent = displayedContent,
++            originalContent = originalContent,
++            translatedContent = translatedContent,
++            language = language,
++            timestamp = timestamp,
++        )
++}
++
++internal object LegacyQuoteJsonCodec {
++    private val json = Json { ignoreUnknownKeys = true }
++
++    fun decode(value: String): LegacyQuoteJsonDocument = json.decodeFromString(value)
++
++    fun decodeArchivedRow(value: String): LegacyQuoteJsonRow = json.decodeFromString<ArchivedLegacyQuoteRow>(value).toQuote()
++}
++
++internal object LegacyQuoteJsonImporter {
++    fun import(
++        files: List<LegacyQuoteJsonFile>,
++        resolveMangaId: (Long, List<String>) -> Long?,
++        insertIfAbsent: (LegacyQuoteJsonRow) -> Boolean,
++    ): LegacyQuoteJsonImportResult {
++        var discoveredQuotes = 0
++        var insertedQuotes = 0
++        var pendingFiles = 0
++        files.forEach { file ->
++            val fileMangaId = file.name.removePrefix("novel_").removeSuffix(".json").toLongOrNull()
++            val document = runCatching { LegacyQuoteJsonCodec.decode(file.json) }.getOrNull()
++            if (fileMangaId == null || document == null || document.novelId != fileMangaId) {
++                pendingFiles++
++                return@forEach
++            }
++            if (document.quotes.isEmpty()) return@forEach
++            val mangaId =
++                resolveMangaId(document.novelId, document.quotes.map { quote -> quote.novelName })
++            if (mangaId == null) {
++                pendingFiles++
++                return@forEach
++            }
++            discoveredQuotes += document.quotes.size
++            val imported =
++                runCatching {
++                    document.quotes.count { quote -> insertIfAbsent(quote.copy(mangaId = mangaId)) }
++                }.getOrElse {
++                    pendingFiles++
++                    return@forEach
++                }
++            insertedQuotes += imported
++        }
++        return LegacyQuoteJsonImportResult(
++            complete = pendingFiles == 0,
++            discoveredQuotes = discoveredQuotes,
++            insertedQuotes = insertedQuotes,
++            pendingFiles = pendingFiles,
++        )
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt
+index 913d8ff28b95ea7dce53c3d477e2202ddb5c9e13..b4e20e8f2c004011f2f0fb2b538887c01e365621 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt
+@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.quote
+ 
+ import android.content.ContentValues
+ import android.database.Cursor
++import dev.ahmedmohamed.hayai.migration.LegacyQuoteJsonCodec
+ import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+ import dev.ahmedmohamed.hayai.novel.error.novelFailure
+ import dev.ahmedmohamed.hayai.novel.error.novelRequire
+@@ -62,6 +63,57 @@ class NovelQuoteStore(
+                 }
+             }
+ 
++    fun importLegacyJson(
++        documents: List<String>,
++        currentMangaId: Long,
++        currentNovelName: String,
++    ): LegacyQuoteImportResult = synchronized(ADD_LOCK) {
++        var discoveredQuotes = 0
++        var insertedQuotes = 0
++        var invalidDocuments = 0
++        var unmatchedDocuments = 0
++        database.inTransactionReturn {
++            documents.forEach { value ->
++                val document = runCatching { LegacyQuoteJsonCodec.decode(value) }.getOrNull()
++                if (document == null) {
++                    invalidDocuments++
++                    return@forEach
++                }
++                if (document.quotes.isEmpty()) return@forEach
++                val mangaId =
++                    resolveMangaId(
++                        legacyMangaId = document.novelId,
++                        novelNames = document.quotes.map { quote -> quote.novelName },
++                        currentMangaId = currentMangaId,
++                        currentNovelName = currentNovelName,
++                    )
++                if (mangaId == null) {
++                    unmatchedDocuments++
++                    return@forEach
++                }
++                discoveredQuotes += document.quotes.size
++                document.quotes.forEach { row ->
++                    if (get(row.id) != null) return@forEach
++                    val quote =
++                        NovelQuote(
++                            id = row.id,
++                            mangaId = mangaId,
++                            novelName = row.novelName,
++                            chapterName = row.chapterName,
++                            displayedContent = row.displayedContent,
++                            originalContent = row.originalContent,
++                            translatedContent = row.translatedContent,
++                            language = row.language,
++                            timestamp = row.timestamp,
++                        )
++                    novelRequire(database.lowLevel().insert(INSERT_QUERY, quote.toContentValues()) >= 0, NovelFailure.Code.QuoteSave)
++                    insertedQuotes++
++                }
++            }
++        }
++        LegacyQuoteImportResult(discoveredQuotes, insertedQuotes, invalidDocuments, unmatchedDocuments)
++    }
++
+     fun delete(quoteId: String): Boolean =
+         database.lowLevel().delete(
+             DeleteQuery.builder().table("hayai_quotes").where("quote_id = ?").whereArgs(quoteId).build(),
+@@ -135,6 +187,25 @@ class NovelQuoteStore(
+                     .build(),
+             ).use { cursor -> cursor.takeIf(Cursor::moveToFirst)?.toQuote() }
+ 
++    private fun resolveMangaId(
++        legacyMangaId: Long,
++        novelNames: List<String>,
++        currentMangaId: Long,
++        currentNovelName: String,
++    ): Long? {
++        val normalizedNames = novelNames.map(String::trim).filter(String::isNotEmpty).distinctBy(String::lowercase)
++        if (normalizedNames.size != 1) return null
++        val novelName = normalizedNames.single()
++        database.getManga(legacyMangaId).executeAsBlocking()?.takeIf { manga -> manga.title.equals(novelName, ignoreCase = true) }?.id?.let { return it }
++        if (novelName.equals(currentNovelName.trim(), ignoreCase = true)) return currentMangaId
++        return database
++            .getMangas()
++            .executeAsBlocking()
++            .filter { manga -> manga.title.equals(novelName, ignoreCase = true) }
++            .mapNotNull { manga -> manga.id }
++            .singleOrNull()
++    }
++
+     private fun Cursor.toQuote() =
+         NovelQuote(
+             id = getString(0),
+@@ -169,6 +240,13 @@ class NovelQuoteStore(
+     }
+ }
+ 
++data class LegacyQuoteImportResult(
++    val discoveredQuotes: Int,
++    val insertedQuotes: Int,
++    val invalidDocuments: Int,
++    val unmatchedDocuments: Int,
++)
++
+ data class NovelQuote(
+     val id: String,
+     val mangaId: Long,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index a561052711f048eccd1a53c963cce6a124dd9f75..65de1c6e86bdc0569d1404d04e1d38f23ee3ea1d 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -171,6 +171,48 @@ class NovelReaderActivity :
+                 )
+             }
+         }
++    private val quoteImportLauncher =
++        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
++            if (uris.isEmpty()) return@registerForActivityResult
++            lifecycleScope.launch {
++                val result =
++                    withContext(Dispatchers.IO) {
++                        runCatching {
++                            val documents =
++                                uris.map { uri ->
++                                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
++                                        ?: error("Could not open $uri")
++                                }
++                            val current = requireNotNull(loaded).manga
++                            quoteStore.importLegacyJson(
++                                documents = documents,
++                                currentMangaId = requireNotNull(current.id),
++                                currentNovelName = current.title,
++                            )
++                        }
++                    }
++                result.fold(
++                    onSuccess = { imported ->
++                        val message =
++                            when {
++                                imported.invalidDocuments + imported.unmatchedDocuments > 0 ->
++                                    getString(
++                                        R.string.hayai_novel_reader_quote_import_partial,
++                                        imported.insertedQuotes,
++                                        imported.invalidDocuments,
++                                        imported.unmatchedDocuments,
++                                    )
++                                imported.insertedQuotes > 0 ->
++                                    getString(R.string.hayai_novel_reader_quote_imported, imported.insertedQuotes)
++                                else -> getString(R.string.hayai_novel_reader_quote_imported_existing)
++                            }
++                        toast(message)
++                        showSavedQuotes()
++                    },
++                    onFailure = { toast(R.string.hayai_novel_reader_quote_import_failed) },
++                )
++            }
++        }
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+@@ -875,15 +917,20 @@ class NovelReaderActivity :
+         val mangaId = loaded?.manga?.id ?: return
+         lifecycleScope.launch {
+             val quotes = withContext(Dispatchers.IO) { quoteStore.forManga(mangaId) }
+-            if (quotes.isEmpty()) {
+-                toast(R.string.hayai_novel_reader_no_quotes)
+-                return@launch
+-            }
+             val labels = quotes.map { quote -> getString(R.string.hayai_novel_reader_quote_list_item, quote.chapterName, quote.displayedContent.replace('\n', ' ').take(80)) }.toTypedArray()
+-            AlertDialog
+-                .Builder(this@NovelReaderActivity)
++            val builder =
++                AlertDialog
++                    .Builder(this@NovelReaderActivity)
+                 .setTitle(R.string.hayai_novel_reader_saved_quotes)
+-                .setItems(labels) { _, index -> showQuote(quotes[index]) }
++            if (quotes.isEmpty()) {
++                builder.setMessage(R.string.hayai_novel_reader_no_quotes)
++            } else {
++                builder.setItems(labels) { _, index -> showQuote(quotes[index]) }
++            }
++            builder
++                .setNeutralButton(R.string.hayai_novel_reader_import_quotes) { _, _ ->
++                    quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
++                }
+                 .setNegativeButton(android.R.string.cancel, null)
+                 .show()
+         }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt b/app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt
+index e83a4a69876341697e23a0f3d314188ba0c0888b..42c2ad02755397c8e4250e98fce4efa3d19ea1e1 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt
+@@ -5,6 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
+ import androidx.sqlite.db.SupportSQLiteOpenHelper
+ import dev.ahmedmohamed.hayai.migration.HayaiLegacyMigration
+ import dev.ahmedmohamed.hayai.migration.HayaiSchema
++import dev.ahmedmohamed.hayai.migration.LegacyQuoteJsonMigration
+ import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+ import eu.kanade.tachiyomi.data.database.tables.CategoryTable
+ import eu.kanade.tachiyomi.data.database.tables.ChapterTable
+@@ -17,6 +18,7 @@ class DbOpenCallback(
+     context: Context,
+ ) : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
+     private val hayaiMigration = HayaiLegacyMigration(context.applicationContext)
++    private val legacyQuoteMigration = LegacyQuoteJsonMigration(context.applicationContext)
+     private val migrationRetry = LegacyMigrationRetryRequest(context.applicationContext)
+ 
+     companion object {
+@@ -46,6 +48,7 @@ class DbOpenCallback(
+         } else {
+             hayaiMigration.runIfNeeded(db)
+         }
++        legacyQuoteMigration.runIfNeeded(db)
+     }
+ 
+     private fun setPragma(
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt
+index 837d02d80154f39890e7eb49956ddd13563918fb..4daf3dd8b1318c065ae5d715103c512445813859 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt
+@@ -94,10 +94,9 @@ class SettingsMainController :
+             }
+             if (hayaiPreferences.hentaiFeaturesEnabled.get()) {
+                 preference {
+-                    iconRes = R.mipmap.ic_ehentai_source
++                    iconRes = R.drawable.ic_ehentai_24dp
+                     iconTint = tintColor
+                     titleRes = R.string.hayai_eh_settings_title
+-                    summaryRes = R.string.hayai_eh_settings_summary
+                     onClick { navigateTo(EhSettingsController()) }
+                 }
+             }
+diff --git a/app/src/main/res/drawable/ic_ehentai_24dp.xml b/app/src/main/res/drawable/ic_ehentai_24dp.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..1d4a3cc4a62af7baaa0d9f312ae4daec1e531766
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_ehentai_24dp.xml
+@@ -0,0 +1,9 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="8"
++    android:viewportHeight="7">
++    <path
++        android:fillColor="#000000"
++        android:pathData="M0,0h3v1H0zM0,1h1v2H0zM0,3h2.25v1H0zM0,4h1v2H0zM0,6h3v1H0zM3,3h1v1H3zM4.75,0h1v7h-1zM5.75,3H7v1H5.75zM7,0h1v7H7z" />
++</vector>
+diff --git a/app/src/main/res/values/strings_hayai_eh.xml b/app/src/main/res/values/strings_hayai_eh.xml
+index ccbc4392eef23dbc0b5d59fa39624c475aae0b37..f21231ae4666b16cd936a593079b02cf619063e3 100644
+--- a/app/src/main/res/values/strings_hayai_eh.xml
++++ b/app/src/main/res/values/strings_hayai_eh.xml
+@@ -1,7 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+     <string name="hayai_eh_settings_title">E-Hentai and ExHentai</string>
+-    <string name="hayai_eh_settings_summary">Account, browsing, gallery previews, favorites sync, and updater</string>
+     <string name="hayai_eh_login_title">E-Hentai login</string>
+     <string name="hayai_eh_login_cloudflare_interrupted">Cloudflare interrupted login. Reopen login and complete the challenge.</string>
+     <string name="hayai_eh_login_invalid_credentials">The credentials were invalid or do not have ExHentai access.</string>
+diff --git a/app/src/main/res/values/strings_hayai_novel_reader.xml b/app/src/main/res/values/strings_hayai_novel_reader.xml
+index d09ac47c53e6305fd9248205c86d9f879a43e707..b152b3bfa033e866b6f13ff5ef3f2fb10cf98b2b 100644
+--- a/app/src/main/res/values/strings_hayai_novel_reader.xml
++++ b/app/src/main/res/values/strings_hayai_novel_reader.xml
+@@ -307,6 +307,11 @@
+     <string name="hayai_novel_reader_chapter_translation_failed">Chapter translation failed</string>
+     <string name="hayai_novel_reader_no_quotes">No saved quotes for this novel</string>
+     <string name="hayai_novel_reader_saved_quotes">Saved quotes</string>
++    <string name="hayai_novel_reader_import_quotes">Import old quote JSON</string>
++    <string name="hayai_novel_reader_quote_imported">Imported %1$d saved quotes</string>
++    <string name="hayai_novel_reader_quote_imported_existing">All selected quotes are already loaded</string>
++    <string name="hayai_novel_reader_quote_import_partial">Imported %1$d quotes; %2$d invalid files; %3$d unmatched novels</string>
++    <string name="hayai_novel_reader_quote_import_failed">Could not import the selected quote files</string>
+     <string name="hayai_novel_reader_copy_attribution">Copy with attribution</string>
+     <string name="hayai_novel_reader_move_earlier">Move earlier</string>
+     <string name="hayai_novel_reader_move_later">Move later</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonImportTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonImportTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d8ab4a16217ce8fda76735144909ab000ba1e378
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonImportTest.kt
+@@ -0,0 +1,150 @@
++package dev.ahmedmohamed.hayai.migration
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class LegacyQuoteJsonImportTest {
++    @Test
++    fun `recovers the complete archived series quotes shape`() {
++        val quote =
++            LegacyQuoteJsonCodec.decodeArchivedRow(
++                """
++                {
++                  "quote_id": "archived-quote",
++                  "manga_id": 100,
++                  "novel_name": "Archived Novel",
++                  "chapter_name": "Chapter 3",
++                  "displayed_content": "Archived display",
++                  "original_content": "Archived original",
++                  "translated_content": "Archived translation",
++                  "language": "ar",
++                  "timestamp": 1600000000000
++                }
++                """.trimIndent(),
++            )
++
++        assertEquals("archived-quote", quote.id)
++        assertEquals(100L, quote.mangaId)
++        assertEquals("Archived Novel", quote.novelName)
++        assertEquals("Chapter 3", quote.chapterName)
++        assertEquals("Archived display", quote.displayedContent)
++        assertEquals("Archived original", quote.originalContent)
++        assertEquals("Archived translation", quote.translatedContent)
++        assertEquals("ar", quote.language)
++        assertEquals(1600000000000L, quote.timestamp)
++    }
++
++    @Test
++    fun `imports the complete legacy quote file shape`() {
++        val document =
++            LegacyQuoteJsonCodec.decode(
++                """
++                {
++                  "novelId": 42,
++                  "quotes": [
++                    {
++                      "id": "quote-1",
++                      "novelName": "Legacy Novel",
++                      "chapterName": "Chapter 7",
++                      "content": "Displayed text",
++                      "originalContent": "Original text",
++                      "translatedContent": "Translated text",
++                      "language": "ja",
++                      "timestamp": 1700000000000
++                    }
++                  ]
++                }
++                """.trimIndent(),
++            )
++
++        assertEquals(42L, document.novelId)
++        assertEquals(1, document.quotes.size)
++        with(document.quotes.single()) {
++            assertEquals("quote-1", id)
++            assertEquals("Legacy Novel", novelName)
++            assertEquals("Chapter 7", chapterName)
++            assertEquals("Displayed text", displayedContent)
++            assertEquals("Original text", originalContent)
++            assertEquals("Translated text", translatedContent)
++            assertEquals("ja", language)
++            assertEquals(1700000000000L, timestamp)
++        }
++    }
++
++    @Test
++    fun `accepts nullable fields written by the old quote manager`() {
++        val document =
++            LegacyQuoteJsonCodec.decode(
++                """{"novelId":100,"quotes":[{"id":"old","novelName":"Verification Novel","chapterName":"Legacy chapter","content":"Restored","originalContent":"Restored","translatedContent":null,"language":"en","timestamp":1700000000000}]}""",
++            )
++
++        assertEquals(100L, document.novelId)
++        assertEquals(null, document.quotes.single().translatedContent)
++    }
++
++    @Test
++    fun `imports files idempotently without overwriting typed quotes`() {
++        val inserted = mutableListOf<LegacyQuoteJsonRow>()
++        val result =
++            LegacyQuoteJsonImporter.import(
++                files =
++                    listOf(
++                        LegacyQuoteJsonFile(
++                            "novel_42.json",
++                            """{"novelId":42,"quotes":[{"id":"existing","novelName":"Old","chapterName":"One","content":"Do not overwrite"},{"id":"missing","novelName":"Old","chapterName":"Two","content":"Restore me"}]}""",
++                        ),
++                    ),
++                resolveMangaId = { id, names -> id.takeIf { it == 42L && names == listOf("Old", "Old") } },
++                insertIfAbsent = { row ->
++                    if (row.id == "existing") false else inserted.add(row)
++                },
++            )
++
++        assertTrue(result.complete)
++        assertEquals(2, result.discoveredQuotes)
++        assertEquals(1, result.insertedQuotes)
++        assertEquals(listOf("missing"), inserted.map { it.id })
++    }
++
++    @Test
++    fun `keeps migration pending when a quote file cannot be attached safely`() {
++        val result =
++            LegacyQuoteJsonImporter.import(
++                files =
++                    listOf(
++                        LegacyQuoteJsonFile(
++                            "novel_77.json",
++                            """{"novelId":77,"quotes":[{"id":"orphan","novelName":"Missing","chapterName":"One","content":"Keep retrying"}]}""",
++                        ),
++                    ),
++                resolveMangaId = { _, _ -> null },
++                insertIfAbsent = { error("An orphaned quote must not be inserted") },
++            )
++
++        assertFalse(result.complete)
++        assertEquals(1, result.pendingFiles)
++        assertEquals(0, result.insertedQuotes)
++    }
++
++    @Test
++    fun `uses the resolved manga identity instead of a colliding legacy id`() {
++        var restored: LegacyQuoteJsonRow? = null
++        val result =
++            LegacyQuoteJsonImporter.import(
++                files =
++                    listOf(
++                        LegacyQuoteJsonFile(
++                            "novel_100.json",
++                            """{"novelId":100,"quotes":[{"id":"remapped","novelName":"Right Novel","chapterName":"One","content":"Keep me"}]}""",
++                        ),
++                    ),
++                resolveMangaId = { id, names -> 321L.takeIf { id == 100L && names == listOf("Right Novel") } },
++                insertIfAbsent = { row -> restored = row; true },
++            )
++
++        assertTrue(result.complete)
++        assertEquals(321L, restored?.mangaId)
++    }
++}
+diff --git a/docs/architecture/ehentai-port.md b/docs/architecture/ehentai-port.md
+index 6a424ce29b1f8488c88c07e85b81446c5c347929..42be53609e1005c552402a227338d78e905f4418 100644
+--- a/docs/architecture/ehentai-port.md
++++ b/docs/architecture/ehentai-port.md
+@@ -2,7 +2,7 @@
+ 
+ Hayai rebuilds the E-Hentai feature set behind `dev.ahmedmohamed.hayai.adult.eh`. TachiyomiJ2K continues to own manga, chapters, history, categories, downloads, and image reading. TachiyomiSY commit `14648c7cf0aa84e5a35d48de9dbf1386df6cca42` is the behavior reference, not an architectural parent.
+ 
+-The bundled source artwork is copied unchanged from TachiyomiSY. The E-Hentai density assets trace to commit `5499404267f6a197de322318500f40c51e5f38b4`; the ExHentai density assets trace to `21a4a935232df32444a11d2dbef640deff71869a`.
++The bundled source artwork is copied unchanged from TachiyomiSY. The E-Hentai density assets trace to commit `5499404267f6a197de322318500f40c51e5f38b4`; the ExHentai density assets trace to `21a4a935232df32444a11d2dbef640deff71869a`. The main Settings destination adapts SY's 24 dp `EhAssets.EhLogo` geometry at commit `14648c7cf0aa84e5a35d48de9dbf1386df6cca42` into the J2K XML preference row and intentionally has no descriptive subtitle.
+ 
+ ## Domain boundaries
+ 
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 35c1b41edaf5703c61b61bb9bb88b8cb72ee978d..b89f30b58ae53eacdd3b86c1dc1a7a15fc272073 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -36,7 +36,7 @@ LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary
+ 
+ Legacy Hayai and current J2K both called their database `tachiyomi.db`, but their schema histories are unrelated (legacy SQLDelight v36+ versus J2K StorIO v20). Hayai therefore uses `hayai-j2k.db` as the active J2K database and treats an existing `tachiyomi.db` as a read-only source.
+ 
+-On first database open, an idempotent importer validates the legacy schema and requires the fresh J2K target to be pristine. It imports compatible J2K core rows in dependency order, imports quotes/novel/E-Hentai/search data into typed tables, and also archives every source row with table and row identity in `hayai_legacy_rows`. The raw archive preserves columns J2K cannot represent. Inserts abort on any identity conflict; a non-pristine target is refused rather than silently merged or overwritten. The importer checks foreign keys and records a durable result. The source database is never modified. A failed import rolls back and records a recoverable diagnostic without entering an app-start retry loop.
++On first database open, an idempotent importer validates the legacy schema and requires the fresh J2K target to be pristine. It imports compatible J2K core rows in dependency order, imports quotes/novel/E-Hentai/search data into typed tables, and also archives every source row with table and row identity in `hayai_legacy_rows`. The raw archive preserves columns J2K cannot represent. Inserts abort on any identity conflict; a non-pristine target is refused rather than silently merged or overwritten. The importer checks foreign keys and records a durable result. The source database is never modified. A failed import rolls back and records a recoverable diagnostic without entering an app-start retry loop. A separate idempotent quote-recovery generation invalidates the superseded quote markers, replays archived `series_quotes` payloads, then restores pre-SQLite quote files from the retained `__APP_STATE_storage_dir` or the legacy `Hayai/quotes/novel_<id>.json` default. It ports both exact shapes from legacy Hayai commit `c1aab40f664dd2eec09774b653535021302f8e86`, never deletes source rows or files, never overwrites an existing typed quote, and does not record completion while storage is inaccessible, a file is unreadable, or a manga identity is absent. Because modern scoped-storage devices can deny the obsolete raw path even when the files remain visible to the system picker, the Saved quotes UI also accepts multiple JSON documents through Android's Storage Access Framework and merges every resolvable novel in one transaction. Manual recovery prefers the preserved numeric ID and falls back only to one exact, case-insensitive novel-title match; absent or ambiguous identities remain rejected.
+ 
+ ## Reader and source architecture
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 5edff84970703d07f159e0d3ccc99aef163809f7..80f19e03bbff81b2ddd2e095272b534f57ed0117 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -53,7 +53,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Typography, themes, spacing, navigation, presets, snippets, search/replace | Five Tsundoku icon tabs with J2K spinner, switch, slider, and toolbar-settings controls; adjacent theme and text/background color controls; Tsundoku-style preset swatches plus a synchronized hex/RGB custom picker; isolated preset/custom color resolution; Tsundoku preference keys and exact tap-zone tables; SAF-imported validated fonts shared by native/Web renderers; progress modes; compact ordered bottom/status registries; searchable full settings; ordered snippets with append semantics; and testable ordered replacements | custom theme logic and compilation verified; picker UI emulator verification and imported-font flow pending |
+ | Translation, definition, search, and dictionary handoff | Bounded provider clients and cache; shared native/Web selection actions with retained Web anchors; Google Translate process-text/send routing; forced resizable Custom Tabs with browser login state; and a secure J2K bottom-sheet WebView fallback | real NovelFull native selection verified Quote, Define, and Google Translate as the first actions; Web selection and floating translation-result verification remain pending |
+ | TTS and playback controls | Foreground media-playback service, notification actions, Tsundoku transport actions surfaced through J2K's reader-sheet buttons, chapter handoff, highlight, and activity reattachment | active exact-shell transport verified on emulator; background and restart recovery pending |
+-| Quotes | Typed `hayai_quotes`, visible semantic Quote action in native/Web selection, retained Web anchors, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | native real-source selection opened the populated Save quote flow on emulator; Web selection lifecycle remains pending |
++| Quotes | Typed `hayai_quotes`, versioned non-destructive replay of archived `series_quotes` and legacy `quotes/novel_<id>.json` files, multi-file SAF recovery for scoped-storage devices, visible semantic Quote action in native/Web selection, retained Web anchors, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | exact archived/legacy JSON shapes, idempotent merge, unresolved-identity retry, and identity-collision remap are covered by focused tests; emulator displayed archived database and safely remapped JSON quotes together; Web selection lifecycle remains pending |
+ | Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, editing, schema, and backup | implemented unverified |
+ | Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, progress-aware J2K chapter rows, and library statistics | integration foundation verified; emulator presentation pending |
+ | Library content filter, shortcuts, and migration compatibility | Typed content policy with narrow J2K presentation and migration adapters | integration foundation verified; emulator flows pending |
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index 3471780fee10ca3ab82f2da6fbda78330b5025c8..5396199f40cbb719ea04904933249e7b0b8e3532 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1095 | 0.0% |
+-| `ar` | 31 / 1095 | 2.8% |
+-| `ars` | 0 / 1095 | 0.0% |
+-| `az` | 0 / 1095 | 0.0% |
+-| `bg` | 0 / 1095 | 0.0% |
+-| `bn` | 0 / 1095 | 0.0% |
+-| `ca` | 0 / 1095 | 0.0% |
+-| `ceb` | 0 / 1095 | 0.0% |
+-| `cs` | 0 / 1095 | 0.0% |
+-| `cv` | 0 / 1095 | 0.0% |
+-| `de` | 29 / 1095 | 2.6% |
+-| `el` | 0 / 1095 | 0.0% |
+-| `eo` | 0 / 1095 | 0.0% |
+-| `es` | 31 / 1095 | 2.8% |
+-| `eu` | 0 / 1095 | 0.0% |
+-| `fa` | 0 / 1095 | 0.0% |
+-| `fi` | 0 / 1095 | 0.0% |
+-| `fil` | 31 / 1095 | 2.8% |
+-| `fr` | 31 / 1095 | 2.8% |
+-| `gl` | 0 / 1095 | 0.0% |
+-| `ha` | 0 / 1095 | 0.0% |
+-| `hi` | 0 / 1095 | 0.0% |
+-| `hr` | 31 / 1095 | 2.8% |
+-| `hu` | 0 / 1095 | 0.0% |
+-| `in` | 31 / 1095 | 2.8% |
+-| `it` | 17 / 1095 | 1.6% |
+-| `iw` | 0 / 1095 | 0.0% |
+-| `ja` | 29 / 1095 | 2.6% |
+-| `jv` | 0 / 1095 | 0.0% |
+-| `ka` | 0 / 1095 | 0.0% |
+-| `kk` | 0 / 1095 | 0.0% |
+-| `km` | 0 / 1095 | 0.0% |
+-| `ko` | 7 / 1095 | 0.6% |
+-| `lt` | 0 / 1095 | 0.0% |
+-| `lv` | 0 / 1095 | 0.0% |
+-| `ml` | 0 / 1095 | 0.0% |
+-| `mn` | 0 / 1095 | 0.0% |
+-| `ms` | 0 / 1095 | 0.0% |
+-| `my` | 0 / 1095 | 0.0% |
+-| `nb-rNO` | 0 / 1095 | 0.0% |
+-| `ne` | 5 / 1095 | 0.5% |
+-| `nl` | 0 / 1095 | 0.0% |
+-| `nn` | 0 / 1095 | 0.0% |
+-| `om` | 0 / 1095 | 0.0% |
+-| `or` | 0 / 1095 | 0.0% |
+-| `pl` | 0 / 1095 | 0.0% |
+-| `pt` | 31 / 1095 | 2.8% |
+-| `pt-rBR` | 31 / 1095 | 2.8% |
+-| `ro` | 0 / 1095 | 0.0% |
+-| `ru` | 31 / 1095 | 2.8% |
+-| `sc` | 0 / 1095 | 0.0% |
+-| `si` | 0 / 1095 | 0.0% |
+-| `sk` | 0 / 1095 | 0.0% |
+-| `sq` | 0 / 1095 | 0.0% |
+-| `sr` | 0 / 1095 | 0.0% |
+-| `sv` | 0 / 1095 | 0.0% |
+-| `ta` | 31 / 1095 | 2.8% |
+-| `te` | 0 / 1095 | 0.0% |
+-| `th` | 0 / 1095 | 0.0% |
+-| `ti` | 0 / 1095 | 0.0% |
+-| `tl` | 0 / 1095 | 0.0% |
+-| `tr` | 31 / 1095 | 2.8% |
+-| `uk` | 7 / 1095 | 0.6% |
+-| `ur` | 0 / 1095 | 0.0% |
+-| `vi` | 5 / 1095 | 0.5% |
+-| `zh-rCN` | 31 / 1095 | 2.8% |
+-| `zh-rTW` | 31 / 1095 | 2.8% |
++| `ajp` | 0 / 1099 | 0.0% |
++| `ar` | 31 / 1099 | 2.8% |
++| `ars` | 0 / 1099 | 0.0% |
++| `az` | 0 / 1099 | 0.0% |
++| `bg` | 0 / 1099 | 0.0% |
++| `bn` | 0 / 1099 | 0.0% |
++| `ca` | 0 / 1099 | 0.0% |
++| `ceb` | 0 / 1099 | 0.0% |
++| `cs` | 0 / 1099 | 0.0% |
++| `cv` | 0 / 1099 | 0.0% |
++| `de` | 29 / 1099 | 2.6% |
++| `el` | 0 / 1099 | 0.0% |
++| `eo` | 0 / 1099 | 0.0% |
++| `es` | 31 / 1099 | 2.8% |
++| `eu` | 0 / 1099 | 0.0% |
++| `fa` | 0 / 1099 | 0.0% |
++| `fi` | 0 / 1099 | 0.0% |
++| `fil` | 31 / 1099 | 2.8% |
++| `fr` | 31 / 1099 | 2.8% |
++| `gl` | 0 / 1099 | 0.0% |
++| `ha` | 0 / 1099 | 0.0% |
++| `hi` | 0 / 1099 | 0.0% |
++| `hr` | 31 / 1099 | 2.8% |
++| `hu` | 0 / 1099 | 0.0% |
++| `in` | 31 / 1099 | 2.8% |
++| `it` | 17 / 1099 | 1.5% |
++| `iw` | 0 / 1099 | 0.0% |
++| `ja` | 29 / 1099 | 2.6% |
++| `jv` | 0 / 1099 | 0.0% |
++| `ka` | 0 / 1099 | 0.0% |
++| `kk` | 0 / 1099 | 0.0% |
++| `km` | 0 / 1099 | 0.0% |
++| `ko` | 7 / 1099 | 0.6% |
++| `lt` | 0 / 1099 | 0.0% |
++| `lv` | 0 / 1099 | 0.0% |
++| `ml` | 0 / 1099 | 0.0% |
++| `mn` | 0 / 1099 | 0.0% |
++| `ms` | 0 / 1099 | 0.0% |
++| `my` | 0 / 1099 | 0.0% |
++| `nb-rNO` | 0 / 1099 | 0.0% |
++| `ne` | 5 / 1099 | 0.5% |
++| `nl` | 0 / 1099 | 0.0% |
++| `nn` | 0 / 1099 | 0.0% |
++| `om` | 0 / 1099 | 0.0% |
++| `or` | 0 / 1099 | 0.0% |
++| `pl` | 0 / 1099 | 0.0% |
++| `pt` | 31 / 1099 | 2.8% |
++| `pt-rBR` | 31 / 1099 | 2.8% |
++| `ro` | 0 / 1099 | 0.0% |
++| `ru` | 31 / 1099 | 2.8% |
++| `sc` | 0 / 1099 | 0.0% |
++| `si` | 0 / 1099 | 0.0% |
++| `sk` | 0 / 1099 | 0.0% |
++| `sq` | 0 / 1099 | 0.0% |
++| `sr` | 0 / 1099 | 0.0% |
++| `sv` | 0 / 1099 | 0.0% |
++| `ta` | 31 / 1099 | 2.8% |
++| `te` | 0 / 1099 | 0.0% |
++| `th` | 0 / 1099 | 0.0% |
++| `ti` | 0 / 1099 | 0.0% |
++| `tl` | 0 / 1099 | 0.0% |
++| `tr` | 31 / 1099 | 2.8% |
++| `uk` | 7 / 1099 | 0.6% |
++| `ur` | 0 / 1099 | 0.0% |
++| `vi` | 5 / 1099 | 0.5% |
++| `zh-rCN` | 31 / 1099 | 2.8% |
++| `zh-rTW` | 31 / 1099 | 2.8% |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 833d8d91060e3f7bb2de5b0a49d5aaafb9f9d8cd..8d82ece3e2f843fff4c43347d241411f1cc8da29 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -284,8 +284,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.Network("E-Hentai request failed", failure)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", (page - 1).toString())
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.removeAllQueryParameters("nw")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("tl", requireNotNull(toplist.requestValue).toString())
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.removeAllQueryParameters("nw")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_apply", "Apply Filter")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_cats", spec.excludedCategories.sumOf { it.exclusionBit }.toString())
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_search", listOf(spec.query.trim(), tags).filter(String::isNotBlank).joinToString(" "))
+@@ -1133,6 +1133,42 @@ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlan.kt	TableCopy
+ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlan.kt	TableCopyPlan("novel_repos", "hayai_novel_repos", columns("base_url", "name")),
+ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt	const val KEY_REQUESTED = "retry_requested"
+ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt	const val PREFERENCES_NAME = "hayai_legacy_migration"
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	"DELETE FROM hayai_novel_import_runs WHERE plan_id IN (?, ?, ?)",
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	"INSERT OR REPLACE INTO hayai_novel_import_runs(plan_id, status, completed_at) VALUES (?, 'complete', ?)",
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	"Legacy quote recovery remains pending: %d archive row(s), %d JSON file(s), storage available=%s",
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	"SELECT payload_json FROM hayai_legacy_rows WHERE table_name = 'series_quotes' ORDER BY legacy_key",
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("chapter_name") val chapterName: String,
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("content") val displayedContent: String,
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("displayed_content") val displayedContent: String,
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("manga_id") val mangaId: Long,
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("novel_name") val novelName: String,
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("original_content") val originalContent: String? = null,
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("quote_id") val id: String,
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	@SerialName("translated_content") val translatedContent: String? = null,
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	arrayOf<Any?>("legacy-quote-json-v1", "legacy-quote-json-v2", "legacy-quote-recovery-v3"),
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	check(alreadyPresent) { "Failed to restore legacy quote ${quote.id}" }
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	const val LEGACY_ROOT_DIRECTORY = "Hayai"
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	const val LEGACY_STORAGE_PREFERENCE = "__APP_STATE_storage_dir"
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	const val PLAN_ID = "legacy-quote-recovery-v4"
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	const val QUOTES_DIRECTORY = "quotes"
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	db.query("SELECT 1 FROM hayai_novel_import_runs WHERE plan_id = ?", arrayOf(PLAN_ID)).use { cursor -> cursor.moveToFirst() }
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	db.query("SELECT 1 FROM hayai_quotes WHERE quote_id = ?", arrayOf(quote.id)).use { cursor -> cursor.moveToFirst() }
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	db.query("SELECT title FROM mangas WHERE _id = ?", arrayOf(legacyMangaId)).use { cursor ->
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("chapter_name", quote.chapterName)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("displayed_content", quote.displayedContent)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("language", quote.language)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("manga_id", quote.mangaId)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("novel_name", quote.novelName)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("original_content", quote.originalContent)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("quote_id", quote.id)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("timestamp", quote.timestamp)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	put("translated_content", quote.translatedContent)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	return db.query("SELECT _id FROM mangas WHERE title = ? COLLATE NOCASE ORDER BY _id", arrayOf(novelName)).use { cursor ->
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	Timber.e(error, "Could not read legacy quote file %s", file.name)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	Timber.e(it, "Could not recover archived quote %s", quote.id)
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val FILE_NAME = Regex("novel_[0-9]+\\.json")
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val fileMangaId = file.name.removePrefix("novel_").removeSuffix(".json").toLongOrNull()
++app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val inserted = db.insert("hayai_quotes", SQLiteDatabase.CONFLICT_IGNORE, values)
+ app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	"""
+ app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	""".trimIndent()
+ app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	fun isChallengeResult(result: String?): Boolean = result == "true"
+@@ -2110,6 +2146,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val resolvedFontFamily = if (importedFontId != null) "'HayaiImported'" else fontFamily
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val selection = if (style.textSelectable) "text" else "none"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	?: error("Could not open $uri")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	.joinToString("\n\n"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	"chapter:${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	).joinToString(" ").takeIf(String::isNotBlank)
+@@ -2121,6 +2158,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	Nov
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	NovelReaderAction.ImportFont -> fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	private const val EXTRA_CHAPTER_ID = "hayai.chapter_id"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	private const val EXTRA_MANGA_ID = "hayai.manga_id"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	statusView.textSize = if (preferences.novelStatusBarSize.get() == "medium") 14f else 11f
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	type = "text/plain"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt	val cacheKey = "${chapter.manga.source}:${chapter.manga.url}:${chapter.chapter.url}:${capture.selectedText.hashCode()}"
+-- 
+2.54.0.windows.1
+

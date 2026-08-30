@@ -1,0 +1,168 @@
+From 67f8c005f12238ebd3af048df4a7e2eed87b0203 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 05:56:03 +0300
+Subject: [PATCH] Fix Browse source icon crash
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index b64fd9b30088a80dfa6556e54587ecaa5397d302..95127a1a0b074c28e26894b2c1dc6f3406b53fe4 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -71,6 +71,7 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T00:21:00Z	validation	compiled the rebased app and ran 320 focused Hayai tests with one Gradle worker	verified source, novel, backup, migration, enhanced-source, E-Hentai, recents, and presentation integration after the upstream replay	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest with focused Hayai filters -x :app:formatKotlin	VERIFIED
+ 2026-08-22T00:08:20Z	emulator-harness	replaced the fixed startup sleep with database readiness and explicit first-run permission handling	the authorized emulator proved migration succeeds when the harness does not force-stop the app before its lazy database open	commit 99c6f64c43	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T02:29:32Z	emulator-verification	verified migrated core and Hayai-owned rows, native novel reading, all five reader settings tabs, offline save, restart recovery, and logged-out EH settings	the run found and drove the fix for a tabbed-sheet superclass initialization crash	artifacts/emulator-verification/20260822-022932	VERIFIED
++2026-08-22T02:41:00Z	browse-crash	passed the registered Application explicitly to bundled source icon resolution and restricted asynchronous app-service startup to the main process	reproduced the crash from Source.icon requesting an unregistered raw Context, then verified the complete migration/reader/restart/EH/Browse workflow with Manga, Novels, and E-Hentai rows on emulator	app/src/main/java/eu/kanade/tachiyomi/source/Source.kt; dev/ahmedmohamed/hayai/process/HayaiProcessPolicy.kt; artifacts/emulator-verification/20260822-025217/16-browse.png	VERIFIED
+ 2026-08-22T00:08:20Z	nightly-release	added an isolated nightly build, channel-aware updater policy, Hayai APK selection, monotonic release workflow, and pull-request CI	preserved stable and nightly identities while keeping release policy under the Hayai namespace	app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt; .github/workflows/nightly.yml	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T01:10:00Z	page-preview-parity	replaced eager bitmap strips with typed lazy previews, bounded caches, full navigation, dedicated source artwork, and selected-page reader routing	preserved source authentication and parsing in Hayai while adding one approved initial-page read to the unchanged J2K reader lifecycle	source/preview; EhDetailsPreviewLoader.kt; MangaDetailsController.kt; ReaderLauncher.kt; ReaderActivity.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T01:11:00Z	content-discovery	split Browse and the extension installer into Manga and Novel views with one content classifier	preserved J2K search and extension ownership while making local novels and novel APK repositories discoverable	ContentKind; BrowseController.kt; ExtensionBottomSheet.kt; RepoController.kt	IMPLEMENTED_UNVERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/process/HayaiProcessPolicy.kt b/app/src/main/java/dev/ahmedmohamed/hayai/process/HayaiProcessPolicy.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..ac9c268ff07957f63c08a98946a888395a4b1bca
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/process/HayaiProcessPolicy.kt
+@@ -0,0 +1,20 @@
++package dev.ahmedmohamed.hayai.process
++
++import android.app.ActivityManager
++import android.app.Application
++import android.content.Context
++import android.os.Build
++import android.os.Process
++
++object HayaiProcessPolicy {
++    fun isMainProcess(context: Context): Boolean {
++        val processName =
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
++                Application.getProcessName()
++            } else {
++                val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
++                manager?.runningAppProcesses?.firstOrNull { it.pid == Process.myPid() }?.processName
++            }
++        return processName == context.packageName
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+index fdae319977de3d7041512cc980a1836bf1c843c0..32309337f5e67c3640e448bdfd5d919211726234 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+@@ -19,6 +19,7 @@ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUConfigHttpRemote
+ import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateStateStore
+ import dev.ahmedmohamed.hayai.adult.eh.update.EhGalleryUpdateWorker
++import dev.ahmedmohamed.hayai.process.HayaiProcessPolicy
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesHttpRemote
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesRemote
+ import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncService
+@@ -144,23 +145,25 @@ class AppModule(
+ 
+         // Asynchronously init expensive components for a faster cold start
+ 
+-        ContextCompat.getMainExecutor(app).execute {
+-            get<PreferencesHelper>()
++        if (HayaiProcessPolicy.isMainProcess(app)) {
++            ContextCompat.getMainExecutor(app).execute {
++                get<PreferencesHelper>()
+ 
+-            get<NetworkHelper>()
++                get<NetworkHelper>()
+ 
+-            get<SourceManager>()
++                get<SourceManager>()
+ 
+-            get<DatabaseHelper>()
++                get<DatabaseHelper>()
+ 
+-            get<DownloadManager>()
++                get<DownloadManager>()
+ 
+-            get<CustomMangaManager>()
++                get<CustomMangaManager>()
+ 
+-            if (HayaiPreferences(get()).hentaiFeaturesEnabled.get()) {
+-                EhGalleryUpdateWorker.schedule(app, EhGalleryUpdateStateStore(app, get()).policy())
+-            } else {
+-                EhGalleryUpdateWorker.cancel(app)
++                if (HayaiPreferences(get()).hentaiFeaturesEnabled.get()) {
++                    EhGalleryUpdateWorker.schedule(app, EhGalleryUpdateStateStore(app, get()).policy())
++                } else {
++                    EhGalleryUpdateWorker.cancel(app)
++                }
+             }
+         }
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/source/Source.kt b/app/src/main/java/eu/kanade/tachiyomi/source/Source.kt
+index 51974eaa04d3cc9e504974382f479073091fe2b0..653895c9f34828a3a7f33ca097c0c24b00645ff8 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/source/Source.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/source/Source.kt
+@@ -1,5 +1,6 @@
+ package eu.kanade.tachiyomi.source
+ 
++import android.app.Application
+ import android.graphics.drawable.Drawable
+ import dev.ahmedmohamed.hayai.source.presentation.BundledSourceIconResolver
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+@@ -144,7 +145,7 @@ interface Source {
+ 
+ fun Source.icon(): Drawable? =
+     Injekt.get<ExtensionManager>().getAppIconForSource(this)
+-        ?: BundledSourceIconResolver.drawable(Injekt.get(), id)
++        ?: BundledSourceIconResolver.drawable(Injekt.get<Application>(), id)
+ 
+ fun Source.pkgName() = Injekt.get<ExtensionManager>().getPackageName(id)
+ 
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 6706eae671c9ade46e5cda52b93d55bd9e439a83..d67c1528fdb82dc4d356fb7bb3d25b1d1414936d 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -16,6 +16,8 @@ J2K owns manga, chapters, history, categories, tracking, downloads, image readin
+ 
+ `tools/verify-upstream-boundary.ps1` rejects unreviewed Kotlin edits outside this namespace. `App.kt`, `MainActivity.kt`, and the J2K image `ReaderActivity.kt` are protected explicitly.
+ 
++`AppModule` delegates process classification to `HayaiProcessPolicy` before scheduling asynchronous database, source, download, and WorkManager-backed initialization. The main process retains the normal startup path; the isolated crash-handler process imports only the synchronous dependencies its activity needs. This prevents a primary failure from being hidden by a second WorkManager initialization crash without changing `App.kt`.
++
+ The sole approved image-reader seam is an initial-page intent read in `ReaderActivity.onCreate`. `ReaderLauncher` owns the namespaced extra and validates its zero-based value. This lets source page previews enter the existing J2K reader at the selected image without changing chapter loading, reader lifecycle, viewer state, persistence, or navigation.
+ 
+ The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one optional high-numbered Hayai field, `BackupCreator` fills it, and `BackupRestorer` applies it only after J2K has restored manga and chapters. All payload validation, serialization models, stable identity mapping, and database behavior remain Hayai-owned. This preserves old-backup compatibility and avoids teaching J2K models about Hayai tables.
+@@ -56,7 +58,7 @@ Built-in source settings are another deliberate adapter seam. `BrowseSourceContr
+ 
+ J2K's extension-facing `JavaScriptEngine` delegates evaluation to Hayai's QuickJS runtime. The novel plugin bridge needs the Dokar binding API, while J2K previously packaged a second QuickJS implementation with the same native `libquickjs.so` name. One Hayai-owned evaluator preserves the extension API and prevents an unresolvable APK native-library collision without changing application lifecycle code.
+ 
+-Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
++Source badges and bundled icons use Hayai-owned presentation resolvers. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. The J2K `Source.icon()` seam asks Injekt for the registered `Application`, not an unregistered raw `Context`, before resolving a bundled fallback. This keeps the badge UI honest and source rows safe while limiting J2K changes to presentation holders and one icon fallback.
+ 
+ Release channels use a Hayai-owned policy. Stable and beta builds query `HayaiApp/hayai`. Nightly builds use the isolated `.nightly` application ID, numeric `rN` versions, and `HayaiApp/hayai-nightly`. J2K's update checker delegates tag comparison and APK selection to this policy. The nightly workflow chooses `max(commit count, latest published nightly + 1)`, which prevents version rollback after the J2K reset and remains safe when a canceled job retries.
+ 
+diff --git a/tools/verify-hayai-emulator.ps1 b/tools/verify-hayai-emulator.ps1
+index 188b1de58cfd8a42a86d34844e2cc3418cd0d847..2498db57ede3933308074b0f932f40a3c485852c 100644
+--- a/tools/verify-hayai-emulator.ps1
++++ b/tools/verify-hayai-emulator.ps1
+@@ -328,7 +328,24 @@ try {
+         Assert-Node "Gallery page 1" "14-eh-previews"
+         Capture "14-eh-previews"
+     }
+-    Database-Report "15-final"
++
++    Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
++    Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity") | Out-Null
++    Start-Sleep -Seconds 3
++    Dismiss-CompatibilityWarning
++    $mainWindow = Dump-Window "15-main-before-browse"
++    if ($null -eq (Find-NodeOptional $mainWindow "^Search sources$")) {
++        Tap-WindowNode (Find-Node $mainWindow "^Browse$") "Browse"
++        Start-Sleep -Seconds 3
++    }
++    $browseWindow = Dump-Window "16-browse"
++    [void](Find-Node $browseWindow "^Search sources$")
++    [void](Find-Node $browseWindow "^Manga$")
++    [void](Find-Node $browseWindow "^Novels$")
++    [void](Find-Node $browseWindow "^E-Hentai$")
++    Capture "16-browse"
++
++    Database-Report "17-final"
+     Invoke-Adb @("logcat", "-d", "-v", "threadtime") | Set-Content -LiteralPath (Join-Path $script:evidence "logcat.txt") -Encoding utf8
+     $fatal = Get-Content -LiteralPath (Join-Path $script:evidence "logcat.txt") | Select-String "FATAL EXCEPTION|AndroidRuntime: Process: $ApplicationId"
+     if ($fatal) { throw "The verification run captured an application crash. See logcat.txt." }
+-- 
+2.54.0.windows.1
+

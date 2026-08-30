@@ -1,0 +1,1901 @@
+From 242781f23c1dd2add80db6459a258234fbcb0171 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 17:45:33 +0300
+Subject: [PATCH] Build production novel reader
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 2078b9b76b6c2e3a390adfb9f745a9fa6e39a134..407f4b68db118c05e4acf871a6c0d597976a68f7 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -13,3 +13,6 @@ ts	phase	decision	why	evidence	result
+ 2026-08-20T14:35:00Z	review	independent GPT-5.4 audit found migration-conflict and novel-scope wording risks	fresh-context review is required by the decision-trail workflow	.audit/final-review.md	FIXED
+ 2026-08-20T14:48:00Z	maintenance	added root agent contract, skill routing, and reproducible patch-stack tools	kept future J2K pulls and agent work bounded and reviewable	AGENTS.md; docs/development/skills.md; patches; tools/refresh-patchset.ps1; tools/apply-patchset.ps1	VERIFIED
+ 2026-08-20T14:52:00Z	review	independent reviewer rechecked the fixes and maintenance layer	closed the required attention loop after changes	.audit/final-review.md	VERIFIED
++2026-08-20T15:10:00Z	reader	built a dedicated novel reader with safe document processing, assets, progress, navigation, TTS, and controls	kept novel behavior inside the Hayai boundary instead of changing J2K's image reader	app/src/main/java/dev/ahmedmohamed/hayai/novel/reader	VERIFIED
++2026-08-20T15:20:00Z	validation	ran the upstream-boundary gate and the complete focused novel test suite	proved the protected lifecycle and image-reader files stayed untouched and all novel formats plus reader helpers remained green	tools/verify-upstream-boundary.ps1; gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.*	114 tests green
++2026-08-20T15:30:00Z	review	fixed independent reader audit findings before commit	bound persistence to captured chapters, blocked WebView navigation, made lifecycle saves durable, and rejected stale or failed TTS utterances	app/src/main/java/dev/ahmedmohamed/hayai/novel/reader	FIXED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..dcaefb2be3b973e2552d3c3a3d2a7a0dc8815d32
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt
+@@ -0,0 +1,87 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import android.net.Uri
++import android.webkit.WebResourceRequest
++import android.webkit.WebResourceResponse
++import android.webkit.WebView
++import android.webkit.WebViewClient
++import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
++import eu.kanade.tachiyomi.source.Source
++import kotlinx.coroutines.runBlocking
++import java.io.ByteArrayInputStream
++import java.net.URLConnection
++
++internal class NovelAssetWebViewClient(
++    private val source: Source,
++    private val chapterUrl: () -> String,
++    private val blockMedia: () -> Boolean,
++) : WebViewClient() {
++    override fun shouldInterceptRequest(
++        view: WebView?,
++        request: WebResourceRequest,
++    ): WebResourceResponse? = intercept(request.url)
++
++    @Deprecated("Deprecated by Android")
++    override fun shouldInterceptRequest(
++        view: WebView?,
++        url: String?,
++    ): WebResourceResponse? = url?.let(Uri::parse)?.let(::intercept)
++
++    override fun shouldOverrideUrlLoading(
++        view: WebView?,
++        request: WebResourceRequest,
++    ): Boolean = request.url.scheme != "about"
++
++    @Deprecated("Deprecated by Android")
++    override fun shouldOverrideUrlLoading(
++        view: WebView?,
++        url: String?,
++    ): Boolean = Uri.parse(url.orEmpty()).scheme != "about"
++
++    private fun intercept(uri: Uri): WebResourceResponse? {
++        if (blockMedia() && isMedia(uri)) return emptyResponse()
++        if (uri.scheme !in ASSET_SCHEMES) return null
++        val provider = source as? NovelAssetProvider ?: return notFoundResponse()
++        val path = decodeAssetPath(uri) ?: return notFoundResponse()
++        val stream = runBlocking { provider.getChapterAsset(chapterUrl(), path) } ?: return notFoundResponse()
++        return WebResourceResponse(mimeType(path), null, stream)
++    }
++
++    private fun decodeAssetPath(uri: Uri): String? {
++        val encoded =
++            buildString {
++                uri.encodedAuthority?.takeIf { it.isNotBlank() }?.let(::append)
++                uri.encodedPath?.let(::append)
++            }.trimStart('/')
++        if (encoded.isBlank()) return null
++        return Uri.decode(encoded).replace('\\', '/').takeUnless { path ->
++            path.startsWith('/') || path.split('/').any { it == ".." }
++        }
++    }
++
++    private fun isMedia(uri: Uri): Boolean =
++        uri.scheme in ASSET_SCHEMES ||
++            uri.path
++                .orEmpty()
++                .substringAfterLast('.', "")
++                .lowercase() in MEDIA_EXTENSIONS
++
++    private fun mimeType(path: String): String =
++        URLConnection.guessContentTypeFromName(path) ?: when (path.substringAfterLast('.', "").lowercase()) {
++            "svg" -> "image/svg+xml"
++            "webp" -> "image/webp"
++            "avif" -> "image/avif"
++            else -> "application/octet-stream"
++        }
++
++    private fun emptyResponse() = WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
++
++    private fun notFoundResponse() =
++        WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
++
++    private companion object {
++        val ASSET_SCHEMES = setOf("hayai-novel-image", "novel-image")
++        val MEDIA_EXTENSIONS =
++            setOf("jpg", "jpeg", "png", "gif", "webp", "svg", "avif", "bmp", "mp3", "m4a", "aac", "ogg", "wav", "mp4", "webm")
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessor.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessor.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..e926e12b74d411556643893d5d28c192c110031b
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessor.kt
+@@ -0,0 +1,183 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import dev.ahmedmohamed.hayai.novel.source.NovelContentType
++import dev.ahmedmohamed.hayai.novel.source.NovelDocument
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
++import org.commonmark.parser.Parser
++import org.commonmark.renderer.html.HtmlRenderer
++import org.jsoup.Jsoup
++import org.jsoup.nodes.Document
++import org.jsoup.nodes.Element
++import org.jsoup.nodes.TextNode
++
++internal class NovelContentProcessor(
++    private val json: Json = Json { ignoreUnknownKeys = true },
++) {
++    fun process(
++        document: NovelDocument,
++        chapterName: String,
++        options: NovelContentOptions,
++    ): ProcessedNovelContent {
++        val sourceHtml =
++            when (document.contentType) {
++                NovelContentType.Html -> document.content
++                NovelContentType.Markdown -> markdownToHtml(document.content)
++                NovelContentType.PlainText -> plainTextToHtml(document.content)
++            }
++        var parsed = Jsoup.parseBodyFragment(sourceHtml, document.baseUrl.orEmpty())
++
++        if (options.showRawHtml) {
++            parsed = Jsoup.parseBodyFragment("<pre>${escapeHtml(document.content)}</pre>")
++        } else {
++            applyRegexReplacements(parsed, options.regexReplacements)
++            if (options.hideChapterTitle) removeDuplicateTitle(parsed, chapterName)
++            sanitize(parsed, options)
++            if (options.forceLowercase) lowercaseTextNodes(parsed.body())
++            if (options.autoSplitText) splitLongParagraphs(parsed, options.autoSplitWordCount)
++        }
++
++        return ProcessedNovelContent(parsed.body().html(), document.baseUrl)
++    }
++
++    private fun markdownToHtml(markdown: String): String {
++        val parser = Parser.builder().build()
++        return HtmlRenderer
++            .builder()
++            .escapeHtml(true)
++            .build()
++            .render(parser.parse(markdown))
++    }
++
++    private fun plainTextToHtml(text: String): String =
++        text
++            .replace("\r\n", "\n")
++            .replace('\r', '\n')
++            .split(Regex("\n{2,}"))
++            .joinToString("\n") { paragraph -> "<p>${escapeHtml(paragraph).replace("\n", "<br>")}</p>" }
++
++    private fun applyRegexReplacements(
++        document: Document,
++        rulesJson: String,
++    ) {
++        if (rulesJson.isBlank() || rulesJson == "[]") return
++        val rules = runCatching { json.decodeFromString<List<RegexReplacement>>(rulesJson) }.getOrDefault(emptyList())
++        var html = document.body().html()
++        rules.filter { it.enabled && it.pattern.isNotBlank() }.forEach { rule ->
++            runCatching {
++                val options = if (rule.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
++                val pattern =
++                    if (rule.isRegex) {
++                        rule.pattern
++                    } else {
++                        val escaped = Regex.escape(rule.pattern)
++                        if (rule.matchWholeWord) "(?<![\\p{L}\\p{N}_])(?:$escaped)(?![\\p{L}\\p{N}_])" else escaped
++                    }
++                html = Regex(pattern, options).replace(html, rule.replacement)
++            }
++        }
++        document.body().html(html)
++    }
++
++    private fun sanitize(
++        document: Document,
++        options: NovelContentOptions,
++    ) {
++        document.select("iframe, object, embed, form, input, button, textarea").remove()
++        if (!options.keepEmbeddedJs) document.select("script").remove()
++        if (!options.keepEmbeddedCss) document.select("style, link[rel=stylesheet]").remove()
++        if (options.blockMedia) document.select("img, image, picture, video, audio, source, track").remove()
++
++        document.allElements.forEach { element ->
++            element.attributes().asList().filter { it.key.startsWith("on", ignoreCase = true) }.forEach {
++                element.removeAttr(it.key)
++            }
++            listOf("href", "src", "xlink:href", "poster").forEach { attribute ->
++                if (element.attr(attribute).trim().startsWith("javascript:", ignoreCase = true)) {
++                    element.removeAttr(attribute)
++                }
++            }
++        }
++    }
++
++    private fun removeDuplicateTitle(
++        document: Document,
++        chapterName: String,
++    ) {
++        val normalizedChapter = normalizeTitle(chapterName)
++        if (normalizedChapter.isBlank()) return
++        document
++            .select("h1, h2, h3, h4, h5, h6")
++            .firstOrNull { heading ->
++                val normalizedHeading = normalizeTitle(heading.text())
++                normalizedHeading.isNotBlank() &&
++                    (
++                        normalizedHeading == normalizedChapter ||
++                            normalizedChapter.contains(normalizedHeading) ||
++                            normalizedHeading.contains(normalizedChapter)
++                    )
++            }?.remove()
++    }
++
++    private fun lowercaseTextNodes(root: Element) {
++        root.childNodes().forEach { node ->
++            when (node) {
++                is TextNode -> node.text(node.text().lowercase())
++                is Element -> if (node.tagName() !in setOf("style", "script", "code", "pre")) lowercaseTextNodes(node)
++            }
++        }
++    }
++
++    private fun splitLongParagraphs(
++        document: Document,
++        wordCount: Int,
++    ) {
++        val threshold = wordCount.coerceIn(10, 500)
++        document.select("p").toList().forEach { paragraph ->
++            if (paragraph.childrenSize() > 0) return@forEach
++            val words = paragraph.text().split(Regex("\\s+")).filter(String::isNotBlank)
++            if (words.size <= threshold) return@forEach
++            val chunks = words.chunked(threshold)
++            chunks.forEach { chunk -> paragraph.before(Element("p").text(chunk.joinToString(" "))) }
++            paragraph.remove()
++        }
++    }
++
++    private fun normalizeTitle(value: String): String = value.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), "").trim()
++
++    private fun escapeHtml(value: String): String =
++        value
++            .replace("&", "&amp;")
++            .replace("<", "&lt;")
++            .replace(">", "&gt;")
++            .replace("\"", "&quot;")
++}
++
++internal data class NovelContentOptions(
++    val hideChapterTitle: Boolean,
++    val forceLowercase: Boolean,
++    val blockMedia: Boolean,
++    val keepEmbeddedCss: Boolean,
++    val keepEmbeddedJs: Boolean,
++    val showRawHtml: Boolean,
++    val autoSplitText: Boolean,
++    val autoSplitWordCount: Int,
++    val regexReplacements: String,
++)
++
++internal data class ProcessedNovelContent(
++    val html: String,
++    val baseUrl: String?,
++)
++
++@Serializable
++internal data class RegexReplacement(
++    val title: String,
++    val pattern: String,
++    val replacement: String,
++    val enabled: Boolean = true,
++    val isRegex: Boolean = true,
++    val matchWholeWord: Boolean = false,
++    val caseSensitive: Boolean = false,
++    val id: String = "",
++)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d07374190354f710df8202f9adf3eec2a361c962
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+@@ -0,0 +1,143 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++internal object NovelHtmlDocumentBuilder {
++    fun build(
++        content: ProcessedNovelContent,
++        chapterTitle: String,
++        style: NovelReaderStyle,
++    ): String {
++        val readerCss = buildReaderCss(style)
++        val styleBlocks =
++            if (style.sourceCssPriority) {
++                "<style>$readerCss</style><style>${style.customCss}</style>"
++            } else {
++                "<style>${style.customCss}</style><style>$readerCss</style>"
++            }
++        val heading = if (style.hideChapterTitle) "" else "<h1 class=\"hayai-chapter-title\">${escape(chapterTitle)}</h1>"
++        return """
++            <!doctype html>
++            <html><head>
++              <meta charset="utf-8">
++              <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
++              $styleBlocks
++            </head><body>
++              <main id="hayai-reader">$heading${content.html}</main>
++              <script>${BRIDGE_SCRIPT}</script>
++              <script>${style.customJs}</script>
++            </body></html>
++            """.trimIndent()
++    }
++
++    private fun buildReaderCss(style: NovelReaderStyle): String {
++        val fontFamily = if (style.useOriginalFonts) "inherit" else cssString(style.fontFamily)
++        val align = style.textAlign.takeIf { it in setOf("left", "right", "center", "justify", "start", "end") } ?: "left"
++        val selection = if (style.textSelectable) "text" else "none"
++        val backgroundColor = color(style.backgroundColor)
++        val textColor = color(style.textColor)
++        val highlightColor = color(style.ttsHighlightColor)
++        val highlightTextColor = color(style.ttsHighlightTextColor)
++        return """
++            :root { color-scheme: ${if (isDark(style.backgroundColor)) "dark" else "light"}; }
++            html, body { margin:0; padding:0; min-height:100%; background:$backgroundColor; color:$textColor; }
++            body {
++              box-sizing:border-box;
++              padding:${style.marginTop.coerceIn(0, 200)}px ${style.marginRight.coerceIn(0, 200)}px
++                ${style.marginBottom.coerceIn(0, 200)}px ${style.marginLeft.coerceIn(0, 200)}px;
++              font-family:$fontFamily; font-size:${style.fontSize.coerceIn(8, 72)}px;
++              line-height:${style.lineHeight.coerceIn(0.8f, 3f)}; text-align:$align;
++              overflow-wrap:anywhere; -webkit-user-select:$selection; user-select:$selection;
++            }
++            *, *::before, *::after { box-sizing:border-box; max-width:100%; }
++            p { margin:${style.paragraphSpacing.coerceIn(0f, 5f)}em 0; text-indent:${style.paragraphIndent.coerceIn(0f, 10f)}em; }
++            img, image, svg, video { height:auto; max-width:100%; }
++            pre, code { white-space:pre-wrap; word-break:break-word; text-indent:0; }
++            table { display:block; overflow-x:auto; border-collapse:collapse; }
++            a { color:${color(style.linkColor)}; }
++            .hayai-chapter-title { text-indent:0; line-height:1.25; margin:0 0 1em; font-size:1.5em; }
++            .hayai-tts-active { background:$highlightColor; color:$highlightTextColor; border-radius:.2em; }
++        """.trimIndent()
++    }
++
++    internal fun color(value: Int): String =
++        "#%02X%02X%02X%02X".format(
++            value ushr 16 and 0xFF,
++            value ushr 8 and 0xFF,
++            value and 0xFF,
++            value ushr 24 and 0xFF,
++        )
++
++    private fun cssString(value: String): String = "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
++
++    private fun escape(value: String): String =
++        value
++            .replace("&", "&amp;")
++            .replace("<", "&lt;")
++            .replace(">", "&gt;")
++            .replace("\"", "&quot;")
++
++    private fun isDark(color: Int): Boolean =
++        (color ushr 16 and 0xFF) * 0.299 +
++            (color ushr 8 and 0xFF) * 0.587 +
++            (color and 0xFF) * 0.114 < 128
++
++    private const val BRIDGE_SCRIPT = """
++        (() => {
++          const progress = () => {
++            const max = Math.max(1, document.documentElement.scrollHeight - innerHeight);
++            return Math.max(0, Math.min(100, Math.round(scrollY * 100 / max)));
++          };
++          let scheduled = false;
++          addEventListener('scroll', () => {
++            if (scheduled) return;
++            scheduled = true;
++            requestAnimationFrame(() => {
++              scheduled = false;
++              if (window.HayaiReader) HayaiReader.onProgress(progress());
++            });
++          }, {passive:true});
++          window.hayaiReader = {
++            progress,
++            scrollToPercent(value) {
++              const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
++              scrollTo({top:max * Math.max(0, Math.min(100, value)) / 100, behavior:'auto'});
++            },
++            paragraphs() {
++              return [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]
++                .map((node, index) => ({index, text:(node.innerText || '').trim()})).filter(it => it.text);
++            },
++            highlight(index) {
++              document.querySelectorAll('.hayai-tts-active').forEach(it => it.classList.remove('hayai-tts-active'));
++              const nodes = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')];
++              const node = nodes[index];
++              if (node) { node.classList.add('hayai-tts-active'); node.scrollIntoView({block:'center', behavior:'smooth'}); }
++            },
++            clearHighlight() { document.querySelectorAll('.hayai-tts-active').forEach(it => it.classList.remove('hayai-tts-active')); }
++          };
++          addEventListener('load', () => { if (window.HayaiReader) HayaiReader.onReady(progress()); });
++        })();
++    """
++}
++
++internal data class NovelReaderStyle(
++    val fontSize: Int,
++    val fontFamily: String,
++    val lineHeight: Float,
++    val textAlign: String,
++    val textColor: Int,
++    val backgroundColor: Int,
++    val linkColor: Int,
++    val paragraphIndent: Float,
++    val paragraphSpacing: Float,
++    val marginLeft: Int,
++    val marginRight: Int,
++    val marginTop: Int,
++    val marginBottom: Int,
++    val useOriginalFonts: Boolean,
++    val textSelectable: Boolean,
++    val hideChapterTitle: Boolean,
++    val sourceCssPriority: Boolean,
++    val customCss: String,
++    val customJs: String,
++    val ttsHighlightColor: Int,
++    val ttsHighlightTextColor: Int,
++)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index bfce552c5f68bcd15bc216dac4610b824f998373..baa3e12aeceda1860727c14c61197499bb326f24 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -1,38 +1,74 @@
+ package dev.ahmedmohamed.hayai.novel.reader
+ 
++import android.annotation.SuppressLint
+ import android.content.Context
+ import android.content.Intent
+ import android.os.Bundle
++import android.view.GestureDetector
+ import android.view.Gravity
++import android.view.KeyEvent
++import android.view.MotionEvent
+ import android.view.View
++import android.view.WindowManager
++import android.webkit.JavascriptInterface
++import android.webkit.WebSettings
++import android.webkit.WebView
++import android.widget.Button
++import android.widget.FrameLayout
+ import android.widget.LinearLayout
+ import android.widget.ProgressBar
+-import android.widget.ScrollView
++import android.widget.SeekBar
+ import android.widget.TextView
++import androidx.appcompat.app.AlertDialog
+ import androidx.appcompat.app.AppCompatActivity
+-import androidx.core.text.HtmlCompat
+ import androidx.core.view.setPadding
+ import androidx.lifecycle.lifecycleScope
+-import dev.ahmedmohamed.hayai.novel.source.NovelContentType
+-import dev.ahmedmohamed.hayai.novel.source.NovelDocument
+-import dev.ahmedmohamed.hayai.novel.source.NovelSource
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+-import eu.kanade.tachiyomi.data.database.models.History
++import eu.kanade.tachiyomi.data.preference.PreferenceStore
+ import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.util.system.toast
+ import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
+ import kotlinx.coroutines.launch
++import kotlinx.coroutines.runBlocking
+ import kotlinx.coroutines.withContext
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
++import kotlin.math.abs
+ 
+-class NovelReaderActivity : AppCompatActivity() {
++class NovelReaderActivity :
++    AppCompatActivity(),
++    NovelTtsController.Callbacks {
++    private val preferences by lazy { HayaiPreferences(Injekt.get<PreferenceStore>()) }
++    private val json = Json { ignoreUnknownKeys = true }
++    private val session by lazy { NovelReaderSession(Injekt.get<DatabaseHelper>(), Injekt.get<SourceManager>()) }
++    private val contentProcessor = NovelContentProcessor()
++    private lateinit var webView: WebView
+     private lateinit var titleView: TextView
+-    private lateinit var contentView: TextView
+-    private lateinit var progress: ProgressBar
++    private lateinit var chapterView: TextView
++    private lateinit var loading: ProgressBar
++    private lateinit var progressSlider: SeekBar
++    private lateinit var previousButton: Button
++    private lateinit var nextButton: Button
++    private lateinit var playButton: Button
++    private lateinit var ttsController: NovelTtsController
++    private var loaded: LoadedNovelChapter? = null
++    private var loadJob: Job? = null
++    private var currentProgress = 0
++    private var programmaticProgress = false
++    private var autoLoadArmed = true
++    private var ttsAutoStartPending = false
++    private var autoScroll = false
++    private var autoScrollRunnable: Runnable? = null
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
++        ttsController = NovelTtsController(this, this)
+         setContentView(createContentView())
++        configureWindow()
+ 
+         val mangaId = intent.getLongExtra(EXTRA_MANGA_ID, -1L)
+         val chapterId = intent.getLongExtra(EXTRA_CHAPTER_ID, -1L)
+@@ -40,91 +76,442 @@ class NovelReaderActivity : AppCompatActivity() {
+             showError("The novel chapter could not be opened.")
+             return
+         }
++        loadJob =
++            lifecycleScope.launch {
++                val result = withContext(Dispatchers.IO) { runCatching { session.initialize(mangaId, chapterId) } }
++                result.fold(::showChapter) { showError(it.message ?: "The novel chapter could not be loaded.") }
++            }
++    }
++
++    override fun onPause() {
++        saveProgressBlocking()
++        if (!preferences.novelTtsBackgroundPlayback.get()) ttsController.pause()
++        super.onPause()
++    }
++
++    override fun onDestroy() {
++        loadJob?.cancel()
++        stopAutoScroll()
++        ttsController.destroy()
++        webView.removeJavascriptInterface(JS_INTERFACE)
++        webView.stopLoading()
++        webView.destroy()
++        super.onDestroy()
++    }
++
++    override fun onKeyDown(
++        keyCode: Int,
++        event: KeyEvent?,
++    ): Boolean {
++        if (preferences.novelVolumeKeysScroll.get() && keyCode in setOf(KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN)) {
++            val direction = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) -1 else 1
++            webView.scrollBy(0, direction * (webView.height * 0.85f).toInt())
++            return true
++        }
++        return super.onKeyDown(keyCode, event)
++    }
++
++    private fun showChapter(chapter: LoadedNovelChapter) {
++        loaded = chapter
++        currentProgress = chapter.chapter.last_page_read.coerceIn(0, 100)
++        autoLoadArmed = true
++        loading.visibility = View.VISIBLE
++        titleView.text = chapter.manga.title
++        chapterView.text = "${chapter.chapter.name}  •  ${chapter.position + 1}/${chapter.total}"
++        previousButton.isEnabled = chapter.hasPrevious
++        nextButton.isEnabled = chapter.hasNext
++
++        val options = contentOptions()
++        val processed = contentProcessor.process(chapter.document, chapter.chapter.name, options)
++        val html = NovelHtmlDocumentBuilder.build(processed, chapter.chapter.name, readerStyle(options))
++        webView.webViewClient =
++            NovelAssetWebViewClient(
++                source = session.source,
++                chapterUrl = { loaded?.chapter?.url.orEmpty() },
++                blockMedia = { preferences.novelBlockMedia.get() },
++            )
++        val baseUrl = processed.baseUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
++        webView.loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
++        updateProgressSlider(currentProgress)
++        configureWindow()
++    }
++
++    private fun contentOptions() =
++        NovelContentOptions(
++            hideChapterTitle = preferences.novelHideChapterTitle.get(),
++            forceLowercase = preferences.novelForceTextLowercase.get(),
++            blockMedia = preferences.novelBlockMedia.get(),
++            keepEmbeddedCss = preferences.novelEnableEpubStyles.get(),
++            keepEmbeddedJs = preferences.novelEnableEpubJs.get(),
++            showRawHtml = preferences.novelShowRawHtml.get(),
++            autoSplitText = preferences.novelAutoSplitText.get(),
++            autoSplitWordCount = preferences.novelAutoSplitWordCount.get(),
++            regexReplacements = preferences.novelRegexReplacements.get(),
++        )
++
++    private fun readerStyle(options: NovelContentOptions): NovelReaderStyle {
++        val dark = resources.configuration.uiMode and 0x30 == 0x20
++        val defaultBackground = if (dark) 0xFF121212.toInt() else 0xFFFFFBFE.toInt()
++        val defaultText = if (dark) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
++        return NovelReaderStyle(
++            fontSize = preferences.novelFontSize.get(),
++            fontFamily = preferences.novelFontFamily.get(),
++            lineHeight = preferences.novelLineHeight.get(),
++            textAlign = preferences.novelTextAlign.get(),
++            textColor = preferences.novelFontColor.get().takeUnless { it == 0 } ?: defaultText,
++            backgroundColor = preferences.novelBackgroundColor.get().takeUnless { it == 0 } ?: defaultBackground,
++            linkColor = if (dark) 0xFFD0BCFF.toInt() else 0xFF6750A4.toInt(),
++            paragraphIndent = preferences.novelParagraphIndent.get(),
++            paragraphSpacing = preferences.novelParagraphSpacing.get(),
++            marginLeft = preferences.novelMarginLeft.get(),
++            marginRight = preferences.novelMarginRight.get(),
++            marginTop = preferences.novelMarginTop.get(),
++            marginBottom = preferences.novelMarginBottom.get(),
++            useOriginalFonts = preferences.novelUseOriginalFonts.get(),
++            textSelectable = preferences.novelTextSelectable.get(),
++            hideChapterTitle = options.hideChapterTitle,
++            sourceCssPriority = preferences.novelSourceCssPriority.get(),
++            customCss = preferences.novelCustomCss.get(),
++            customJs = preferences.novelCustomJs.get(),
++            ttsHighlightColor = preferences.novelTtsHighlightColor.get(),
++            ttsHighlightTextColor = preferences.novelTtsHighlightTextColor.get(),
++        )
++    }
++
++    private fun navigate(next: Boolean) {
++        if (loadJob?.isActive == true) return
++        val chapterToSave = loaded?.chapter
++        val progressToSave = currentProgress
++        ttsController.stop()
++        stopAutoScroll()
++        loading.visibility = View.VISIBLE
++        loadJob =
++            lifecycleScope.launch {
++                val result =
++                    withContext(Dispatchers.IO) {
++                        runCatching {
++                            chapterToSave?.let { session.saveProgress(it, progressToSave, preferences.novelMarkAsReadThreshold.get()) }
++                            if (next) session.next() else session.previous()
++                        }
++                    }
++                result.fold(
++                    onSuccess = { chapter -> chapter?.let(::showChapter) ?: toast(if (next) "No next chapter" else "No previous chapter") },
++                    onFailure = { showError(it.message ?: "The chapter could not be loaded.") },
++                )
++            }
++    }
+ 
+-        lifecycleScope.launch {
+-            val result = withContext(Dispatchers.IO) { loadDocument(mangaId, chapterId) }
+-            result.fold(::showDocument) { showError(it.message ?: "The novel chapter could not be loaded.") }
++    private fun saveProgress() {
++        val chapter = loaded?.chapter ?: return
++        val progress = currentProgress
++        lifecycleScope.launch(Dispatchers.IO) {
++            session.saveProgress(chapter, progress, preferences.novelMarkAsReadThreshold.get())
+         }
+     }
+ 
+-    private suspend fun loadDocument(
+-        mangaId: Long,
+-        chapterId: Long,
+-    ): Result<LoadedDocument> =
+-        runCatching {
+-            val db = Injekt.get<DatabaseHelper>()
+-            val manga = requireNotNull(db.getManga(mangaId).executeAsBlocking())
+-            val chapter = requireNotNull(db.getChapter(chapterId).executeAsBlocking())
+-            val source =
+-                Injekt.get<SourceManager>().get(manga.source) as? NovelSource
+-                    ?: error("This source does not provide novel text.")
+-            val document = source.getChapterDocument(chapter)
+-            db
+-                .upsertHistoryLastRead(
+-                    History.create(chapter).apply { last_read = System.currentTimeMillis() },
+-                ).executeAsBlocking()
+-            LoadedDocument(chapter.name, document)
++    private fun saveProgressBlocking() {
++        val chapter = loaded?.chapter ?: return
++        val progress = currentProgress
++        runBlocking(Dispatchers.IO) {
++            session.saveProgress(chapter, progress, preferences.novelMarkAsReadThreshold.get())
+         }
++    }
++
++    private fun onReaderProgress(progress: Int) {
++        currentProgress = progress.coerceIn(0, 100)
++        updateProgressSlider(currentProgress)
++        val threshold = preferences.novelAutoLoadNextChapterAt.get().coerceIn(1, 100)
++        if (autoLoadArmed && preferences.novelInfiniteScroll.get() && currentProgress >= threshold && session.hasNext) {
++            autoLoadArmed = false
++            navigate(next = true)
++        }
++    }
++
++    private fun updateProgressSlider(value: Int) {
++        programmaticProgress = true
++        progressSlider.progress = value
++        programmaticProgress = false
++    }
++
++    private fun onDocumentReady() {
++        loading.visibility = View.GONE
++        val chapter = loaded ?: return
++        val openingProgress = if (chapter.chapter.read && chapter.chapter.last_page_read >= 100) 0 else currentProgress
++        webView.evaluateJavascript("window.hayaiReader.scrollToPercent($openingProgress)", null)
++        extractTtsParagraphs(autoStart = ttsAutoStartPending)
++        ttsAutoStartPending = false
++        if (preferences.novelMarkShortChapterAsRead.get()) {
++            webView.evaluateJavascript("document.documentElement.scrollHeight <= innerHeight") { short ->
++                if (short == "true") {
++                    currentProgress = 100
++                    saveProgress()
++                    updateProgressSlider(100)
++                }
++            }
++        }
++    }
++
++    private fun extractTtsParagraphs(autoStart: Boolean = false) {
++        webView.evaluateJavascript("JSON.stringify(window.hayaiReader.paragraphs())") { encoded ->
++            val payload = runCatching { json.decodeFromString<String>(encoded) }.getOrNull() ?: return@evaluateJavascript
++            val paragraphs = runCatching { json.decodeFromString<List<TtsParagraph>>(payload) }.getOrDefault(emptyList())
++            ttsController.configure(preferences.novelTtsSpeed.get(), preferences.novelTtsPitch.get(), preferences.novelTtsVoice.get())
++            ttsController.setParagraphs(paragraphs.map(TtsParagraph::text))
++            if (autoStart) ttsController.play()
++        }
++    }
++
++    private fun showReaderSettings() {
++        val labels =
++            arrayOf("Smaller text", "Larger text", "Toggle alignment", "Toggle media", "Toggle auto-scroll", "Reset chapter progress")
++        AlertDialog
++            .Builder(this)
++            .setTitle("Novel reader")
++            .setItems(labels) { _, which ->
++                when (which) {
++                    0 -> preferences.novelFontSize.set((preferences.novelFontSize.get() - 1).coerceAtLeast(8))
++                    1 -> preferences.novelFontSize.set((preferences.novelFontSize.get() + 1).coerceAtMost(72))
++                    2 -> preferences.novelTextAlign.set(if (preferences.novelTextAlign.get() == "justify") "left" else "justify")
++                    3 -> preferences.novelBlockMedia.set(!preferences.novelBlockMedia.get())
++                    4 -> if (autoScroll) stopAutoScroll() else startAutoScroll()
++                    5 -> {
++                        currentProgress = 0
++                        loaded?.chapter?.let(NovelProgress::reset)
++                        saveProgress()
++                    }
++                }
++                if (which != 4) loaded?.let(::showChapter)
++            }.show()
++    }
++
++    private fun startAutoScroll() {
++        if (autoScroll) return
++        autoScroll = true
++        val delay = (110L - preferences.novelAutoScrollSpeed.get().coerceIn(1, 20) * 5L).coerceAtLeast(10L)
++        autoScrollRunnable =
++            object : Runnable {
++                override fun run() {
++                    if (!autoScroll || isFinishing) return
++                    webView.scrollBy(0, 2)
++                    webView.postDelayed(this, delay)
++                }
++            }.also(webView::post)
++    }
+ 
+-    private fun showDocument(loaded: LoadedDocument) {
+-        progress.visibility = View.GONE
+-        titleView.text = loaded.title
+-        contentView.text = loaded.document.asDisplayText()
++    private fun stopAutoScroll() {
++        autoScroll = false
++        autoScrollRunnable?.let(webView::removeCallbacks)
++        autoScrollRunnable = null
++    }
++
++    private fun configureWindow() {
++        if (preferences.novelKeepScreenOn.get()) {
++            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
++        } else {
++            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
++        }
++        val brightness =
++            if (preferences.novelCustomBrightness.get()) {
++                preferences.novelCustomBrightnessValue
++                    .get()
++                    .coerceIn(-100, 100)
++                    .let { (it + 100) / 200f }
++            } else {
++                WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
++            }
++        window.attributes = window.attributes.apply { screenBrightness = brightness }
+     }
+ 
+     private fun showError(message: String) {
+-        progress.visibility = View.GONE
+-        titleView.text = "Unable to open chapter"
+-        contentView.text = message
++        loading.visibility = View.GONE
++        chapterView.text = message
++        toast(message)
+     }
+ 
++    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
+     private fun createContentView(): View {
++        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+         val density = resources.displayMetrics.density
+-        val padding = (24 * density).toInt()
+-        val container =
++        val header =
+             LinearLayout(this).apply {
+                 orientation = LinearLayout.VERTICAL
+-                setPadding(padding)
++                setPadding((8 * density).toInt())
+             }
+         titleView =
+             TextView(this).apply {
+-                textSize = 24f
+-                setPadding(0, 0, 0, (16 * density).toInt())
++                textSize = 16f
++                maxLines = 1
+             }
+-        progress =
+-            ProgressBar(this).apply {
+-                isIndeterminate = true
+-                layoutParams =
+-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+-                        gravity = Gravity.CENTER_HORIZONTAL
+-                    }
+-            }
+-        contentView =
++        chapterView =
+             TextView(this).apply {
+-                textSize = 18f
+-                setLineSpacing(0f, 1.35f)
+-                setTextIsSelectable(true)
++                textSize = 12f
++                maxLines = 2
++            }
++        header.addView(titleView)
++        header.addView(chapterView)
++        root.addView(header)
++
++        val content = FrameLayout(this)
++        webView =
++            WebView(this).apply {
++                settings.javaScriptEnabled = true
++                settings.domStorageEnabled = false
++                settings.allowFileAccess = false
++                settings.allowContentAccess = false
++                settings.setSupportMultipleWindows(false)
++                settings.javaScriptCanOpenWindowsAutomatically = false
++                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
++                isVerticalScrollBarEnabled = preferences.novelVerticalScrollbar.get()
++                addJavascriptInterface(ReaderBridge(), JS_INTERFACE)
++                setOnTouchListener { _, event ->
++                    gestureDetector.onTouchEvent(event)
++                    false
++                }
++            }
++        content.addView(webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
++        loading = ProgressBar(this).apply { isIndeterminate = true }
++        content.addView(
++            loading,
++            FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
++        )
++        root.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
++
++        progressSlider =
++            SeekBar(this).apply {
++                max = 100
++                visibility = if (preferences.novelShowProgressSlider.get()) View.VISIBLE else View.GONE
++                setOnSeekBarChangeListener(
++                    object : SeekBar.OnSeekBarChangeListener {
++                        override fun onProgressChanged(
++                            seekBar: SeekBar?,
++                            value: Int,
++                            fromUser: Boolean,
++                        ) {
++                            if (fromUser && !programmaticProgress) currentProgress = value
++                        }
++
++                        override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
++
++                        override fun onStopTrackingTouch(seekBar: SeekBar?) {
++                            webView.evaluateJavascript("window.hayaiReader.scrollToPercent($currentProgress)", null)
++                            saveProgress()
++                        }
++                    },
++                )
+             }
+-        container.addView(titleView)
+-        container.addView(progress)
+-        container.addView(contentView)
+-        return ScrollView(this).apply { addView(container) }
++        root.addView(progressSlider)
++
++        val controls =
++            LinearLayout(this).apply {
++                gravity = Gravity.CENTER
++                orientation = LinearLayout.HORIZONTAL
++            }
++        previousButton = controlButton("‹") { navigate(next = false) }
++        playButton =
++            controlButton("Read") { if (ttsController.isPlaying) ttsController.pause() else extractTtsParagraphs(autoStart = true) }
++        nextButton = controlButton("›") { navigate(next = true) }
++        controls.addView(previousButton)
++        controls.addView(controlButton("◀") { ttsController.previousParagraph() })
++        controls.addView(playButton)
++        controls.addView(controlButton("▶") { ttsController.nextParagraph() })
++        controls.addView(nextButton)
++        controls.addView(controlButton("Aa") { showReaderSettings() })
++        root.addView(controls)
++        return root
++    }
++
++    private fun controlButton(
++        text: String,
++        action: () -> Unit,
++    ) = Button(this).apply {
++        this.text = text
++        minWidth = 0
++        minimumWidth = 0
++        setPadding(14, 0, 14, 0)
++        setOnClickListener { action() }
++    }
++
++    private val gestureDetector by lazy {
++        GestureDetector(
++            this,
++            object : GestureDetector.SimpleOnGestureListener() {
++                override fun onDown(event: MotionEvent): Boolean = true
++
++                override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
++                    if (!preferences.novelTapToScroll.get()) return false
++                    val direction = if (event.y < webView.height / 2f) -1 else 1
++                    webView.scrollBy(0, direction * (webView.height * 0.85f).toInt())
++                    return true
++                }
++
++                override fun onFling(
++                    first: MotionEvent?,
++                    second: MotionEvent,
++                    velocityX: Float,
++                    velocityY: Float,
++                ): Boolean {
++                    first ?: return false
++                    val horizontal = second.x - first.x
++                    if (!preferences.novelSwipeNavigation.get() ||
++                        abs(horizontal) < 120 * resources.displayMetrics.density ||
++                        abs(velocityX) < abs(velocityY)
++                    ) {
++                        return false
++                    }
++                    navigate(next = horizontal < 0)
++                    return true
++                }
++            },
++        )
++    }
++
++    override fun onParagraphChanged(index: Int) {
++        if (preferences.novelTtsEnableHighlight.get()) webView.evaluateJavascript("window.hayaiReader.highlight($index)", null)
++    }
++
++    override fun onHighlightCleared() {
++        webView.evaluateJavascript("window.hayaiReader.clearHighlight()", null)
++    }
++
++    override fun onPlaybackChanged(playing: Boolean) {
++        playButton.text = if (playing) "Pause" else "Read"
+     }
+ 
+-    private fun NovelDocument.asDisplayText(): CharSequence =
+-        when (contentType) {
+-            NovelContentType.Html -> HtmlCompat.fromHtml(content, HtmlCompat.FROM_HTML_MODE_LEGACY)
+-            NovelContentType.Markdown, NovelContentType.PlainText -> content
++    override fun onChapterCompleted() {
++        currentProgress = 100
++        saveProgress()
++        if (preferences.novelTtsAutoNextChapter.get() && session.hasNext) {
++            ttsAutoStartPending = true
++            navigate(next = true)
+         }
++    }
++
++    override fun onError(message: String) {
++        toast(message)
++    }
++
++    override fun runOnUiThread(action: () -> Unit) {
++        super.runOnUiThread(action)
++    }
++
++    private inner class ReaderBridge {
++        @JavascriptInterface
++        fun onProgress(progress: Int) = runOnUiThread { onReaderProgress(progress) }
++
++        @JavascriptInterface
++        fun onReady(progress: Int) = runOnUiThread { onDocumentReady() }
++    }
+ 
+-    private data class LoadedDocument(
+-        val title: String,
+-        val document: NovelDocument,
++    @Serializable
++    private data class TtsParagraph(
++        val index: Int,
++        val text: String,
+     )
+ 
+     companion object {
+         private const val EXTRA_MANGA_ID = "hayai.manga_id"
+         private const val EXTRA_CHAPTER_ID = "hayai.chapter_id"
++        private const val JS_INTERFACE = "HayaiReader"
+ 
+         fun newIntent(
+             context: Context,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..76802afac20edfbecf165f7a664aad592e731a6d
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+@@ -0,0 +1,126 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import dev.ahmedmohamed.hayai.novel.source.NovelDocument
++import dev.ahmedmohamed.hayai.novel.source.NovelDocumentLoader
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import eu.kanade.tachiyomi.data.database.models.History
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.source.Source
++import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.util.chapter.ChapterSort
++
++internal class NovelReaderSession(
++    private val database: DatabaseHelper,
++    private val sourceManager: SourceManager,
++) {
++    lateinit var manga: Manga
++        private set
++    lateinit var source: Source
++        private set
++    private lateinit var chapters: List<Chapter>
++    private var chapterIndex = -1
++
++    val currentChapter: Chapter
++        get() = chapters[chapterIndex]
++    val hasPrevious: Boolean
++        get() = chapterIndex > 0
++    val hasNext: Boolean
++        get() = chapterIndex in 0 until chapters.lastIndex
++
++    suspend fun initialize(
++        mangaId: Long,
++        chapterId: Long,
++    ): LoadedNovelChapter {
++        manga = requireNotNull(database.getManga(mangaId).executeAsBlocking()) { "Novel not found" }
++        source =
++            requireNotNull(sourceManager.get(manga.source)) { "Novel source is not installed" }
++                .takeIf { it.isNovelSource }
++                ?: error("This source does not provide novel text")
++
++        val databaseChapters = database.getChapters(manga).executeAsBlocking()
++        val selected = requireNotNull(databaseChapters.find { it.id == chapterId }) { "Novel chapter not found" }
++        chapters = ChapterSort(manga).getChaptersSorted(databaseChapters, filterForReader = true, currentChapter = selected)
++        chapterIndex = chapters.indexOfFirst { it.id == chapterId }
++        if (chapterIndex < 0) {
++            chapters = ChapterSort(manga).getChaptersSorted(databaseChapters, andFiltered = false)
++            chapterIndex = chapters.indexOfFirst { it.id == chapterId }
++        }
++        require(chapterIndex >= 0) { "Novel chapter is unavailable with the current filters" }
++        return loadCurrent()
++    }
++
++    suspend fun previous(): LoadedNovelChapter? {
++        if (!hasPrevious) return null
++        chapterIndex -= 1
++        return loadCurrent()
++    }
++
++    suspend fun next(): LoadedNovelChapter? {
++        if (!hasNext) return null
++        chapterIndex += 1
++        return loadCurrent()
++    }
++
++    fun saveProgress(
++        chapter: Chapter,
++        progress: Int,
++        markReadAt: Int,
++    ) {
++        NovelProgress.apply(chapter, progress, markReadAt)
++        database.updateChapterProgress(chapter).executeAsBlocking()
++        database
++            .upsertHistoryLastRead(
++                History.create(chapter).apply { last_read = System.currentTimeMillis() },
++            ).executeAsBlocking()
++    }
++
++    private suspend fun loadCurrent(): LoadedNovelChapter {
++        val chapter = currentChapter
++        val document = NovelDocumentLoader.load(source, chapter)
++        database
++            .upsertHistoryLastRead(
++                History.create(chapter).apply { last_read = System.currentTimeMillis() },
++            ).executeAsBlocking()
++        return LoadedNovelChapter(
++            manga = manga,
++            chapter = chapter,
++            document = document,
++            position = chapterIndex,
++            total = chapters.size,
++            hasPrevious = hasPrevious,
++            hasNext = hasNext,
++        )
++    }
++}
++
++internal object NovelProgress {
++    fun apply(
++        chapter: Chapter,
++        progress: Int,
++        markReadAt: Int,
++    ) {
++        chapter.last_page_read = progress.coerceIn(0, 100)
++        chapter.pages_left = 100 - chapter.last_page_read
++        if (chapter.last_page_read >= markReadAt.coerceIn(1, 100)) {
++            chapter.read = true
++            chapter.pages_left = 0
++        }
++    }
++
++    fun reset(chapter: Chapter) {
++        chapter.last_page_read = 0
++        chapter.pages_left = 100
++        chapter.read = false
++    }
++}
++
++internal data class LoadedNovelChapter(
++    val manga: Manga,
++    val chapter: Chapter,
++    val document: NovelDocument,
++    val position: Int,
++    val total: Int,
++    val hasPrevious: Boolean,
++    val hasNext: Boolean,
++)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..176a85c39c2efe8f8d705370b7dc938472203fbb
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsController.kt
+@@ -0,0 +1,206 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import android.content.Context
++import android.os.Bundle
++import android.speech.tts.TextToSpeech
++import android.speech.tts.UtteranceProgressListener
++import java.util.Locale
++
++internal class NovelTtsController(
++    context: Context,
++    private val callbacks: Callbacks,
++) : TextToSpeech.OnInitListener {
++    private val textToSpeech = TextToSpeech(context.applicationContext, this)
++    private var initialized = false
++    private var pendingPlay = false
++    private var chunks: List<TtsChunk> = emptyList()
++    private var chunkIndex = 0
++    private var paused = false
++    private var speed = 1f
++    private var pitch = 1f
++    private var preferredVoice = ""
++    private var playbackGeneration = 0
++    private var activeUtteranceId: String? = null
++
++    val isPlaying: Boolean
++        get() = initialized && textToSpeech.isSpeaking && !paused
++
++    override fun onInit(status: Int) {
++        initialized = status == TextToSpeech.SUCCESS
++        if (!initialized) {
++            callbacks.onError("Text-to-speech is unavailable on this device.")
++            return
++        }
++        textToSpeech.language = Locale.getDefault()
++        textToSpeech.setOnUtteranceProgressListener(
++            object : UtteranceProgressListener() {
++                override fun onStart(utteranceId: String?) {
++                    if (utteranceId != activeUtteranceId) return
++                    callbacks.runOnUiThread { callbacks.onParagraphChanged(chunks.getOrNull(chunkIndex)?.paragraphIndex ?: 0) }
++                }
++
++                override fun onDone(utteranceId: String?) {
++                    if (utteranceId != activeUtteranceId) return
++                    callbacks.runOnUiThread { advance() }
++                }
++
++                @Deprecated("Deprecated by Android")
++                override fun onError(utteranceId: String?) {
++                    if (utteranceId != activeUtteranceId) return
++                    callbacks.runOnUiThread { failPlayback("Text-to-speech could not read this passage.") }
++                }
++
++                override fun onError(
++                    utteranceId: String?,
++                    errorCode: Int,
++                ) {
++                    if (utteranceId != activeUtteranceId) return
++                    callbacks.runOnUiThread { failPlayback("Text-to-speech error $errorCode.") }
++                }
++            },
++        )
++        applySettings()
++        if (pendingPlay) {
++            pendingPlay = false
++            play()
++        }
++    }
++
++    fun configure(
++        speed: Float,
++        pitch: Float,
++        voiceName: String,
++    ) {
++        this.speed = speed.coerceIn(0.1f, 3f)
++        this.pitch = pitch.coerceIn(0.1f, 2f)
++        preferredVoice = voiceName
++        if (initialized) applySettings()
++    }
++
++    fun setParagraphs(
++        paragraphs: List<String>,
++        startParagraph: Int = 0,
++    ) {
++        stop()
++        chunks =
++            paragraphs.flatMapIndexed { paragraphIndex, paragraph ->
++                TtsTextUtils.splitTextForTts(paragraph, TextToSpeech.getMaxSpeechInputLength() - 100).map {
++                    TtsChunk(paragraphIndex, it)
++                }
++            }
++        chunkIndex = chunks.indexOfFirst { it.paragraphIndex >= startParagraph }.takeIf { it >= 0 } ?: 0
++    }
++
++    fun toggle() {
++        if (isPlaying) pause() else play()
++    }
++
++    fun play() {
++        if (!initialized) {
++            pendingPlay = true
++            return
++        }
++        if (chunks.isEmpty()) {
++            callbacks.onError("No readable text was found in this chapter.")
++            return
++        }
++        paused = false
++        speakCurrent()
++        callbacks.onPlaybackChanged(true)
++    }
++
++    fun pause() {
++        invalidatePlayback()
++        textToSpeech.stop()
++        paused = true
++        callbacks.onPlaybackChanged(false)
++    }
++
++    fun nextParagraph() = seekParagraph(1)
++
++    fun previousParagraph() = seekParagraph(-1)
++
++    fun stop() {
++        pendingPlay = false
++        paused = false
++        invalidatePlayback()
++        textToSpeech.stop()
++        callbacks.onPlaybackChanged(false)
++        callbacks.onHighlightCleared()
++    }
++
++    fun destroy() {
++        stop()
++        textToSpeech.shutdown()
++    }
++
++    private fun seekParagraph(delta: Int) {
++        if (chunks.isEmpty()) return
++        val currentParagraph = chunks.getOrNull(chunkIndex)?.paragraphIndex ?: 0
++        val target = (currentParagraph + delta).coerceIn(0, chunks.last().paragraphIndex)
++        chunkIndex = chunks.indexOfFirst { it.paragraphIndex == target }.takeIf { it >= 0 } ?: chunkIndex
++        if (isPlaying) speakCurrent() else callbacks.onParagraphChanged(target)
++    }
++
++    private fun advance() {
++        if (paused) return
++        chunkIndex += 1
++        if (chunkIndex < chunks.size) {
++            speakCurrent()
++        } else {
++            callbacks.onPlaybackChanged(false)
++            callbacks.onHighlightCleared()
++            callbacks.onChapterCompleted()
++        }
++    }
++
++    private fun speakCurrent() {
++        val chunk = chunks.getOrNull(chunkIndex) ?: return
++        val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f) }
++        playbackGeneration += 1
++        val utteranceId = "hayai-$playbackGeneration-$chunkIndex"
++        activeUtteranceId = utteranceId
++        textToSpeech.speak(chunk.text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
++    }
++
++    private fun invalidatePlayback() {
++        playbackGeneration += 1
++        activeUtteranceId = null
++    }
++
++    private fun failPlayback(message: String) {
++        invalidatePlayback()
++        textToSpeech.stop()
++        paused = false
++        callbacks.onPlaybackChanged(false)
++        callbacks.onHighlightCleared()
++        callbacks.onError(message)
++    }
++
++    private fun applySettings() {
++        textToSpeech.setSpeechRate(speed)
++        textToSpeech.setPitch(pitch)
++        if (preferredVoice.isNotBlank()) {
++            textToSpeech.voices?.firstOrNull { it.name == preferredVoice }?.let { textToSpeech.voice = it }
++        }
++    }
++
++    private data class TtsChunk(
++        val paragraphIndex: Int,
++        val text: String,
++    )
++
++    interface Callbacks {
++        fun onParagraphChanged(index: Int)
++
++        fun onHighlightCleared()
++
++        fun onPlaybackChanged(playing: Boolean)
++
++        fun onChapterCompleted()
++
++        fun onError(message: String)
++
++        fun runOnUiThread(action: () -> Unit)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
+index 1ca82aef5b9183936feaea7512c7f24b499ff161..e642f24343a6f722a9dedae7f92def092da1b4ea 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
+@@ -2,7 +2,6 @@ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.content.Context
+ import android.content.Intent
+-import dev.ahmedmohamed.hayai.novel.source.NovelSource
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.source.SourceManager
+@@ -14,7 +13,7 @@ object ReaderLauncher {
+     fun isNovel(
+         manga: Manga,
+         sourceManager: SourceManager = Injekt.get(),
+-    ): Boolean = sourceManager.get(manga.source) is NovelSource
++    ): Boolean = sourceManager.get(manga.source)?.isNovelSource == true
+ 
+     fun newIntent(
+         context: Context,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/TtsTextUtils.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/TtsTextUtils.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..5346f9edcbe6748c87849670f9b9b3132572794a
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/TtsTextUtils.kt
+@@ -0,0 +1,31 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++internal object TtsTextUtils {
++    fun splitTextForTts(
++        text: String,
++        maxLength: Int,
++    ): List<String> {
++        if (text.isBlank()) return emptyList()
++        val limit = maxLength.coerceAtLeast(1)
++        val chunks = mutableListOf<String>()
++        var remaining = text.trim()
++        while (remaining.isNotEmpty()) {
++            if (remaining.length <= limit) {
++                chunks += remaining
++                break
++            }
++            val slice = remaining.substring(0, limit)
++            val sentenceEnd = slice.lastIndexOfAny(charArrayOf('.', '!', '?', '。', '！', '？', '\n'))
++            val whitespace = slice.indexOfLast(Char::isWhitespace)
++            val breakPoint =
++                when {
++                    sentenceEnd >= limit / 2 -> sentenceEnd + 1
++                    whitespace >= limit / 2 -> whitespace + 1
++                    else -> limit
++                }
++            chunks += remaining.substring(0, breakPoint).trim()
++            remaining = remaining.substring(breakPoint).trim()
++        }
++        return chunks.filter(String::isNotBlank)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/NovelSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/NovelSource.kt
+index e79dd988a06293ae3d1a275e4c0fa19f7a3bb96a..1fb360fe9ff50c979259604fbce5c702a4602c5e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/NovelSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/NovelSource.kt
+@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.source
+ 
+ import eu.kanade.tachiyomi.source.CatalogueSource
+ import eu.kanade.tachiyomi.source.model.SChapter
++import java.io.InputStream
+ 
+ interface NovelSource : CatalogueSource {
+     override val isNovelSource: Boolean
+@@ -10,6 +11,14 @@ interface NovelSource : CatalogueSource {
+     suspend fun getChapterDocument(chapter: SChapter): NovelDocument = NovelDocumentLoader.load(this, chapter)
+ }
+ 
++/** Optional boundary for source-owned assets referenced by a novel document. */
++interface NovelAssetProvider {
++    suspend fun getChapterAsset(
++        chapterUrl: String,
++        assetPath: String,
++    ): InputStream?
++}
++
+ data class NovelDocument(
+     val content: String,
+     val contentType: NovelContentType,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/local/LocalNovelSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/local/LocalNovelSource.kt
+index 99eb991d299c68612c6545ee88260255d03e5456..9bb73b1ec2b663f6c47f11d2f21b72344278ae9c 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/local/LocalNovelSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/local/LocalNovelSource.kt
+@@ -3,6 +3,7 @@ package dev.ahmedmohamed.hayai.novel.source.local
+ import android.content.Context
+ import dev.ahmedmohamed.hayai.novel.archive.ArchiveReader
+ import dev.ahmedmohamed.hayai.novel.archive.EpubReader
++import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+ import dev.ahmedmohamed.hayai.novel.source.NovelSource
+ import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelCatalog.Companion.ARCHIVE_EXTENSIONS
+ import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelCatalog.Companion.EPUB_EXTENSIONS
+@@ -36,6 +37,7 @@ import java.util.concurrent.TimeUnit
+ class LocalNovelSource(
+     private val context: Context,
+ ) : NovelSource,
++    NovelAssetProvider,
+     UnmeteredSource {
+     private val baseDirectories = getBaseDirectories(context)
+     private val catalog = LocalNovelCatalog(baseDirectories)
+@@ -193,7 +195,7 @@ class LocalNovelSource(
+         }
+     }
+ 
+-    suspend fun getChapterAsset(
++    override suspend fun getChapterAsset(
+         chapterUrl: String,
+         assetPath: String,
+     ): InputStream? = withContext(Dispatchers.IO) {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt b/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
+index 58a8632626b5db664c9109f8bff4b2e575198e80..b661a192f5f3399ed20bdcf5cd77d15cb30ac84e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
+@@ -12,6 +12,76 @@ class HayaiPreferences(
+     val lewdLibraryFilter: Preference<Int> =
+         store.getInt(KEY_LEWD_LIBRARY_FILTER, LewdLibraryFilter.Show.persistedValue)
+ 
++    val novelFontSize = store.getInt("pref_novel_font_size", 16)
++    val novelFontFamily = store.getString("pref_novel_font_family", "sans-serif")
++    val novelTheme = store.getString("pref_novel_theme", "app")
++    val novelLineHeight = store.getFloat("pref_novel_line_height", 1.6f)
++    val novelTextAlign = store.getString("pref_novel_text_align", "left")
++    val novelFontColor = store.getInt("pref_novel_font_color", 0)
++    val novelBackgroundColor = store.getInt("pref_novel_background_color", 0)
++    val novelParagraphIndent = store.getFloat("pref_novel_paragraph_indent", 0f)
++    val novelParagraphSpacing = store.getFloat("pref_novel_paragraph_spacing", 0.5f)
++    val novelMarginLeft = store.getInt("pref_novel_margin_left", 16)
++    val novelMarginRight = store.getInt("pref_novel_margin_right", 16)
++    val novelMarginTop = store.getInt("pref_novel_margin_top", 50)
++    val novelMarginBottom = store.getInt("pref_novel_margin_bottom", 16)
++    val novelRenderingMode = store.getString("pref_novel_rendering_mode", "default")
++    val novelEnableEpubStyles = store.getBoolean("pref_novel_enable_epub_css", true)
++    val novelEnableEpubJs = store.getBoolean("pref_novel_enable_epub_js", false)
++    val novelSourceCssPriority = store.getBoolean("pref_novel_source_css_priority", false)
++    val novelCustomCss = store.getString("pref_novel_custom_css", "")
++    val novelCustomJs = store.getString("pref_novel_custom_js", "")
++    val novelCustomCssSnippets = store.getString("pref_novel_css_snippets", "[]")
++    val novelCustomJsSnippets = store.getString("pref_novel_js_snippets", "[]")
++    val novelGlobalPresets = store.getString("pref_novel_global_presets", "[]")
++    val novelRegexReplacements = store.getString("pref_novel_regex_replacements", "[]")
++    val novelInfiniteScroll = store.getBoolean("pref_novel_infinite_scroll", false)
++    val novelKeepChaptersLoaded = store.getInt("pref_novel_keep_chapters_loaded", 0)
++    val novelCustomBrightness = store.getBoolean("pref_novel_custom_brightness", false)
++    val novelCustomBrightnessValue = store.getInt("pref_novel_custom_brightness_value", 0)
++    val novelShowProgressSlider = store.getBoolean("pref_novel_show_progress_slider", true)
++    val novelVerticalScrollbar = store.getBoolean("pref_novel_vertical_scrollbar", false)
++    val novelVerticalScrollbarPosition = store.getString("pref_novel_vertical_scrollbar_position", "right")
++    val novelVerticalProgressSliderSize = store.getString("pref_novel_vertical_progress_slider_size", "half")
++    val novelHideChapterTitle = store.getBoolean("pref_novel_hide_chapter_title", false)
++    val novelForceTextLowercase = store.getBoolean("pref_novel_force_lowercase", false)
++    val novelAutoSplitText = store.getBoolean("pref_novel_auto_split_text", false)
++    val novelAutoSplitWordCount = store.getInt("pref_novel_auto_split_word_count", 50)
++    val novelUseOriginalFonts = store.getBoolean("pref_novel_use_original_fonts", false)
++    val novelKeepScreenOn = store.getBoolean("pref_novel_keep_screen_on", false)
++    val novelSwipeNavigation = store.getBoolean("pref_novel_swipe_navigation", false)
++    val novelVolumeKeysScroll = store.getBoolean("pref_novel_volume_keys_scroll", false)
++    val novelTapToScroll = store.getBoolean("pref_novel_tap_to_scroll", false)
++    val novelTextSelectable = store.getBoolean("pref_novel_text_selectable", true)
++    val novelBlockMedia = store.getBoolean("pref_novel_block_media", false)
++    val novelChapterTitleDisplay = store.getInt("pref_novel_chapter_title_display", 2)
++    val novelAutoLoadNextChapterAt = store.getInt("pref_novel_auto_load_next_at", 95)
++    val novelMarkAsReadThreshold = store.getInt("pref_novel_mark_read_threshold", 95)
++    val novelMarkShortChapterAsRead = store.getBoolean("pref_novel_mark_short_chapter_read", true)
++    val novelShowRawHtml = store.getBoolean("pref_novel_show_raw_html", false)
++    val novelAutoScrollSpeed = store.getInt("pref_novel_auto_scroll_speed_half", 6)
++    val novelTtsSpeed = store.getFloat("pref_novel_tts_speed", 1f)
++    val novelTtsPitch = store.getFloat("pref_novel_tts_pitch", 1f)
++    val novelTtsVoice = store.getString("pref_novel_tts_voice", "")
++    val novelTtsAutoNextChapter = store.getBoolean("pref_novel_tts_auto_next", true)
++    val novelTtsHighlightStyle = store.getString("pref_novel_tts_highlight_style", "background")
++    val novelTtsHighlightColor = store.getInt("pref_novel_tts_highlight_color", 0xFFFFD54F.toInt())
++    val novelTtsHighlightTextColor = store.getInt("pref_novel_tts_highlight_text_color", 0xFF1A1A1A.toInt())
++    val novelTtsEnableHighlight = store.getBoolean("pref_novel_tts_enable_highlight", true)
++    val novelTtsKeepHighlightInView = store.getBoolean("pref_novel_tts_keep_highlight_in_view", true)
++    val novelTtsBackgroundPlayback = store.getBoolean("pref_novel_tts_background_playback", false)
++    val novelTtsControlsVisible = store.getBoolean("pref_novel_tts_controls_visible", false)
++    val novelTtsAutoStartOnPanelOpen = store.getBoolean("pref_novel_tts_auto_start_on_panel_open", false)
++    val novelStatusBarEnabled = store.getBoolean("pref_novel_status_bar_enabled", false)
++    val novelStatusBarShowTime = store.getBoolean("pref_novel_status_bar_show_time", true)
++    val novelStatusBarShowBattery = store.getBoolean("pref_novel_status_bar_show_battery", true)
++    val novelStatusBarShowChapterNumber = store.getBoolean("pref_novel_status_bar_show_chapter_number", true)
++    val novelStatusBarShowChapterTitle = store.getBoolean("pref_novel_status_bar_show_chapter_title", true)
++    val novelStatusBarShowProgress = store.getBoolean("pref_novel_status_bar_show_progress", true)
++    val novelStatusBarPosition = store.getString("pref_novel_status_bar_position", "bottom")
++    val novelStatusBarSize = store.getString("pref_novel_status_bar_size", "small")
++    val novelStatusBarShowCharging = store.getBoolean("pref_novel_status_bar_show_charging", true)
++
+     companion object {
+         const val KEY_HENTAI_FEATURES = "eh_is_hentai_enabled"
+         const val KEY_LEWD_LIBRARY_FILTER = "pref_filter_library_lewd_v2"
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt b/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
+index f9b33925db015ab7c0bee1e4e618bfe84b5902b5..75a367b6fdbff5acea28bc066a34828224a62b54 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
+@@ -1,6 +1,7 @@
+ package eu.kanade.tachiyomi.source
+ 
+ import android.content.Context
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.source.model.Page
+@@ -46,7 +47,13 @@ class SourceManager(
+         scope.launch {
+             extensionManager.installedExtensionsFlow
+                 .collectLatest { extensions ->
+-                    val mutableMap = ConcurrentHashMap<Long, Source>(mapOf(LocalSource.ID to LocalSource(context)))
++                    val mutableMap =
++                        ConcurrentHashMap<Long, Source>(
++                            mapOf(
++                                LocalSource.ID to LocalSource(context),
++                                LocalNovelSource.ID to LocalNovelSource(context),
++                            ),
++                        )
+                     extensions.forEach { extension ->
+                         extension.sources.forEach {
+                             mutableMap[it.id] = it
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessorTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4f6508b52cfd0c8e7b1eb294be2aea52056d196e
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelContentProcessorTest.kt
+@@ -0,0 +1,115 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import dev.ahmedmohamed.hayai.novel.source.NovelContentType
++import dev.ahmedmohamed.hayai.novel.source.NovelDocument
++import org.jsoup.Jsoup
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelContentProcessorTest {
++    private val processor = NovelContentProcessor()
++
++    @Test
++    fun `plain text escapes markup and preserves paragraphs`() {
++        val result = processor.process(document("One <two>\nline\n\nThree", NovelContentType.PlainText), "Chapter", options())
++        val body = Jsoup.parseBodyFragment(result.html).body()
++        assertEquals(2, body.select("p").size)
++        assertEquals("One <two> line", body.select("p").first()!!.text())
++    }
++
++    @Test
++    fun `markdown escapes embedded html`() {
++        val result =
++            processor.process(
++                document("# Title\n\n<script>alert(1)</script> **safe**", NovelContentType.Markdown),
++                "Chapter",
++                options(),
++            )
++        assertFalse(result.html.contains("<script", ignoreCase = true))
++        assertTrue(Jsoup.parseBodyFragment(result.html).text().contains("safe"))
++    }
++
++    @Test
++    fun `unsafe active content and event handlers are removed`() {
++        val html = """<h1>Chapter 1</h1><p onclick="steal()">Text</p><a href="javascript:steal()">link</a><iframe src="https://bad"></iframe>"""
++        val result = processor.process(document(html), "Chapter 1", options(hideChapterTitle = true))
++        assertFalse(result.html.contains("onclick", ignoreCase = true))
++        assertFalse(result.html.contains("javascript:", ignoreCase = true))
++        assertFalse(result.html.contains("iframe", ignoreCase = true))
++        assertFalse(result.html.contains("<h1", ignoreCase = true))
++    }
++
++    @Test
++    fun `source scripts and styles are separately gated`() {
++        val html = "<style>p{color:red}</style><script>safe()</script><p>Text</p>"
++        val cssOnly = processor.process(document(html), "Chapter", options(keepEmbeddedCss = true))
++        assertTrue(cssOnly.html.contains("<style>"))
++        assertFalse(cssOnly.html.contains("<script>"))
++        val both = processor.process(document(html), "Chapter", options(keepEmbeddedCss = true, keepEmbeddedJs = true))
++        assertTrue(both.html.contains("<script>"))
++    }
++
++    @Test
++    fun `media blocking removes every embedded media family`() {
++        val html = "<picture><source src='a.webp'><img src='a.jpg'></picture><video src='v.mp4'></video><audio src='a.mp3'></audio>"
++        val result = processor.process(document(html), "Chapter", options(blockMedia = true))
++        assertTrue(Jsoup.parseBodyFragment(result.html).select("picture, source, img, video, audio").isEmpty())
++    }
++
++    @Test
++    fun `regex replacement ignores invalid rules and applies valid rules`() {
++        val rules = """[{"title":"valid","pattern":"cat","replacement":"dog"},{"title":"bad","pattern":"[","replacement":"x"}]"""
++        val result = processor.process(document("<p>cat sat</p>"), "Chapter", options(regexReplacements = rules))
++        assertEquals("dog sat", Jsoup.parseBodyFragment(result.html).text())
++    }
++
++    @Test
++    fun `lowercase and paragraph splitting preserve code`() {
++        val words = (1..25).joinToString(" ") { "WORD$it" }
++        val result =
++            processor.process(
++                document("<p>$words</p><pre>KEEP CODE</pre>"),
++                "Chapter",
++                options(forceLowercase = true, autoSplitText = true, autoSplitWordCount = 10),
++            )
++        val body = Jsoup.parseBodyFragment(result.html).body()
++        assertEquals(3, body.select("p").size)
++        assertEquals("KEEP CODE", body.select("pre").text())
++        assertTrue(body.select("p").all { it.text() == it.text().lowercase() })
++    }
++
++    @Test
++    fun `raw html mode displays source as text`() {
++        val result = processor.process(document("<b>source</b>"), "Chapter", options(showRawHtml = true))
++        assertEquals("<b>source</b>", Jsoup.parseBodyFragment(result.html).select("pre").text())
++    }
++
++    private fun document(
++        content: String,
++        type: NovelContentType = NovelContentType.Html,
++    ) = NovelDocument(content, type, "https://example.test/book/")
++
++    private fun options(
++        hideChapterTitle: Boolean = false,
++        forceLowercase: Boolean = false,
++        blockMedia: Boolean = false,
++        keepEmbeddedCss: Boolean = false,
++        keepEmbeddedJs: Boolean = false,
++        showRawHtml: Boolean = false,
++        autoSplitText: Boolean = false,
++        autoSplitWordCount: Int = 50,
++        regexReplacements: String = "[]",
++    ) = NovelContentOptions(
++        hideChapterTitle,
++        forceLowercase,
++        blockMedia,
++        keepEmbeddedCss,
++        keepEmbeddedJs,
++        showRawHtml,
++        autoSplitText,
++        autoSplitWordCount,
++        regexReplacements,
++    )
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a80474378a2499c89a813569a31148e595b8076
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
+@@ -0,0 +1,57 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelHtmlDocumentBuilderTest {
++    @Test
++    fun `android argb colors are emitted as css rgba hex`() {
++        assertTrue(NovelHtmlDocumentBuilder.color(0x80402010.toInt()) == "#40201080")
++    }
++
++    @Test
++    fun `chapter title and font family are escaped`() {
++        val html =
++            NovelHtmlDocumentBuilder.build(
++                ProcessedNovelContent("<p>Body</p>", null),
++                "A <chapter>",
++                style(fontFamily = "A\"B"),
++            )
++        assertTrue(html.contains("A &lt;chapter&gt;"))
++        assertTrue(html.contains("font-family:\"A\\\"B\""))
++    }
++
++    @Test
++    fun `chapter title can be omitted`() {
++        val html = NovelHtmlDocumentBuilder.build(ProcessedNovelContent("<p>Body</p>", null), "Hidden", style(hideTitle = true))
++        assertFalse(html.contains("<h1 class=\"hayai-chapter-title\""))
++    }
++
++    private fun style(
++        fontFamily: String = "sans-serif",
++        hideTitle: Boolean = false,
++    ) = NovelReaderStyle(
++        fontSize = 16,
++        fontFamily = fontFamily,
++        lineHeight = 1.5f,
++        textAlign = "left",
++        textColor = 0xFF111111.toInt(),
++        backgroundColor = 0xFFFFFFFF.toInt(),
++        linkColor = 0xFF0000FF.toInt(),
++        paragraphIndent = 0f,
++        paragraphSpacing = 0.5f,
++        marginLeft = 16,
++        marginRight = 16,
++        marginTop = 16,
++        marginBottom = 16,
++        useOriginalFonts = false,
++        textSelectable = true,
++        hideChapterTitle = hideTitle,
++        sourceCssPriority = false,
++        customCss = "",
++        customJs = "",
++        ttsHighlightColor = 0xFFFFFF00.toInt(),
++        ttsHighlightTextColor = 0xFF000000.toInt(),
++    )
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelProgressTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelProgressTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f7d74bf0489fa4dc694229deda467310fbc3f9d0
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelProgressTest.kt
+@@ -0,0 +1,50 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelProgressTest {
++    @Test
++    fun `progress is clamped and remaining percentage is maintained`() {
++        val chapter = chapter()
++        NovelProgress.apply(chapter, 45, 95)
++        assertEquals(45, chapter.last_page_read)
++        assertEquals(55, chapter.pages_left)
++        assertFalse(chapter.read)
++
++        NovelProgress.apply(chapter, 120, 95)
++        assertEquals(100, chapter.last_page_read)
++        assertEquals(0, chapter.pages_left)
++        assertTrue(chapter.read)
++    }
++
++    @Test
++    fun `threshold is clamped to a valid percentage`() {
++        val chapter = chapter()
++        NovelProgress.apply(chapter, 1, 0)
++        assertTrue(chapter.read)
++    }
++
++    @Test
++    fun `reset clears read state and all progress metadata`() {
++        val chapter =
++            chapter().apply {
++                read = true
++                last_page_read = 100
++                pages_left = 0
++            }
++        NovelProgress.reset(chapter)
++        assertFalse(chapter.read)
++        assertEquals(0, chapter.last_page_read)
++        assertEquals(100, chapter.pages_left)
++    }
++
++    private fun chapter() =
++        Chapter.create().apply {
++            url = "chapter"
++            name = "Chapter"
++        }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/TtsTextUtilsTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/TtsTextUtilsTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d797a850c5bc66da8ce0612111f08acca5759fbe
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/TtsTextUtilsTest.kt
+@@ -0,0 +1,40 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class TtsTextUtilsTest {
++    @Test
++    fun `blank text has no chunks`() {
++        assertTrue(TtsTextUtils.splitTextForTts(" \n ", 20).isEmpty())
++    }
++
++    @Test
++    fun `short text remains intact`() {
++        assertEquals(listOf("A short sentence."), TtsTextUtils.splitTextForTts("  A short sentence.  ", 100))
++    }
++
++    @Test
++    fun `chunks never exceed the requested limit`() {
++        val chunks = TtsTextUtils.splitTextForTts("one two three four five six seven eight nine ten", 12)
++        assertTrue(chunks.all { it.length <= 12 })
++        assertEquals("one two three four five six seven eight nine ten", chunks.joinToString(" "))
++    }
++
++    @Test
++    fun `sentence punctuation is preferred for latin and cjk text`() {
++        val latin = TtsTextUtils.splitTextForTts("First sentence. Second sentence has more text.", 25)
++        val cjk = TtsTextUtils.splitTextForTts("最初の文です。次の文章にはさらに文字があります。", 12)
++        assertEquals("First sentence.", latin.first())
++        assertTrue(cjk.first().endsWith("。"))
++    }
++
++    @Test
++    fun `long unbroken words are split without data loss`() {
++        val text = "abcdefghijklmnopqrstuvwxyz"
++        val chunks = TtsTextUtils.splitTextForTts(text, 5)
++        assertTrue(chunks.all { it.length <= 5 })
++        assertEquals(text, chunks.joinToString(""))
++    }
++}
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 41cbbfe523a921e6de428d338ac2705087869be8..b58830d209ba548c931fb95d98646f2bcc8d751b 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -11,6 +11,7 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/Source.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/model/Page.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
+-- 
+2.54.0.windows.1
+

@@ -1,0 +1,711 @@
+From 795a6ed612172e823ebf6f8918f9dc054f00d61d Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 18:32:48 +0300
+Subject: [PATCH] Back up and restore Hayai side data
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 41f9d34e13e5d79fef59e7d36c92c1772882a858..d8bb480a0fc1c5a93958ca6bdf3946ccc419b9a1 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -24,3 +24,6 @@ ts	phase	decision	why	evidence	result
+ 2026-08-20T17:20:00Z	validation	ran the complete focused novel suite and upstream boundary gate	verified formats, local sources, reader behavior, TTS, atomic downloads, asset rewriting, corruption fallback, and protected J2K files	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.*; tools/verify-upstream-boundary.ps1	125 tests green
+ 2026-08-20T17:48:00Z	quotes	completed migrated and new novel quote management	selection caching survives focus changes, duplicate capture is idempotent, writes are serialized and transactional, and users can browse, copy, confirm-delete, and retain legacy quotes	app/src/main/java/dev/ahmedmohamed/hayai/novel/quote; NovelReaderActivity.kt	VERIFIED
+ 2026-08-20T17:52:00Z	review	closed the independent quote-management audit	verified SQL, threading, legacy compatibility, capture lifecycle, concurrency, and destructive confirmation	app/src/main/java/dev/ahmedmohamed/hayai/novel/quote	VERIFIED
++2026-08-20T18:20:00Z	backup	added a versioned optional Hayai payload to J2K backup and restore	preserved quotes, novel repositories, chapter statistics, and E-Hentai favorites across database ID changes without duplicating J2K-owned data	app/src/main/java/dev/ahmedmohamed/hayai/backup; Backup.kt	VERIFIED
++2026-08-20T18:24:00Z	validation	ran focused serialization tests and compiled the integrated app	verified old-backup compatibility, typed payload round trips, unsafe-value rejection, and deterministic quote collision identities	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.backup.*	VERIFIED
++2026-08-20T18:28:00Z	review	closed the independent Hayai backup audit	verified stable core-ID remapping, full-payload quote identity, collision preservation, idempotence, and bounded validation	app/src/main/java/dev/ahmedmohamed/hayai/backup	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupData.kt b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupData.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..53fe8dabab834adf6462b5e578a13e3da6cf37e7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupData.kt
+@@ -0,0 +1,59 @@
++package dev.ahmedmohamed.hayai.backup
++
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.protobuf.ProtoNumber
++
++@Serializable
++data class HayaiBackupData(
++    @ProtoNumber(1) val version: Int = CURRENT_VERSION,
++    @ProtoNumber(2) val quotes: List<HayaiBackupQuote> = emptyList(),
++    @ProtoNumber(3) val novelRepositories: List<HayaiBackupNovelRepository> = emptyList(),
++    @ProtoNumber(4) val chapterStats: List<HayaiBackupChapterStat> = emptyList(),
++    @ProtoNumber(5) val ehFavorites: List<HayaiBackupEhFavorite> = emptyList(),
++) {
++    companion object {
++        const val CURRENT_VERSION = 1
++    }
++}
++
++@Serializable
++data class HayaiBackupQuote(
++    @ProtoNumber(1) val id: String,
++    @ProtoNumber(2) val sourceId: Long,
++    @ProtoNumber(3) val mangaUrl: String,
++    @ProtoNumber(4) val novelName: String,
++    @ProtoNumber(5) val chapterName: String,
++    @ProtoNumber(6) val displayedContent: String,
++    @ProtoNumber(7) val originalContent: String? = null,
++    @ProtoNumber(8) val translatedContent: String? = null,
++    @ProtoNumber(9) val language: String? = null,
++    @ProtoNumber(10) val timestamp: Long,
++)
++
++@Serializable
++data class HayaiBackupNovelRepository(
++    @ProtoNumber(1) val baseUrl: String,
++    @ProtoNumber(2) val name: String,
++)
++
++@Serializable
++data class HayaiBackupChapterStat(
++    @ProtoNumber(1) val sourceId: Long,
++    @ProtoNumber(2) val mangaUrl: String,
++    @ProtoNumber(3) val chapterUrl: String,
++    @ProtoNumber(4) val wordCount: Long,
++)
++
++@Serializable
++data class HayaiBackupEhFavorite(
++    @ProtoNumber(1) val gid: String,
++    @ProtoNumber(2) val token: String,
++    @ProtoNumber(3) val title: String,
++    @ProtoNumber(4) val category: Int,
++)
++
++data class HayaiRestoreReport(
++    val restored: Int,
++    val skipped: Int,
++    val errors: List<String>,
++)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..c78b827b029c9648b27a3de3014c656f5bcaf530
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt
+@@ -0,0 +1,298 @@
++package dev.ahmedmohamed.hayai.backup
++
++import android.content.ContentValues
++import android.database.Cursor
++import com.pushtorefresh.storio.sqlite.queries.InsertQuery
++import com.pushtorefresh.storio.sqlite.queries.RawQuery
++import com.pushtorefresh.storio.sqlite.queries.UpdateQuery
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Manga
++
++class HayaiBackupService(
++    private val database: DatabaseHelper,
++) {
++    fun create(mangas: List<Manga>): HayaiBackupData {
++        val identities = mangas.mapNotNull { manga -> manga.id?.let { it to MangaIdentity(manga.source, manga.url) } }.toMap()
++        val quotes = mutableListOf<HayaiBackupQuote>()
++        val stats = mutableListOf<HayaiBackupChapterStat>()
++        identities.forEach { (mangaId, identity) ->
++            query(
++                "SELECT quote_id, novel_name, chapter_name, displayed_content, original_content, " +
++                    "translated_content, language, timestamp FROM hayai_quotes WHERE manga_id = ? ORDER BY timestamp, quote_id",
++                mangaId,
++            ).use { cursor ->
++                while (cursor.moveToNext()) {
++                    quotes +=
++                        HayaiBackupQuote(
++                            id = cursor.getString(0),
++                            sourceId = identity.sourceId,
++                            mangaUrl = identity.mangaUrl,
++                            novelName = cursor.getString(1),
++                            chapterName = cursor.getString(2),
++                            displayedContent = cursor.getString(3),
++                            originalContent = cursor.stringOrNull(4),
++                            translatedContent = cursor.stringOrNull(5),
++                            language = cursor.stringOrNull(6),
++                            timestamp = cursor.getLong(7),
++                        )
++                }
++            }
++            database.getChapters(mangaId).executeAsBlocking().forEach { chapter ->
++                val chapterId = chapter.id ?: return@forEach
++                query("SELECT word_count FROM hayai_novel_chapter_stats WHERE chapter_id = ?", chapterId).use { cursor ->
++                    if (cursor.moveToFirst()) {
++                        stats += HayaiBackupChapterStat(identity.sourceId, identity.mangaUrl, chapter.url, cursor.getLong(0))
++                    }
++                }
++            }
++        }
++        return HayaiBackupData(
++            quotes = quotes,
++            novelRepositories = readNovelRepositories(),
++            chapterStats = stats,
++            ehFavorites = readEhFavorites(),
++        )
++    }
++
++    fun restore(data: HayaiBackupData?): HayaiRestoreReport {
++        if (data == null) return HayaiRestoreReport(0, 0, emptyList())
++        val errors = HayaiBackupLimits.validate(data).toMutableList()
++        if (errors.isNotEmpty()) return HayaiRestoreReport(0, data.itemCount(), errors)
++        var restored = 0
++        var skipped = 0
++        val mangaCache = mutableMapOf<MangaIdentity, Manga?>()
++
++        database.inTransaction {
++            data.quotes.forEach { quote ->
++                process("quote ${quote.id}", errors, { skipped++ }) {
++                    val manga = findManga(quote.sourceId, quote.mangaUrl, mangaCache) ?: return@process false
++                    restoreQuote(requireNotNull(manga.id), quote)
++                }.also { if (it) restored++ }
++            }
++            data.novelRepositories.forEach { repository ->
++                process("novel repository ${repository.baseUrl}", errors, { skipped++ }) {
++                    upsert(
++                        table = "hayai_novel_repos",
++                        where = "base_url = ?",
++                        whereArgs = arrayOf(repository.baseUrl),
++                        values = ContentValues(2).apply { put("base_url", repository.baseUrl); put("name", repository.name) },
++                    )
++                }.also { if (it) restored++ }
++            }
++            data.chapterStats.forEach { stat ->
++                process("chapter stat ${stat.chapterUrl}", errors, { skipped++ }) {
++                    val manga = findManga(stat.sourceId, stat.mangaUrl, mangaCache) ?: return@process false
++                    val chapter = database.getChapters(manga).executeAsBlocking().firstOrNull { it.url == stat.chapterUrl } ?: return@process false
++                    val chapterId = requireNotNull(chapter.id)
++                    upsert(
++                        table = "hayai_novel_chapter_stats",
++                        where = "chapter_id = ?",
++                        whereArgs = arrayOf(chapterId),
++                        values = ContentValues(2).apply { put("chapter_id", chapterId); put("word_count", stat.wordCount) },
++                    )
++                }.also { if (it) restored++ }
++            }
++            data.ehFavorites.forEach { favorite ->
++                process("E-Hentai favorite ${favorite.gid}", errors, { skipped++ }) {
++                    upsert(
++                        table = "hayai_eh_favorites",
++                        where = "gid = ? AND token = ?",
++                        whereArgs = arrayOf(favorite.gid, favorite.token),
++                        values =
++                            ContentValues(4).apply {
++                                put("gid", favorite.gid)
++                                put("token", favorite.token)
++                                put("title", favorite.title)
++                                put("category", favorite.category)
++                            },
++                    )
++                }.also { if (it) restored++ }
++            }
++        }
++        return HayaiRestoreReport(restored, skipped, errors)
++    }
++
++    private fun restoreQuote(
++        mangaId: Long,
++        quote: HayaiBackupQuote,
++    ): Boolean {
++        val quoteId = resolveQuoteId(mangaId, quote) ?: return true
++        val values =
++            ContentValues(9).apply {
++                put("quote_id", quoteId)
++                put("manga_id", mangaId)
++                put("novel_name", quote.novelName)
++                put("chapter_name", quote.chapterName)
++                put("displayed_content", quote.displayedContent)
++                put("original_content", quote.originalContent)
++                put("translated_content", quote.translatedContent)
++                put("language", quote.language)
++                put("timestamp", quote.timestamp)
++            }
++        check(database.lowLevel().insert(insertQuery("hayai_quotes"), values) >= 0)
++        return true
++    }
++
++    /** Returns null when this exact quote is already present, otherwise a free stable ID. */
++    private fun resolveQuoteId(
++        mangaId: Long,
++        quote: HayaiBackupQuote,
++    ): String? {
++        quoteAtId(quote.id)?.let { existing -> if (existing.matches(mangaId, quote)) return null } ?: return quote.id
++        repeat(100) { attempt ->
++            val candidate = HayaiQuoteRestoreIdentity.remappedId(quote, mangaId, attempt)
++            quoteAtId(candidate)?.let { existing ->
++                if (existing.matches(mangaId, quote)) return null
++            } ?: return candidate
++        }
++        error("Unable to allocate a stable quote ID")
++    }
++
++    private fun quoteAtId(quoteId: String): StoredQuote? =
++        query(
++            "SELECT manga_id, novel_name, chapter_name, displayed_content, original_content, translated_content, language, timestamp " +
++                "FROM hayai_quotes WHERE quote_id = ?",
++            quoteId,
++        ).use { cursor ->
++            if (!cursor.moveToFirst()) return@use null
++            StoredQuote(
++                mangaId = cursor.getLong(0),
++                novelName = cursor.getString(1),
++                chapterName = cursor.getString(2),
++                displayedContent = cursor.getString(3),
++                originalContent = cursor.stringOrNull(4),
++                translatedContent = cursor.stringOrNull(5),
++                language = cursor.stringOrNull(6),
++                timestamp = cursor.getLong(7),
++            )
++        }
++
++    private fun upsert(
++        table: String,
++        where: String,
++        whereArgs: Array<out Any>,
++        values: ContentValues,
++    ): Boolean {
++        val exists = query("SELECT 1 FROM $table WHERE $where LIMIT 1", *whereArgs).use(Cursor::moveToFirst)
++        if (exists) {
++            check(database.lowLevel().update(UpdateQuery.builder().table(table).where(where).whereArgs(*whereArgs).build(), values) > 0)
++        } else {
++            check(database.lowLevel().insert(insertQuery(table), values) >= 0)
++        }
++        return true
++    }
++
++    private fun findManga(
++        sourceId: Long,
++        mangaUrl: String,
++        cache: MutableMap<MangaIdentity, Manga?>,
++    ): Manga? {
++        val identity = MangaIdentity(sourceId, mangaUrl)
++        return cache.getOrPut(identity) { database.getManga(mangaUrl, sourceId).executeAsBlocking() }
++    }
++
++    private fun readNovelRepositories(): List<HayaiBackupNovelRepository> =
++        query("SELECT base_url, name FROM hayai_novel_repos ORDER BY base_url").use { cursor ->
++            buildList { while (cursor.moveToNext()) add(HayaiBackupNovelRepository(cursor.getString(0), cursor.getString(1))) }
++        }
++
++    private fun readEhFavorites(): List<HayaiBackupEhFavorite> =
++        query("SELECT gid, token, title, category FROM hayai_eh_favorites ORDER BY gid, token").use { cursor ->
++            buildList {
++                while (cursor.moveToNext()) add(HayaiBackupEhFavorite(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getInt(3)))
++            }
++        }
++
++    private fun query(
++        sql: String,
++        vararg args: Any,
++    ): Cursor =
++        database.lowLevel().rawQuery(RawQuery.builder().query(sql).args(*args).build())
++
++    private fun insertQuery(table: String): InsertQuery = InsertQuery.builder().table(table).build()
++
++    private inline fun process(
++        label: String,
++        errors: MutableList<String>,
++        skipped: () -> Unit,
++        block: () -> Boolean,
++    ): Boolean =
++        try {
++            block().also {
++                if (!it) {
++                    skipped()
++                    errors += "$label: matching core data was not restored or the stable ID conflicts"
++                }
++            }
++        } catch (error: Exception) {
++            skipped()
++            errors += "$label: ${error.message ?: error.javaClass.simpleName}"
++            false
++        }
++
++    private fun Cursor.stringOrNull(index: Int): String? = if (isNull(index)) null else getString(index)
++
++    private fun HayaiBackupData.itemCount() = quotes.size + novelRepositories.size + chapterStats.size + ehFavorites.size
++
++    private data class MangaIdentity(
++        val sourceId: Long,
++        val mangaUrl: String,
++    )
++
++    private data class StoredQuote(
++        val mangaId: Long,
++        val novelName: String,
++        val chapterName: String,
++        val displayedContent: String,
++        val originalContent: String?,
++        val translatedContent: String?,
++        val language: String?,
++        val timestamp: Long,
++    ) {
++        fun matches(
++            expectedMangaId: Long,
++            quote: HayaiBackupQuote,
++        ): Boolean =
++            mangaId == expectedMangaId &&
++                novelName == quote.novelName &&
++                chapterName == quote.chapterName &&
++                displayedContent == quote.displayedContent &&
++                originalContent == quote.originalContent &&
++                translatedContent == quote.translatedContent &&
++                language == quote.language &&
++                timestamp == quote.timestamp
++    }
++}
++
++internal object HayaiBackupLimits {
++    fun validate(data: HayaiBackupData): List<String> =
++        buildList {
++            if (data.version != HayaiBackupData.CURRENT_VERSION) add("Unsupported Hayai backup version ${data.version}")
++            if (data.quotes.size > 100_000) add("Too many Hayai quotes")
++            if (data.novelRepositories.size > 1_000) add("Too many novel repositories")
++            if (data.chapterStats.size > 1_000_000) add("Too many novel chapter statistics")
++            if (data.ehFavorites.size > 100_000) add("Too many E-Hentai favorites")
++            data.quotes.firstOrNull {
++                it.id.length !in 1..128 ||
++                    it.mangaUrl.length !in 1..8_192 ||
++                    it.novelName.length !in 1..8_192 ||
++                    it.chapterName.length !in 1..8_192 ||
++                    it.displayedContent.length !in 1..20_000 ||
++                    (it.originalContent?.length ?: 0) > 20_000 ||
++                    (it.translatedContent?.length ?: 0) > 20_000 ||
++                    (it.language?.length ?: 0) > 128
++            }
++                ?.let { add("Invalid Hayai quote ${it.id.take(32)}") }
++            data.novelRepositories.firstOrNull { it.baseUrl.length !in 1..8_192 || it.name.length !in 1..1_024 }
++                ?.let { add("Invalid novel repository") }
++            data.chapterStats.firstOrNull { it.mangaUrl.length !in 1..8_192 || it.chapterUrl.length !in 1..8_192 || it.wordCount < 0 }
++                ?.let { add("Invalid novel chapter statistic") }
++            data.ehFavorites.firstOrNull {
++                it.gid.length !in 1..128 ||
++                    it.token.length !in 1..512 ||
++                    it.title.length !in 1..8_192 ||
++                    it.category !in 0..9
++            }
++                ?.let { add("Invalid E-Hentai favorite") }
++        }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..206c1b1d4a2abb4d5f5756574ea1bc08823867fa
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt
+@@ -0,0 +1,29 @@
++package dev.ahmedmohamed.hayai.backup
++
++import java.util.UUID
++
++/** Allocates the same conflict-free quote ID on every restore of the same payload. */
++internal object HayaiQuoteRestoreIdentity {
++    fun remappedId(
++        quote: HayaiBackupQuote,
++        mangaId: Long,
++        attempt: Int,
++    ): String {
++        require(attempt >= 0)
++        val seed =
++            listOf(
++                "hayai-quote-v1",
++                quote.id,
++                mangaId.toString(),
++                quote.novelName,
++                quote.chapterName,
++                quote.displayedContent,
++                quote.originalContent.orEmpty(),
++                quote.translatedContent.orEmpty(),
++                quote.language.orEmpty(),
++                quote.timestamp.toString(),
++                attempt.toString(),
++            ).joinToString("\u0000")
++        return UUID.nameUUIDFromBytes(seed.toByteArray(Charsets.UTF_8)).toString()
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
+index 4f747e4e4e8bfeece2d54dae5c38496dd0e79a84..ff15cbad819e569a9cea4a5da8ccd3d02491a27d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
+@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.backup
+ import android.content.Context
+ import android.net.Uri
+ import com.hippo.unifile.UniFile
++import dev.ahmedmohamed.hayai.backup.HayaiBackupService
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS
+ import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS_MASK
+@@ -96,6 +97,7 @@ class BackupCreator(
+                     backupExtensionInfo(databaseManga),
+                     backupAppPreferences(flags),
+                     backupSourcePreferences(flags),
++                    HayaiBackupService(db).create(databaseManga),
+                 )
+         }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
+index 3355a77e1cf160f260839167be1cf6e97f7d2d51..0a35b40ea6d143b3407eefa34d2091e00a867149 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
+@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.backup
+ 
+ import android.content.Context
+ import android.net.Uri
++import dev.ahmedmohamed.hayai.backup.HayaiBackupService
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.backup.models.BackupCategory
+ import eu.kanade.tachiyomi.data.backup.models.BackupHistory
+@@ -87,7 +88,7 @@ class BackupRestorer(
+     private suspend fun performRestore(uri: Uri): Boolean {
+         val backup = BackupUtil.decodeBackup(context, uri)
+ 
+-        restoreAmount = backup.backupManga.size + 3 // +3 for categories, app prefs, source prefs
++        restoreAmount = backup.backupManga.size + 4 // categories, app prefs, source prefs, Hayai side data
+ 
+         // Restore categories
+         if (backup.backupCategories.isNotEmpty()) {
+@@ -113,6 +114,10 @@ class BackupRestorer(
+                     mangaChunk.forEach { restoreManga(it, backup.backupCategories) }
+                 }
+             }
++            val hayaiReport = HayaiBackupService(db).restore(backup.hayaiData)
++            hayaiReport.errors.forEach { error -> errors.add(Date() to "Hayai data: $error") }
++            restoreProgress += 1
++            showRestoreProgress(restoreProgress, restoreAmount, "Hayai data")
+             true
+         }
+         // TODO: optionally trigger online library + tracker update
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt
+index adb0875ec4bb71449fc8bf4a27da014883c5b937..379668d86f6d84085f00c9d84f89bcd1f6a8911a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt
+@@ -1,5 +1,6 @@
+ package eu.kanade.tachiyomi.data.backup.models
+ 
++import dev.ahmedmohamed.hayai.backup.HayaiBackupData
+ import eu.kanade.tachiyomi.BuildConfig
+ import kotlinx.serialization.Serializable
+ import kotlinx.serialization.protobuf.ProtoNumber
+@@ -15,6 +16,7 @@ data class Backup(
+     @ProtoNumber(101) var backupSources: List<BackupSource> = emptyList(),
+     @ProtoNumber(104) var backupPreferences: List<BackupPreference> = emptyList(),
+     @ProtoNumber(105) var backupSourcePreferences: List<BackupSourcePreferences> = emptyList(),
++    @ProtoNumber(900) var hayaiData: HayaiBackupData? = null,
+ ) {
+     companion object {
+         val filenameRegex = """(${BuildConfig.APPLICATION_ID}|tachiyomi)?_\d+-\d+-\d+_\d+-\d+\.(tachibk|proto\.gz)""".toRegex()
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..fe1b3b212f2676c6458557a29b416045ec178ac4
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt
+@@ -0,0 +1,93 @@
++package dev.ahmedmohamed.hayai.backup
++
++import eu.kanade.tachiyomi.data.backup.models.Backup
++import kotlinx.serialization.protobuf.ProtoBuf
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class HayaiBackupDataTest {
++    @Test
++    fun `protobuf round trip retains every typed side payload`() {
++        val data =
++            HayaiBackupData(
++                quotes =
++                    listOf(
++                        HayaiBackupQuote(
++                            id = "quote-id",
++                            sourceId = 7,
++                            mangaUrl = "/novel",
++                            novelName = "Novel",
++                            chapterName = "Chapter",
++                            displayedContent = "Quote",
++                            originalContent = "Quote",
++                            translatedContent = "Translation",
++                            language = "en",
++                            timestamp = 123,
++                        ),
++                    ),
++                novelRepositories = listOf(HayaiBackupNovelRepository("https://repo.test", "Repo")),
++                chapterStats = listOf(HayaiBackupChapterStat(7, "/novel", "/chapter", 900)),
++                ehFavorites = listOf(HayaiBackupEhFavorite("1", "token", "Gallery", 2)),
++            )
++
++        val encoded = ProtoBuf.encodeToByteArray(HayaiBackupData.serializer(), data)
++
++        assertEquals(data, ProtoBuf.decodeFromByteArray(HayaiBackupData.serializer(), encoded))
++    }
++
++    @Test
++    fun `validation rejects unsupported versions and unsafe values before writes`() {
++        val invalid =
++            HayaiBackupData(
++                version = 99,
++                quotes = listOf(HayaiBackupQuote("", 1, "", "", "", "", timestamp = 0)),
++                chapterStats = listOf(HayaiBackupChapterStat(1, "manga", "chapter", -1)),
++            )
++
++        val errors = HayaiBackupLimits.validate(invalid)
++
++        assertTrue(errors.any { it.contains("version") })
++        assertTrue(errors.any { it.contains("quote") })
++        assertTrue(errors.any { it.contains("statistic") })
++    }
++
++    @Test
++    fun `top level backup keeps Hayai payload optional for old backup compatibility`() {
++        val data = HayaiBackupData(novelRepositories = listOf(HayaiBackupNovelRepository("https://repo.test", "Repo")))
++        val withHayai = Backup(backupManga = emptyList(), hayaiData = data)
++        val withoutHayai = Backup(backupManga = emptyList())
++
++        val restoredWithHayai =
++            ProtoBuf.decodeFromByteArray(Backup.serializer(), ProtoBuf.encodeToByteArray(Backup.serializer(), withHayai))
++        val restoredWithoutHayai =
++            ProtoBuf.decodeFromByteArray(Backup.serializer(), ProtoBuf.encodeToByteArray(Backup.serializer(), withoutHayai))
++
++        assertEquals(data, restoredWithHayai.hayaiData)
++        assertEquals(null, restoredWithoutHayai.hayaiData)
++    }
++
++    @Test
++    fun `quote conflict IDs are deterministic and include the complete restore identity`() {
++        val quote =
++            HayaiBackupQuote(
++                id = "existing-id",
++                sourceId = 7,
++                mangaUrl = "/novel",
++                novelName = "Novel",
++                chapterName = "Chapter",
++                displayedContent = "same visible text",
++                originalContent = "original",
++                translatedContent = "translation one",
++                language = "en",
++                timestamp = 123,
++            )
++
++        val first = HayaiQuoteRestoreIdentity.remappedId(quote, mangaId = 42, attempt = 0)
++
++        assertEquals(first, HayaiQuoteRestoreIdentity.remappedId(quote, mangaId = 42, attempt = 0))
++        assertTrue(first != HayaiQuoteRestoreIdentity.remappedId(quote.copy(translatedContent = "translation two"), 42, 0))
++        assertTrue(first != HayaiQuoteRestoreIdentity.remappedId(quote, mangaId = 43, attempt = 0))
++        assertTrue(first != HayaiQuoteRestoreIdentity.remappedId(quote, mangaId = 42, attempt = 1))
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 81820db5fde119dbfb48d689aea4ef02cf61e92b..2d44919d1eaccd20564690284d7dbafc63459a0c 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -10,10 +10,13 @@ J2K owns manga, chapters, history, categories, tracking, downloads, image readin
+ - `source`: typed source capabilities and enhanced-source families.
+ - `novel`: the text-source contract and dedicated reader.
+ - `migration`: read-only legacy import and typed Hayai side tables.
++- `backup`: versioned serialization and stable-ID remapping for Hayai-owned side data.
+ - `preferences`: stable Hayai and TachiyomiSY-compatible preference keys.
+ 
+ `tools/verify-upstream-boundary.ps1` rejects unreviewed Kotlin edits outside this namespace. `App.kt`, `MainActivity.kt`, and the J2K image `ReaderActivity.kt` are protected explicitly.
+ 
++The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one optional high-numbered Hayai field, `BackupCreator` fills it, and `BackupRestorer` applies it only after J2K has restored manga and chapters. All payload validation, serialization models, stable identity mapping, and database behavior remain Hayai-owned. This preserves old-backup compatibility and avoids teaching J2K models about Hayai tables.
++
+ ## Database reset and migration
+ 
+ Legacy Hayai and current J2K both called their database `tachiyomi.db`, but their schema histories are unrelated (legacy SQLDelight v36+ versus J2K StorIO v20). Hayai therefore uses `hayai-j2k.db` as the active J2K database and treats an existing `tachiyomi.db` as a read-only source.
+@@ -24,9 +27,15 @@ On first database open, an idempotent importer validates the legacy schema and r
+ 
+ Extensions remain standard J2K `Source`/`SourceFactory` extensions. `SourceCapabilityRegistry` adds behavior by stable source ID or recognized family name instead of scattering source checks through presenters.
+ 
+-`NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. No production novel source implementation or Tsundoku compatibility bridge ships in this foundation yet; those are explicit ports in the feature audit.
++`NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources and downloaded source chapters are production implementations; remote extension discovery and Tsundoku compatibility remain explicit ports in the feature audit.
++
++The text reader owns its lifecycle. It loads text off the main thread, renders bounded selectable documents, updates J2K history, supports typography/navigation/search, speaks chapters through TTS, captures and manages quotes, and saves authenticated source assets into a self-contained integrity-checked offline store. Translation/dictionary adapters and JS/custom repository runtimes remain future Hayai-owned slices rather than changes to the image reader.
++
++## Backup ownership
++
++J2K continues to own backup of library, chapter, category, history, tracking, and selected preferences. Hayai appends a versioned optional protobuf payload for quotes, novel repositories, chapter word counts, and E-Hentai favorites. References to J2K rows use `(sourceId, mangaUrl, chapterUrl)` rather than transient database IDs and are resolved only after core restore. Quote ID collisions are deterministically remapped from the complete quote payload, so repeated restores are idempotent without collapsing distinct quotes. Invalid or unsupported side payloads are rejected without invalidating the core J2K restore.
+ 
+-The text reader owns its lifecycle. It loads text off the main thread, renders selectable HTML/text, and updates J2K history. TTS, typography profiles, quote capture, translations, downloads, and JS/custom/local source runtimes belong in this Hayai-owned vertical slice rather than in the image reader.
++Offline novel files are deliberately excluded, matching J2K's treatment of downloaded image pages: backup contains durable user data and state, not potentially large downloaded content.
+ 
+ ## Updating upstreams
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index a7220b7a3583bc7e9b2b35dbb6dc38dd7906fc89..444133f067ef148ee9f1fb1a840cdf8a3bed8091 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -2,7 +2,7 @@
+ 
+ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `547ddea3ce3e2a4943a1279b517e14b7af422467`, and J2K `57935d373fab209da0104d1a6ce2cb14ffd762dd`.
+ 
+-**Foundation** means implemented on the reset branch. **Port** means a production implementation is still required. This distinction prevents the clean baseline from being mistaken for the full multi-upstream port.
++**Foundation** means a boundary or partial implementation exists. **Port** means the end-to-end production behavior is implemented and verified. **Audit** means upstream behavior is mapped but production work remains. This distinction prevents the clean baseline from being mistaken for the full multi-upstream port.
+ 
+ ## Adult and enhanced sources
+ 
+@@ -11,14 +11,14 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | Global hentai enable (`eh_is_hentai_enabled`) | Stable SY-compatible key and central policy | foundation |
+ | Library lewd filter show/hide/only (`pref_filter_library_lewd_v2`) | `LewdClassifier` and `HayaiLibraryPolicy` | foundation |
+ | Fixed adult IDs, adult-source rules, tags, and `Non-H` exemption | Typed source registry and classifier | foundation |
+-| E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | port |
+-| EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime port |
+-| EH metadata, gallery versions, archives/H@H, thumbnails, tag filtering | Metadata gateway and EH delegate | port |
+-| 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | Registered enhanced-source families | registry foundation; behavior port |
+-| Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | port |
+-| Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI port |
+-| Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime port |
+-| Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | port |
++| E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | audit |
++| EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
++| EH metadata, gallery versions, archives/H@H, thumbnails, tag filtering | Metadata gateway and EH delegate | audit |
++| 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | Registered enhanced-source families | registry foundation; behavior audit |
++| Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | audit |
++| Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI audit |
++| Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
++| Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | audit |
+ 
+ SY areas audited include its EH/ExHentai source, login and preferences; metadata models/parsers; adult classifier and library filters; favorites/update flows; enhanced source handlers; merged/feed/saved-search systems; and reader/network extras. Exact behavior is rebuilt behind Hayai contracts rather than copied into J2K presenters.
+ 
+@@ -27,18 +27,20 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+-| Dedicated reader, central routing, and J2K history | `NovelReaderActivity` and `ReaderLauncher` | foundation |
++| Dedicated reader, central routing, and J2K history | `NovelReaderActivity` and `ReaderLauncher` | port |
+ | Novel extension discovery | J2K loader plus Hayai ABI | contract foundation; compatibility port |
+-| JavaScript repository sources and custom-source builder | Sandboxed novel runtime and signed repositories | port |
+-| Local novels and EPUB import/export | Document storage and local novel source | port |
++| JavaScript repository sources and custom-source builder | Sandboxed novel runtime and signed repositories | audit |
++| Local novels and EPUB import/export | Document storage and local novel source | import port; export audit |
+ | Text downloads/offline reading | Document downloader, separate from image pages | port |
+-| Typography, themes, spacing, navigation, search/replace | Text-reader profiles and document transforms | port |
+-| Translation and dictionary handoff | Reader-owned adapters | port |
+-| TTS and playback controls | Reader-owned foreground service | port |
+-| Quotes/highlights | Typed `hayai_quotes` and reader selection UI | migration foundation; UI port |
+-| Word count, chapter stats, analytics | `hayai_novel_chapter_stats` | migration foundation; runtime port |
+-| Novel trackers | J2K tracking boundary adapters | port |
+-| Hayai backup and LNReader/Tsundoku imports | Side payload after core ID remapping | port |
++| Typography, themes, spacing, navigation, search/replace | Text-reader profiles and document transforms | foundation; replace audit |
++| Translation and dictionary handoff | Reader-owned adapters | audit |
++| TTS and playback controls | Reader-owned lifecycle-aware engine and controls | port |
++| Quotes | Typed `hayai_quotes`, selection capture, browse/copy/delete UI | port |
++| Persistent highlights | Reader ranges anchored to document identity | audit |
++| Word count, chapter stats, analytics | `hayai_novel_chapter_stats` | migration foundation; runtime audit |
++| Novel trackers | J2K tracking boundary adapters | audit |
++| Hayai backup | Versioned side payload after stable core ID remapping | port |
++| LNReader/Tsundoku imports | Validated external import adapters | audit |
+ 
+ Tsundoku areas audited include its novel source/text-fetch contract, extension and repository handling, dedicated reader, downloads, TTS, reader tools, local/EPUB flows, tracking, statistics, and backup/import paths.
+ 
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index b58830d209ba548c931fb95d98646f2bcc8d751b..b82ef01a8c61d1b7beb8de3ce74a219814604931 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -6,6 +6,9 @@ Push-Location $repositoryRoot
+ try {
+     $changed = @(git diff --name-only $Base; git ls-files --others --exclude-standard) | Sort-Object -Unique
+     $allowedUpstreamKotlin = @(
++        "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
+-- 
+2.54.0.windows.1
+

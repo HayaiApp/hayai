@@ -1,0 +1,178 @@
+From 04778dcf9c1cda7014e72c3d432f23097f1184d2 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 10:21:34 +0300
+Subject: [PATCH] Expose LNReader repository management
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 66a5c6a1198e406a4fc81dbaac4ace127626dbbb..619c9462f32e0b3d428bcec87f4977f6c2ef17aa 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -100,3 +100,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T08:20:00Z	legacy-preferences-and-tabs	replaced throwing FlowPreferences enum reads with one Hayai compatibility decoder and prevented tabbed roots from clearing the destination tab strip	preserved all current enum values, mapped legacy BySource to BySeries without rewriting it, audited removed theme values, and verified the fixture plus repeated Browse/Recents navigation on emulator	CompatibleEnumPreferenceTest; legacy-by-source-preferences.xml; CompatibleEnumPreference.kt; PreferencesHelper.kt; BrowseController.kt; RecentsController.kt; legacy-preference-audit.md; verify-navigation-tabs.ps1	VERIFIED
+ 2026-08-23T09:10:00Z	recents-bysource	restored History BySource as a real J2K Recents grouping mode	kept J2K history rows, chapter expansion, downloads, swipe actions, and reader routing authoritative while moving only source-section ordering and visibility mutation into Hayai-owned policy	RecentSourceGrouper.kt; RecentMangaHeaderItem.kt; RecentsPresenter.kt; RecentSourceVisibility.kt; upstream-feature-audit.md	IMPLEMENTED_UNVERIFIED
+ 2026-08-23T09:25:00Z	lnreader-v3-repository	restored the production LNReader v3 catalogue	accepted root and enveloped documents, encoded raw brackets outside URL authorities, stripped Unicode format marks from language labels, and ignored invalid optional site metadata without weakening required plugin URL validation	NovelPluginRepositoryDocument.kt; NovelPluginModels.kt; NovelPluginRepositoryDocumentTest.kt	IMPLEMENTED_UNVERIFIED
++2026-08-23T10:05:00Z	novel-repository-navigation	added one native J2K settings hub with typed APK-extension and LNReader-plugin destinations	made both repository formats discoverable from Browse and Browse settings without URL auto-detection or bypassing the JavaScript plugin trust warning	NovelRepositoryKind; NovelRepositoryHubController.kt; BrowseController.kt; SettingsBrowseController.kt	IMPLEMENTED_UNVERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..5be901bf11a6a86a6d4ee1aa1d4e3059910ae68a
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
+@@ -0,0 +1,49 @@
++package dev.ahmedmohamed.hayai.novel.repository
++
++import androidx.annotation.StringRes
++import androidx.preference.PreferenceScreen
++import com.bluelinelabs.conductor.Controller
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerController
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import eu.kanade.tachiyomi.ui.setting.onClick
++import eu.kanade.tachiyomi.ui.setting.preference
++import eu.kanade.tachiyomi.ui.setting.summaryRes
++import eu.kanade.tachiyomi.ui.setting.titleRes
++import eu.kanade.tachiyomi.ui.source.browse.repos.RepoController
++import eu.kanade.tachiyomi.util.view.withFadeTransaction
++
++internal enum class NovelRepositoryKind(
++    @StringRes val titleRes: Int,
++    @StringRes val summaryRes: Int,
++) {
++    ApkExtensions(
++        titleRes = R.string.hayai_novel_extension_repos,
++        summaryRes = R.string.hayai_novel_extension_repository_warning,
++    ),
++    LnReaderPlugins(
++        titleRes = R.string.hayai_novel_plugins,
++        summaryRes = R.string.hayai_novel_plugins_summary,
++    ),
++    ;
++
++    fun destination(): Controller = when (this) {
++        ApkExtensions -> RepoController(ContentKind.Novel)
++        LnReaderPlugins -> NovelPluginManagerController()
++    }
++}
++
++class NovelRepositoryHubController : SettingsController() {
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
++        titleRes = R.string.hayai_novel_repository_management
++
++        NovelRepositoryKind.entries.forEach { kind ->
++            preference {
++                titleRes = kind.titleRes
++                summaryRes = kind.summaryRes
++                onClick { router.pushController(kind.destination().withFadeTransaction()) }
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+index 79fac5430548f4dd01130da7f6c3669902be693a..dbb48247c8429689904ca54e582a913ef232abbb 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+@@ -5,8 +5,8 @@ import android.content.Intent
+ import android.provider.Settings
+ import androidx.preference.PreferenceScreen
+ import androidx.preference.SwitchPreferenceCompat
+-import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+ import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import dev.ahmedmohamed.hayai.novel.repository.NovelRepositoryHubController
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.notification.Notifications
+@@ -26,7 +26,6 @@ import uy.kohesive.injekt.injectLazy
+ 
+ class SettingsBrowseController : SettingsController() {
+     val sourceManager: SourceManager by injectLazy()
+-    private val novelRepositories: NovelApkRepositoryRegistry by injectLazy()
+     var updatedExtNotifPref: SwitchPreferenceCompat? = null
+ 
+     override fun setupPreferenceScreen(screen: PreferenceScreen) =
+@@ -70,11 +69,10 @@ class SettingsBrowseController : SettingsController() {
+                 preference {
+                     key = "pref_edit_novel_extension_repos"
+ 
+-                    val repoCount = novelRepositories.repositoriesNow().count()
+-                    titleRes = R.string.hayai_novel_extension_repos
+-                    if (repoCount > 0) summary = context.resources.getQuantityString(R.plurals.num_repos, repoCount, repoCount)
++                    titleRes = R.string.hayai_novel_repository_management
++                    summaryRes = R.string.hayai_novel_repository_management_summary
+ 
+-                    onClick { router.pushController(RepoController(ContentKind.Novel).withFadeTransaction()) }
++                    onClick { router.pushController(NovelRepositoryHubController().withFadeTransaction()) }
+                 }
+                 if (ExtensionManager.canAutoInstallUpdates()) {
+                     val intPref =
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
+index bec8aa98f0cfec06a92e32f440667a252aa84941..9007c62e3c10a6a7464c765e5d3d9f5f0b16c155 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
+@@ -25,6 +25,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
+ import com.google.android.material.snackbar.Snackbar
+ import com.google.android.material.tabs.TabLayout
+ import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import dev.ahmedmohamed.hayai.novel.repository.NovelRepositoryHubController
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+@@ -428,7 +429,13 @@ class BrowseController :
+                 }
+                 R.id.action_ext_repos -> {
+                     val kind = ContentKind.fromPosition(binding.bottomSheet.tabs.selectedTabPosition)
+-                    router.pushController(RepoController(kind).withFadeTransaction())
++                    val destination =
++                        if (kind == ContentKind.Novel) {
++                            NovelRepositoryHubController()
++                        } else {
++                            RepoController(kind)
++                        }
++                    router.pushController(destination.withFadeTransaction())
+                 }
+             }
+             return@setOnMenuItemClickListener true
+diff --git a/app/src/main/res/values/strings_hayai_misc.xml b/app/src/main/res/values/strings_hayai_misc.xml
+index 5afcf2d50d3a49703569ceba252b8adb1fc873b6..61afede3d81ed8f86feaf9900e256b892d1be659 100644
+--- a/app/src/main/res/values/strings_hayai_misc.xml
++++ b/app/src/main/res/values/strings_hayai_misc.xml
+@@ -2,6 +2,8 @@
+ <resources>
+     <!-- Novel APK extensions -->
+     <string name="hayai_novel_extensions_title">Novel extensions</string>
++    <string name="hayai_novel_repository_management">Novel repositories</string>
++    <string name="hayai_novel_repository_management_summary">Manage APK extension and LNReader plugin repositories</string>
+     <string name="hayai_add_repository">Add repository</string>
+     <string name="hayai_cancel_installation">Cancel installation</string>
+     <string name="hayai_refreshing">Refreshing…</string>
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index c56695223fdd6fa7abcbdf3c71167010e0d01823..68c56e4daaad7db9c701f901ea57eaf7d9f9aa2d 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -26,7 +26,7 @@ The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one
+ 
+ Extension discovery uses one Hayai-owned `ContentKind` policy at the J2K presentation seams. Tsundoku's protobuf `isNovel` field is authoritative for remote APKs, with its historical novel package prefix as the legacy fallback. Installed APKs are classified from their actual loaded sources, so an APK that exposes both kinds appears in both installer tabs. Browse and global search use the same source classification, and local novels remain discoverable even when their synthetic language is not enabled. J2K continues to own loading, trust, installation, source registration, and searching.
+ 
+-APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores only novel membership and novel-only ownership tags. Manga-only, novel-only, and shared ownership transitions are idempotent: removing one view never deletes a URL or its metadata while the other view still owns it. Repository redirects migrate both J2K URLs and Hayai tags together. The typed Manga/Novel repository controllers and Manga/Novel/Migration extension tabs are narrow UI adapters over those contracts; they do not introduce a second downloader or extension catalog.
++APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores only novel membership and novel-only ownership tags. Manga-only, novel-only, and shared ownership transitions are idempotent: removing one view never deletes a URL or its metadata while the other view still owns it. Repository redirects migrate both J2K URLs and Hayai tags together. The typed Manga/Novel repository controllers and Manga/Novel/Migration extension tabs are narrow UI adapters over those contracts; they do not introduce a second downloader or extension catalog. Novel repository actions in Browse and Browse settings open one Hayai-owned J2K settings hub. Its `NovelRepositoryKind` entries route users explicitly to either APK extension repositories or LNReader JavaScript plugin repositories, so the two trust and document formats never rely on URL auto-detection.
+ 
+ LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. It also caches filter and setting schemas so J2K's synchronous source UI never starts QuickJS on the main thread. Chapter documents expose an absolute base URL. Source-owned asset requests retain cookies and a referrer and enforce a 16 MiB stream limit. Users explicitly accept repository and install warnings because TLS and file integrity do not authenticate a repository publisher. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index e8e8d398f7c1b3de13e6de1ae446d4a00b52514e..5ff651575cbb2d4fbc831a4f0c9385addf4d36fa 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -44,8 +44,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+ | Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | exact J2K shell and native renderer verified on emulator; WebView, prepend, and incognito emulator flows pending |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+-| Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership and separate management entry points | implemented unverified; compile and emulator install flows pending |
+-| LNReader JavaScript repository sources | Hayai manager, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
++| Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership; typed repository hub with explicit APK and LNReader destinations | implemented unverified; compile and emulator install flows pending |
++| LNReader JavaScript repository sources | Hayai manager, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge, and a Browse/settings repository entry that preserves the plugin trust warning | port |
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+-- 
+2.54.0.windows.1
+

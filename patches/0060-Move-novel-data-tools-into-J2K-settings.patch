@@ -1,0 +1,406 @@
+From ea15c1897275eaa318a98741302733d3a25350ce Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 13:22:42 +0300
+Subject: [PATCH] Move novel data tools into J2K settings
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index e484bb3425995338f6c55dd4627913e46c7f8c5e..c53d0fbd1383175db5c33600c252552776909309 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -91,3 +91,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T13:22:00+03:00	j2k-novel-extension-navigation	replaced the standalone novel APK manager activity with a J2K SettingsController catalog and the existing J2K novel-repository controller	preserved refresh, update, install, remove, trust-signature, progress, cancellation, and error behavior without a second repository UI	NovelApkExtensionManagerController.kt; RepoController.kt; NovelSettingsController.kt	COMPILED
+ 2026-08-22T13:34:00+03:00	j2k-enhanced-batch-navigation	replaced the standalone enhanced batch-add activity, custom toolbar, and activity-scoped ViewModel with a J2K SettingsController and Hayai coordinator	preserved multiline input, input validation, per-item progress, retry-aware results, summary, cancellation, and duplicate handling while removing the duplicate app shell	EnhancedBatchAddController.kt; EnhancedBatchAddCoordinator; SettingsAdvancedController.kt	COMPILED
+ 2026-08-22T13:45:00+03:00	j2k-novel-plugin-navigation	replaced the standalone novel plugin manager activity and hand-built cards with a J2K SettingsController catalog	preserved repository add, enable, remove, refresh errors, search, install, update, uninstall, trust warning, and in-progress gating while removing the duplicate app shell	NovelPluginManagerController.kt; SettingsAdvancedController.kt	COMPILED
++2026-08-22T14:02:00+03:00	j2k-novel-data-navigation	replaced the standalone novel data-tools activity with a J2K SettingsController and controller-owned document results	preserved Tsundoku and LNReader dry-run import, warnings, atomic apply, EPUB export with bounded assets, destination cleanup, cancellation, and progress while deleting the duplicate activity shell	NovelDataToolsController.kt; NovelSettingsController.kt; MangaDetailsController.kt	COMPILED
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 910946ee3dce46aca7de60b98459ef4f96c3a223..a09bc485d38742bc98be078e022f84a321df53e4 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -155,10 +155,6 @@
+             android:configChanges="uiMode|orientation|screenSize"
+             android:exported="false"
+             android:theme="@style/Theme.Tachiyomi" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity"
+-            android:exported="false"
+-            android:theme="@style/Theme.Tachiyomi" />
+         <activity
+             android:name=".ui.webview.WebViewActivity"
+             android:configChanges="uiMode|orientation|screenSize"/>
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt
+similarity index 74%
+rename from app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt
+rename to app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt
+index d0328066abc0a42152686539ec653c63d784a8e9..e49e1ecf825b2ad49f6ece546a501f54ee624721 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt
+@@ -1,15 +1,11 @@
+ package dev.ahmedmohamed.hayai.novel.integration
+ 
++import android.app.Activity
++import android.content.Intent
+ import android.net.Uri
+-import android.os.Bundle
+-import android.widget.Button
+-import android.widget.LinearLayout
+-import android.widget.ProgressBar
+-import android.widget.TextView
+-import androidx.activity.result.contract.ActivityResultContracts
+-import androidx.appcompat.app.AlertDialog
+-import androidx.appcompat.app.AppCompatActivity
+-import androidx.lifecycle.lifecycleScope
++import androidx.annotation.StringRes
++import androidx.preference.Preference
++import androidx.preference.PreferenceScreen
+ import dev.ahmedmohamed.hayai.novel.download.NovelAssetReferences
+ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+ import dev.ahmedmohamed.hayai.novel.export.NovelEpubAsset
+@@ -36,6 +32,12 @@ import eu.kanade.tachiyomi.source.SourceManager
+ import eu.kanade.tachiyomi.source.model.Page
+ import eu.kanade.tachiyomi.source.online.HttpSource
+ import eu.kanade.tachiyomi.source.isNovelSource
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import eu.kanade.tachiyomi.ui.setting.onClick
++import eu.kanade.tachiyomi.ui.setting.preference
++import eu.kanade.tachiyomi.ui.setting.preferenceCategory
++import eu.kanade.tachiyomi.ui.setting.titleRes
++import eu.kanade.tachiyomi.util.system.materialAlertDialog
+ import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+@@ -49,61 +51,92 @@ import java.net.URI
+ import java.security.MessageDigest
+ import kotlin.coroutines.coroutineContext
+ 
+-class NovelDataToolsActivity : AppCompatActivity() {
++class NovelDataToolsController() : SettingsController() {
+     private val database by lazy { Injekt.get<DatabaseHelper>() }
+     private val sources by lazy { Injekt.get<SourceManager>() }
+     private val parser = ExternalNovelImportParser()
+     private var job: Job? = null
+-    private lateinit var status: TextView
+-    private lateinit var progress: ProgressBar
+-    private lateinit var cancel: Button
+-    private val importPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::inspectImport) }
+-    private val exportPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("application/epub+zip")) { uri -> uri?.let(::exportTo) }
++    private lateinit var status: Preference
++    private lateinit var progress: Preference
++    private lateinit var cancel: Preference
++    private val mangaId get() = args.getLong(MANGA_ID, -1)
+ 
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        title = getString(R.string.hayai_novel_data_tools)
+-        setContentView(LinearLayout(this).apply {
+-            orientation = LinearLayout.VERTICAL
+-            setPadding(24, 24, 24, 24)
+-            status = TextView(context)
+-            addView(status)
+-            progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
+-            addView(progress)
+-            addView(Button(context).apply {
+-                text = getString(R.string.hayai_import_tsundoku_lnreader)
+-                setOnClickListener {
+-                    importPicker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-protobuf"))
+-                }
+-            })
+-            addView(Button(context).apply {
+-                text = getString(R.string.hayai_export_novel_epub)
+-                isEnabled = intent.getLongExtra(EXTRA_MANGA_ID, -1) > 0
+-                setOnClickListener {
+-                    val mangaId = intent.getLongExtra(EXTRA_MANGA_ID, -1)
+-                    val manga = database.getManga(mangaId).executeAsBlocking()
+-                    if (manga != null) exportPicker.launch(NovelEpubNaming.safeFileName(manga.title))
+-                }
+-            })
+-            cancel = Button(context).apply {
+-                setText(android.R.string.cancel)
++    constructor(mangaId: Long) : this() {
++        args.putLong(MANGA_ID, mangaId)
++    }
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
++        titleRes = R.string.hayai_novel_data_tools
++        preferenceCategory {
++            status = preference { isSelectable = false }
++            progress = preference {
++                summary = getString(R.string.hayai_novel_data_progress, 0)
++                isSelectable = false
++            }
++            preference {
++                title = getString(R.string.hayai_import_tsundoku_lnreader)
++                onClick { openImportPicker() }
++            }
++            preference {
++                title = getString(R.string.hayai_export_novel_epub)
++                isEnabled = mangaId > 0
++                onClick { openExportPicker() }
++            }
++            cancel = preference {
++                title = getString(android.R.string.cancel)
+                 isEnabled = false
+-                setOnClickListener { job?.cancel() }
++                onClick { job?.cancel() }
+             }
+-            addView(cancel)
+-        })
++        }
++    }
++
++    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
++        if (resultCode != Activity.RESULT_OK) return
++        val uri = data?.data ?: return
++        when (requestCode) {
++            IMPORT_REQUEST -> inspectImport(uri)
++            EXPORT_REQUEST -> exportTo(uri)
++        }
++    }
++
++    override fun onDestroy() {
++        job?.cancel()
++        super.onDestroy()
++    }
++
++    private fun openImportPicker() {
++        startActivityForResult(
++            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
++                addCategory(Intent.CATEGORY_OPENABLE)
++                type = "application/octet-stream"
++                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/octet-stream", "application/x-protobuf"))
++            },
++            IMPORT_REQUEST,
++        )
++    }
++
++    private fun openExportPicker() {
++        val manga = database.getManga(mangaId).executeAsBlocking() ?: return
++        startActivityForResult(
++            Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
++                addCategory(Intent.CATEGORY_OPENABLE)
++                type = "application/epub+zip"
++                putExtra(Intent.EXTRA_TITLE, NovelEpubNaming.safeFileName(manga.title))
++            },
++            EXPORT_REQUEST,
++        )
+     }
+ 
+     private fun inspectImport(uri: Uri) = startJob {
+         update(getString(R.string.hayai_inspecting_import), 0)
+         val plan = withContext(Dispatchers.IO) {
+-            contentResolver.openInputStream(uri).use { input -> parser.dryRun(requireNotNull(input)) }
++            requireNotNull(activity).contentResolver.openInputStream(uri).use { input -> parser.dryRun(requireNotNull(input)) }
+         }
+         val warnings =
+             plan.issues.joinToString("\n") {
+                 getString(R.string.hayai_import_issue, severityText(it.severity), it.location, importIssueText(it))
+             }
+-        AlertDialog.Builder(this)
++        requireNotNull(activity).materialAlertDialog()
+             .setTitle(R.string.hayai_import_preview)
+             .setMessage(
+                 getString(
+@@ -131,10 +164,10 @@ class NovelDataToolsActivity : AppCompatActivity() {
+         } else {
+             getString(
+                 R.string.hayai_import_result,
+-                resources.getQuantityString(R.plurals.hayai_imported_novels, result.importedNovels, result.importedNovels),
+-                resources.getQuantityString(R.plurals.hayai_imported_chapters, result.importedChapters, result.importedChapters),
+-                resources.getQuantityString(R.plurals.hayai_imported_categories, result.importedCategories, result.importedCategories),
+-                resources.getQuantityString(R.plurals.hayai_skipped_novels, result.skippedNovels, result.skippedNovels),
++                requireNotNull(resources).getQuantityString(R.plurals.hayai_imported_novels, result.importedNovels, result.importedNovels),
++                requireNotNull(resources).getQuantityString(R.plurals.hayai_imported_chapters, result.importedChapters, result.importedChapters),
++                requireNotNull(resources).getQuantityString(R.plurals.hayai_imported_categories, result.importedCategories, result.importedCategories),
++                requireNotNull(resources).getQuantityString(R.plurals.hayai_skipped_novels, result.skippedNovels, result.skippedNovels),
+                 missing.joinToString().ifBlank { getString(R.string.none) },
+             )
+         }
+@@ -142,7 +175,6 @@ class NovelDataToolsActivity : AppCompatActivity() {
+     }
+ 
+     private fun exportTo(uri: Uri) = startJob(cleanupDestination = uri) {
+-        val mangaId = intent.getLongExtra(EXTRA_MANGA_ID, -1)
+         val manga = withContext(Dispatchers.IO) {
+             requireNotNull(database.getManga(mangaId).executeAsBlocking()) { getString(R.string.hayai_export_novel_missing) }
+         }
+@@ -203,7 +235,7 @@ class NovelDataToolsActivity : AppCompatActivity() {
+         )
+         update(getString(R.string.hayai_writing_epub), 95)
+         withContext(Dispatchers.IO) {
+-            contentResolver.openOutputStream(uri, "w").use { output ->
++            requireNotNull(activity).contentResolver.openOutputStream(uri, "w").use { output ->
+                 NovelEpubExporter().write(book, requireNotNull(output) { getString(R.string.hayai_export_destination_error) })
+             }
+         }
+@@ -212,11 +244,11 @@ class NovelDataToolsActivity : AppCompatActivity() {
+ 
+     private fun startJob(cleanupDestination: Uri? = null, block: suspend () -> Unit) {
+         if (job?.isActive == true) return
+-        job = lifecycleScope.launch {
++        job = viewScope.launch {
+             cancel.isEnabled = true
+             runCatching { block() }.onFailure { error ->
+                 val removed = cleanupDestination?.let { destination ->
+-                    runCatching { contentResolver.delete(destination, null, null) > 0 }.getOrDefault(false)
++                    runCatching { requireNotNull(activity).contentResolver.delete(destination, null, null) > 0 }.getOrDefault(false)
+                 } ?: false
+                 if (error is CancellationException) {
+                     update(
+@@ -232,8 +264,8 @@ class NovelDataToolsActivity : AppCompatActivity() {
+     }
+ 
+     private fun update(message: String, value: Int) {
+-        status.text = message
+-        progress.progress = value
++        status.summary = message
++        progress.summary = getString(R.string.hayai_novel_data_progress, value)
+     }
+ 
+     private fun formatText(format: ExternalNovelFormat): String =
+@@ -255,7 +287,7 @@ class NovelDataToolsActivity : AppCompatActivity() {
+     private fun importIssueText(issue: NovelImportIssue): String =
+         when (issue.code) {
+             NovelImportIssueCode.MissingCategoryAssignments ->
+-                resources.getQuantityString(R.plurals.hayai_missing_category_assignments, issue.count, issue.count)
++                requireNotNull(resources).getQuantityString(R.plurals.hayai_missing_category_assignments, issue.count, issue.count)
+         }
+ 
+     private suspend fun loadAsset(
+@@ -347,8 +379,15 @@ class NovelDataToolsActivity : AppCompatActivity() {
+         .replace("<", "&lt;")
+         .replace(">", "&gt;")
+ 
++    private fun getString(@StringRes id: Int, vararg args: Any): String = requireNotNull(resources).getString(id, *args)
++
++    private fun novelFailureMessage(error: Throwable, @StringRes fallback: Int): String =
++        requireNotNull(activity).novelFailureMessage(error, fallback)
++
+     companion object {
+-        const val EXTRA_MANGA_ID = "hayai.manga_id"
++        private const val MANGA_ID = "hayai.manga_id"
++        private const val IMPORT_REQUEST = 3201
++        private const val EXPORT_REQUEST = 3202
+         private const val MAX_SINGLE_ASSET = 8 * 1024 * 1024
+         private const val MAX_EXPORT_ASSETS = 32L * 1024 * 1024
+         private const val MAX_EXPORT_CHARS = 16L * 1024 * 1024
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+index 02aecca1f69e69aca1cdbaa60ce3049bed6a178b..8952e2c1ffbf4cc25e3cfc478b1142df0f9b7460 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+@@ -15,7 +15,7 @@ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+ import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerController
+-import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
++import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsController
+ import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
+ import dev.ahmedmohamed.hayai.novel.reader.NovelColorPickerDialog
+ import dev.ahmedmohamed.hayai.novel.reader.NovelThemeColors
+@@ -279,7 +279,7 @@ class NovelSettingsController : SettingsController() {
+             preference {
+                 title = context.getString(R.string.hayai_novel_reader_import_external)
+                 summary = context.getString(R.string.hayai_novel_reader_import_external_summary)
+-                onClick { startActivity(Intent(context, NovelDataToolsActivity::class.java)) }
++                onClick { router.pushController(NovelDataToolsController().withFadeTransaction()) }
+             }
+         }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+index 9c856e365c23572d4005954bc88b7e25e4b00222..40075d278c026e94df567b9ec86c6c7a06dbfd4b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+@@ -58,7 +58,7 @@ import com.google.android.material.snackbar.Snackbar
+ import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
+ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
+-import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
++import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsController
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+ import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
+ import dev.ahmedmohamed.hayai.source.preview.SourcePreviewController
+@@ -1294,12 +1294,8 @@ class MangaDetailsController :
+             R.id.action_open_in_web_view -> openInWebView()
+             R.id.action_refresh_tracking -> presenter.refreshTracking(true)
+             R.id.action_export_novel_epub -> {
+-                val context = activity ?: return false
+-                startActivity(
+-                    Intent(context, NovelDataToolsActivity::class.java).putExtra(
+-                        NovelDataToolsActivity.EXTRA_MANGA_ID,
+-                        presenter.manga.id ?: return false,
+-                    ),
++                router.pushController(
++                    NovelDataToolsController(presenter.manga.id ?: return false).withFadeTransaction(),
+                 )
+             }
+             R.id.action_migrate ->
+diff --git a/app/src/main/res/values/strings_hayai_misc.xml b/app/src/main/res/values/strings_hayai_misc.xml
+index da8b6576a37766deb26215a2a50eae9e73aa334c..ac804af5819145aa947c27cdd4c83f4b45981a49 100644
+--- a/app/src/main/res/values/strings_hayai_misc.xml
++++ b/app/src/main/res/values/strings_hayai_misc.xml
+@@ -388,4 +388,5 @@
+     <string name="hayai_value_configured">Configured</string>
+     <string name="hayai_translation_engine">Translation engine</string>
+     <string name="hayai_available">Available</string>
++    <string name="hayai_novel_data_progress">Progress: %1$d%%</string>
+ </resources>
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 58f8e7281562b43e01351fab90b8785627dd0c14..5b3107cbd05dcce82dbdec083e53cad0c732c00b 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -1461,29 +1461,30 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/ExternalNovelImporter.kt
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("INSERT OR REPLACE INTO hayai_novel_import_runs(plan_id,status,completed_at) VALUES (?,'complete',?)")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("SELECT 1 FROM hayai_novel_import_runs WHERE plan_id=? AND status='complete'")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("SELECT 1 FROM mangas_categories WHERE manga_id=? AND category_id=?")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.ifBlank { "asset.bin" }
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.joinToString("") { "%02x".format(it) }
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.replace("&", "&amp;")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.replace("<", "&lt;")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.replace(">", "&gt;")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	.replace(Regex("[^A-Za-z0-9._-]"), "_")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"gif" -> "image/gif"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"jpg", "jpeg" -> "image/jpeg"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"png" -> "image/png"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"svg" -> "image/svg+xml"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	"webp" -> "image/webp"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	const val EXTRA_MANGA_ID = "hayai.manga_id"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	contentResolver.openOutputStream(uri, "w").use { output ->
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	else -> "<pre>${escape(document.content)}</pre>"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	else -> "application/octet-stream"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	identifier = "hayai:${manga.source}:${manga.url}",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	importPicker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-protobuf"))
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	plan.issues.joinToString("\n") {
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	private val exportPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("application/epub+zip")) { uri -> uri?.let(::exportTo) }
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	return "$digest-$raw"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	val cover = coverUrl?.takeIf { mediaType(it).startsWith("image/") }?.let { url ->
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	val digest = MessageDigest.getInstance("SHA-256")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt	val language = source.lang.takeUnless { it.isBlank() || it == "all" } ?: "en"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.ifBlank { "asset.bin" }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.joinToString("") { "%02x".format(it) }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace("&", "&amp;")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace("<", "&lt;")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace(">", "&gt;")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace(Regex("[^A-Za-z0-9._-]"), "_")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"gif" -> "image/gif"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"jpg", "jpeg" -> "image/jpeg"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"png" -> "image/png"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"svg" -> "image/svg+xml"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	"webp" -> "image/webp"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	else -> "<pre>${escape(document.content)}</pre>"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	else -> "application/octet-stream"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	identifier = "hayai:${manga.source}:${manga.url}",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	plan.issues.joinToString("\n") {
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	private const val MANGA_ID = "hayai.manga_id"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/octet-stream", "application/x-protobuf"))
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	requireNotNull(activity).contentResolver.openOutputStream(uri, "w").use { output ->
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	return "$digest-$raw"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	type = "application/epub+zip"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	type = "application/octet-stream"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val cover = coverUrl?.takeIf { mediaType(it).startsWith("image/") }?.let { url ->
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val digest = MessageDigest.getInstance("SHA-256")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val language = source.lang.takeUnless { it.isBlank() || it == "all" } ?: "en"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"COALESCE(SUM(CASE WHEN c.read = 1 THEN s.word_count " +
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"ELSE (s.word_count * MIN(MAX(c.last_page_read, 0), 100) / 100) END), 0) " +
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"FROM hayai_novel_chapter_stats s JOIN chapters c ON c._id = s.chapter_id " +
+-- 
+2.54.0.windows.1
+

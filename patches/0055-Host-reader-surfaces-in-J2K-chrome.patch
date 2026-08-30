@@ -1,0 +1,1169 @@
+From b20b5b8d4489fbae7d3b43adcf5295fb706d79d6 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 12:40:57 +0300
+Subject: [PATCH] Host reader surfaces in J2K chrome
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index f5e7e1768c1208256cb2c6e61ae0c988465f4891..c59798c69c0b18f8409068b7c1ef0ed33304418c 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -84,3 +84,6 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T06:11:47Z	localization-validation	compiled the integrated app, verified resources and placeholder signatures, checked the J2K boundary, and reran the corrected E-Hentai favorites protocol test with one Gradle worker	the full 359-test run reached one obsolete exception-type assertion after 358 passes; the typed assertion was updated and its focused test class passes	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin; :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesProtocolTest; tools/verify-localization.ps1 -WriteCoverage; tools/verify-upstream-boundary.ps1	VERIFIED
+ 2026-08-22T11:22:47+03:00	source-surface-parity	restored SY-style E-Hentai rich browse rows and tag autocomplete, exposed typed source metadata, and fixed the details parent-resolution defect that suppressed both metadata and page previews	kept source parsing, metadata persistence, preview loading, tag catalog, and presentation policy Hayai-owned behind four narrow J2K presentation adapters	SourceBrowsePresentation; SourceMetadataDocument; SourceTagCompletionFilter; MangaDetailsController.kt; BrowseSourcePresenter.kt	VERIFIED
+ 2026-08-22T11:22:47+03:00	source-surface-validation	compiled the app and passed focused E-Hentai browse, tag, metadata, enhanced-source, and preview tests with one Gradle worker	also verified all localization keys and the documented J2K boundary, including reviewed SY translations in 20 locales	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests adult.eh.* --tests source.metadata.* --tests source.enhanced.*; tools/verify-localization.ps1; tools/verify-upstream-boundary.ps1	VERIFIED
++2026-08-22T12:34:00+03:00	j2k-source-navigation	replaced standalone metadata and page-preview activities with Hayai feature controllers hosted by J2K MainActivity navigation	removed duplicate app shells while preserving source-owned state, loading, empty-state, metadata, preview, and selected-page behavior	SourceMetadataController.kt; SourcePreviewController.kt; MangaDetailsController.kt; AndroidManifest.xml	VERIFIED
++2026-08-22T12:34:00+03:00	novel-reader-insets	made the existing J2K reader layout authoritative for system-cutout and visible-reader-chrome insets	the toolbar ends at y=351 and the novel viewer begins at y=351 on the authorized Pixel_10_Pro_XL fixture, with no fatal exception	NovelReaderActivity.kt; artifacts/emulator-verification/novel-reader-overlap-fixed.xml; artifacts/emulator-verification/novel-reader-overlap-fixed.png	VERIFIED
++2026-08-22T12:34:00+03:00	migration-fixture-evidence	verified the restored emulator fixture retains the promoted quote and source-metadata rows plus the lossless archived legacy rows	preserved quote attribution, original and translated fields, language, timestamp, metadata, durable migration completion, and foreign-key integrity	artifacts/emulator-verification/hayai-state-before-controller.tgz; LegacyImportPlanTest.kt	VERIFIED
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index ddc618b9fb5b67d2a95e385de635713439af8696..19a183e4ec08180752f65e54f8c62786d95e5c96 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -159,14 +159,6 @@
+             android:configChanges="uiMode|orientation|screenSize"
+             android:exported="false"
+             android:theme="@style/Theme.Tachiyomi" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.source.preview.SourcePreviewActivity"
+-            android:exported="false"
+-            android:theme="@style/Theme.Tachiyomi" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.source.metadata.SourceMetadataActivity"
+-            android:exported="false"
+-            android:theme="@style/Theme.Tachiyomi" />
+         <activity
+             android:name="dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity"
+             android:exported="false"
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index 73d211f1af02e24e4a2fb9de332c8ac2ba9524a5..3a2fd2d6111aaf328a44fbc9ac0b56090384a22d 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -28,6 +28,11 @@ import androidx.appcompat.app.AppCompatActivity
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.core.view.setPadding
+ import androidx.core.view.isVisible
++import androidx.core.view.WindowCompat
++import androidx.core.view.WindowInsetsCompat.Type.displayCutout
++import androidx.core.view.WindowInsetsCompat.Type.systemBars
++import androidx.core.view.WindowInsetsControllerCompat
++import androidx.core.view.updateLayoutParams
+ import androidx.lifecycle.lifecycleScope
+ import androidx.recyclerview.widget.LinearLayoutManager
+ import com.google.android.material.bottomsheet.BottomSheetBehavior
+@@ -60,6 +65,7 @@ import eu.kanade.tachiyomi.ui.reader.ReaderSlider
+ import eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterSheet
+ import eu.kanade.tachiyomi.util.system.launchIO
+ import eu.kanade.tachiyomi.util.system.toast
++import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
+ import eu.kanade.tachiyomi.ui.main.SearchActivity
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+@@ -1063,11 +1069,10 @@ class NovelReaderActivity :
+         } else {
+             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+         }
+-        if (preferences.novelFullscreen.get()) {
+-            window.decorView.systemUiVisibility =
+-                View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+-        } else {
+-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
++        WindowCompat.setDecorFitsSystemWindows(window, false)
++        WindowInsetsControllerCompat(window, window.decorView).apply {
++            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
++            if (preferences.novelFullscreen.get()) hide(systemBars()) else show(systemBars())
+         }
+         requestedOrientation = orientationValue(preferences.novelOrientation.get())
+         val brightness =
+@@ -1080,6 +1085,42 @@ class NovelReaderActivity :
+                 WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+             }
+         window.attributes = window.attributes.apply { screenBrightness = brightness }
++        bindReaderInsets()
++    }
++
++    private fun bindReaderInsets() {
++        val readerLayout = findViewById<View>(R.id.reader_layout)
++        val navigation = findViewById<View>(R.id.nav_layout)
++        readerLayout.doOnApplyWindowInsetsCompat { _, insets, _ ->
++            val systemInsets = insets.getInsetsIgnoringVisibility(systemBars())
++            val cutoutInsets = insets.getInsetsIgnoringVisibility(displayCutout())
++            val contentInsets = insets.getInsetsIgnoringVisibility(systemBars() or displayCutout())
++            appBar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
++                leftMargin = systemInsets.left
++                rightMargin = systemInsets.right
++            }
++            toolbar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
++                topMargin = systemInsets.top
++                leftMargin = cutoutInsets.left
++                rightMargin = cutoutInsets.right
++            }
++            viewerContainer.updateLayoutParams<androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams> {
++                leftMargin = cutoutInsets.left
++                rightMargin = cutoutInsets.right
++                val systemTop = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else contentInsets.top
++                val readerChrome = systemInsets.top + toolbar.layoutParams.height.coerceAtLeast(0)
++                topMargin = if (controlsVisible) readerChrome else systemTop
++                bottomMargin = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else contentInsets.bottom
++            }
++            navigation.updateLayoutParams<ViewGroup.MarginLayoutParams> {
++                leftMargin = 12.dp + contentInsets.left
++                rightMargin = 12.dp + contentInsets.right
++            }
++            statusView.updateLayoutParams<androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams> {
++                bottomMargin = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else systemInsets.bottom
++            }
++            viewerContainer.requestLayout()
++        }
+     }
+ 
+     private fun showError(message: String) {
+@@ -1438,6 +1479,7 @@ class NovelReaderActivity :
+         findViewById<View>(R.id.nav_layout).isVisible = visible && chapterSheetBehavior.state != BottomSheetBehavior.STATE_EXPANDED
+         chapterSheetBehavior.state = if (visible) BottomSheetBehavior.STATE_COLLAPSED else BottomSheetBehavior.STATE_HIDDEN
+         configureProgressControls()
++        findViewById<View>(R.id.reader_layout).requestApplyInsets()
+     }
+ 
+     private fun setEditMode(enabled: Boolean) {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataActivity.kt
+deleted file mode 100644
+index 0fe0d7ac725f42a19462de1a133d257f14d32a56..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataActivity.kt
++++ /dev/null
+@@ -1,86 +0,0 @@
+-package dev.ahmedmohamed.hayai.source.metadata
+-
+-import android.content.Context
+-import android.content.Intent
+-import android.os.Bundle
+-import android.view.Gravity
+-import android.view.ViewGroup
+-import android.widget.LinearLayout
+-import android.widget.ProgressBar
+-import android.widget.ScrollView
+-import android.widget.TextView
+-import androidx.appcompat.app.AppCompatActivity
+-import androidx.core.view.isVisible
+-import androidx.lifecycle.lifecycleScope
+-import com.google.android.material.appbar.MaterialToolbar
+-import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.data.database.DatabaseHelper
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.launch
+-import kotlinx.coroutines.withContext
+-import uy.kohesive.injekt.Injekt
+-import uy.kohesive.injekt.api.get
+-
+-class SourceMetadataActivity : AppCompatActivity() {
+-    private val database: DatabaseHelper by lazy { Injekt.get() }
+-    private val metadata: SourceMetadataProviderRegistry by lazy { Injekt.get() }
+-    private lateinit var progress: ProgressBar
+-    private lateinit var message: TextView
+-    private lateinit var content: LinearLayout
+-
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        val mangaId = intent.getLongExtra(EXTRA_MANGA_ID, -1L)
+-        val manga = database.getManga(mangaId).executeAsBlocking() ?: run {
+-            finish()
+-            return
+-        }
+-        title = getString(R.string.hayai_source_metadata_title)
+-        setContentView(createContent())
+-        load(manga)
+-    }
+-
+-    private fun createContent(): LinearLayout = LinearLayout(this).apply {
+-        orientation = LinearLayout.VERTICAL
+-        addView(
+-            MaterialToolbar(context).apply {
+-                title = getString(R.string.hayai_source_metadata_title)
+-                setNavigationIcon(R.drawable.ic_arrow_back_24dp)
+-                setNavigationOnClickListener { finish() }
+-            },
+-            matchWrap(),
+-        )
+-        progress = ProgressBar(context).apply { isIndeterminate = true }
+-        addView(progress, LinearLayout.LayoutParams(dp(48), dp(48)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+-        message = TextView(context).apply {
+-            gravity = Gravity.CENTER
+-            setPadding(dp(24), dp(24), dp(24), dp(24))
+-            isVisible = false
+-        }
+-        addView(message, matchWrap())
+-        content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+-        addView(ScrollView(context).apply { addView(content) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+-    }
+-
+-    private fun load(manga: eu.kanade.tachiyomi.data.database.models.Manga) {
+-        lifecycleScope.launch {
+-            val result = withContext(Dispatchers.IO) { runCatching { metadata.load(manga) } }
+-            progress.isVisible = false
+-            result.onSuccess { SourceMetadataUi.renderFull(content, it) }
+-                .onFailure {
+-                    message.setText(R.string.hayai_source_metadata_failed)
+-                    message.isVisible = true
+-                }
+-        }
+-    }
+-
+-    private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+-
+-    companion object {
+-        private const val EXTRA_MANGA_ID = "manga_id"
+-
+-        fun newIntent(context: Context, mangaId: Long): Intent =
+-            Intent(context, SourceMetadataActivity::class.java).putExtra(EXTRA_MANGA_ID, mangaId)
+-    }
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f92c2bfce776e516dd391ecf5e33042bbd5b62d4
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt
+@@ -0,0 +1,148 @@
++package dev.ahmedmohamed.hayai.source.metadata
++
++import android.content.ClipData
++import android.os.Bundle
++import android.view.Gravity
++import android.view.LayoutInflater
++import android.view.View
++import android.view.ViewGroup
++import android.widget.FrameLayout
++import android.widget.LinearLayout
++import android.widget.TextView
++import androidx.core.view.isVisible
++import androidx.recyclerview.widget.LinearLayoutManager
++import androidx.recyclerview.widget.RecyclerView
++import com.google.android.material.loadingindicator.LoadingIndicator
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.databinding.SubDebugControllerBinding
++import eu.kanade.tachiyomi.ui.base.controller.BaseController
++import eu.kanade.tachiyomi.util.system.clipboardManager
++import eu.kanade.tachiyomi.util.system.launchIO
++import eu.kanade.tachiyomi.util.system.withUIContext
++import eu.kanade.tachiyomi.util.view.scrollViewWith
++import eu.kanade.tachiyomi.widget.EmptyView
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++
++class SourceMetadataController(
++    bundle: Bundle? = null,
++) : BaseController<SubDebugControllerBinding>(bundle) {
++    private val database: DatabaseHelper = Injekt.get()
++    private val metadata: SourceMetadataProviderRegistry = Injekt.get()
++    private val mangaId = args.getLong(MANGA_ID)
++    private val manga by lazy { database.getManga(mangaId).executeAsBlocking() }
++    private val adapter = MetadataAdapter()
++    private lateinit var loading: LoadingIndicator
++    private lateinit var emptyView: EmptyView
++    private var loadGeneration = 0
++
++    constructor(mangaId: Long) : this(Bundle().apply { putLong(MANGA_ID, mangaId) })
++
++    override fun getTitle(): String? = manga?.title ?: resources?.getString(R.string.hayai_source_metadata_title)
++
++    override fun createBinding(inflater: LayoutInflater) = SubDebugControllerBinding.inflate(inflater)
++
++    override fun onViewCreated(view: View) {
++        super.onViewCreated(view)
++        scrollViewWith(binding.recycler, padBottom = true)
++        binding.recycler.layoutManager = LinearLayoutManager(view.context)
++        binding.recycler.adapter = adapter
++
++        val root = binding.root as FrameLayout
++        loading = LoadingIndicator(view.context)
++        root.addView(loading, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER))
++        emptyView = EmptyView(view.context).apply { hide() }
++        root.addView(
++            emptyView,
++            FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
++        )
++        if (manga == null) {
++            loading.isVisible = false
++            emptyView.show(R.drawable.ic_search_off_24dp, R.string.no_results_found)
++        } else {
++            load()
++        }
++    }
++
++    override fun onDestroyView(view: View) {
++        loadGeneration++
++        binding.recycler.adapter = null
++        adapter.submit(emptyList())
++        super.onDestroyView(view)
++    }
++
++    private fun load() {
++        val manga = manga ?: return
++        val generation = ++loadGeneration
++        loading.isVisible = true
++        binding.recycler.isVisible = false
++        emptyView.hide()
++        viewScope.launchIO {
++            val result = runCatching { metadata.load(manga) }
++            withUIContext {
++                if (generation != loadGeneration || !isBindingInitialized) return@withUIContext
++                loading.isVisible = false
++                result.onSuccess { document ->
++                    val rows = SourceMetadataUi.fullRows(requireNotNull(activity), document)
++                    adapter.submit(rows)
++                    binding.recycler.isVisible = rows.isNotEmpty()
++                    if (rows.isEmpty()) emptyView.show(R.drawable.ic_search_off_24dp, R.string.no_results_found)
++                }.onFailure {
++                    adapter.submit(emptyList())
++                    emptyView.show(R.drawable.ic_search_off_24dp, R.string.hayai_source_metadata_failed)
++                }
++            }
++        }
++    }
++
++    private inner class MetadataAdapter : RecyclerView.Adapter<MetadataHolder>() {
++        private var rows = emptyList<SourceMetadataUi.Row>()
++
++        fun submit(rows: List<SourceMetadataUi.Row>) {
++            this.rows = rows
++            notifyDataSetChanged()
++        }
++
++        override fun getItemCount(): Int = rows.size
++
++        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MetadataHolder {
++            val row = LinearLayout(parent.context).apply {
++                orientation = LinearLayout.HORIZONTAL
++                setPadding(dp(16), dp(8), dp(8), dp(8))
++            }
++            val title = TextView(parent.context).apply { setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium) }
++            val value = TextView(parent.context).apply {
++                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
++                alpha = 0.7f
++                setTextIsSelectable(true)
++            }
++            row.addView(title, LinearLayout.LayoutParams(dp(140), ViewGroup.LayoutParams.WRAP_CONTENT))
++            row.addView(value, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
++            return MetadataHolder(row, title, value)
++        }
++
++        override fun onBindViewHolder(holder: MetadataHolder, position: Int) = holder.bind(rows[position])
++    }
++
++    private inner class MetadataHolder(
++        itemView: View,
++        private val title: TextView,
++        private val value: TextView,
++    ) : RecyclerView.ViewHolder(itemView) {
++        fun bind(row: SourceMetadataUi.Row) {
++            title.text = row.title
++            value.text = row.value
++            itemView.setOnLongClickListener {
++                itemView.context.clipboardManager.setPrimaryClip(ClipData.newPlainText(row.title, row.value))
++                true
++            }
++        }
++    }
++
++    private fun dp(value: Int): Int = ((resources?.displayMetrics?.density ?: 1f) * value).toInt()
++
++    private companion object {
++        const val MANGA_ID = "manga_id"
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
+index 99ad8fc661a4e6c290678819f2a3949c3817e151..3f82bbca682119f46479fd71f81d37df16269e9f 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
+@@ -22,6 +22,8 @@ import java.text.DateFormat
+ import java.util.Date
+ 
+ object SourceMetadataUi {
++    data class Row(val title: String, val value: String)
++
+     fun renderSummary(
+         container: LinearLayout,
+         document: SourceMetadataDocument,
+@@ -142,6 +144,19 @@ object SourceMetadataUi {
+         }
+     }
+ 
++    fun fullRows(context: Context, document: SourceMetadataDocument): List<Row> = buildList {
++        document.titles.forEachIndexed { index, title ->
++            val key = if (index == 0) SourceMetadataKey.EnglishTitle else SourceMetadataKey.AlternativeTitle
++            add(Row(context.getString(label(key)), title))
++        }
++        document.fields.forEach { field ->
++            add(Row(context.getString(label(field.key)), formatValue(context, field.key, field.value)))
++        }
++        document.tags.groupBy { it.namespace }.forEach { (namespace, tags) ->
++            add(Row(namespace ?: context.getString(R.string.tags), tags.joinToString { it.name }))
++        }
++    }
++
+     fun typeColor(type: String): Int = when (type.trim().lowercase()) {
+         "doujinshi" -> Color.rgb(244, 67, 54)
+         "manga" -> Color.rgb(255, 152, 0)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt
+deleted file mode 100644
+index bfb0857da5f721417acc6d1280ab2aee255f3441..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt
++++ /dev/null
+@@ -1,287 +0,0 @@
+-package dev.ahmedmohamed.hayai.source.preview
+-
+-import android.content.Context
+-import android.content.Intent
+-import android.graphics.Bitmap
+-import android.os.Bundle
+-import android.text.InputType
+-import android.view.Gravity
+-import android.view.Menu
+-import android.view.MenuItem
+-import android.view.View
+-import android.view.ViewGroup
+-import android.widget.Button
+-import android.widget.EditText
+-import android.widget.ImageView
+-import android.widget.LinearLayout
+-import android.widget.ProgressBar
+-import android.widget.TextView
+-import androidx.appcompat.app.AlertDialog
+-import androidx.appcompat.app.AppCompatActivity
+-import androidx.core.view.isVisible
+-import androidx.lifecycle.lifecycleScope
+-import androidx.recyclerview.widget.GridLayoutManager
+-import androidx.recyclerview.widget.RecyclerView
+-import com.google.android.material.appbar.MaterialToolbar
+-import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+-import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+-import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
+-import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.data.database.DatabaseHelper
+-import eu.kanade.tachiyomi.data.database.models.Manga
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.Job
+-import kotlinx.coroutines.launch
+-import kotlinx.coroutines.withContext
+-import uy.kohesive.injekt.Injekt
+-import uy.kohesive.injekt.api.get
+-
+-class SourcePreviewActivity : AppCompatActivity() {
+-    private val database: DatabaseHelper by lazy { Injekt.get() }
+-    private val previews: SourceDetailsPreviewRegistry by lazy { Injekt.get() }
+-    private lateinit var manga: Manga
+-    private lateinit var toolbar: MaterialToolbar
+-    private lateinit var progress: ProgressBar
+-    private lateinit var message: TextView
+-    private lateinit var recycler: RecyclerView
+-    private lateinit var previous: Button
+-    private lateinit var next: Button
+-    private lateinit var signIn: Button
+-    private val adapter = PreviewAdapter(::openPage)
+-    private var page = 1
+-    private var totalPages: Int? = null
+-    private var loadJob: Job? = null
+-
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        val mangaId = intent.getLongExtra(EXTRA_MANGA_ID, -1L)
+-        manga = database.getManga(mangaId).executeAsBlocking() ?: run {
+-            finish()
+-            return
+-        }
+-        title = getString(R.string.hayai_page_previews)
+-        setContentView(createContent())
+-        setSupportActionBar(toolbar)
+-        page = savedInstanceState?.getInt(STATE_PAGE, 1) ?: 1
+-        load(page)
+-    }
+-
+-    override fun onSaveInstanceState(outState: Bundle) {
+-        outState.putInt(STATE_PAGE, page)
+-        super.onSaveInstanceState(outState)
+-    }
+-
+-    override fun onDestroy() {
+-        loadJob?.cancel()
+-        if (::recycler.isInitialized) {
+-            for (index in 0 until recycler.childCount) {
+-                (recycler.getChildViewHolder(recycler.getChildAt(index)) as? PreviewHolder)?.recycle()
+-            }
+-            recycler.adapter = null
+-        }
+-        super.onDestroy()
+-    }
+-
+-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+-        menu.add(Menu.NONE, MENU_GO_TO, Menu.NONE, R.string.hayai_go_to_preview_page).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+-        menu.add(Menu.NONE, MENU_RETRY, Menu.NONE, R.string.retry).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+-        return true
+-    }
+-
+-    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
+-        MENU_GO_TO -> {
+-            showGoToDialog()
+-            true
+-        }
+-        MENU_RETRY -> {
+-            load(page, forceRefresh = true)
+-            true
+-        }
+-        else -> super.onOptionsItemSelected(item)
+-    }
+-
+-    private fun createContent(): View {
+-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+-        toolbar = MaterialToolbar(this).apply {
+-            title = getString(R.string.hayai_page_previews)
+-            setNavigationIcon(R.drawable.ic_arrow_back_24dp)
+-            setNavigationOnClickListener { finish() }
+-        }
+-        root.addView(toolbar, matchWrap())
+-        progress = ProgressBar(this).apply { isIndeterminate = true }
+-        root.addView(progress, centered(dp(48)))
+-        message = TextView(this).apply {
+-            gravity = Gravity.CENTER
+-            setPadding(dp(24), dp(16), dp(24), dp(16))
+-        }
+-        root.addView(message, matchWrap())
+-        signIn = Button(this).apply {
+-            text = getString(R.string.hayai_open_ehentai_settings)
+-            setOnClickListener { startActivity(Intent(this@SourcePreviewActivity, EhSettingsActivity::class.java)) }
+-        }
+-        root.addView(signIn, centered(ViewGroup.LayoutParams.WRAP_CONTENT))
+-        recycler = RecyclerView(this).apply {
+-            layoutManager = GridLayoutManager(this@SourcePreviewActivity, spanCount())
+-            adapter = this@SourcePreviewActivity.adapter
+-        }
+-        root.addView(recycler, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+-        val navigation = LinearLayout(this).apply {
+-            gravity = Gravity.CENTER
+-            previous = Button(context).apply {
+-                text = getString(R.string.previous)
+-                setOnClickListener { load(page - 1) }
+-            }
+-            addView(previous)
+-            next = Button(context).apply {
+-                text = getString(R.string.next)
+-                setOnClickListener { load(page + 1) }
+-            }
+-            addView(next)
+-        }
+-        root.addView(navigation, matchWrap())
+-        return root
+-    }
+-
+-    private fun load(targetPage: Int, forceRefresh: Boolean = false) {
+-        if (targetPage < 1 || totalPages?.let { targetPage > it } == true) return
+-        loadJob?.cancel()
+-        progress.isVisible = true
+-        message.isVisible = false
+-        signIn.isVisible = false
+-        previous.isEnabled = false
+-        next.isEnabled = false
+-        loadJob = lifecycleScope.launch {
+-            val result = withContext(Dispatchers.IO) {
+-                runCatching { previews.load(manga, targetPage, okhttp3.CacheControl.FORCE_NETWORK.takeIf { forceRefresh }) }
+-            }
+-            progress.isVisible = false
+-            result.onSuccess { loaded ->
+-                page = loaded.page
+-                totalPages = loaded.totalPages
+-                title = totalPages?.let { getString(R.string.hayai_page_previews_position, page, it) }
+-                    ?: getString(R.string.hayai_page_previews_position_unknown, page)
+-                adapter.submit(manga, loaded.previews)
+-                recycler.scrollToPosition(0)
+-                message.isVisible = loaded.previews.isEmpty()
+-                message.text = getString(R.string.hayai_no_page_previews)
+-                previous.isEnabled = page > 1
+-                next.isEnabled = loaded.hasNextPage
+-            }.onFailure { error ->
+-                adapter.submit(manga, emptyList())
+-                message.isVisible = true
+-                message.text = error.message ?: getString(R.string.hayai_page_previews_failed)
+-                previous.isEnabled = page > 1
+-                signIn.isVisible = manga.source == EhSite.ExHentai.sourceId
+-            }
+-        }
+-    }
+-
+-    private fun showGoToDialog() {
+-        val input = EditText(this).apply {
+-            inputType = InputType.TYPE_CLASS_NUMBER
+-            setText(page.toString())
+-            selectAll()
+-            hint = totalPages?.let { getString(R.string.hayai_page_range, 1, it) } ?: getString(R.string.hayai_preview_page_number)
+-        }
+-        AlertDialog.Builder(this)
+-            .setTitle(R.string.hayai_go_to_preview_page)
+-            .setView(input)
+-            .setPositiveButton(android.R.string.ok) { _, _ -> input.text.toString().toIntOrNull()?.let(::load) }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
+-    }
+-
+-    private fun openPage(preview: SourcePagePreview) {
+-        val chapter = database.getChapters(manga).executeAsBlocking().minByOrNull { it.source_order } ?: return
+-        startActivity(ReaderLauncher.newIntent(this, manga, chapter, preview.index - 1))
+-    }
+-
+-    private fun spanCount(): Int = (resources.displayMetrics.widthPixels / dp(120)).coerceAtLeast(2)
+-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+-    private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+-    private fun centered(size: Int) = LinearLayout.LayoutParams(size, size).apply { gravity = Gravity.CENTER_HORIZONTAL }
+-
+-    private inner class PreviewAdapter(
+-        private val onClick: (SourcePagePreview) -> Unit,
+-    ) : RecyclerView.Adapter<PreviewHolder>() {
+-        private var manga: Manga? = null
+-        private var items = emptyList<SourcePagePreview>()
+-
+-        fun submit(manga: Manga, items: List<SourcePagePreview>) {
+-            this.manga = manga
+-            this.items = items
+-            notifyDataSetChanged()
+-        }
+-
+-        override fun getItemCount(): Int = items.size
+-
+-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PreviewHolder {
+-            val column = LinearLayout(parent.context).apply {
+-                orientation = LinearLayout.VERTICAL
+-                gravity = Gravity.CENTER_HORIZONTAL
+-                setPadding(dp(4), dp(4), dp(4), dp(8))
+-            }
+-            val image = ImageView(parent.context).apply {
+-                scaleType = ImageView.ScaleType.CENTER_CROP
+-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(200))
+-            }
+-            column.addView(image)
+-            val label = TextView(parent.context).apply { gravity = Gravity.CENTER }
+-            column.addView(label, matchWrap())
+-            return PreviewHolder(column, image, label)
+-        }
+-
+-        override fun onBindViewHolder(holder: PreviewHolder, position: Int) {
+-            val item = items[position]
+-            holder.bind(checkNotNull(manga), item)
+-            holder.itemView.setOnClickListener { onClick(item) }
+-        }
+-
+-        override fun onViewRecycled(holder: PreviewHolder) = holder.recycle()
+-    }
+-
+-    private inner class PreviewHolder(
+-        itemView: View,
+-        private val image: ImageView,
+-        private val label: TextView,
+-    ) : RecyclerView.ViewHolder(itemView) {
+-        private var job: Job? = null
+-        private var bitmap: Bitmap? = null
+-
+-        fun bind(manga: Manga, preview: SourcePagePreview) {
+-            recycle()
+-            label.text = preview.index.toString()
+-            image.contentDescription = getString(R.string.hayai_gallery_page, preview.index)
+-            image.setImageDrawable(null)
+-            job = lifecycleScope.launch {
+-                val loaded = withContext(Dispatchers.IO) {
+-                    runCatching { SourcePreviewBitmapDecoder.decode(previews.loadImage(manga, preview)) }.getOrNull()
+-                }
+-                if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
+-                    bitmap = loaded
+-                    image.setImageBitmap(loaded)
+-                } else {
+-                    loaded?.recycle()
+-                }
+-            }
+-        }
+-
+-        fun recycle() {
+-            job?.cancel()
+-            job = null
+-            image.setImageDrawable(null)
+-            bitmap?.takeUnless(Bitmap::isRecycled)?.recycle()
+-            bitmap = null
+-        }
+-    }
+-
+-    companion object {
+-        private const val EXTRA_MANGA_ID = "manga_id"
+-        private const val STATE_PAGE = "page"
+-        private const val MENU_GO_TO = 1
+-        private const val MENU_RETRY = 2
+-
+-        fun newIntent(context: Context, mangaId: Long): Intent =
+-            Intent(context, SourcePreviewActivity::class.java).putExtra(EXTRA_MANGA_ID, mangaId)
+-    }
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
+index e56f2d624242ffc16c983a654ef63065277fdba8..b33c5472fc9aa680a5998d527c9b8e9d296bc1b5 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
+@@ -57,12 +57,17 @@ class SourcePreviewCache(private val context: Context) {
+     }
+ 
+     private fun write(directory: File, key: String, bytes: ByteArray) {
++        check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
+         val target = File(directory, key)
+-        val temporary = File(directory, "$key.tmp")
+-        temporary.writeBytes(bytes)
+-        if (!temporary.renameTo(target)) {
+-            target.delete()
+-            check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
++        val temporary = File.createTempFile("$key.", ".tmp", directory)
++        try {
++            temporary.writeBytes(bytes)
++            if (!temporary.renameTo(target)) {
++                target.delete()
++                check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
++            }
++        } finally {
++            temporary.delete()
+         }
+     }
+ 
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7aeea15e719c1e6453abbb72b89e14ba7e77fe0a
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+@@ -0,0 +1,276 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import android.graphics.Bitmap
++import android.os.Bundle
++import android.view.Gravity
++import android.view.LayoutInflater
++import android.view.Menu
++import android.view.MenuInflater
++import android.view.MenuItem
++import android.view.View
++import android.view.ViewGroup
++import android.widget.FrameLayout
++import android.widget.ImageView
++import android.widget.LinearLayout
++import android.widget.TextView
++import androidx.core.view.isVisible
++import androidx.recyclerview.widget.GridLayoutManager
++import androidx.recyclerview.widget.RecyclerView
++import com.google.android.material.loadingindicator.LoadingIndicator
++import com.google.android.material.slider.Slider
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
++import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.databinding.SubDebugControllerBinding
++import eu.kanade.tachiyomi.ui.base.controller.BaseController
++import eu.kanade.tachiyomi.util.system.launchIO
++import eu.kanade.tachiyomi.util.system.materialAlertDialog
++import eu.kanade.tachiyomi.util.system.withUIContext
++import eu.kanade.tachiyomi.util.view.scrollViewWith
++import eu.kanade.tachiyomi.widget.EmptyView
++import okhttp3.CacheControl
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++import kotlin.math.roundToInt
++
++class SourcePreviewController(
++    bundle: Bundle? = null,
++) : BaseController<SubDebugControllerBinding>(bundle) {
++    private val database: DatabaseHelper = Injekt.get()
++    private val previews: SourceDetailsPreviewRegistry = Injekt.get()
++    private val mangaId = args.getLong(MANGA_ID)
++    private val manga: Manga? by lazy { database.getManga(mangaId).executeAsBlocking() }
++    private val adapter = PreviewAdapter(::openPage)
++    private lateinit var loading: LoadingIndicator
++    private lateinit var emptyView: EmptyView
++    private var page = 1
++    private var totalPages: Int? = null
++    private var loadGeneration = 0
++
++    constructor(mangaId: Long) : this(Bundle().apply { putLong(MANGA_ID, mangaId) })
++
++    override fun getTitle(): String? = resources?.getString(R.string.hayai_page_previews)
++
++    override fun createBinding(inflater: LayoutInflater) = SubDebugControllerBinding.inflate(inflater)
++
++    override fun onViewCreated(view: View) {
++        super.onViewCreated(view)
++        scrollViewWith(binding.recycler, padBottom = true)
++        binding.recycler.layoutManager = GridLayoutManager(view.context, spanCount(view))
++        binding.recycler.adapter = adapter
++        binding.recycler.setPadding(dp(8), dp(8), dp(8), dp(8))
++
++        val root = binding.root as FrameLayout
++        loading = LoadingIndicator(view.context).apply { isVisible = false }
++        root.addView(loading, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER))
++        emptyView = EmptyView(view.context).apply { hide() }
++        root.addView(
++            emptyView,
++            FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
++        )
++        if (manga == null) {
++            emptyView.show(R.drawable.ic_search_off_24dp, R.string.no_results_found)
++        } else {
++            load(page)
++        }
++    }
++
++    override fun onDestroyView(view: View) {
++        loadGeneration++
++        binding.recycler.adapter = null
++        adapter.clear()
++        super.onDestroyView(view)
++    }
++
++    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
++        if ((totalPages ?: 0) > 1) {
++            menu.add(Menu.NONE, MENU_GO_TO, Menu.NONE, R.string.hayai_go_to_preview_page)
++                .setIcon(R.drawable.ic_page_next_outline_24dp)
++                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
++        }
++    }
++
++    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
++        MENU_GO_TO -> {
++            showGoToDialog()
++            true
++        }
++        else -> super.onOptionsItemSelected(item)
++    }
++
++    private fun load(targetPage: Int, forceRefresh: Boolean = false) {
++        val manga = manga ?: return
++        val knownTotal = totalPages
++        if (targetPage < 1 || knownTotal != null && targetPage > knownTotal) return
++        val generation = ++loadGeneration
++        loading.isVisible = true
++        emptyView.hide()
++        binding.recycler.isVisible = false
++        viewScope.launchIO {
++            val result = runCatching {
++                previews.load(manga, targetPage, CacheControl.FORCE_NETWORK.takeIf { forceRefresh })
++            }
++            withUIContext {
++                if (generation != loadGeneration || !isBindingInitialized) return@withUIContext
++                loading.isVisible = false
++                result.onSuccess { loaded ->
++                    page = loaded.page
++                    totalPages = loaded.totalPages
++                    adapter.submit(manga, loaded.previews)
++                    binding.recycler.scrollToPosition(0)
++                    binding.recycler.isVisible = loaded.previews.isNotEmpty()
++                    if (loaded.previews.isEmpty()) {
++                        emptyView.show(R.drawable.ic_search_off_24dp, R.string.hayai_no_page_previews)
++                    }
++                    activity?.invalidateOptionsMenu()
++                }.onFailure { error ->
++                    adapter.clear()
++                    val actions = buildList {
++                        add(EmptyView.Action(R.string.retry) { load(targetPage, forceRefresh = true) })
++                        if (manga.source == EhSite.ExHentai.sourceId) {
++                            add(EmptyView.Action(R.string.hayai_open_ehentai_settings) { startActivity(EhSettingsActivity.newIntent(emptyView.context)) })
++                        }
++                    }
++                    emptyView.show(
++                        R.drawable.ic_search_off_24dp,
++                        error.message ?: emptyView.context.getString(R.string.hayai_page_previews_failed),
++                        actions,
++                    )
++                }
++            }
++        }
++    }
++
++    private fun showGoToDialog() {
++        val lastPage = totalPages?.takeIf { it > 1 } ?: return
++        val context = activity ?: return
++        val row = LinearLayout(context).apply {
++            gravity = Gravity.CENTER_VERTICAL
++            setPadding(dp(16), 0, dp(16), 0)
++        }
++        val current = TextView(context).apply { text = page.toString() }
++        val end = TextView(context).apply { text = lastPage.toString() }
++        val slider = Slider(context).apply {
++            valueFrom = 1f
++            valueTo = lastPage.toFloat()
++            stepSize = 1f
++            value = page.toFloat()
++            addOnChangeListener { _, value, _ -> current.text = value.roundToInt().toString() }
++        }
++        row.addView(current)
++        row.addView(slider, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
++        row.addView(end)
++        context.materialAlertDialog()
++            .setTitle(R.string.hayai_go_to_preview_page)
++            .setView(row)
++            .setPositiveButton(android.R.string.ok) { _, _ -> load(slider.value.roundToInt()) }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun openPage(preview: SourcePagePreview) {
++        val manga = manga ?: return
++        val chapter = database.getChapters(manga).executeAsBlocking().minByOrNull { it.source_order } ?: return
++        startActivity(ReaderLauncher.newIntent(requireNotNull(activity), manga, chapter, preview.index - 1))
++    }
++
++    private fun spanCount(view: View): Int = (view.resources.displayMetrics.widthPixels / dp(120)).coerceAtLeast(2)
++
++    private fun dp(value: Int): Int = ((activity?.resources ?: resources)?.displayMetrics?.density?.times(value) ?: value).toInt()
++
++    private inner class PreviewAdapter(
++        private val onClick: (SourcePagePreview) -> Unit,
++    ) : RecyclerView.Adapter<PreviewHolder>() {
++        private var manga: Manga? = null
++        private var items = emptyList<SourcePagePreview>()
++
++        fun submit(manga: Manga, items: List<SourcePagePreview>) {
++            this.manga = manga
++            this.items = items
++            notifyDataSetChanged()
++        }
++
++        fun clear() {
++            items = emptyList()
++            manga = null
++            notifyDataSetChanged()
++        }
++
++        override fun getItemCount(): Int = items.size
++
++        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PreviewHolder {
++            val column = LinearLayout(parent.context).apply {
++                orientation = LinearLayout.VERTICAL
++                gravity = Gravity.CENTER_HORIZONTAL
++                setPadding(dp(4), dp(4), dp(4), dp(8))
++            }
++            val previewFrame = FrameLayout(parent.context).apply {
++                layoutParams = LinearLayout.LayoutParams(dp(120), dp(200))
++            }
++            val image = ImageView(parent.context).apply {
++                scaleType = ImageView.ScaleType.CENTER_CROP
++            }
++            previewFrame.addView(image, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
++            val loading = LoadingIndicator(parent.context)
++            previewFrame.addView(loading, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER))
++            column.addView(previewFrame)
++            val label = TextView(parent.context).apply { gravity = Gravity.CENTER }
++            column.addView(label, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
++            return PreviewHolder(column, image, loading, label)
++        }
++
++        override fun onBindViewHolder(holder: PreviewHolder, position: Int) {
++            val item = items[position]
++            holder.bind(requireNotNull(manga), item)
++            holder.itemView.setOnClickListener { onClick(item) }
++        }
++
++        override fun onViewRecycled(holder: PreviewHolder) = holder.recycle()
++    }
++
++    private inner class PreviewHolder(
++        itemView: View,
++        private val image: ImageView,
++        private val loading: LoadingIndicator,
++        private val label: TextView,
++    ) : RecyclerView.ViewHolder(itemView) {
++        private var generation = 0
++        private var bitmap: Bitmap? = null
++
++        fun bind(manga: Manga, preview: SourcePagePreview) {
++            recycle()
++            label.text = preview.index.toString()
++            image.contentDescription = image.context.getString(R.string.hayai_gallery_page, preview.index)
++            loading.isVisible = true
++            val expectedGeneration = generation
++            viewScope.launchIO {
++                val loaded = runCatching { SourcePreviewBitmapDecoder.decode(previews.loadImage(manga, preview)) }.getOrNull()
++                withUIContext {
++                    if (expectedGeneration == generation && bindingAdapterPosition != RecyclerView.NO_POSITION) {
++                        bitmap = loaded
++                        image.setImageBitmap(loaded)
++                        loading.isVisible = false
++                    } else {
++                        loaded?.recycle()
++                    }
++                }
++            }
++        }
++
++        fun recycle() {
++            generation++
++            image.setImageDrawable(null)
++            loading.isVisible = false
++            bitmap?.takeUnless(Bitmap::isRecycled)?.recycle()
++            bitmap = null
++        }
++    }
++
++    private companion object {
++        const val MANGA_ID = "manga_id"
++        const val MENU_GO_TO = 1
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+index 739bcfe2a4df932962960ce35c6a03d7b24387cb..9c856e365c23572d4005954bc88b7e25e4b00222 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+@@ -61,9 +61,9 @@ import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
+ import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+ import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
+-import dev.ahmedmohamed.hayai.source.preview.SourcePreviewActivity
++import dev.ahmedmohamed.hayai.source.preview.SourcePreviewController
+ import dev.ahmedmohamed.hayai.source.preview.SourcePreviewBitmapDecoder
+-import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataActivity
++import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataController
+ import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
+ import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataUi
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+@@ -1501,7 +1501,7 @@ class MangaDetailsController :
+                         container = container,
+                         document = document,
+                         onMoreInfo = {
+-                            manga.id?.let { startActivity(SourceMetadataActivity.newIntent(container.context, it)) }
++                            manga.id?.let { router.pushController(SourceMetadataController(it).withFadeTransaction()) }
+                         },
+                         onSearch = ::sourceSearch,
+                     )
+@@ -1552,13 +1552,18 @@ class MangaDetailsController :
+                             },
+                         )
+                     }
++                    if (visible.isEmpty()) {
++                        container.addView(TextView(container.context).apply { setText(R.string.no_results_found) })
++                    }
+                     container.addView(
+                         MaterialButton(container.context).apply {
+                             text = context.getString(R.string.hayai_more_previews)
+-                            setOnClickListener { startActivity(SourcePreviewActivity.newIntent(context, requireNotNull(manga.id))) }
++                            setOnClickListener {
++                                router.pushController(SourcePreviewController(requireNotNull(manga.id)).withFadeTransaction())
++                            }
+                         },
+                     )
+-                    featureRoot.visibility = if (visible.isNotEmpty()) View.VISIBLE else View.GONE
++                    featureRoot.visibility = View.VISIBLE
+                 } else {
+                     val error = result.exceptionOrNull()
+                     container.addView(TextView(container.context).apply {
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlanTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlanTest.kt
+index 90e3d03cb6287c4cccc139040db0c168688c939b..2239ee70b6def6df42acde7175a085b34c286b09 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlanTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyImportPlanTest.kt
+@@ -20,4 +20,35 @@ class LegacyImportPlanTest {
+         assertEquals("hayai_eh_favorites", targets["eh_favorites"])
+         assertTrue(LegacyImportPlan.promotedTables.contains("search_metadata"))
+     }
++
++    @Test
++    fun `quote migration preserves identity attribution translations and ordering timestamp`() {
++        val quotePlan = LegacyImportPlan.typedHayaiTables.single { it.sourceTable == "series_quotes" }
++        assertEquals(
++            listOf(
++                "quote_id",
++                "manga_id",
++                "novel_name",
++                "chapter_name",
++                "displayed_content",
++                "original_content",
++                "translated_content",
++                "language",
++                "timestamp",
++            ),
++            quotePlan.columns.map(ColumnCopy::source),
++        )
++        assertTrue(quotePlan.columns.all { it.source == it.target })
++    }
++
++    @Test
++    fun `source metadata keeps its typed row and archives titles and tags for backfill`() {
++        val metadataPlan = LegacyImportPlan.coreTables.single { it.sourceTable == "search_metadata" }
++        assertEquals(
++            listOf("manga_id", "uploader", "extra", "indexed_extra", "extra_version"),
++            metadataPlan.columns.map(ColumnCopy::source),
++        )
++        assertEquals(LegacyDataDisposition.Archived, LegacyDataAudit.disposition("search_titles"))
++        assertEquals(LegacyDataDisposition.Archived, LegacyDataAudit.disposition("search_tags"))
++    }
+ }
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 298e49622f7fc6c731ea919c52fc38c74c2aef69..c24e0cd055db121c98f10120243f4291607f4a99 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -52,7 +52,9 @@ Read-aloud state lives in a Hayai foreground media-playback service rather than
+ 
+ Novel integration uses a small set of presentation adapters rather than parallel J2K models. The library filter delegates content-kind classification to Hayai. Manga details decorate the existing chapter rows with percent, word count, reading time, and verified offline state; the normal download/remove controls delegate novel chapters to `NovelOfflineManager`. J2K statistics aggregate Hayai's derived word data, shortcuts preserve novel identity, and migration searches reject novel-to-image and image-to-novel targets. `NovelSettingsController` owns the complete text-reader preference surface, typed reusable presets, CSS/JavaScript snippets, and bounded text-replacement rules. J2K remains authoritative for chapters, progress, history, categories, and the enclosing screens.
+ 
+-Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. `SettingsAppearanceController` exposes only the inline-row preference adapter; the cache, loaders, metadata documents, and UI state remain Hayai-owned. Tapping a preview routes through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
++The novel reader inflates J2K's existing `reader_activity` and binds its existing app bar, toolbar, viewer container, navigation controls, chapter sheet, and slider. Hayai applies system-bar and display-cutout insets at that shared layout boundary. While reader chrome is visible, the novel viewer starts after the system inset and toolbar height; when chrome visibility changes, the same inset binding recalculates the viewer margin. This avoids a second novel-specific safe-area model and keeps the image-reader activity unchanged.
++
++Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. `SettingsAppearanceController` exposes only the inline-row preference adapter; the cache, loaders, metadata documents, and UI state remain Hayai-owned. Full metadata and previews are Hayai controllers hosted by J2K's existing `MainActivity`, `BaseController`, toolbar, navigation, theme, and safe-area lifecycle. Tapping a preview routes through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
+ 
+ The browse-source presenter and its existing list item/holder form one approved presentation seam for E-Hentai's SY-style rich result rows. The presenter asks a source for an optional immutable `SourceBrowsePresentation`; the item selects J2K's list layout when that presentation exists; and the holder renders its category badge, uploader, rating, language, page count, and date. Parsing, category colors, localization, caching, and source-family recognition remain under `dev.ahmedmohamed.hayai`. Normal sources still take the original grid/list paths without extra work. The same presenter has one generic typed-filter branch for Hayai tag completion, while the E-Hentai catalog, chip state, validation, and suggestions remain Hayai-owned.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index a7760919a971db97d27e5b646f1f72b6d1afb489..6e8e675ffce225a8c2e968311e9a2e5d824fd6f6 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -14,10 +14,10 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; logged-out emulator screen verified; authenticated login pending |
+ | EH source settings, default filters, enhanced details toggle, and remote uconfig | Typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
+ | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
+-| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, SY-style inline/full metadata UI, lazy cached preview pages, full preview browser, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | implemented unverified; authenticated emulator details/search flow pending |
++| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, SY-style inline/full metadata UI, lazy cached preview pages, a J2K-hosted preview controller, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | port; fixture details, metadata, rich browse, autocomplete, empty previews, and cache recovery verified on emulator; authenticated ExHentai remains pending |
+ | 8Muses/EroMuse, HBrowse, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | implemented unverified for the source-specific behavior SY exposes |
+-| Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions plus bounded listing/image caches and a full preview browser | implemented unverified; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not |
+-| Raised metadata, titles, and tags | Additive schema, typed source documents, durable enhanced-source cache, inline summary, and full metadata activity | implemented unverified; emulator source fixtures pending |
++| Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions plus bounded listing/image caches and a J2K-hosted preview controller | port; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not; live authenticated source verification remains pending |
++| Raised metadata, titles, and tags | Additive schema, typed source documents, durable enhanced-source cache, inline summary, and a full metadata controller hosted by J2K navigation | port; E-Hentai fixture verified on emulator |
+ | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
+ | Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | source-supported preview and settings behavior implemented unverified |
+ | Source type and origin badges | Hayai presentation resolver plus SY category colors and EH rich browse adapter | implemented unverified; live browse verification pending |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 12151237d63053d49f7919a7c4215827aedaab7c..f30d62f7e19f73808c612a4d18a9bba3286c2a7c 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -2889,10 +2889,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	require(output.length + read <= limit) { "Enhanced source details exceeded the size limit" }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	return joinToString("\n") { row ->
+ app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt	holder.input.setText("", false)
+-app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataActivity.kt	private const val EXTRA_MANGA_ID = "manga_id"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	EnhancedDescriptionLabel.Tags -> error("Tags are represented by SourceMetadataDocument.tags")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	get() = namespace?.let { "$it:$name" } ?: name
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FAMILY = "hayaiFamily"
++app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt	const val MANGA_ID = "manga_id"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FIELDS = "fields"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Category to extra.string("category"),
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Favorites to extra.string("favoriteCount"),
+@@ -2933,11 +2933,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt	require(imageUrl.startsWith("https://") || imageUrl.startsWith("http://"))
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt	error.message ?: "Page previews could not be loaded",
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreviewSession.kt	val nextIdentity = "${manga.source}:${manga.url}:$page"
+-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt	private const val EXTRA_MANGA_ID = "manga_id"
+-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewActivity.kt	private const val STATE_PAGE = "page"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecoder.kt	"Preview image dimensions are invalid"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecoder.kt	) { "Preview image could not be decoded" }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	.joinToString("") { "%02x".format(it) }
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
+@@ -2945,7 +2944,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	pr
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val listings = File(root, "listings").apply { mkdirs() }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val root = File(context.cacheDir, "hayai_source_previews").apply { mkdirs() }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val files = root.walkTopDown().filter(File::isFile).filterNot { it.extension == "tmp" }.toList()
+-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val temporary = File(directory, "$key.tmp")
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val temporary = File.createTempFile("$key.", ".tmp", directory)
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val MANGA_ID = "manga_id"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt	private const val SOURCE_ID_KEY = "hayai_source_id"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt	Timber.e(error, "Unable to create settings for source %d", configurable.id)
+ app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	"8muses",
+-- 
+2.54.0.windows.1
+

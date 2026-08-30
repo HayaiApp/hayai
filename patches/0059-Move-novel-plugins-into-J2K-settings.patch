@@ -1,0 +1,702 @@
+From e5fc53c9be94c20131c43964d12a4b469777a6ea Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 13:15:13 +0300
+Subject: [PATCH] Move novel plugins into J2K settings
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index ba0d579845f261b2567f405b3322623755cab58e..e484bb3425995338f6c55dd4627913e46c7f8c5e 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -90,3 +90,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T13:05:00+03:00	j2k-novel-settings-navigation	replaced the standalone translation, dictionary, and visual-source-builder activities with J2K SettingsController screens	preserved atomic language-tool validation and every custom-source field, JSON round trip, validation, live preview, and install action while deleting two duplicate activity shells	NovelLanguageToolsSettingsController.kt; NovelCustomSourceBuilderController.kt; NovelSettingsController.kt	COMPILED
+ 2026-08-22T13:22:00+03:00	j2k-novel-extension-navigation	replaced the standalone novel APK manager activity with a J2K SettingsController catalog and the existing J2K novel-repository controller	preserved refresh, update, install, remove, trust-signature, progress, cancellation, and error behavior without a second repository UI	NovelApkExtensionManagerController.kt; RepoController.kt; NovelSettingsController.kt	COMPILED
+ 2026-08-22T13:34:00+03:00	j2k-enhanced-batch-navigation	replaced the standalone enhanced batch-add activity, custom toolbar, and activity-scoped ViewModel with a J2K SettingsController and Hayai coordinator	preserved multiline input, input validation, per-item progress, retry-aware results, summary, cancellation, and duplicate handling while removing the duplicate app shell	EnhancedBatchAddController.kt; EnhancedBatchAddCoordinator; SettingsAdvancedController.kt	COMPILED
++2026-08-22T13:45:00+03:00	j2k-novel-plugin-navigation	replaced the standalone novel plugin manager activity and hand-built cards with a J2K SettingsController catalog	preserved repository add, enable, remove, refresh errors, search, install, update, uninstall, trust warning, and in-progress gating while removing the duplicate app shell	NovelPluginManagerController.kt; SettingsAdvancedController.kt	COMPILED
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 3b6a76977c47585de19cc287ef19d46cb6760ce3..910946ee3dce46aca7de60b98459ef4f96c3a223 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -146,10 +146,6 @@
+             android:name="dev.ahmedmohamed.hayai.novel.reader.NovelTtsPlaybackService"
+             android:exported="false"
+             android:foregroundServiceType="mediaPlayback" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity"
+-            android:exported="false"
+-            android:theme="@style/Theme.Tachiyomi" />
+         <activity
+             android:name="dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity"
+             android:exported="false"
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt
+deleted file mode 100644
+index f9ec78024e6330710c3dd8bdc72546514d0dca98..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt
++++ /dev/null
+@@ -1,346 +0,0 @@
+-package dev.ahmedmohamed.hayai.novel.plugin.ui
+-
+-import android.graphics.Color
+-import android.graphics.Typeface
+-import android.graphics.drawable.GradientDrawable
+-import android.os.Bundle
+-import android.text.InputType
+-import android.view.Gravity
+-import android.view.ViewGroup
+-import android.widget.Button
+-import android.widget.EditText
+-import android.widget.LinearLayout
+-import android.widget.ProgressBar
+-import android.widget.ScrollView
+-import android.widget.TextView
+-import android.widget.Toast
+-import androidx.appcompat.app.AppCompatActivity
+-import androidx.appcompat.app.AlertDialog
+-import androidx.core.view.isVisible
+-import androidx.core.widget.doAfterTextChanged
+-import androidx.lifecycle.Lifecycle
+-import androidx.lifecycle.lifecycleScope
+-import androidx.lifecycle.repeatOnLifecycle
+-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+-import com.google.android.material.switchmaterial.SwitchMaterial
+-import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
+-import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginRepository
+-import eu.kanade.tachiyomi.R
+-import kotlinx.coroutines.launch
+-import uy.kohesive.injekt.Injekt
+-import uy.kohesive.injekt.api.get
+-
+-class NovelPluginManagerActivity : AppCompatActivity() {
+-    private val manager by lazy { Injekt.get<NovelPluginManager>() }
+-    private lateinit var progress: ProgressBar
+-    private lateinit var errorText: TextView
+-    private lateinit var content: LinearLayout
+-    private var query = ""
+-    private var latest = NovelPluginCatalog()
+-    private var actionInProgress: String? = null
+-
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        title = getString(R.string.hayai_novel_plugins)
+-        setContentView(buildScreen())
+-        lifecycleScope.launch {
+-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+-                manager.catalog.collect { state ->
+-                    latest = state
+-                    render()
+-                }
+-            }
+-        }
+-        if (savedInstanceState == null) runAction(getString(R.string.refresh)) { manager.refresh() }
+-    }
+-
+-    private fun buildScreen(): LinearLayout =
+-        LinearLayout(this).apply {
+-            orientation = LinearLayout.VERTICAL
+-            setPadding(dp(16), dp(16), dp(16), dp(16))
+-
+-            addView(
+-                LinearLayout(context).apply {
+-                    gravity = Gravity.CENTER_VERTICAL
+-                    addView(
+-                        TextView(context).apply {
+-                            text = getString(R.string.hayai_novel_plugins)
+-                            textSize = 24f
+-                            setTypeface(typeface, Typeface.BOLD)
+-                        },
+-                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+-                    )
+-                    addView(
+-                        Button(context).apply {
+-                            text = getString(R.string.refresh)
+-                            setOnClickListener { runAction(text.toString()) { manager.refresh() } }
+-                        },
+-                    )
+-                    addView(
+-                        Button(context).apply {
+-                            text = getString(R.string.add)
+-                            setOnClickListener { showAddRepository() }
+-                        },
+-                    )
+-                },
+-            )
+-            addView(
+-                TextView(context).apply {
+-                    text = getString(R.string.hayai_novel_plugins_security_summary)
+-                    setPadding(0, dp(8), 0, dp(8))
+-                },
+-            )
+-            addView(
+-                EditText(context).apply {
+-                    hint = getString(R.string.search)
+-                    inputType = InputType.TYPE_CLASS_TEXT
+-                    doAfterTextChanged {
+-                        query = it?.toString().orEmpty()
+-                        render()
+-                    }
+-                },
+-                matchWidth(),
+-            )
+-            progress =
+-                ProgressBar(context).apply {
+-                    isIndeterminate = true
+-                    isVisible = false
+-                }
+-            addView(
+-                progress,
+-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+-                    gravity =
+-                        Gravity.CENTER_HORIZONTAL
+-                },
+-            )
+-            errorText = TextView(context).apply { setTextColor(Color.RED) }
+-            addView(errorText, matchWidth())
+-            addView(
+-                ScrollView(context).apply {
+-                    content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+-                    addView(content, matchWidth())
+-                },
+-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+-            )
+-        }
+-
+-    private fun render() {
+-        if (!::content.isInitialized) return
+-        progress.isVisible = latest.refreshing || actionInProgress != null
+-        errorText.text = latest.repositoryErrors.entries.joinToString("\n") { (url, error) ->
+-            getString(R.string.hayai_repository_error, url, novelFailureMessage(error, R.string.unknown_error))
+-        }
+-        errorText.isVisible = errorText.text.isNotBlank()
+-        content.removeAllViews()
+-        content.addView(sectionTitle(getString(R.string.hayai_novel_repositories)))
+-        if (latest.repositories.isEmpty()) content.addView(message(getString(R.string.hayai_no_novel_repositories)))
+-        latest.repositories.forEach { content.addView(repositoryRow(it)) }
+-
+-        content.addView(sectionTitle(getString(R.string.hayai_novel_plugins)))
+-        val installedById = latest.installed.associateBy { it.descriptor.id }
+-        val availableById = latest.available.associateBy(NovelPluginDescriptor::id)
+-        val descriptors =
+-            (availableById.keys + installedById.keys)
+-                .mapNotNull { availableById[it] ?: installedById[it]?.descriptor }
+-                .filter { query.isBlank() || it.name.contains(query, true) || it.id.contains(query, true) || it.lang.contains(query, true) }
+-                .sortedWith(compareBy(NovelPluginDescriptor::normalizedLanguage, NovelPluginDescriptor::name))
+-        if (descriptors.isEmpty()) content.addView(message(getString(R.string.hayai_no_novel_plugins)))
+-        descriptors.forEach { descriptor -> content.addView(pluginRow(descriptor, installedById[descriptor.id])) }
+-    }
+-
+-    private fun repositoryRow(repository: NovelPluginRepository): LinearLayout =
+-        card().apply {
+-            addView(
+-                TextView(context).apply {
+-                    // localization-ignore: repository name and URL are runtime data; the newline is layout only.
+-                    text = "${repository.name}\n${repository.url}"
+-                    setTextIsSelectable(true)
+-                },
+-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+-            )
+-            addView(
+-                SwitchMaterial(context).apply {
+-                    isChecked = repository.enabled
+-                    contentDescription = getString(R.string.enable)
+-                    setOnCheckedChangeListener { _, enabled ->
+-                        runAction(repository.name) {
+-                            manager.setRepositoryEnabled(repository.url, enabled)
+-                            manager.refresh()
+-                        }
+-                    }
+-                },
+-            )
+-            addView(
+-                Button(context).apply {
+-                    text = getString(R.string.remove)
+-                    setOnClickListener {
+-                        MaterialAlertDialogBuilder(this@NovelPluginManagerActivity)
+-                            .setTitle(R.string.remove)
+-                            .setMessage(getString(R.string.hayai_remove_repository_confirmation, repository.name))
+-                            .setNegativeButton(android.R.string.cancel, null)
+-                            .setPositiveButton(R.string.remove) { _, _ ->
+-                                runAction(repository.name) {
+-                                    manager.removeRepository(repository.url)
+-                                    manager.refresh()
+-                                }
+-                            }.show()
+-                    }
+-                },
+-            )
+-        }
+-
+-    private fun pluginRow(
+-        descriptor: NovelPluginDescriptor,
+-        installed: InstalledNovelPlugin?,
+-    ): LinearLayout =
+-        card(vertical = true).apply {
+-            addView(
+-                TextView(context).apply {
+-                    text = descriptor.name
+-                    textSize = 17f
+-                    setTypeface(typeface, Typeface.BOLD)
+-                },
+-            )
+-            addView(
+-                TextView(context).apply {
+-                    text =
+-                        buildString {
+-                            append(descriptor.lang).append(" · ").append(descriptor.id)
+-                            append("\n").append(getString(R.string.version)).append(' ').append(descriptor.version)
+-                            if (installed != null) append(" · ").append(getString(R.string.installed))
+-                        }
+-                },
+-            )
+-            addView(
+-                Button(context).apply {
+-                    val update = installed != null && manager.hasUpdate(descriptor.id)
+-                    text =
+-                        when {
+-                            installed == null -> getString(R.string.install)
+-                            update -> getString(R.string.update)
+-                            else -> getString(R.string.uninstall)
+-                        }
+-                    isEnabled = actionInProgress == null
+-                    setOnClickListener {
+-                        when {
+-                            installed == null -> confirmPluginInstall(descriptor)
+-                            update -> confirmPluginInstall(descriptor)
+-                            else -> runAction(descriptor.name) { manager.uninstall(descriptor.id) }
+-                        }
+-                    }
+-                },
+-                matchWidth(),
+-            )
+-        }
+-
+-    private fun confirmPluginInstall(descriptor: NovelPluginDescriptor) {
+-        MaterialAlertDialogBuilder(this)
+-            .setTitle(descriptor.name)
+-            .setMessage(R.string.hayai_novel_plugin_install_warning)
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.install) { _, _ -> runAction(descriptor.name) { manager.install(descriptor.id) } }
+-            .show()
+-    }
+-
+-    private fun showAddRepository() {
+-        val form =
+-            LinearLayout(this).apply {
+-                orientation = LinearLayout.VERTICAL
+-                setPadding(dp(24), 0, dp(24), 0)
+-            }
+-        val name = EditText(this).apply { hint = getString(R.string.name) }
+-        val url =
+-            EditText(this).apply {
+-                setHint(R.string.hayai_novel_plugin_repository_url_hint)
+-                inputType = InputType.TYPE_TEXT_VARIATION_URI
+-            }
+-        form.addView(name, matchWidth())
+-        form.addView(url, matchWidth())
+-        val dialog =
+-            MaterialAlertDialogBuilder(this)
+-            .setTitle(R.string.hayai_add_novel_repository)
+-            .setMessage(R.string.hayai_novel_repository_trust_warning)
+-            .setView(form)
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.add, null)
+-            .create()
+-        dialog.setOnShowListener {
+-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+-                if (actionInProgress != null) return@setOnClickListener
+-                val label = name.text.toString().trim()
+-                actionInProgress = label.ifBlank { getString(R.string.hayai_add_novel_repository) }
+-                render()
+-                lifecycleScope.launch {
+-                    runCatching {
+-                        manager.addRepository(label, url.text.toString().trim())
+-                        manager.refresh()
+-                    }.onSuccess {
+-                        dialog.dismiss()
+-                    }.onFailure {
+-                        url.error = novelFailureMessage(it, R.string.unknown_error)
+-                    }
+-                    actionInProgress = null
+-                    render()
+-                }
+-            }
+-        }
+-        dialog.show()
+-    }
+-
+-    private fun runAction(
+-        label: String,
+-        action: suspend () -> Any?,
+-    ) {
+-        if (actionInProgress != null) return
+-        actionInProgress = label
+-        render()
+-        lifecycleScope.launch {
+-            runCatching { action() }
+-                .onFailure {
+-                    Toast
+-                        .makeText(
+-                            this@NovelPluginManagerActivity,
+-                            novelFailureMessage(it, R.string.unknown_error),
+-                            Toast.LENGTH_LONG,
+-                        ).show()
+-                }
+-            actionInProgress = null
+-            render()
+-        }
+-    }
+-
+-    private fun sectionTitle(value: String) =
+-        TextView(this).apply {
+-            text = value
+-            textSize = 19f
+-            setTypeface(typeface, Typeface.BOLD)
+-            setPadding(0, dp(20), 0, dp(8))
+-        }
+-
+-    private fun message(value: String) =
+-        TextView(this).apply {
+-            text = value
+-            setPadding(0, dp(8), 0, dp(8))
+-        }
+-
+-    private fun card(vertical: Boolean = false) =
+-        LinearLayout(this).apply {
+-            orientation = if (vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+-            gravity = Gravity.CENTER_VERTICAL
+-            setPadding(dp(12), dp(10), dp(12), dp(10))
+-            background =
+-                GradientDrawable().apply {
+-                    cornerRadius = dp(12).toFloat()
+-                    setColor(0x11000000)
+-                }
+-            layoutParams = matchWidth().apply { setMargins(0, dp(4), 0, dp(4)) }
+-        }
+-
+-    private fun matchWidth() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+-
+-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f44c7b904c560e0c71e90a03633d34c9d0d64660
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt
+@@ -0,0 +1,268 @@
++package dev.ahmedmohamed.hayai.novel.plugin.ui
++
++import android.text.InputType
++import android.widget.EditText
++import android.widget.LinearLayout
++import androidx.appcompat.app.AlertDialog
++import androidx.preference.Preference
++import androidx.preference.PreferenceCategory
++import androidx.preference.PreferenceScreen
++import androidx.preference.SwitchPreferenceCompat
++import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
++import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginRepository
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import eu.kanade.tachiyomi.ui.setting.onChange
++import eu.kanade.tachiyomi.ui.setting.onClick
++import eu.kanade.tachiyomi.ui.setting.preference
++import eu.kanade.tachiyomi.ui.setting.preferenceCategory
++import eu.kanade.tachiyomi.ui.setting.switchPreference
++import eu.kanade.tachiyomi.ui.setting.titleRes
++import eu.kanade.tachiyomi.util.system.materialAlertDialog
++import eu.kanade.tachiyomi.util.system.toast
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.collect
++import kotlinx.coroutines.launch
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++
++class NovelPluginManagerController : SettingsController() {
++    private val manager: NovelPluginManager = Injekt.get()
++    private lateinit var status: Preference
++    private lateinit var repositories: PreferenceCategory
++    private lateinit var plugins: PreferenceCategory
++    private var query = ""
++    private var latest = NovelPluginCatalog()
++    private var actionInProgress: String? = null
++    private var collectionJob: Job? = null
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
++        titleRes = R.string.hayai_novel_plugins
++        preferenceCategory {
++            status = preference {
++                summary = context.getString(R.string.hayai_novel_plugins_security_summary)
++                isSelectable = false
++            }
++            preference {
++                title = context.getString(R.string.refresh)
++                onClick { runAction(context.getString(R.string.refresh)) { manager.refresh() } }
++            }
++            preference {
++                title = context.getString(R.string.add)
++                summary = context.getString(R.string.hayai_add_novel_repository)
++                onClick { showAddRepository() }
++            }
++            preference {
++                title = context.getString(R.string.search)
++                onClick { editQuery() }
++            }
++        }
++        repositories = preferenceCategory { title = context.getString(R.string.hayai_novel_repositories) }
++        plugins = preferenceCategory { title = context.getString(R.string.hayai_novel_plugins) }
++        collectionJob = viewScope.launch {
++            manager.catalog.collect {
++                latest = it
++                render()
++            }
++        }
++        runAction(context.getString(R.string.refresh)) { manager.refresh() }
++    }
++
++    override fun onDestroy() {
++        collectionJob?.cancel()
++        super.onDestroy()
++    }
++
++    private fun render() {
++        val context = activity ?: return
++        status.summary = buildString {
++            append(context.getString(R.string.hayai_novel_plugins_security_summary))
++            latest.repositoryErrors.forEach { (url, error) ->
++                appendLine()
++                append(context.getString(R.string.hayai_repository_error, url, context.novelFailureMessage(error, R.string.unknown_error)))
++            }
++            actionInProgress?.let {
++                appendLine()
++                append(it)
++            }
++        }
++        repositories.removeAll()
++        plugins.removeAll()
++        if (latest.repositories.isEmpty()) {
++            repositories.preference {
++                summary = context.getString(R.string.hayai_no_novel_repositories)
++                isSelectable = false
++            }
++        }
++        latest.repositories.forEach(::addRepositoryPreferences)
++
++        val installedById = latest.installed.associateBy { it.descriptor.id }
++        val availableById = latest.available.associateBy(NovelPluginDescriptor::id)
++        val descriptors = (availableById.keys + installedById.keys)
++            .mapNotNull { availableById[it] ?: installedById[it]?.descriptor }
++            .filter { query.isBlank() || it.name.contains(query, true) || it.id.contains(query, true) || it.lang.contains(query, true) }
++            .sortedWith(compareBy(NovelPluginDescriptor::normalizedLanguage, NovelPluginDescriptor::name))
++        if (descriptors.isEmpty()) {
++            plugins.preference {
++                summary = context.getString(R.string.hayai_no_novel_plugins)
++                isSelectable = false
++            }
++        }
++        descriptors.forEach { descriptor -> addPluginPreference(descriptor, installedById[descriptor.id]) }
++    }
++
++    private fun addRepositoryPreferences(repository: NovelPluginRepository) {
++        val context = requireNotNull(activity)
++        repositories.switchPreference {
++            key = "hayai.plugin.repository.${repository.url.hashCode()}"
++            title = repository.name
++            summary = repository.url
++            isChecked = repository.enabled
++            isPersistent = false
++            isEnabled = actionInProgress == null
++            onChange { enabled ->
++                runAction(repository.name) {
++                    manager.setRepositoryEnabled(repository.url, enabled as Boolean)
++                    manager.refresh()
++                }
++                false
++            }
++        }
++        repositories.preference {
++            title = context.getString(R.string.hayai_remove_named_item, repository.name)
++            summary = context.getString(R.string.remove)
++            isEnabled = actionInProgress == null
++            onClick { confirmRepositoryRemoval(repository) }
++        }
++    }
++
++    private fun addPluginPreference(descriptor: NovelPluginDescriptor, installed: InstalledNovelPlugin?) {
++        val context = requireNotNull(activity)
++        val update = installed != null && manager.hasUpdate(descriptor.id)
++        plugins.preference {
++            title = descriptor.name
++            summary = buildString {
++                append(descriptor.lang).append(" · ").append(descriptor.id)
++                appendLine()
++                append(context.getString(R.string.version)).append(' ').append(descriptor.version)
++                if (installed != null) append(" · ").append(context.getString(R.string.installed))
++                appendLine()
++                append(
++                    context.getString(
++                        when {
++                            installed == null -> R.string.install
++                            update -> R.string.update
++                            else -> R.string.uninstall
++                        },
++                    ),
++                )
++            }
++            isEnabled = actionInProgress == null
++            onClick {
++                when {
++                    installed == null || update -> confirmPluginInstall(descriptor)
++                    else -> runAction(descriptor.name) { manager.uninstall(descriptor.id) }
++                }
++            }
++        }
++    }
++
++    private fun editQuery() {
++        val context = activity ?: return
++        val input = EditText(context).apply {
++            setText(query)
++            setSelection(text.length)
++        }
++        context.materialAlertDialog()
++            .setTitle(R.string.search)
++            .setView(input)
++            .setPositiveButton(android.R.string.ok) { _, _ ->
++                query = input.text.toString()
++                render()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun confirmRepositoryRemoval(repository: NovelPluginRepository) {
++        val context = activity ?: return
++        context.materialAlertDialog()
++            .setTitle(R.string.remove)
++            .setMessage(context.getString(R.string.hayai_remove_repository_confirmation, repository.name))
++            .setNegativeButton(android.R.string.cancel, null)
++            .setPositiveButton(R.string.remove) { _, _ ->
++                runAction(repository.name) {
++                    manager.removeRepository(repository.url)
++                    manager.refresh()
++                }
++            }
++            .show()
++    }
++
++    private fun confirmPluginInstall(descriptor: NovelPluginDescriptor) {
++        val context = activity ?: return
++        context.materialAlertDialog()
++            .setTitle(descriptor.name)
++            .setMessage(R.string.hayai_novel_plugin_install_warning)
++            .setNegativeButton(android.R.string.cancel, null)
++            .setPositiveButton(R.string.install) { _, _ -> runAction(descriptor.name) { manager.install(descriptor.id) } }
++            .show()
++    }
++
++    private fun showAddRepository() {
++        val context = activity ?: return
++        val form = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
++        val name = EditText(context).apply { setHint(R.string.name) }
++        val url = EditText(context).apply {
++            setHint(R.string.hayai_novel_plugin_repository_url_hint)
++            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
++        }
++        form.addView(name)
++        form.addView(url)
++        val dialog = context.materialAlertDialog()
++            .setTitle(R.string.hayai_add_novel_repository)
++            .setMessage(R.string.hayai_novel_repository_trust_warning)
++            .setView(form)
++            .setNegativeButton(android.R.string.cancel, null)
++            .setPositiveButton(R.string.add, null)
++            .create()
++        dialog.setOnShowListener {
++            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
++                if (actionInProgress != null) return@setOnClickListener
++                val label = name.text.toString().trim()
++                actionInProgress = label.ifBlank { context.getString(R.string.hayai_add_novel_repository) }
++                render()
++                viewScope.launch {
++                    runCatching {
++                        manager.addRepository(label, url.text.toString().trim())
++                        manager.refresh()
++                    }.onSuccess {
++                        dialog.dismiss()
++                    }.onFailure {
++                        url.error = context.novelFailureMessage(it, R.string.unknown_error)
++                    }
++                    actionInProgress = null
++                    render()
++                }
++            }
++        }
++        dialog.show()
++    }
++
++    private fun runAction(label: String, action: suspend () -> Any?) {
++        if (actionInProgress != null) return
++        val context = activity ?: return
++        actionInProgress = label
++        render()
++        viewScope.launch {
++            runCatching { action() }
++                .onFailure { context.toast(context.novelFailureMessage(it, R.string.unknown_error)) }
++            actionInProgress = null
++            render()
++        }
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+index 42044c7b6fe16c037e526cb835a2d4176360558d..d8300e0b0ab9c5e7b9bedc76cd2e02d625394c15 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+@@ -15,7 +15,7 @@ import androidx.core.net.toUri
+ import androidx.lifecycle.lifecycleScope
+ import androidx.preference.PreferenceScreen
+ import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+-import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
++import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerController
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddController
+@@ -111,7 +111,7 @@ class SettingsAdvancedController : SettingsController() {
+                 preference {
+                     titleRes = R.string.hayai_novel_plugins
+                     summaryRes = R.string.hayai_novel_plugins_summary
+-                    onClick { startActivity(Intent(context, NovelPluginManagerActivity::class.java)) }
++                    onClick { router.pushController(NovelPluginManagerController().withFadeTransaction()) }
+                 }
+ 
+                 preference {
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index cd52f33b5ec4529936d8974e40b8f8024cfbf05f..58f8e7281562b43e01351fab90b8785627dd0c14 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -1967,12 +1967,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	val type = settingObj["type"]?.jsonPrimitive?.content ?: "Text"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	value.replace(Regex("/{2,}"), "/")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	when (obj["status"]?.jsonPrimitive?.content) {
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	append("\n").append(getString(R.string.version)).append(' ').append(descriptor.version)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	append(descriptor.lang).append(" · ").append(descriptor.id)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	errorText.text = latest.repositoryErrors.entries.joinToString("\n") { (url, error) ->
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	if (installed != null) append(" · ").append(getString(R.string.installed))
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	private var query = ""
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerActivity.kt	text = "${repository.name}\n${repository.url}"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	append(descriptor.lang).append(" · ").append(descriptor.id)
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	if (installed != null) append(" · ").append(context.getString(R.string.installed))
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	key = "hayai.plugin.repository.${repository.url.hashCode()}"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	private var query = ""
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	.observesTables("hayai_quotes")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	.query("SELECT $COLUMNS FROM hayai_quotes WHERE manga_id = ? ORDER BY timestamp DESC, quote_id")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	"quote_id, manga_id, novel_name, chapter_name, displayed_content, original_content, translated_content, language, timestamp"
+-- 
+2.54.0.windows.1
+

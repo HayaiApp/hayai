@@ -1,0 +1,526 @@
+From 4acd81873f3be63950acac3716aad3ba14a3fdc7 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 17:58:34 +0300
+Subject: [PATCH] Make legacy migration recoverable and auditable
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 407f4b68db118c05e4acf871a6c0d597976a68f7..27c47bf5624c8fd39a4329d1834ecc82cbf0c231 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -16,3 +16,6 @@ ts	phase	decision	why	evidence	result
+ 2026-08-20T15:10:00Z	reader	built a dedicated novel reader with safe document processing, assets, progress, navigation, TTS, and controls	kept novel behavior inside the Hayai boundary instead of changing J2K's image reader	app/src/main/java/dev/ahmedmohamed/hayai/novel/reader	VERIFIED
+ 2026-08-20T15:20:00Z	validation	ran the upstream-boundary gate and the complete focused novel test suite	proved the protected lifecycle and image-reader files stayed untouched and all novel formats plus reader helpers remained green	tools/verify-upstream-boundary.ps1; gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.*	114 tests green
+ 2026-08-20T15:30:00Z	review	fixed independent reader audit findings before commit	bound persistence to captured chapters, blocked WebView navigation, made lifecycle saves durable, and rejected stale or failed TTS utterances	app/src/main/java/dev/ahmedmohamed/hayai/novel/reader	FIXED
++2026-08-20T15:42:00Z	validation	superseded the earlier reader test count after adding progress regression coverage	the complete focused novel suite includes format, reader, persistence, navigation, TTS, and progress helpers	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.*	117 tests green
++2026-08-20T16:05:00Z	migration	made the legacy import retry-safe and explicitly auditable	failed automatic imports no longer loop on app start, support-triggered retries remain possible, and every v36 table is checked against the preserved schema	tools/verify-legacy-schema-audit.ps1; app/src/main/java/dev/ahmedmohamed/hayai/migration	VERIFIED
++2026-08-20T16:22:00Z	review	closed the independent migration audit	wired explicit recovery into Advanced settings and made schema classification verification exact rather than textual	app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt; tools/verify-legacy-schema-audit.ps1	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt b/app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt
+index cf9cd05563ff166c6148415024e0c9054cf4d89f..3a66cb03a3a15d21add871c48930da34b8ba3df4 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt
+@@ -10,6 +10,7 @@ import androidx.core.database.getLongOrNull
+ import androidx.core.database.getStringOrNull
+ import androidx.sqlite.db.SupportSQLiteDatabase
+ import org.json.JSONObject
++import java.security.MessageDigest
+ import timber.log.Timber
+ 
+ class HayaiLegacyMigration(
+@@ -18,8 +19,20 @@ class HayaiLegacyMigration(
+     private val legacyFile = context.getDatabasePath(LEGACY_DATABASE_NAME)
+ 
+     fun runIfNeeded(target: SupportSQLiteDatabase) {
++        run(target, explicitRetry = false)
++    }
++
++    /** Explicit user/support action for retrying a previously failed, rolled-back import. */
++    fun retry(target: SupportSQLiteDatabase) {
++        run(target, explicitRetry = true)
++    }
++
++    private fun run(
++        target: SupportSQLiteDatabase,
++        explicitRetry: Boolean,
++    ) {
+         HayaiSchema.ensure(target)
+-        if (!legacyFile.isFile || migrationState(target) != null) return
++        if (!legacyFile.isFile || !MigrationRunPolicy.shouldRun(migrationState(target), explicitRetry)) return
+ 
+         val startedAt = System.currentTimeMillis()
+         val legacy =
+@@ -52,31 +65,36 @@ class HayaiLegacyMigration(
+             }
+ 
+             val counts = linkedMapOf<String, Int>()
++            var failure: Exception? = null
++            var transactionStarted = false
+             try {
+                 target.beginTransaction()
++                transactionStarted = true
+                 LegacyImportPlan.coreTables.forEach { counts[it.targetTable] = copyTable(source, target, it) }
+                 LegacyImportPlan.typedHayaiTables.forEach { counts[it.targetTable] = copyTable(source, target, it) }
+-                counts["hayai_legacy_rows"] = archiveAllTables(source, target)
++                val archivedCounts = archiveAllTables(source, target)
++                archivedCounts.forEach { (table, count) -> counts["archive:$table"] = count }
++                counts["hayai_legacy_rows"] = archivedCounts.values.sum()
+                 val foreignKeyErrors = foreignKeyErrors(target)
+                 check(foreignKeyErrors == 0) { "Imported database has $foreignKeyErrors foreign-key violations" }
+                 recordSuccess(target, startedAt, legacyVersion, counts)
+                 target.setTransactionSuccessful()
+             } catch (error: Exception) {
+                 Timber.e(error, "Hayai legacy data import failed")
+-                recordFailureAfterRollback = Triple(startedAt, legacyVersion, error)
++                failure = error
+             } finally {
+-                target.endTransaction()
++                if (transactionStarted) {
++                    try {
++                        target.endTransaction()
++                    } catch (endError: Exception) {
++                        failure?.addSuppressed(endError) ?: run { failure = endError }
++                    }
++                }
+             }
+-        }
+-
+-        recordFailureAfterRollback?.let { (startedAt, version, error) ->
+-            recordFailure(target, startedAt, version, error)
+-            recordFailureAfterRollback = null
++            failure?.let { error -> recordFailure(target, startedAt, legacyVersion, error) }
+         }
+     }
+ 
+-    private var recordFailureAfterRollback: Triple<Long, Int, Exception>? = null
+-
+     private fun copyTable(
+         source: SQLiteDatabase,
+         target: SupportSQLiteDatabase,
+@@ -99,14 +117,15 @@ class HayaiLegacyMigration(
+     private fun archiveAllTables(
+         source: SQLiteDatabase,
+         target: SupportSQLiteDatabase,
+-    ): Int {
+-        var archived = 0
++    ): Map<String, Int> {
++        val archived = linkedMapOf<String, Int>()
+         val tables = mutableListOf<String>()
+         source.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", null).use { cursor ->
+             while (cursor.moveToNext()) tables += cursor.getString(0)
+         }
+         tables.sorted().forEach { table ->
+             var row = 0L
++            val duplicateKeys = mutableMapOf<String, Int>()
+             source.rawQuery("SELECT * FROM ${quoteIdentifier(table)}", null).use { cursor ->
+                 while (cursor.moveToNext()) {
+                     val payload = JSONObject()
+@@ -114,7 +133,11 @@ class HayaiLegacyMigration(
+                         payload.put(cursor.getColumnName(index), cursorValue(cursor, index) ?: JSONObject.NULL)
+                     }
+                     val stableKey = firstStableKey(cursor) ?: "row"
+-                    val key = "$stableKey#row=$row"
++                    val payloadHash = sha256(payload.toString())
++                    val contentKey = "$stableKey#sha256=$payloadHash"
++                    val duplicate = duplicateKeys.getOrDefault(contentKey, 0)
++                    duplicateKeys[contentKey] = duplicate + 1
++                    val key = if (duplicate == 0) contentKey else "$contentKey#duplicate=$duplicate"
+                     val values =
+                         ContentValues(3).apply {
+                             put("table_name", table)
+@@ -123,9 +146,9 @@ class HayaiLegacyMigration(
+                         }
+                     target.insert("hayai_legacy_rows", SQLiteDatabase.CONFLICT_REPLACE, values)
+                     row++
+-                    archived++
+                 }
+             }
++            archived[table] = row.toInt()
+         }
+         return archived
+     }
+@@ -232,6 +255,12 @@ class HayaiLegacyMigration(
+ 
+     private fun quoteIdentifier(value: String): String = "\"${value.replace("\"", "\"\"")}\""
+ 
++    private fun sha256(value: String): String =
++        MessageDigest
++            .getInstance("SHA-256")
++            .digest(value.toByteArray(Charsets.UTF_8))
++            .joinToString("") { byte -> "%02x".format(byte) }
++
+     companion object {
+         const val ACTIVE_DATABASE_NAME = "hayai-j2k.db"
+         const val LEGACY_DATABASE_NAME = "tachiyomi.db"
+@@ -239,3 +268,10 @@ class HayaiLegacyMigration(
+         const val MINIMUM_SUPPORTED_LEGACY_VERSION = 36
+     }
+ }
++
++internal object MigrationRunPolicy {
++    fun shouldRun(
++        status: String?,
++        explicitRetry: Boolean,
++    ): Boolean = status == null || (status == "failed" && explicitRetry)
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyArchiveStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyArchiveStore.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..2bedc079bbb507a43f49eeee60d0b1cd6ecf3e8f
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyArchiveStore.kt
+@@ -0,0 +1,53 @@
++package dev.ahmedmohamed.hayai.migration
++
++import androidx.sqlite.db.SupportSQLiteDatabase
++import org.json.JSONObject
++
++class LegacyArchiveStore(
++    private val database: SupportSQLiteDatabase,
++) {
++    fun tables(): List<LegacyArchivedTable> =
++        database.query(
++            "SELECT table_name, count(*) FROM hayai_legacy_rows GROUP BY table_name ORDER BY table_name",
++        ).use { cursor ->
++            buildList {
++                while (cursor.moveToNext()) add(LegacyArchivedTable(cursor.getString(0), cursor.getInt(1)))
++            }
++        }
++
++    fun rows(table: String): List<LegacyArchivedRow> =
++        database.query(
++            "SELECT legacy_key, payload_json FROM hayai_legacy_rows WHERE table_name = ? ORDER BY legacy_key",
++            arrayOf(table),
++        ).use { cursor ->
++            buildList {
++                while (cursor.moveToNext()) {
++                    add(LegacyArchivedRow(table, cursor.getString(0), JSONObject(cursor.getString(1))))
++                }
++            }
++        }
++
++    fun find(
++        table: String,
++        legacyKey: String,
++    ): LegacyArchivedRow? =
++        database.query(
++            "SELECT payload_json FROM hayai_legacy_rows WHERE table_name = ? AND legacy_key = ?",
++            arrayOf(table, legacyKey),
++        ).use { cursor ->
++            cursor.takeIf { it.moveToFirst() }?.let {
++                LegacyArchivedRow(table, legacyKey, JSONObject(it.getString(0)))
++            }
++        }
++}
++
++data class LegacyArchivedTable(
++    val name: String,
++    val rowCount: Int,
++)
++
++data class LegacyArchivedRow(
++    val table: String,
++    val legacyKey: String,
++    val payload: JSONObject,
++)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyDataAudit.kt b/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyDataAudit.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..47c738fb004eb80c96c6a5f73238652c908ee010
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyDataAudit.kt
+@@ -0,0 +1,61 @@
++package dev.ahmedmohamed.hayai.migration
++
++enum class LegacyDataDisposition {
++    Core,
++    TypedSidecar,
++    Archived,
++}
++
++/** The known Hayai v36 tables and the migration boundary that owns each one. */
++object LegacyDataAudit {
++    private val CORE_TABLES =
++        setOf(
++            "categories",
++            "chapters",
++            "history",
++            "manga_sync",
++            "mangas",
++            "mangas_categories",
++            "search_metadata",
++        )
++
++    private val TYPED_SIDECAR_TABLES =
++        setOf(
++            "series_quotes",
++            "novel_repos",
++            "novel_chapter_stats",
++            "eh_favorites",
++        )
++
++    private val ARCHIVED_TABLES =
++        setOf(
++            "custom_manga_info",
++            "excluded_scanlators",
++            "extension_repos",
++            "feed_saved_search",
++            "merged",
++            "recents_hidden",
++            "saved_search",
++            "search_tags",
++            "search_titles",
++            "series_translation_canon",
++            "series_translation_entities",
++            "series_translation_relationships",
++            "series_translation_events",
++            "series_translation_nudges",
++            "series_metadata_values",
++            "series_metadata_choices",
++            "series_display_options",
++            "chapter_translation_cache",
++            "chapter_translation_queue",
++        )
++
++    val knownTables: Map<String, LegacyDataDisposition> =
++        buildMap {
++            CORE_TABLES.forEach { put(it, LegacyDataDisposition.Core) }
++            TYPED_SIDECAR_TABLES.forEach { put(it, LegacyDataDisposition.TypedSidecar) }
++            ARCHIVED_TABLES.forEach { put(it, LegacyDataDisposition.Archived) }
++        }
++
++    fun disposition(table: String): LegacyDataDisposition = knownTables[table] ?: LegacyDataDisposition.Archived
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt b/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a6adeefb685d8c9ba53c3e470d1ab425d41dba9a
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyMigrationRetryRequest.kt
+@@ -0,0 +1,25 @@
++package dev.ahmedmohamed.hayai.migration
++
++import android.content.Context
++
++/** Persistent hand-off between Advanced settings and the next database open. */
++class LegacyMigrationRetryRequest(
++    context: Context,
++) {
++    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
++
++    fun request() {
++        preferences.edit().putBoolean(KEY_REQUESTED, true).apply()
++    }
++
++    fun isRequested(): Boolean = preferences.getBoolean(KEY_REQUESTED, false)
++
++    fun clear() {
++        preferences.edit().remove(KEY_REQUESTED).apply()
++    }
++
++    private companion object {
++        const val PREFERENCES_NAME = "hayai_legacy_migration"
++        const val KEY_REQUESTED = "retry_requested"
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt b/app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt
+index 7d526d28e39d132c0ab246820b7cc8b8c5444d93..e83a4a69876341697e23a0f3d314188ba0c0888b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt
+@@ -5,6 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
+ import androidx.sqlite.db.SupportSQLiteOpenHelper
+ import dev.ahmedmohamed.hayai.migration.HayaiLegacyMigration
+ import dev.ahmedmohamed.hayai.migration.HayaiSchema
++import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+ import eu.kanade.tachiyomi.data.database.tables.CategoryTable
+ import eu.kanade.tachiyomi.data.database.tables.ChapterTable
+ import eu.kanade.tachiyomi.data.database.tables.HistoryTable
+@@ -16,6 +17,7 @@ class DbOpenCallback(
+     context: Context,
+ ) : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
+     private val hayaiMigration = HayaiLegacyMigration(context.applicationContext)
++    private val migrationRetry = LegacyMigrationRetryRequest(context.applicationContext)
+ 
+     companion object {
+         /**
+@@ -35,7 +37,15 @@ class DbOpenCallback(
+         setPragma(db, "journal_mode = WAL")
+         setPragma(db, "synchronous = NORMAL")
+         HayaiSchema.ensure(db)
+-        hayaiMigration.runIfNeeded(db)
++        if (migrationRetry.isRequested()) {
++            try {
++                hayaiMigration.retry(db)
++            } finally {
++                migrationRetry.clear()
++            }
++        } else {
++            hayaiMigration.runIfNeeded(db)
++        }
+     }
+ 
+     private fun setPragma(
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+index 89d2e877f85257824aab48aa4f9b2ca63b9b954e..3e6673bd01657702a27479bc35ed98ed17f50071 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
+ import androidx.core.net.toUri
+ import androidx.lifecycle.lifecycleScope
+ import androidx.preference.PreferenceScreen
++import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+@@ -114,6 +115,16 @@ class SettingsAdvancedController : SettingsController() {
+                     key = hayaiPreferences.lewdLibraryFilter.key()
+                     defaultValue = hayaiPreferences.lewdLibraryFilter.defaultValue()
+                 }
++
++                preference {
++                    titleRes = R.string.hayai_retry_legacy_migration
++                    summaryRes = R.string.hayai_retry_legacy_migration_summary
++
++                    onClick {
++                        LegacyMigrationRetryRequest(context.applicationContext).request()
++                        context.toast(R.string.hayai_retry_legacy_migration_scheduled)
++                    }
++                }
+             }
+ 
+             preference {
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index fc43027d4566cfbfdf8d76d9b08ac467fa07f7d1..6db4956c41c510a385e1208446e36ed84c83b06c 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -15,6 +15,9 @@
+     <string name="hayai_lewd_show">Show</string>
+     <string name="hayai_lewd_hide">Hide</string>
+     <string name="hayai_lewd_only">Show only</string>
++    <string name="hayai_retry_legacy_migration">Retry legacy data migration</string>
++    <string name="hayai_retry_legacy_migration_summary">Schedule one explicit retry on the next app start. Existing J2K data is never overwritten.</string>
++    <string name="hayai_retry_legacy_migration_scheduled">Migration retry scheduled for the next app start</string>
+ 
+     <!--Models-->
+ 
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyDataAuditTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyDataAuditTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..17d2c496d664ffefea5e3c2bde9fdc0ab0130912
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/migration/LegacyDataAuditTest.kt
+@@ -0,0 +1,40 @@
++package dev.ahmedmohamed.hayai.migration
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Test
++
++class LegacyDataAuditTest {
++    @Test
++    fun `every promoted table has one explicit disposition`() {
++        val core = LegacyImportPlan.coreTables.mapTo(mutableSetOf()) { it.sourceTable }
++        val typed = LegacyImportPlan.typedHayaiTables.mapTo(mutableSetOf()) { it.sourceTable }
++        assertEquals(core.size + typed.size, (core + typed).size)
++        assertEquals(core, LegacyDataAudit.knownTables.filterValues { it == LegacyDataDisposition.Core }.keys)
++        assertEquals(typed, LegacyDataAudit.knownTables.filterValues { it == LegacyDataDisposition.TypedSidecar }.keys)
++        (core + typed).forEach { table -> assertFalse(LegacyDataAudit.disposition(table) == LegacyDataDisposition.Archived) }
++    }
++
++    @Test
++    fun `all known Hayai v36 schema tables are catalogued`() {
++        assertEquals(KNOWN_V36_TABLES, LegacyDataAudit.knownTables.keys)
++    }
++
++    @Test
++    fun `unknown future tables remain losslessly archived`() {
++        assertEquals(LegacyDataDisposition.Archived, LegacyDataAudit.disposition("future_hayai_table"))
++    }
++
++    private companion object {
++        val KNOWN_V36_TABLES =
++            setOf(
++                "categories", "chapters", "custom_manga_info", "eh_favorites", "excluded_scanlators",
++                "extension_repos", "feed_saved_search", "history", "manga_sync", "mangas", "mangas_categories",
++                "merged", "novel_repos", "novel_chapter_stats", "recents_hidden", "saved_search", "search_metadata",
++                "search_tags", "search_titles", "series_translation_canon", "series_translation_entities",
++                "series_translation_relationships", "series_translation_events", "series_translation_nudges",
++                "series_metadata_values", "series_metadata_choices", "series_display_options", "series_quotes",
++                "chapter_translation_cache", "chapter_translation_queue",
++            )
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/migration/MigrationRunPolicyTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/migration/MigrationRunPolicyTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4b9dc9eb82ca4579b1f49184bac04f1bc55d3318
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/migration/MigrationRunPolicyTest.kt
+@@ -0,0 +1,23 @@
++package dev.ahmedmohamed.hayai.migration
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class MigrationRunPolicyTest {
++    @Test
++    fun `automatic migration runs once and never loops after a durable result`() {
++        assertTrue(MigrationRunPolicy.shouldRun(null, explicitRetry = false))
++        assertFalse(MigrationRunPolicy.shouldRun("failed", explicitRetry = false))
++        assertFalse(MigrationRunPolicy.shouldRun("running", explicitRetry = false))
++        assertFalse(MigrationRunPolicy.shouldRun("complete", explicitRetry = false))
++    }
++
++    @Test
++    fun `explicit retry only reopens a failed migration`() {
++        assertTrue(MigrationRunPolicy.shouldRun(null, explicitRetry = true))
++        assertTrue(MigrationRunPolicy.shouldRun("failed", explicitRetry = true))
++        assertFalse(MigrationRunPolicy.shouldRun("running", explicitRetry = true))
++        assertFalse(MigrationRunPolicy.shouldRun("complete", explicitRetry = true))
++    }
++}
+diff --git a/tools/verify-legacy-schema-audit.ps1 b/tools/verify-legacy-schema-audit.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..842af314cafcfb8240f2a2e02842bb10aa3c6889
+--- /dev/null
++++ b/tools/verify-legacy-schema-audit.ps1
+@@ -0,0 +1,41 @@
++$ErrorActionPreference = "Stop"
++
++$legacyRef = "legacy/hayai-pre-j2k"
++$schemaRoot = "data/src/commonMain/sqldelight/tachiyomi/data/"
++$auditFile = "app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyDataAudit.kt"
++
++$schemaFiles = git ls-tree -r --name-only $legacyRef -- $schemaRoot
++if ($LASTEXITCODE -ne 0 -or -not $schemaFiles) {
++    throw "Unable to read the legacy Hayai schema from $legacyRef"
++}
++
++$schemaTables = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
++foreach ($schemaFile in $schemaFiles) {
++    if (-not $schemaFile.EndsWith(".sq")) { continue }
++    $schema = git show "${legacyRef}:$schemaFile"
++    if ($LASTEXITCODE -ne 0) { throw "Unable to read $schemaFile from $legacyRef" }
++    foreach ($line in $schema) {
++        if ($line -match '^CREATE TABLE(?: IF NOT EXISTS)?\s+([A-Za-z0-9_]+)') {
++            [void]$schemaTables.Add($Matches[1])
++        }
++    }
++}
++
++$auditText = Get-Content -LiteralPath $auditFile -Raw
++$classifiedTables = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
++foreach ($setName in @("CORE_TABLES", "TYPED_SIDECAR_TABLES", "ARCHIVED_TABLES")) {
++    $match = [regex]::Match($auditText, "(?s)$setName\s*=\s*setOf\((.*?)\)\s*")
++    if (-not $match.Success) { throw "Unable to parse production classification set $setName" }
++    foreach ($tableMatch in [regex]::Matches($match.Groups[1].Value, '"([A-Za-z0-9_]+)"')) {
++        $table = $tableMatch.Groups[1].Value
++        if (-not $classifiedTables.Add($table)) { throw "Table $table has more than one production disposition" }
++    }
++}
++
++$missing = @($schemaTables | Where-Object { -not $classifiedTables.Contains($_) } | Sort-Object)
++$extra = @($classifiedTables | Where-Object { -not $schemaTables.Contains($_) } | Sort-Object)
++if ($missing.Count -gt 0 -or $extra.Count -gt 0) {
++    throw "Legacy schema classification mismatch. Missing: $($missing -join ', '); extra: $($extra -join ', ')"
++}
++
++Write-Host "Legacy schema audit verified: $($schemaTables.Count) v36 tables are classified."
+-- 
+2.54.0.windows.1
+

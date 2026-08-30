@@ -1,0 +1,441 @@
+From cc564128f7c5eb8a875bf483f12f3d738cc41b25 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 13:11:27 +0300
+Subject: [PATCH] Move batch add into J2K settings
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index e925b1bd88d0cb1ba5f59c3220cd0d151577dce7..ba0d579845f261b2567f405b3322623755cab58e 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -89,3 +89,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T12:34:00+03:00	migration-fixture-evidence	verified the restored emulator fixture retains the promoted quote and source-metadata rows plus the lossless archived legacy rows	preserved quote attribution, original and translated fields, language, timestamp, metadata, durable migration completion, and foreign-key integrity	artifacts/emulator-verification/hayai-state-before-controller.tgz; LegacyImportPlanTest.kt	VERIFIED
+ 2026-08-22T13:05:00+03:00	j2k-novel-settings-navigation	replaced the standalone translation, dictionary, and visual-source-builder activities with J2K SettingsController screens	preserved atomic language-tool validation and every custom-source field, JSON round trip, validation, live preview, and install action while deleting two duplicate activity shells	NovelLanguageToolsSettingsController.kt; NovelCustomSourceBuilderController.kt; NovelSettingsController.kt	COMPILED
+ 2026-08-22T13:22:00+03:00	j2k-novel-extension-navigation	replaced the standalone novel APK manager activity with a J2K SettingsController catalog and the existing J2K novel-repository controller	preserved refresh, update, install, remove, trust-signature, progress, cancellation, and error behavior without a second repository UI	NovelApkExtensionManagerController.kt; RepoController.kt; NovelSettingsController.kt	COMPILED
++2026-08-22T13:34:00+03:00	j2k-enhanced-batch-navigation	replaced the standalone enhanced batch-add activity, custom toolbar, and activity-scoped ViewModel with a J2K SettingsController and Hayai coordinator	preserved multiline input, input validation, per-item progress, retry-aware results, summary, cancellation, and duplicate handling while removing the duplicate app shell	EnhancedBatchAddController.kt; EnhancedBatchAddCoordinator; SettingsAdvancedController.kt	COMPILED
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 3920d3fbdc48cb75b7bf77e2fef112c0bac4909a..3b6a76977c47585de19cc287ef19d46cb6760ce3 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -159,10 +159,6 @@
+             android:configChanges="uiMode|orientation|screenSize"
+             android:exported="false"
+             android:theme="@style/Theme.Tachiyomi" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity"
+-            android:exported="false"
+-            android:theme="@style/Theme.Tachiyomi" />
+         <activity
+             android:name="dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity"
+             android:exported="false"
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddActivity.kt
+deleted file mode 100644
+index 93f8fcebce617099a23318d6409b4ac7305e5ea3..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddActivity.kt
++++ /dev/null
+@@ -1,157 +0,0 @@
+-package dev.ahmedmohamed.hayai.source.enhanced.batch
+-
+-import android.content.Context
+-import android.content.Intent
+-import android.os.Bundle
+-import android.text.Editable
+-import android.text.TextWatcher
+-import android.view.ViewGroup
+-import android.widget.EditText
+-import android.widget.LinearLayout
+-import android.widget.ScrollView
+-import android.widget.TextView
+-import androidx.core.view.setPadding
+-import androidx.activity.viewModels
+-import androidx.lifecycle.Lifecycle
+-import androidx.lifecycle.lifecycleScope
+-import androidx.lifecycle.repeatOnLifecycle
+-import androidx.viewbinding.ViewBinding
+-import com.google.android.material.appbar.MaterialToolbar
+-import com.google.android.material.button.MaterialButton
+-import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
+-import eu.kanade.tachiyomi.util.system.dpToPx
+-import kotlinx.coroutines.launch
+-
+-class EnhancedBatchAddActivity : BaseActivity<ViewBinding>() {
+-    private val viewModel by viewModels<EnhancedBatchAddViewModel>()
+-    private lateinit var input: EditText
+-    private lateinit var start: MaterialButton
+-    private lateinit var cancel: MaterialButton
+-    private lateinit var output: TextView
+-    private var rendering = false
+-
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        title = getString(R.string.hayai_enhanced_batch_title)
+-        setContentView(buildContent())
+-        savedInstanceState?.getString(STATE_INPUT)?.let(viewModel::updateInput)
+-        lifecycleScope.launch {
+-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+-                viewModel.state.collect(::render)
+-            }
+-        }
+-    }
+-
+-    override fun onSaveInstanceState(outState: Bundle) {
+-        outState.putString(STATE_INPUT, input.text.toString())
+-        super.onSaveInstanceState(outState)
+-    }
+-
+-    private fun buildContent(): LinearLayout {
+-        val root = LinearLayout(this).apply {
+-            orientation = LinearLayout.VERTICAL
+-            setPadding(16.dpToPx)
+-        }
+-        root.addView(MaterialToolbar(this).apply {
+-            title = getString(R.string.hayai_enhanced_batch_title)
+-            setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
+-            setNavigationOnClickListener { finish() }
+-        }, matchWidth())
+-        root.addView(TextView(this).apply {
+-            text = getString(R.string.hayai_enhanced_batch_instructions)
+-        }, matchWidth())
+-        input = EditText(this).apply {
+-            hint = getString(R.string.hayai_enhanced_batch_hint)
+-            minLines = 6
+-            maxLines = 14
+-            addTextChangedListener(object : TextWatcher {
+-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+-                    if (!rendering) viewModel.updateInput(s?.toString().orEmpty())
+-                }
+-                override fun afterTextChanged(s: Editable?) = Unit
+-            })
+-        }
+-        root.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+-        start = MaterialButton(this).apply {
+-            text = getString(R.string.add_to_library)
+-            setOnClickListener { viewModel.start() }
+-        }
+-        cancel = MaterialButton(this).apply {
+-            text = getString(R.string.cancel)
+-            setOnClickListener { viewModel.cancel() }
+-        }
+-        actions.addView(start, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+-        actions.addView(cancel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+-        root.addView(actions, matchWidth())
+-        val scroll = ScrollView(this)
+-        output = TextView(this).apply { setPadding(8.dpToPx) }
+-        scroll.addView(output, matchWidth())
+-        root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+-        return root
+-    }
+-
+-    private fun render(state: EnhancedBatchAddUiState) {
+-        if (input.text.toString() != state.input) {
+-            rendering = true
+-            input.setText(state.input)
+-            input.setSelection(input.text.length)
+-            rendering = false
+-        }
+-        input.isEnabled = !state.running
+-        start.isEnabled = !state.running && state.input.isNotBlank()
+-        cancel.isEnabled = state.running
+-        output.text = buildString {
+-            state.error?.let { appendLine(it.localizedMessage()) }
+-            state.progress?.let { progress ->
+-                appendLine(getString(R.string.hayai_enhanced_batch_progress, progress.completed, progress.total))
+-                progress.currentUrl?.let { appendLine(getString(R.string.hayai_enhanced_batch_loading, it)) }
+-                progress.results.forEach { appendLine(it.displayText()) }
+-            }
+-            state.report?.let { report ->
+-                appendLine()
+-                append(
+-                    getString(
+-                        R.string.hayai_enhanced_batch_summary,
+-                        report.added,
+-                        report.alreadyPresent,
+-                        report.duplicates,
+-                        report.failed,
+-                    ),
+-                )
+-            }
+-        }
+-    }
+-
+-    private fun EnhancedBatchItemResult.displayText(): String = when (this) {
+-        is EnhancedBatchItemResult.Added -> getString(R.string.hayai_enhanced_batch_added, title, target.sourceName)
+-        is EnhancedBatchItemResult.AlreadyInLibrary -> getString(R.string.hayai_enhanced_batch_present, title)
+-        is EnhancedBatchItemResult.Duplicate -> getString(R.string.hayai_enhanced_batch_duplicate, submittedUrl)
+-        is EnhancedBatchItemResult.Failed -> getString(R.string.hayai_enhanced_batch_failed, submittedUrl, reason.localizedMessage())
+-    }
+-
+-    private fun EnhancedBatchFailure.localizedMessage(): String = when (this) {
+-        is EnhancedBatchFailure.UnsupportedSource -> getString(R.string.hayai_enhanced_failure_unsupported_source)
+-        is EnhancedBatchFailure.AmbiguousSource -> getString(R.string.hayai_enhanced_failure_ambiguous_source, sourceNames.joinToString())
+-        is EnhancedBatchFailure.Network -> getString(R.string.hayai_enhanced_failure_network)
+-        is EnhancedBatchFailure.InvalidGallery -> getString(R.string.hayai_enhanced_failure_invalid_gallery)
+-        is EnhancedBatchFailure.Persistence -> getString(R.string.hayai_enhanced_failure_persistence)
+-    }
+-
+-    private fun EnhancedBatchUiError.localizedMessage(): String = getString(
+-        when (this) {
+-            EnhancedBatchUiError.InvalidInput -> R.string.hayai_enhanced_batch_invalid_input
+-            EnhancedBatchUiError.Cancelled -> R.string.cancelled
+-            EnhancedBatchUiError.Failed -> R.string.hayai_enhanced_batch_run_failed
+-        },
+-    )
+-
+-    private fun matchWidth() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+-
+-    companion object {
+-        private const val STATE_INPUT = "hayai.enhanced.batch.input"
+-        fun newIntent(context: Context): Intent = Intent(context, EnhancedBatchAddActivity::class.java)
+-    }
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4538012b3db09cbd4c524dfd376c3f0e827f5480
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddController.kt
+@@ -0,0 +1,132 @@
++package dev.ahmedmohamed.hayai.source.enhanced.batch
++
++import android.text.InputType
++import android.widget.EditText
++import androidx.preference.Preference
++import androidx.preference.PreferenceScreen
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import eu.kanade.tachiyomi.ui.setting.onClick
++import eu.kanade.tachiyomi.ui.setting.preference
++import eu.kanade.tachiyomi.ui.setting.preferenceCategory
++import eu.kanade.tachiyomi.ui.setting.titleRes
++import eu.kanade.tachiyomi.util.system.materialAlertDialog
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.collect
++import kotlinx.coroutines.launch
++
++class EnhancedBatchAddController : SettingsController() {
++    private lateinit var coordinator: EnhancedBatchAddCoordinator
++    private lateinit var input: Preference
++    private lateinit var start: Preference
++    private lateinit var cancel: Preference
++    private lateinit var output: Preference
++    private var collectionJob: Job? = null
++    private var currentInput = ""
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
++        titleRes = R.string.hayai_enhanced_batch_title
++        coordinator = EnhancedBatchAddCoordinator(viewScope)
++        preferenceCategory {
++            title = context.getString(R.string.hayai_enhanced_batch_instructions)
++            input = preference {
++                title = context.getString(R.string.hayai_enhanced_batch_hint)
++                onClick { editInput() }
++            }
++            start = preference {
++                title = context.getString(R.string.add_to_library)
++                onClick { coordinator.start() }
++            }
++            cancel = preference {
++                title = context.getString(R.string.cancel)
++                onClick { coordinator.cancel() }
++            }
++        }
++        preferenceCategory {
++            output = preference { isSelectable = false }
++        }
++        collectionJob = viewScope.launch { coordinator.state.collect(::render) }
++    }
++
++    override fun onDestroy() {
++        coordinator.cancel()
++        collectionJob?.cancel()
++        super.onDestroy()
++    }
++
++    private fun editInput() {
++        val context = activity ?: return
++        val editor = EditText(context).apply {
++            hint = context.getString(R.string.hayai_enhanced_batch_hint)
++            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
++            minLines = 8
++            maxLines = 16
++            setText(currentInput)
++            setSelection(text.length)
++        }
++        context.materialAlertDialog()
++            .setTitle(R.string.hayai_enhanced_batch_title)
++            .setView(editor)
++            .setPositiveButton(android.R.string.ok) { _, _ -> coordinator.updateInput(editor.text.toString()) }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun render(state: EnhancedBatchAddUiState) {
++        val context = activity ?: return
++        currentInput = state.input
++        input.summary = state.input.ifBlank { context.getString(R.string.hayai_enhanced_batch_hint) }
++        input.isEnabled = !state.running
++        start.isEnabled = !state.running && state.input.isNotBlank()
++        cancel.isEnabled = state.running
++        output.summary = buildString {
++            state.error?.let { appendLine(it.localizedMessage()) }
++            state.progress?.let { progress ->
++                appendLine(context.getString(R.string.hayai_enhanced_batch_progress, progress.completed, progress.total))
++                progress.currentUrl?.let { appendLine(context.getString(R.string.hayai_enhanced_batch_loading, it)) }
++                progress.results.forEach { appendLine(it.displayText()) }
++            }
++            state.report?.let { report ->
++                if (isNotEmpty()) appendLine()
++                append(
++                    context.getString(
++                        R.string.hayai_enhanced_batch_summary,
++                        report.added,
++                        report.alreadyPresent,
++                        report.duplicates,
++                        report.failed,
++                    ),
++                )
++            }
++        }
++    }
++
++    private fun EnhancedBatchItemResult.displayText(): String {
++        val context = requireNotNull(activity)
++        return when (this) {
++            is EnhancedBatchItemResult.Added -> context.getString(R.string.hayai_enhanced_batch_added, title, target.sourceName)
++            is EnhancedBatchItemResult.AlreadyInLibrary -> context.getString(R.string.hayai_enhanced_batch_present, title)
++            is EnhancedBatchItemResult.Duplicate -> context.getString(R.string.hayai_enhanced_batch_duplicate, submittedUrl)
++            is EnhancedBatchItemResult.Failed -> context.getString(R.string.hayai_enhanced_batch_failed, submittedUrl, reason.localizedMessage())
++        }
++    }
++
++    private fun EnhancedBatchFailure.localizedMessage(): String {
++        val context = requireNotNull(activity)
++        return when (this) {
++            is EnhancedBatchFailure.UnsupportedSource -> context.getString(R.string.hayai_enhanced_failure_unsupported_source)
++            is EnhancedBatchFailure.AmbiguousSource -> context.getString(R.string.hayai_enhanced_failure_ambiguous_source, sourceNames.joinToString())
++            is EnhancedBatchFailure.Network -> context.getString(R.string.hayai_enhanced_failure_network)
++            is EnhancedBatchFailure.InvalidGallery -> context.getString(R.string.hayai_enhanced_failure_invalid_gallery)
++            is EnhancedBatchFailure.Persistence -> context.getString(R.string.hayai_enhanced_failure_persistence)
++        }
++    }
++
++    private fun EnhancedBatchUiError.localizedMessage(): String = requireNotNull(resources).getString(
++        when (this) {
++            EnhancedBatchUiError.InvalidInput -> R.string.hayai_enhanced_batch_invalid_input
++            EnhancedBatchUiError.Cancelled -> R.string.cancelled
++            EnhancedBatchUiError.Failed -> R.string.hayai_enhanced_batch_run_failed
++        },
++    )
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt
+index 255909034c606d266957e2d6a6ce851703507618..9a56d79d72ff852b12bcc28120701e8259dbf1e5 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt
+@@ -1,17 +1,14 @@
+ package dev.ahmedmohamed.hayai.source.enhanced.batch
+ 
+-import androidx.lifecycle.ViewModel
+-import androidx.lifecycle.viewModelScope
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.source.SourceManager
+ import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.Flow
+ import kotlinx.coroutines.flow.MutableStateFlow
+-import kotlinx.coroutines.flow.SharingStarted
+-import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.combine
+-import kotlinx.coroutines.flow.stateIn
+ import kotlinx.coroutines.launch
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+@@ -26,16 +23,17 @@ data class EnhancedBatchAddUiState(
+ 
+ enum class EnhancedBatchUiError { InvalidInput, Cancelled, Failed }
+ 
+-class EnhancedBatchAddViewModel(
++class EnhancedBatchAddCoordinator(
++    private val scope: CoroutineScope,
+     sourceManager: SourceManager = Injekt.get(),
+     database: DatabaseHelper = Injekt.get(),
+-) : ViewModel() {
++) {
+     private val service = EnhancedBatchAddService(J2kEnhancedBatchLibraryGateway(sourceManager, database))
+     private val mutableInput = MutableStateFlow("")
+     private val mutableResult = MutableStateFlow<ResultState>(ResultState.Idle)
+     @Volatile private var runJob: Job? = null
+ 
+-    val state: StateFlow<EnhancedBatchAddUiState> = combine(mutableInput, mutableResult, service.progress) { input, result, progress ->
++    val state: Flow<EnhancedBatchAddUiState> = combine(mutableInput, mutableResult, service.progress) { input, result, progress ->
+         EnhancedBatchAddUiState(
+             input = input,
+             running = result is ResultState.Running,
+@@ -43,7 +41,7 @@ class EnhancedBatchAddViewModel(
+             report = (result as? ResultState.Finished)?.report,
+             error = (result as? ResultState.Error)?.reason,
+         )
+-    }.stateIn(viewModelScope, SharingStarted.Eagerly, EnhancedBatchAddUiState())
++    }
+ 
+     fun updateInput(value: String) {
+         if (runJob == null) mutableInput.value = value
+@@ -56,7 +54,7 @@ class EnhancedBatchAddViewModel(
+             return
+         }
+         mutableResult.value = ResultState.Running
+-        runJob = viewModelScope.launch(Dispatchers.IO) {
++        runJob = scope.launch(Dispatchers.IO) {
+             try {
+                 val report = service.run(plan)
+                 mutableResult.value = ResultState.Finished(report)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+index dd91b74ba4f0868d30b699188db2d2e26759059c..42044c7b6fe16c037e526cb835a2d4176360558d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+@@ -18,7 +18,7 @@ import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+ import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerActivity
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+-import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity
++import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddController
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+@@ -125,7 +125,7 @@ class SettingsAdvancedController : SettingsController() {
+                     summaryRes = R.string.hayai_enhanced_batch_settings_summary
+                     onClick {
+                         if (hayaiPreferences.hentaiFeaturesEnabled.get()) {
+-                            startActivity(EnhancedBatchAddActivity.newIntent(context))
++                            router.pushController(EnhancedBatchAddController().withFadeTransaction())
+                         } else {
+                             context.toast(R.string.hayai_hentai_features_summary)
+                         }
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index a86f7227548f463698f35b09bb2e05b97764da9d..cd52f33b5ec4529936d8974e40b8f8024cfbf05f 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -1382,8 +1382,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManage
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	novelRequire(uri?.scheme == "https" && uri.host != null && uri.userInfo == null, NovelFailure.Code.ExtensionRepositoryHttps)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	private val tags = context.getSharedPreferences("hayai_novel_apk_repositories", Context.MODE_PRIVATE)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	val untrustedNovel = untrusted.filter { it.pkgName in fromNovelRepos.map(Extension.Available::pkgName) || it.pkgName.contains(".novel.") }
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerActivity.kt	row(R.string.hayai_trust_signature, "${extension.name}\n${extension.signatureHash}") {
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerActivity.kt	setOnClickListener { installJob?.cancel(CancellationException("Canceled by user")) }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	.removePrefix("Tachiyomi: ")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	.removePrefix("Tsundoku: ")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	const val CONTENT_WARNING_KEY = "tachiyomix.contentWarning"
+@@ -2741,7 +2739,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt
+ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	choice.copy(label = "${choice.label} (${choice.sourceId})")
+ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	require(surface != RecentSurface.Mixed) { "Mixed visibility must be edited through History or Updates" }
+ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	val baseLabel = if (language == null) source.name else "${source.name} · $language"
+-app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddActivity.kt	private const val STATE_INPUT = "hayai.enhanced.batch.input"
++app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddController.kt	private var currentInput = ""
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddService.kt	EnhancedBatchFailure.Network(error.message ?: "Network request failed"),
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt	private val mutableInput = MutableStateFlow("")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt	val input: String = "",
+-- 
+2.54.0.windows.1
+

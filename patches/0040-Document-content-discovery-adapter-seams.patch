@@ -1,0 +1,93 @@
+From 4a0fe5e98e4cd7ab0db43b1c1f845c098173254f Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 04:04:49 +0300
+Subject: [PATCH] Document content discovery adapter seams
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 765c59b823406787763dfa99f83b35ca9e9396f0..7c3a11edf1b4df4f40ab8ff2596cf602b3e8d299 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -70,3 +70,6 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T00:21:00Z	validation	compiled the rebased app and ran 320 focused Hayai tests with one Gradle worker	verified source, novel, backup, migration, enhanced-source, E-Hentai, recents, and presentation integration after the upstream replay	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest with focused Hayai filters -x :app:formatKotlin	VERIFIED
+ 2026-08-22T00:08:20Z	emulator-harness	replaced the fixed startup sleep with database readiness and explicit first-run permission handling	the authorized emulator proved migration succeeds when the harness does not force-stop the app before its lazy database open	commit 99c6f64c43	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T00:08:20Z	nightly-release	added an isolated nightly build, channel-aware updater policy, Hayai APK selection, monotonic release workflow, and pull-request CI	preserved stable and nightly identities while keeping release policy under the Hayai namespace	app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt; .github/workflows/nightly.yml	IMPLEMENTED_UNVERIFIED
++2026-08-22T01:11:00Z	content-discovery	split Browse and the extension installer into Manga and Novel views with one content classifier	preserved J2K search and extension ownership while making local novels and novel APK repositories discoverable	ContentKind; BrowseController.kt; ExtensionBottomSheet.kt; RepoController.kt	IMPLEMENTED_UNVERIFIED
++2026-08-22T01:12:00Z	repository-ownership	modeled manga-only, novel-only, and shared APK repository ownership with redirect-safe tags	deleting one content tag retains the global URL and metadata whenever the other content kind still owns it	NovelApkExtensionManager.kt; RepoPresenter.kt; ExtensionApi.kt	IMPLEMENTED_UNVERIFIED
++2026-08-22T01:13:00Z	branding	replaced debug and nightly launcher overlays with Hayai adaptive, monochrome, round, and legacy-density assets	kept release-channel application IDs visually and textually Hayai-branded	app/src/debug/res; app/src/nightly/res	IMPLEMENTED_UNVERIFIED
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index e6611275a222a6541e75e27a0566d4ef3091c0a2..1b26a2b4d780812d7629ff08ae4a6f15a23be85f 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -20,6 +20,10 @@ The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one
+ 
+ `ExtensionLoader` is also an intentional adapter seam. Package discovery delegates manifest interpretation to Hayai's pure `NovelExtensionManifest` contract, then uses J2K's existing signature trust, NSFW policy, private-extension, and class-loading paths. A small `eu.kanade.tachiyomi.source.NovelSource` compatibility shim retains the exact legacy binary name and recognizes both the current virtual property and older marker implementations. This adds Tsundoku's `tachiyomi.novelextension` namespace without creating a second extension manager or bypassing J2K's security checks.
+ 
++Extension discovery uses one Hayai-owned `ContentKind` policy at the J2K presentation seams. Tsundoku's protobuf `isNovel` field is authoritative for remote APKs, with its historical novel package prefix as the legacy fallback. Installed APKs are classified from their actual loaded sources, so an APK that exposes both kinds appears in both installer tabs. Browse and global search use the same source classification, and local novels remain discoverable even when their synthetic language is not enabled. J2K continues to own loading, trust, installation, source registration, and searching.
++
++APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores only novel membership and novel-only ownership tags. Manga-only, novel-only, and shared ownership transitions are idempotent: removing one view never deletes a URL or its metadata while the other view still owns it. Repository redirects migrate both J2K URLs and Hayai tags together. The typed Manga/Novel repository controllers and Manga/Novel/Migration extension tabs are narrow UI adapters over those contracts; they do not introduce a second downloader or extension catalog.
++
+ LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. It also caches filter and setting schemas so J2K's synchronous source UI never starts QuickJS on the main thread. Chapter documents expose an absolute base URL. Source-owned asset requests retain cookies and a referrer and enforce a 16 MiB stream limit. Users explicitly accept repository and install warnings because TLS and file integrity do not authenticate a repository publisher. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
+ 
+ ## Database reset and migration
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 7ecefd20459ed1550d83a21a0d0026a6441116f9..a9f2c6ac4a887b1774409a15f682b0a866c3dfe3 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -31,7 +31,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+ | Dedicated reader, central routing, and J2K history | `NovelReaderActivity` and `ReaderLauncher` | port |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+-| Remote novel extension catalogs and installation | J2K extension manager plus tagged Hayai repository ownership and management UI | implemented unverified |
++| Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership and separate management entry points | implemented unverified; compile and emulator install flows pending |
+ | LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+@@ -56,6 +56,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ |---|---|---|
+ | Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
+ | Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, and isolated nightly publishing | implemented unverified; hosted nightly run pending |
++| Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | implemented unverified; compile and emulator navigation pending |
+ 
+ ## Completion rules
+ 
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index df00c272331e86bd14695749c9dc2843ed81d6cd..6d3d7c5053aa08e4aa0d6472f8237243f60e4fcd 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -12,6 +12,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/extension/model/Extension.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
+@@ -23,6 +25,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/model/Page.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt"
+@@ -48,9 +52,14 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsTrackingController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/util/manga/MangaShortcutManager.kt"
+     )
+-- 
+2.54.0.windows.1
+

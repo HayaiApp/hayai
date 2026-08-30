@@ -1,0 +1,803 @@
+From 64dc8db6460f08c6cd4595bd840e7cc97ff4eea4 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 10:35:45 +0300
+Subject: [PATCH] Restore novel selection web tools
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 619c9462f32e0b3d428bcec87f4977f6c2ef17aa..39ca1961d449ab771624072060a5338df259a0e1 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -101,3 +101,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T09:10:00Z	recents-bysource	restored History BySource as a real J2K Recents grouping mode	kept J2K history rows, chapter expansion, downloads, swipe actions, and reader routing authoritative while moving only source-section ordering and visibility mutation into Hayai-owned policy	RecentSourceGrouper.kt; RecentMangaHeaderItem.kt; RecentsPresenter.kt; RecentSourceVisibility.kt; upstream-feature-audit.md	IMPLEMENTED_UNVERIFIED
+ 2026-08-23T09:25:00Z	lnreader-v3-repository	restored the production LNReader v3 catalogue	accepted root and enveloped documents, encoded raw brackets outside URL authorities, stripped Unicode format marks from language labels, and ignored invalid optional site metadata without weakening required plugin URL validation	NovelPluginRepositoryDocument.kt; NovelPluginModels.kt; NovelPluginRepositoryDocumentTest.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-23T10:05:00Z	novel-repository-navigation	added one native J2K settings hub with typed APK-extension and LNReader-plugin destinations	made both repository formats discoverable from Browse and Browse settings without URL auto-detection or bypassing the JavaScript plugin trust warning	NovelRepositoryKind; NovelRepositoryHubController.kt; BrowseController.kt; SettingsBrowseController.kt	IMPLEMENTED_UNVERIFIED
++2026-08-23T10:30:00Z	novel-selection-lookup	restored selected-text quote, definition, Google Translate, and web-search actions in both novel renderers	routed validated transient queries through forced resizable Custom Tabs, app-intent fallbacks, and a secure J2K bottom-sheet WebView without coupling browser state to either renderer	NovelSelectionActionMode.kt; NovelLookupModels.kt; NovelLookupLauncher.kt; NovelLookupWebSheet.kt; NovelReaderActivity.kt	IMPLEMENTED_UNVERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..174fa1ae8308dc0aa9e889711fbe2378e2b88bd6
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt
+@@ -0,0 +1,103 @@
++package dev.ahmedmohamed.hayai.novel.lookup
++
++import android.content.Intent
++import android.net.Uri
++import androidx.appcompat.app.AppCompatActivity
++import androidx.browser.customtabs.CustomTabColorSchemeParams
++import androidx.browser.customtabs.CustomTabsClient
++import androidx.browser.customtabs.CustomTabsIntent
++import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupAppIntent.GoogleTranslateProcessText
++import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupAppIntent.GoogleTranslateSend
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.util.system.getResourceColor
++import eu.kanade.tachiyomi.util.system.toast
++import kotlin.math.roundToInt
++
++class NovelLookupLauncher(
++    private val activity: AppCompatActivity,
++    private val showWebSheet: (Uri, String) -> Boolean,
++) {
++    fun launch(request: NovelLookupRequest): NovelLookupLaunchResult {
++        val route = NovelLookupRouter.route(request)
++        if (route is NovelLookupRoute.AppThenWeb && launchTranslateApp(route, request.query)) {
++            return NovelLookupLaunchResult.ExternalApp
++        }
++        return launchWeb(Uri.parse(route.webUrl.toString()), request.query)
++    }
++
++    private fun launchTranslateApp(route: NovelLookupRoute.AppThenWeb, query: NovelSelectionQuery): Boolean =
++        route.appIntents.any { intentType ->
++            val intent =
++                when (intentType) {
++                    GoogleTranslateProcessText ->
++                        Intent(Intent.ACTION_PROCESS_TEXT)
++                            .setType("text/plain")
++                            .putExtra(Intent.EXTRA_PROCESS_TEXT, query.value)
++                            .putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
++
++                    GoogleTranslateSend ->
++                        Intent(Intent.ACTION_SEND)
++                            .setType("text/plain")
++                            .putExtra(Intent.EXTRA_TEXT, query.value)
++                }.setPackage(GOOGLE_TRANSLATE_PACKAGE)
++            try {
++                activity.startActivity(intent)
++                true
++            } catch (_: RuntimeException) {
++                false
++            }
++        }
++
++    @Suppress("DEPRECATION")
++    private fun launchWeb(uri: Uri, query: NovelSelectionQuery): NovelLookupLaunchResult {
++        val packageName =
++            try {
++                CustomTabsClient.getPackageName(activity, null)
++            } catch (_: RuntimeException) {
++                null
++            }
++        if (packageName != null) {
++            val metrics = activity.resources.displayMetrics
++            val density = metrics.density
++            val initialHeight = (metrics.heightPixels * 0.70f).roundToInt()
++            val desiredWidthDp = (metrics.widthPixels / density * 0.42f).coerceIn(360f, 560f)
++            val initialWidth = (desiredWidthDp * density).roundToInt().coerceAtMost(metrics.widthPixels)
++            try {
++                val customTab =
++                    CustomTabsIntent.Builder()
++                        .setDefaultColorSchemeParams(
++                            CustomTabColorSchemeParams.Builder()
++                                .setToolbarColor(activity.getResourceColor(R.attr.colorSurfaceContainer))
++                                .build(),
++                        )
++                        .setShowTitle(true)
++                        .setInitialActivityHeightPx(initialHeight, CustomTabsIntent.ACTIVITY_HEIGHT_ADJUSTABLE)
++                        .setInitialActivityWidthPx(initialWidth)
++                        .setActivitySideSheetBreakpointDp(600)
++                        .setActivitySideSheetPosition(CustomTabsIntent.ACTIVITY_SIDE_SHEET_POSITION_END)
++                        .setActivitySideSheetDecorationType(CustomTabsIntent.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_SHADOW)
++                        .setActivitySideSheetRoundedCornersPosition(CustomTabsIntent.ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_POSITION_TOP)
++                        .setToolbarCornerRadiusDp(16)
++                        .setCloseButtonPosition(CustomTabsIntent.CLOSE_BUTTON_POSITION_END)
++                        .build()
++                customTab.intent.`package` = packageName
++                customTab.intent.data = uri
++                activity.startActivityForResult(customTab.intent, CUSTOM_TAB_REQUEST_CODE, customTab.startAnimationBundle)
++                return NovelLookupLaunchResult.CustomTab
++            } catch (_: RuntimeException) {
++                Unit
++            }
++        }
++        return if (showWebSheet(uri, query.value)) {
++            NovelLookupLaunchResult.WebSheet
++        } else {
++            activity.toast(R.string.hayai_novel_lookup_browser_unavailable)
++            NovelLookupLaunchResult.Unavailable
++        }
++    }
++
++    private companion object {
++        const val GOOGLE_TRANSLATE_PACKAGE = "com.google.android.apps.translate"
++        const val CUSTOM_TAB_REQUEST_CODE = 0x4859
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..b44cbc557e9f4699ea71f7c342ea5b59efb954a0
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupModels.kt
+@@ -0,0 +1,82 @@
++package dev.ahmedmohamed.hayai.novel.lookup
++
++import okhttp3.HttpUrl
++import okhttp3.HttpUrl.Companion.toHttpUrl
++
++@JvmInline
++value class NovelSelectionQuery private constructor(val value: String) {
++    companion object {
++        private const val MAX_QUERY_CHARS = 2_048
++        private const val MAX_QUERY_BYTES = 2_048
++
++        fun parse(raw: String): Result<NovelSelectionQuery> =
++            runCatching {
++                val value = raw.trim()
++                when {
++                    value.isEmpty() -> throw NovelSelectionQueryException(NovelSelectionQueryFailure.Blank)
++                    value.length > MAX_QUERY_CHARS || value.toByteArray(Charsets.UTF_8).size > MAX_QUERY_BYTES ->
++                        throw NovelSelectionQueryException(NovelSelectionQueryFailure.TooLong)
++                }
++                NovelSelectionQuery(value)
++            }
++    }
++}
++
++enum class NovelSelectionQueryFailure { Blank, TooLong }
++
++class NovelSelectionQueryException(val failure: NovelSelectionQueryFailure) : IllegalArgumentException()
++
++enum class NovelLookupAction { Define, GoogleTranslate, SearchWeb }
++
++data class NovelLookupRequest(
++    val action: NovelLookupAction,
++    val query: NovelSelectionQuery,
++    val sourceLanguage: String,
++    val targetLanguage: String,
++)
++
++enum class NovelLookupAppIntent { GoogleTranslateProcessText, GoogleTranslateSend }
++
++sealed interface NovelLookupRoute {
++    val webUrl: HttpUrl
++
++    data class Web(override val webUrl: HttpUrl) : NovelLookupRoute
++
++    data class AppThenWeb(
++        val appIntents: List<NovelLookupAppIntent>,
++        override val webUrl: HttpUrl,
++    ) : NovelLookupRoute
++}
++
++enum class NovelLookupLaunchResult { ExternalApp, CustomTab, WebSheet, Unavailable }
++
++object NovelLookupRouter {
++    private val googleSearch = "https://www.google.com/search".toHttpUrl()
++    private val googleTranslate = "https://translate.google.com/".toHttpUrl()
++    private val language = Regex("auto|[a-z]{2,3}(?:-[A-Z]{2})?")
++
++    fun route(request: NovelLookupRequest): NovelLookupRoute =
++        when (request.action) {
++            NovelLookupAction.Define -> NovelLookupRoute.Web(searchUrl("define ${request.query.value}"))
++            NovelLookupAction.SearchWeb -> NovelLookupRoute.Web(searchUrl(request.query.value))
++            NovelLookupAction.GoogleTranslate ->
++                NovelLookupRoute.AppThenWeb(
++                    appIntents =
++                        listOf(
++                            NovelLookupAppIntent.GoogleTranslateProcessText,
++                            NovelLookupAppIntent.GoogleTranslateSend,
++                        ),
++                    webUrl =
++                        googleTranslate.newBuilder()
++                            .addQueryParameter("sl", request.sourceLanguage.validLanguage("auto"))
++                            .addQueryParameter("tl", request.targetLanguage.validLanguage("en").takeUnless { it == "auto" } ?: "en")
++                            .addQueryParameter("text", request.query.value)
++                            .addQueryParameter("op", "translate")
++                            .build(),
++                )
++        }
++
++    private fun searchUrl(query: String) = googleSearch.newBuilder().addQueryParameter("q", query).build()
++
++    private fun String.validLanguage(fallback: String) = trim().takeIf(language::matches) ?: fallback
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7f0954c8d494deb2baf40a33596b1c53d964f2d5
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt
+@@ -0,0 +1,216 @@
++package dev.ahmedmohamed.hayai.novel.lookup
++
++import android.content.Intent
++import android.graphics.Bitmap
++import android.net.Uri
++import android.net.http.SslError
++import android.os.Build
++import android.view.KeyEvent
++import android.view.LayoutInflater
++import android.view.ViewGroup
++import android.webkit.CookieManager
++import android.webkit.SslErrorHandler
++import android.webkit.WebResourceError
++import android.webkit.WebResourceRequest
++import android.webkit.WebResourceResponse
++import android.webkit.RenderProcessGoneDetail
++import android.webkit.WebSettings
++import android.webkit.WebView
++import android.webkit.WebViewClient
++import androidx.appcompat.app.AppCompatActivity
++import androidx.core.view.isVisible
++import com.google.android.material.bottomsheet.BottomSheetBehavior
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.databinding.HayaiNovelLookupSheetBinding
++import eu.kanade.tachiyomi.util.system.defaultBrowserPackageName
++import eu.kanade.tachiyomi.util.system.toast
++import eu.kanade.tachiyomi.widget.E2EBottomSheetDialog
++import kotlin.math.roundToInt
++
++class NovelLookupWebSheet(
++    private val activity: AppCompatActivity,
++    initialUri: Uri,
++    query: String,
++    private val onDismissed: () -> Unit,
++) : E2EBottomSheetDialog<HayaiNovelLookupSheetBinding>(activity) {
++    private var destroyed = false
++    private var failedMainFrame = false
++    private var initialUri: Uri? = initialUri
++
++    override fun createBinding(inflater: LayoutInflater) = HayaiNovelLookupSheetBinding.inflate(inflater)
++
++    init {
++        require(initialUri.isAllowedWebUri())
++        binding.toolbar.title = query
++        configureToolbar()
++        configureWebView()
++        binding.retry.setOnClickListener { this.initialUri?.let(::load) }
++        setOnKeyListener { _, keyCode, event ->
++            keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP && handleBack()
++        }
++        setOnDismissListener {
++            destroyWebView()
++            onDismissed()
++        }
++        load(initialUri)
++    }
++
++    override fun onStart() {
++        super.onStart()
++        if (!destroyed) binding.webview.onResume()
++        val height = (activity.resources.displayMetrics.heightPixels * 0.70f).roundToInt()
++        binding.root.updateLayoutParamsHeight(height)
++        sheetBehavior.peekHeight = height
++        sheetBehavior.skipCollapsed = true
++        sheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
++    }
++
++    override fun onStop() {
++        if (!destroyed) binding.webview.onPause()
++        super.onStop()
++    }
++
++    private fun configureToolbar() {
++        binding.toolbar.setNavigationContentDescription(R.string.back)
++        binding.toolbar.setNavigationOnClickListener { handleBack() }
++        binding.toolbar.menu.add(0, MENU_EXTERNAL, 0, R.string.open_in_browser)
++            .setIcon(R.drawable.ic_open_in_new_24dp)
++            .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
++        binding.toolbar.menu.add(0, MENU_CLOSE, 1, R.string.close)
++            .setIcon(R.drawable.ic_close_24dp)
++            .setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
++        binding.toolbar.setOnMenuItemClickListener { item ->
++            when (item.itemId) {
++                MENU_EXTERNAL -> openExternally()
++                MENU_CLOSE -> dismiss()
++                else -> return@setOnMenuItemClickListener false
++            }
++            true
++        }
++    }
++
++    @Suppress("SetJavaScriptEnabled")
++    private fun configureWebView() {
++        CookieManager.getInstance().apply {
++            setAcceptCookie(true)
++            setAcceptThirdPartyCookies(binding.webview, true)
++        }
++        binding.webview.settings.apply {
++            javaScriptEnabled = true
++            domStorageEnabled = true
++            databaseEnabled = true
++            allowFileAccess = false
++            allowContentAccess = false
++            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
++            setSupportMultipleWindows(false)
++            javaScriptCanOpenWindowsAutomatically = false
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = true
++        }
++        binding.webview.webViewClient =
++            object : WebViewClient() {
++                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
++                    blockUnsafeNavigation(request.url, request.isForMainFrame)
++
++                @Suppress("DEPRECATION")
++                override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
++                    blockUnsafeNavigation(Uri.parse(url), true)
++
++                override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
++                    failedMainFrame = false
++                    binding.loading.isVisible = true
++                    binding.errorState.isVisible = false
++                    binding.webview.isVisible = true
++                }
++
++                override fun onPageFinished(view: WebView, url: String?) {
++                    binding.loading.isVisible = false
++                }
++
++                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
++                    if (request.isForMainFrame) showError()
++                }
++
++                override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
++                    if (request.isForMainFrame && errorResponse.statusCode >= 400) showError()
++                }
++
++                override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
++                    handler.cancel()
++                    showError()
++                }
++
++                override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
++                    activity.toast(R.string.hayai_novel_lookup_renderer_failed)
++                    dismiss()
++                    return true
++                }
++            }
++    }
++
++    private fun load(uri: Uri) {
++        if (destroyed || !uri.isAllowedWebUri()) return
++        failedMainFrame = false
++        binding.webview.loadUrl(uri.toString())
++    }
++
++    private fun showError() {
++        if (destroyed || failedMainFrame) return
++        failedMainFrame = true
++        binding.loading.isVisible = false
++        binding.webview.isVisible = false
++        binding.errorState.isVisible = true
++    }
++
++    private fun blockUnsafeNavigation(uri: Uri, mainFrame: Boolean): Boolean {
++        val blocked = !uri.isAllowedWebUri()
++        if (blocked && mainFrame) activity.toast(R.string.hayai_novel_lookup_blocked_navigation)
++        return blocked
++    }
++
++    private fun handleBack(): Boolean {
++        when {
++            binding.errorState.isVisible -> dismiss()
++            binding.webview.canGoBack() -> binding.webview.goBack()
++            else -> dismiss()
++        }
++        return true
++    }
++
++    private fun openExternally() {
++        val uri = binding.webview.url?.let(Uri::parse)?.takeIf { it.isAllowedWebUri() } ?: initialUri ?: return
++        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
++            activity.defaultBrowserPackageName()?.let(::setPackage)
++        }
++        try {
++            activity.startActivity(intent)
++        } catch (_: RuntimeException) {
++            activity.toast(R.string.hayai_novel_lookup_browser_unavailable)
++        }
++    }
++
++    private fun destroyWebView() {
++        if (destroyed) return
++        destroyed = true
++        binding.webview.stopLoading()
++        binding.webview.webChromeClient = null
++        binding.webview.webViewClient = WebViewClient()
++        binding.webview.loadUrl("about:blank")
++        binding.webview.clearHistory()
++        (binding.webview.parent as? ViewGroup)?.removeView(binding.webview)
++        binding.webview.destroy()
++        binding.toolbar.title = null
++        initialUri = null
++        CookieManager.getInstance().flush()
++    }
++
++    private fun Uri.isAllowedWebUri() = scheme.equals("https", ignoreCase = true) && !host.isNullOrBlank()
++
++    private fun android.view.View.updateLayoutParamsHeight(height: Int) {
++        layoutParams = layoutParams.apply { this.height = height }
++    }
++
++    companion object {
++        const val MENU_EXTERNAL = 1
++        const val MENU_CLOSE = 2
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index 3a2fd2d6111aaf328a44fbc9ac0b56090384a22d..d4a2aa2c4fec942293d8347043e7f32f1f061b18 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -44,6 +44,13 @@ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+ import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightAnchor
+ import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlight
+ import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightStore
++import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupAction
++import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupLauncher
++import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupRequest
++import dev.ahmedmohamed.hayai.novel.lookup.NovelLookupWebSheet
++import dev.ahmedmohamed.hayai.novel.lookup.NovelSelectionQuery
++import dev.ahmedmohamed.hayai.novel.lookup.NovelSelectionQueryException
++import dev.ahmedmohamed.hayai.novel.lookup.NovelSelectionQueryFailure
+ import dev.ahmedmohamed.hayai.novel.quote.NovelQuote
+ import dev.ahmedmohamed.hayai.novel.quote.NovelQuoteStore
+ import dev.ahmedmohamed.hayai.novel.quote.QuoteAddResult
+@@ -106,6 +113,7 @@ class NovelReaderActivity :
+     private val translationService by lazy { NovelTranslationService(Injekt.get<NetworkHelper>(), NovelTranslationCache(this)) }
+     private val dictionary by lazy { NovelDictionaryLauncher(this) }
+     private val dictionarySettings by lazy { NovelDictionarySettingsStore(this) }
++    private val lookupLauncher by lazy { NovelLookupLauncher(this, ::showLookupSheet) }
+     private lateinit var viewerContainer: FrameLayout
+     private lateinit var appBar: View
+     private lateinit var toolbar: Toolbar
+@@ -137,6 +145,9 @@ class NovelReaderActivity :
+     private var ttsAutoStartPending = false
+     private var autoScroll = false
+     private var autoScrollRunnable: Runnable? = null
++    private var autoScrollResumePending = false
++    private var selectionModeActive = false
++    private var lookupSheet: NovelLookupWebSheet? = null
+     private var statusRunnable: Runnable? = null
+     private var controlsVisible = true
+     private var editMode = false
+@@ -201,7 +212,13 @@ class NovelReaderActivity :
+             }
+     }
+ 
++    override fun onResume() {
++        super.onResume()
++        resumeInterruptedAutoScroll()
++    }
++
+     override fun onPause() {
++        pauseAutoScrollForInterruption()
+         saveProgressBlocking()
+         if (!preferences.novelTtsBackgroundPlayback.get()) ttsController.pause()
+         super.onPause()
+@@ -211,8 +228,11 @@ class NovelReaderActivity :
+         loadJob?.cancel()
+         renderJob?.cancel()
+         prefetchJob?.cancel()
++        autoScrollResumePending = false
+         stopAutoScroll()
+         stopStatusUpdates()
++        lookupSheet?.dismiss()
++        lookupSheet = null
+         ttsController.destroy()
+         renderer?.destroy()
+         super.onDestroy()
+@@ -993,6 +1013,10 @@ class NovelReaderActivity :
+ 
+     private fun startAutoScroll() {
+         if (autoScroll) return
++        if (selectionModeActive || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
++            autoScrollResumePending = true
++            return
++        }
+         autoScroll = true
+         if (::autoScrollButton.isInitialized) configureChapterSheetActions()
+         val delay = (110L - preferences.novelAutoScrollSpeed.get().coerceIn(1, 20) * 5L).coerceAtLeast(10L)
+@@ -1013,6 +1037,18 @@ class NovelReaderActivity :
+         if (::autoScrollButton.isInitialized) configureChapterSheetActions()
+     }
+ 
++    private fun pauseAutoScrollForInterruption() {
++        if (!autoScroll) return
++        autoScrollResumePending = true
++        stopAutoScroll()
++    }
++
++    private fun resumeInterruptedAutoScroll() {
++        if (!autoScrollResumePending || selectionModeActive || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
++        autoScrollResumePending = false
++        startAutoScroll()
++    }
++
+     private fun stepReader(direction: Int) {
+         renderer?.step(direction)
+     }
+@@ -1423,7 +1459,16 @@ class NovelReaderActivity :
+             NovelReaderAction.SaveQuote -> captureSelectedQuote()
+             NovelReaderAction.ToggleEditMode -> setEditMode(!editMode)
+             NovelReaderAction.ToggleBookmark -> toggleBookmark()
+-            NovelReaderAction.ToggleAutoScroll -> if (autoScroll) stopAutoScroll() else startAutoScroll()
++            NovelReaderAction.ToggleAutoScroll -> {
++                autoScrollResumePending = false
++                if (autoScroll) {
++                    stopAutoScroll()
++                } else if (selectionModeActive) {
++                    autoScrollResumePending = true
++                } else {
++                    startAutoScroll()
++                }
++            }
+             NovelReaderAction.ToggleOrientation -> cycleOrientation()
+             NovelReaderAction.TranslateSelection -> translateSelection()
+             NovelReaderAction.TranslateChapter -> translateChapter()
+@@ -1622,6 +1667,66 @@ class NovelReaderActivity :
+         super.runOnUiThread(action)
+     }
+ 
++    override fun onSelectionAction(action: NovelSelectionAction, selection: NovelSelection) {
++        if (action == NovelSelectionAction.SaveQuote) {
++            loaded?.let { showCreateQuote(it, selection.selectedText) }
++            return
++        }
++        val query =
++            NovelSelectionQuery.parse(selection.selectedText).getOrElse { error ->
++                val message =
++                    when ((error as? NovelSelectionQueryException)?.failure) {
++                        NovelSelectionQueryFailure.TooLong -> R.string.hayai_novel_lookup_query_too_long
++                        else -> R.string.hayai_novel_lookup_query_blank
++                    }
++                toast(message)
++                return
++            }
++        val settings = translationSettings.get()
++        lookupLauncher.launch(
++            NovelLookupRequest(
++                action =
++                    when (action) {
++                        NovelSelectionAction.Define -> NovelLookupAction.Define
++                        NovelSelectionAction.GoogleTranslate -> NovelLookupAction.GoogleTranslate
++                        NovelSelectionAction.SearchWeb -> NovelLookupAction.SearchWeb
++                        NovelSelectionAction.SaveQuote -> return
++                    },
++                query = query,
++                sourceLanguage = settings.sourceLanguage,
++                targetLanguage = settings.targetLanguage,
++            ),
++        )
++    }
++
++    override fun onSelectionModeChanged(active: Boolean) {
++        selectionModeActive = active
++        if (active) pauseAutoScrollForInterruption() else resumeInterruptedAutoScroll()
++    }
++
++    private fun showLookupSheet(uri: Uri, query: String): Boolean {
++        if (isFinishing || isDestroyed) return false
++        return try {
++            lookupSheet?.dismiss()
++            pauseAutoScrollForInterruption()
++            lateinit var sheet: NovelLookupWebSheet
++            sheet =
++                NovelLookupWebSheet(this, uri, query) {
++                    if (lookupSheet === sheet) {
++                        lookupSheet = null
++                        resumeInterruptedAutoScroll()
++                    }
++                }
++            lookupSheet = sheet
++            sheet.show()
++            true
++        } catch (_: RuntimeException) {
++            lookupSheet = null
++            resumeInterruptedAutoScroll()
++            false
++        }
++    }
++
+     override fun onReady(progress: Int) = onDocumentReady()
+ 
+     override fun onProgress(progress: Int) = onReaderProgress(progress)
+diff --git a/app/src/main/res/layout/hayai_novel_lookup_sheet.xml b/app/src/main/res/layout/hayai_novel_lookup_sheet.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..49d0d3ce03a48860aa3ae06494f49884ba3b4d1b
+--- /dev/null
++++ b/app/src/main/res/layout/hayai_novel_lookup_sheet.xml
+@@ -0,0 +1,68 @@
++<?xml version="1.0" encoding="utf-8"?>
++<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="@drawable/bottom_sheet_rounded_background"
++    android:backgroundTint="?attr/colorSurfaceContainer">
++
++    <com.google.android.material.appbar.MaterialToolbar
++        android:id="@+id/toolbar"
++        android:layout_width="0dp"
++        android:layout_height="?attr/mainActionBarSize"
++        android:backgroundTint="?attr/colorSurfaceContainer"
++        android:navigationIcon="@drawable/ic_arrow_back_24dp"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++
++    <com.google.android.material.progressindicator.LinearProgressIndicator
++        android:id="@+id/loading"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:indeterminate="true"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toBottomOf="@id/toolbar" />
++
++    <WebView
++        android:id="@+id/webview"
++        android:layout_width="0dp"
++        android:layout_height="0dp"
++        app:layout_constraintBottom_toBottomOf="parent"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toBottomOf="@id/loading" />
++
++    <LinearLayout
++        android:id="@+id/error_state"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:gravity="center"
++        android:orientation="vertical"
++        android:padding="24dp"
++        android:visibility="gone"
++        app:layout_constraintBottom_toBottomOf="parent"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toBottomOf="@id/toolbar">
++
++        <com.google.android.material.textview.MaterialTextView
++            android:id="@+id/error_message"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:gravity="center"
++            android:text="@string/hayai_novel_lookup_load_failed"
++            android:textAppearance="?textAppearanceBodyLarge" />
++
++        <com.google.android.material.button.MaterialButton
++            android:id="@+id/retry"
++            style="?materialButtonOutlinedStyle"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="16dp"
++            android:text="@string/retry"
++            app:icon="@drawable/ic_refresh_24dp" />
++    </LinearLayout>
++
++</androidx.constraintlayout.widget.ConstraintLayout>
+diff --git a/app/src/main/res/values/strings_hayai_novel_reader.xml b/app/src/main/res/values/strings_hayai_novel_reader.xml
+index 951b6f6646cc39f7eb2216594ad57db1389a712c..84594dc261b2225a3c51dd493470b7e1e99b1a7f 100644
+--- a/app/src/main/res/values/strings_hayai_novel_reader.xml
++++ b/app/src/main/res/values/strings_hayai_novel_reader.xml
+@@ -153,6 +153,12 @@
+     <string name="hayai_novel_selection_define">Define</string>
+     <string name="hayai_novel_selection_google_translate">Google Translate</string>
+     <string name="hayai_novel_selection_search_web">Search web</string>
++    <string name="hayai_novel_lookup_query_blank">Select text to look up</string>
++    <string name="hayai_novel_lookup_query_too_long">The selection is too long for a web lookup</string>
++    <string name="hayai_novel_lookup_load_failed">The lookup page could not be loaded.</string>
++    <string name="hayai_novel_lookup_browser_unavailable">No browser can open this page.</string>
++    <string name="hayai_novel_lookup_blocked_navigation">Only secure web pages can open in the lookup sheet.</string>
++    <string name="hayai_novel_lookup_renderer_failed">The lookup page closed after its web process stopped.</string>
+     <string name="hayai_novel_reader_translate_chapter">Translate chapter</string>
+     <string name="hayai_novel_reader_chapter_statistics">Chapter statistics</string>
+     <string name="hayai_novel_reader_toggle_offline">Save or remove offline copy</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupRouterTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupRouterTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..b84f13ac7eb61ab9e5574abe1a820a85ef16780a
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupRouterTest.kt
+@@ -0,0 +1,66 @@
++package dev.ahmedmohamed.hayai.novel.lookup
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelLookupRouterTest {
++    @Test fun `query rejects blank text`() {
++        val error = NovelSelectionQuery.parse(" \n\t ").exceptionOrNull() as NovelSelectionQueryException
++
++        assertEquals(NovelSelectionQueryFailure.Blank, error.failure)
++    }
++
++    @Test fun `query rejects an oversized unicode url value`() {
++        val error = NovelSelectionQuery.parse("界".repeat(683)).exceptionOrNull() as NovelSelectionQueryException
++
++        assertEquals(NovelSelectionQueryFailure.TooLong, error.failure)
++    }
++
++    @Test fun `search preserves unicode through url encoding`() {
++        val route = NovelLookupRouter.route(request(NovelLookupAction.SearchWeb, "辞書 café \uD83D\uDE80")) as NovelLookupRoute.Web
++
++        assertEquals("辞書 café \uD83D\uDE80", route.webUrl.queryParameter("q"))
++        assertEquals("https", route.webUrl.scheme)
++    }
++
++    @Test fun `definition uses a distinct define query`() {
++        val route = NovelLookupRouter.route(request(NovelLookupAction.Define, "serendipity")) as NovelLookupRoute.Web
++
++        assertEquals("define serendipity", route.webUrl.queryParameter("q"))
++    }
++
++    @Test fun `google translate tries process text then send before web`() {
++        val route =
++            NovelLookupRouter.route(
++                request(NovelLookupAction.GoogleTranslate, "مرحبا", source = "ar", target = "en"),
++            ) as NovelLookupRoute.AppThenWeb
++
++        assertEquals(
++            listOf(NovelLookupAppIntent.GoogleTranslateProcessText, NovelLookupAppIntent.GoogleTranslateSend),
++            route.appIntents,
++        )
++        assertEquals("ar", route.webUrl.queryParameter("sl"))
++        assertEquals("en", route.webUrl.queryParameter("tl"))
++        assertEquals("مرحبا", route.webUrl.queryParameter("text"))
++        assertEquals("translate", route.webUrl.queryParameter("op"))
++        assertTrue(route.webUrl.isHttps)
++    }
++
++    @Test fun `translate web fallback repairs invalid stored languages`() {
++        val route =
++            NovelLookupRouter.route(
++                request(NovelLookupAction.GoogleTranslate, "text", source = "invalid!", target = "auto"),
++            ) as NovelLookupRoute.AppThenWeb
++
++        assertEquals("auto", route.webUrl.queryParameter("sl"))
++        assertEquals("en", route.webUrl.queryParameter("tl"))
++    }
++
++    private fun request(
++        action: NovelLookupAction,
++        text: String,
++        source: String = "auto",
++        target: String = "en",
++    ) = NovelLookupRequest(action, NovelSelectionQuery.parse(text).getOrThrow(), source, target)
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 68c56e4daaad7db9c701f901ea57eaf7d9f9aa2d..f0e9949243ae6e2f3d20dfacd608e61ba30de37f 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -52,7 +52,7 @@ Browse and Recents share J2K's activity-owned tab strip. Their controller exit c
+ 
+ The text reader owns its lifecycle behind a Hayai renderer contract. Its XML shell reuses J2K reader visual language without subclassing or editing the protected image `ReaderActivity`. The default renderer is a native selectable text surface, while the opt-in WebView renderer remains isolated and blocks unsafe navigation and file access. A typed action registry drives the customizable bottom bar, a typed status registry drives ordered reader status, and the seven J2K/Tsundoku tap-zone modes share exact stored keys. The reader writes progress and bookmarks to J2K chapter rows, suppresses history in incognito mode, and keeps adjacent chapter documents in a bounded queue.
+ 
+-Read-aloud state lives in a Hayai foreground media-playback service rather than the activity. The notification exposes play, pause, stop, and paragraph navigation, and a recreated reader can attach to the active service. Quotes support duplicate-safe creation, editing, attributed copying, ordering, and deletion. Translation providers, dictionary handoff, highlight recovery, visual custom-source compilation, statistics, offline chapters, presets, snippets, and EPUB export remain typed Hayai actions and do not change the image reader. Both renderers present bounded chapter blocks with stable IDs, append and prepend without changing focus, preserve the visible offset, and move J2K progress when a new block becomes visible. Emulator verification remains required before this implementation becomes a verified port.
++Read-aloud state lives in a Hayai foreground media-playback service rather than the activity. The notification exposes play, pause, stop, and paragraph navigation, and a recreated reader can attach to the active service. Quotes support duplicate-safe creation, editing, attributed copying, ordering, and deletion. Native selection actions route quote creation back into the existing quote dialog. Definition and search actions open a forced resizable Custom Tab so the user's browser session remains available. Google Translate first tries its process-text and send contracts, then uses the same browser path. A secure `E2EBottomSheetDialog` WebView preserves only WebView cookies as the fallback and blocks navigation outside HTTPS. Full-chapter translation and cached in-app selection translation remain separate typed actions. Translation providers, dictionary handoff, highlight recovery, visual custom-source compilation, statistics, offline chapters, presets, snippets, and EPUB export do not change the image reader. Both renderers present bounded chapter blocks with stable IDs, append and prepend without changing focus, preserve the visible offset, and move J2K progress when a new block becomes visible. Emulator verification remains required before this implementation becomes a verified port.
+ 
+ Novel integration uses a small set of presentation adapters rather than parallel J2K models. The library filter delegates content-kind classification to Hayai. Manga details decorate the existing chapter rows with percent, word count, reading time, and verified offline state; the normal download/remove controls delegate novel chapters to `NovelOfflineManager`. J2K statistics aggregate Hayai's derived word data, shortcuts preserve novel identity, and migration searches reject novel-to-image and image-to-novel targets. `NovelSettingsController` owns the complete text-reader preference surface, typed reusable presets, CSS/JavaScript snippets, and bounded text-replacement rules. Translation, dictionary, and visual-source-builder settings use J2K `SettingsController` screens and preference rows while their drafts, validation, network preview, and persistence remain Hayai-owned. J2K remains authoritative for chapters, progress, history, categories, and the enclosing screens.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 5ff651575cbb2d4fbc831a4f0c9385addf4d36fa..402bbc1b6f52c3c4076ec07ecb4ab876d815182f 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -51,7 +51,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+ | Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | implemented; local chapter offline save and restart recovery verified; bulk-flow pending |
+ | Typography, themes, spacing, navigation, presets, snippets, search/replace | Five Tsundoku icon tabs with J2K spinner, switch, slider, and toolbar-settings controls; adjacent theme and text/background color controls; Tsundoku-style preset swatches plus a synchronized hex/RGB custom picker; isolated preset/custom color resolution; Tsundoku preference keys and exact tap-zone tables; SAF-imported validated fonts shared by native/Web renderers; progress modes; compact ordered bottom/status registries; searchable full settings; ordered snippets with append semantics; and testable ordered replacements | custom theme logic and compilation verified; picker UI emulator verification and imported-font flow pending |
+-| Translation and dictionary handoff | Bounded provider clients, cache, selection/chapter reader actions, installed-app lookup, and web fallback | implemented unverified |
++| Translation, definition, search, and dictionary handoff | Bounded provider clients and cache; separate selection/chapter translation; native selection actions; Google Translate process-text/send routing; forced resizable Custom Tabs with browser login state; and a secure J2K bottom-sheet WebView fallback | implemented unverified; focused routing and reader-surface validation pending |
+ | TTS and playback controls | Foreground media-playback service, notification actions, Tsundoku transport actions surfaced through J2K's reader-sheet buttons, chapter handoff, highlight, and activity reattachment | active exact-shell transport verified on emulator; background and restart recovery pending |
+ | Quotes | Typed `hayai_quotes`, native/Web selection capture, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | implemented unverified; emulator selection lifecycle pending |
+ | Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, editing, schema, and backup | implemented unverified |
+-- 
+2.54.0.windows.1
+

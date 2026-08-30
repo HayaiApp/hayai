@@ -1,0 +1,447 @@
+From b3d0e3ab9cd2fd13a3f39a1ab6a1228d43075365 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 18:55:31 +0300
+Subject: [PATCH] Complete novel chapter statistics
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 9515259983df864eb71a280d7ba880a139fb85d0..09c96a416d591ae2c6fa2761a8afa73b38a113d2 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -30,3 +30,8 @@ ts	phase	decision	why	evidence	result
+ 2026-08-20T18:50:00Z	extensions	discovered installed Tsundoku novel APKs through J2K's trusted loader	kept signature trust, private-extension precedence, NSFW policy, class loading, and the single J2K extension manager authoritative	NovelExtensionManifest.kt; ExtensionLoader.kt	VERIFIED
+ 2026-08-20T18:54:00Z	validation	compiled the loader integration and ran focused manifest contract tests	verified both feature namespaces, mixed manifests, relative and migrated class names, labels, and unsupported packages	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.extension.*	VERIFIED
+ 2026-08-20T19:12:00Z	review	closed the independent installed-novel-extension audit	added the legacy marker ABI and cross-classloader detection after review identified a real pre-property Tsundoku compatibility gap	NovelSource.kt; NovelSourceCompatibilityTest.kt	VERIFIED
++2026-08-20T19:40:00Z	statistics	completed persistent novel chapter analytics	counts readable Unicode text rather than markup, self-heals changed counts, derives progress-aware reading estimates, and keeps analytics failure from blocking the reader	app/src/main/java/dev/ahmedmohamed/hayai/novel/statistics; NovelReaderSession.kt; NovelReaderActivity.kt	VERIFIED
++2026-08-20T19:46:00Z	validation	compiled the reader integration and ran focused statistics tests	verified plain text, sanitized HTML, rendered Markdown, punctuation-only chapters, Unicode words, time rounding, and progress bounds	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.statistics.*	VERIFIED
++2026-08-20T20:08:00Z	review	closed the independent novel-statistics audit	separated fallible analysis from persistence and added explicit unspaced-script segmentation after two review rounds found reader-availability and CJK/Thai undercount risks	NovelTextStatistics.kt; NovelReaderSession.kt	VERIFIED
++2026-08-20T20:10:00Z	validation	ran the complete novel suite plus legacy extension compatibility before final review fixes	verified the statistics integration did not regress reader, formats, downloads, quotes, or installed-novel linkage	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.* --tests eu.kanade.tachiyomi.source.NovelSourceCompatibilityTest	VERIFIED
++2026-08-20T20:14:00Z	validation	reran focused statistics tests after the final review fixes	verified analysis and DB failure fallback plus Chinese, Thai, Korean, and Japanese segmentation in the final code	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.statistics.*	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index 8fee41c008fc3fa6c7792f76d13ef007adb4f842..7f13c2ac8b5d14f81df245ff7635e710bc6372f9 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -45,6 +45,7 @@ import kotlinx.serialization.json.Json
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+ import java.io.File
++import java.text.NumberFormat
+ import kotlin.math.abs
+ 
+ class NovelReaderActivity :
+@@ -137,6 +138,13 @@ class NovelReaderActivity :
+             buildString {
+                 append(chapter.chapter.name, "  •  ", chapter.position + 1, "/", chapter.total)
+                 if (chapter.isDownloaded) append("  •  Offline")
++                append(
++                    "  •  ",
++                    NumberFormat.getIntegerInstance().format(chapter.statistics.wordCount),
++                    " words  •  ",
++                    chapter.statistics.estimatedMinutes(),
++                    " min",
++                )
+             }
+         previousButton.isEnabled = chapter.hasPrevious
+         nextButton.isEnabled = chapter.hasNext
+@@ -292,6 +300,7 @@ class NovelReaderActivity :
+                 "Toggle auto-scroll",
+                 if (loaded?.isDownloaded == true) "Remove offline copy" else "Save chapter offline",
+                 "Saved quotes",
++                "Chapter statistics",
+                 "Reset chapter progress",
+             )
+         AlertDialog
+@@ -306,16 +315,36 @@ class NovelReaderActivity :
+                     4 -> if (autoScroll) stopAutoScroll() else startAutoScroll()
+                     5 -> toggleOfflineCopy()
+                     6 -> showSavedQuotes()
+-                    7 -> {
++                    7 -> showChapterStatistics()
++                    8 -> {
+                         currentProgress = 0
+                         loaded?.chapter?.let(NovelProgress::reset)
+                         saveProgress()
+                     }
+                 }
+-                if (which !in setOf(4, 5, 6)) loaded?.let(::showChapter)
++                if (which !in setOf(4, 5, 6, 7)) loaded?.let(::showChapter)
+             }.show()
+     }
+ 
++    private fun showChapterStatistics() {
++        val chapter = loaded ?: return
++        val statistics = chapter.statistics
++        val number = NumberFormat.getIntegerInstance()
++        AlertDialog
++            .Builder(this)
++            .setTitle("Chapter statistics")
++            .setMessage(
++                buildString {
++                    append("Words: ", number.format(statistics.wordCount))
++                    append("\nEstimated reading time: ", statistics.estimatedMinutes(), " min")
++                    append("\nEstimated words read: ", number.format(statistics.wordsRead(currentProgress)))
++                    append("\nEstimated time remaining: ", statistics.remainingMinutes(currentProgress), " min")
++                    append("\nProgress: ", currentProgress.coerceIn(0, 100), "%")
++                },
++            ).setPositiveButton(android.R.string.ok, null)
++            .show()
++    }
++
+     private fun captureSelectedQuote() {
+         val chapter = loaded ?: return
+         webView.evaluateJavascript("window.hayaiReader.takeSelection()") { encoded ->
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+index df75122decf6450828d47727b1649b7e56ca094a..b24f851a024c1d45b838465f0ef9f6bc0856d445 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+@@ -7,6 +7,9 @@ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+ import dev.ahmedmohamed.hayai.novel.source.NovelDocument
+ import dev.ahmedmohamed.hayai.novel.source.NovelDocumentLoader
+ import dev.ahmedmohamed.hayai.novel.source.NovelSource
++import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatStore
++import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatistics
++import dev.ahmedmohamed.hayai.novel.statistics.NovelStatisticsResolver
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+ import eu.kanade.tachiyomi.data.database.models.History
+@@ -28,6 +31,7 @@ internal class NovelReaderSession(
+     private val downloadStore: NovelDownloadStore,
+     private val network: NetworkHelper,
+ ) : NovelAssetProvider {
++    private val chapterStatStore = NovelChapterStatStore(database)
+     lateinit var manga: Manga
+         private set
+     lateinit var source: Source
+@@ -118,6 +122,11 @@ internal class NovelReaderSession(
+             offlineDocument
+                 ?: (source as? NovelSource)?.getChapterDocument(chapter)
+                 ?: NovelDocumentLoader.load(source, chapter)
++        val chapterId = requireNotNull(chapter.id)
++        // Derived analytics must never make otherwise readable content unavailable.
++        val statistics =
++            NovelStatisticsResolver.resolve(document, persisted = { chapterStatStore.get(chapterId) })
++        runCatching { chapterStatStore.store(chapterId, statistics) }
+         database
+             .upsertHistoryLastRead(
+                 History.create(chapter).apply { last_read = System.currentTimeMillis() },
+@@ -131,6 +140,7 @@ internal class NovelReaderSession(
+             hasPrevious = hasPrevious,
+             hasNext = hasNext,
+             isDownloaded = offlineDocument != null,
++            statistics = statistics,
+         )
+     }
+ 
+@@ -196,4 +206,5 @@ internal data class LoadedNovelChapter(
+     val hasPrevious: Boolean,
+     val hasNext: Boolean,
+     val isDownloaded: Boolean,
++    val statistics: NovelChapterStatistics,
+ )
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/statistics/NovelChapterStatStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/statistics/NovelChapterStatStore.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..12e7f4871b4aa4206ddf96418314861fe2566202
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/statistics/NovelChapterStatStore.kt
+@@ -0,0 +1,57 @@
++package dev.ahmedmohamed.hayai.novel.statistics
++
++import android.content.ContentValues
++import com.pushtorefresh.storio.sqlite.queries.InsertQuery
++import com.pushtorefresh.storio.sqlite.queries.RawQuery
++import com.pushtorefresh.storio.sqlite.queries.UpdateQuery
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++
++internal class NovelChapterStatStore(
++    private val database: DatabaseHelper,
++) {
++    fun store(
++        chapterId: Long,
++        statistics: NovelChapterStatistics,
++    ): NovelChapterStatistics {
++        require(chapterId >= 0)
++        synchronized(writeLock) {
++            val existingWordCount = getWordCount(chapterId)
++            if (existingWordCount == statistics.wordCount) return statistics
++            val values = ContentValues(2).apply { put("chapter_id", chapterId); put("word_count", statistics.wordCount) }
++            if (existingWordCount == null) {
++                check(
++                    database.lowLevel().insert(InsertQuery.builder().table(TABLE).build(), values) >= 0,
++                ) { "Chapter statistics could not be saved" }
++            } else {
++                check(
++                    database.lowLevel().update(
++                        UpdateQuery.builder().table(TABLE).where("chapter_id = ?").whereArgs(chapterId).build(),
++                        values,
++                    ) == 1,
++                ) { "Chapter statistics could not be updated" }
++            }
++        }
++        return statistics
++    }
++
++    fun get(chapterId: Long): NovelChapterStatistics? =
++        getWordCount(chapterId)?.let { NovelChapterStatistics(it.coerceAtLeast(0)) }
++
++    private fun getWordCount(chapterId: Long): Long? =
++        database
++            .lowLevel()
++            .rawQuery(
++                RawQuery
++                    .builder()
++                    .query("SELECT word_count FROM $TABLE WHERE chapter_id = ?")
++                    .args(chapterId)
++                    .build(),
++            ).use { cursor ->
++                if (cursor.moveToFirst()) cursor.getLong(0) else null
++            }
++
++    private companion object {
++        const val TABLE = "hayai_novel_chapter_stats"
++        val writeLock = Any()
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/statistics/NovelTextStatistics.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/statistics/NovelTextStatistics.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..6bb97b9a30ee216fb8ca46fef307517dcd045493
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/statistics/NovelTextStatistics.kt
+@@ -0,0 +1,110 @@
++package dev.ahmedmohamed.hayai.novel.statistics
++
++import dev.ahmedmohamed.hayai.novel.source.NovelContentType
++import dev.ahmedmohamed.hayai.novel.source.NovelDocument
++import org.commonmark.parser.Parser
++import org.commonmark.renderer.html.HtmlRenderer
++import org.jsoup.Jsoup
++import kotlin.math.ceil
++
++internal object NovelTextStatistics {
++    const val DEFAULT_WORDS_PER_MINUTE = 200
++
++    fun analyze(document: NovelDocument): NovelChapterStatistics {
++        val readableText =
++            when (document.contentType) {
++                NovelContentType.Html -> htmlText(document.content)
++                NovelContentType.Markdown -> markdownText(document.content)
++                NovelContentType.PlainText -> document.content
++            }
++        return NovelChapterStatistics(wordCount(readableText))
++    }
++
++    internal fun wordCount(text: String): Long {
++        if (text.isBlank()) return 0
++        val codePoints = text.codePoints().toArray()
++        var count = 0L
++        var inSpacedScriptWord = false
++        codePoints.forEachIndexed { index, codePoint ->
++            when {
++                codePoint.isUnspacedScriptUnit() -> {
++                    count++
++                    inSpacedScriptWord = false
++                }
++                Character.isLetterOrDigit(codePoint) -> {
++                    if (!inSpacedScriptWord) count++
++                    inSpacedScriptWord = true
++                }
++                Character.getType(codePoint) in MARK_TYPES -> Unit
++                codePoint in WORD_JOINERS &&
++                    inSpacedScriptWord &&
++                    codePoints.getOrNull(index + 1)?.let { Character.isLetterOrDigit(it) && !it.isUnspacedScriptUnit() } == true -> Unit
++                else -> inSpacedScriptWord = false
++            }
++        }
++        return count
++    }
++
++    private fun Int.isUnspacedScriptUnit(): Boolean =
++        Character.isLetterOrDigit(this) &&
++            Character.UnicodeScript.of(this) in UNSPACED_SCRIPTS
++
++    private fun htmlText(html: String): String =
++        Jsoup
++            .parse(html)
++            .apply { select("script, style, template, noscript, svg").remove() }
++            .text()
++
++    private fun markdownText(markdown: String): String {
++        val node = Parser.builder().build().parse(markdown)
++        val html = HtmlRenderer.builder().escapeHtml(true).build().render(node)
++        return htmlText(html)
++    }
++
++    private val UNSPACED_SCRIPTS =
++        setOf(
++            Character.UnicodeScript.HAN,
++            Character.UnicodeScript.HIRAGANA,
++            Character.UnicodeScript.KATAKANA,
++            Character.UnicodeScript.HANGUL,
++            Character.UnicodeScript.THAI,
++        )
++    private val MARK_TYPES =
++        setOf(
++            Character.NON_SPACING_MARK.toInt(),
++            Character.COMBINING_SPACING_MARK.toInt(),
++            Character.ENCLOSING_MARK.toInt(),
++        )
++    private val WORD_JOINERS = setOf('\''.code, '’'.code, '-'.code, '_'.code)
++}
++
++internal object NovelStatisticsResolver {
++    fun resolve(
++        document: NovelDocument,
++        persisted: () -> NovelChapterStatistics?,
++        analyze: (NovelDocument) -> NovelChapterStatistics = NovelTextStatistics::analyze,
++    ): NovelChapterStatistics =
++        runCatching { analyze(document) }
++            .getOrElse { runCatching(persisted).getOrNull() ?: NovelChapterStatistics(0) }
++}
++
++internal data class NovelChapterStatistics(
++    val wordCount: Long,
++) {
++    init {
++        require(wordCount >= 0)
++    }
++
++    fun estimatedMinutes(wordsPerMinute: Int = NovelTextStatistics.DEFAULT_WORDS_PER_MINUTE): Int {
++        require(wordsPerMinute > 0)
++        if (wordCount == 0L) return 0
++        return ceil(wordCount.toDouble() / wordsPerMinute).toInt().coerceAtLeast(1)
++    }
++
++    fun wordsRead(progress: Int): Long = wordCount * progress.coerceIn(0, 100) / 100
++
++    fun remainingMinutes(
++        progress: Int,
++        wordsPerMinute: Int = NovelTextStatistics.DEFAULT_WORDS_PER_MINUTE,
++    ): Int = NovelChapterStatistics(wordCount - wordsRead(progress)).estimatedMinutes(wordsPerMinute)
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/statistics/NovelTextStatisticsTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/statistics/NovelTextStatisticsTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..865f1b0ab63f588f8c1da1fe964f42987366e66c
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/statistics/NovelTextStatisticsTest.kt
+@@ -0,0 +1,93 @@
++package dev.ahmedmohamed.hayai.novel.statistics
++
++import dev.ahmedmohamed.hayai.novel.source.NovelContentType
++import dev.ahmedmohamed.hayai.novel.source.NovelDocument
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class NovelTextStatisticsTest {
++    @Test
++    fun `plain text count handles punctuation contractions numbers and unicode`() {
++        assertEquals(7, NovelTextStatistics.wordCount("Hello, world! Don't stop 42 — مرحبا بالعالم."))
++    }
++
++    @Test
++    fun `unspaced Chinese text counts readable ideographs`() {
++        assertEquals(6, NovelTextStatistics.wordCount("这是一个测试"))
++    }
++
++    @Test
++    fun `Thai combining marks attach to base letters without collapsing the sentence`() {
++        assertEquals(7, NovelTextStatistics.wordCount("สวัสดีโลก"))
++    }
++
++    @Test
++    fun `Korean and Japanese syllables do not collapse into one word`() {
++        assertEquals(7, NovelTextStatistics.wordCount("안녕하세요 세계"))
++        assertEquals(7, NovelTextStatistics.wordCount("こんにちは世界"))
++    }
++
++    @Test
++    fun `HTML count excludes scripts styles templates and markup`() {
++        val document =
++            NovelDocument(
++                "<style>hidden style words</style><script>hidden script words</script><p>Visible <b>chapter</b> text.</p><template>hidden</template>",
++                NovelContentType.Html,
++            )
++
++        assertEquals(3, NovelTextStatistics.analyze(document).wordCount)
++    }
++
++    @Test
++    fun `Markdown count includes readable labels but not syntax or destinations`() {
++        val document = NovelDocument("# Chapter title\n\nRead **bold words** at [the site](https://example.test/path).", NovelContentType.Markdown)
++
++        assertEquals(8, NovelTextStatistics.analyze(document).wordCount)
++    }
++
++    @Test
++    fun `blank and symbol only chapters have zero words`() {
++        assertEquals(0, NovelTextStatistics.wordCount("  \n — … ❝ ❞ "))
++    }
++
++    @Test
++    fun `reading estimates round up and clamp progress`() {
++        val statistics = NovelChapterStatistics(401)
++
++        assertEquals(3, statistics.estimatedMinutes(200))
++        assertEquals(200, statistics.wordsRead(50))
++        assertEquals(0, statistics.wordsRead(-1))
++        assertEquals(401, statistics.wordsRead(500))
++        assertEquals(2, statistics.remainingMinutes(50, 200))
++        assertEquals(0, statistics.remainingMinutes(100, 200))
++        assertEquals(0, NovelChapterStatistics(0).estimatedMinutes())
++    }
++
++    @Test
++    fun `analysis failure falls back to persisted statistics`() {
++        val document = NovelDocument("content", NovelContentType.PlainText)
++
++        val resolved =
++            NovelStatisticsResolver.resolve(
++                document = document,
++                persisted = { NovelChapterStatistics(321) },
++                analyze = { error("parser failed") },
++            )
++
++        assertEquals(321, resolved.wordCount)
++    }
++
++    @Test
++    fun `analysis and persistence read failures degrade to zero`() {
++        val document = NovelDocument("content", NovelContentType.PlainText)
++
++        val resolved =
++            NovelStatisticsResolver.resolve(
++                document = document,
++                persisted = { error("database failed") },
++                analyze = { error("parser failed") },
++            )
++
++        assertEquals(0, resolved.wordCount)
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index b5bbf0ce5b94c055dbabd1ae098e7e72120fbf5e..debee5b0ee8178d38a562d7dfed1d9344d27588a 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -31,7 +31,7 @@ Extensions remain standard J2K `Source`/`SourceFactory` extensions. `SourceCapab
+ 
+ `NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources, downloaded source chapters, and installed Tsundoku novel APK discovery are production implementations; remote repository catalogs and JavaScript plugins remain explicit ports in the feature audit.
+ 
+-The text reader owns its lifecycle. It loads text off the main thread, renders bounded selectable documents, updates J2K history, supports typography/navigation/search, speaks chapters through TTS, captures and manages quotes, and saves authenticated source assets into a self-contained integrity-checked offline store. Translation/dictionary adapters and JS/custom repository runtimes remain future Hayai-owned slices rather than changes to the image reader.
++The text reader owns its lifecycle. It loads text off the main thread, renders bounded selectable documents, updates J2K history, supports typography/navigation/search, speaks chapters through TTS, captures and manages quotes, persists Unicode-aware chapter word counts and reading-time estimates, and saves authenticated source assets into a self-contained integrity-checked offline store. Derived-stat persistence failure never prevents reading. Translation/dictionary adapters and JS/custom repository runtimes remain future Hayai-owned slices rather than changes to the image reader.
+ 
+ ## Backup ownership
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 3186ed634e3d9fba6a7467d0f10c643e0136da0c..b1c09345fc6afd65258fcb946561f3484292648e 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -38,7 +38,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | TTS and playback controls | Reader-owned lifecycle-aware engine and controls | port |
+ | Quotes | Typed `hayai_quotes`, selection capture, browse/copy/delete UI | port |
+ | Persistent highlights | Reader ranges anchored to document identity | audit |
+-| Word count, chapter stats, analytics | `hayai_novel_chapter_stats` | migration foundation; runtime audit |
++| Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, reader header and progress-aware details | port |
+ | Novel trackers | J2K tracking boundary adapters | audit |
+ | Hayai backup | Versioned side payload after stable core ID remapping | port |
+ | LNReader/Tsundoku imports | Validated external import adapters | audit |
+-- 
+2.54.0.windows.1
+

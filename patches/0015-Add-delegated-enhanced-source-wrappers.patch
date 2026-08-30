@@ -1,0 +1,887 @@
+From a332cd4921080872a647f6ebeada6324659b869c Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 01:21:05 +0300
+Subject: [PATCH] Add delegated enhanced source wrappers
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index c68733fb705ab3a92f552907d69cb62e49a28b73..80e28578e1d0f4ae0ff1b1bf5daf6039f2444a31 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -52,3 +52,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T13:08:00Z	validation	compiled the integrated app and ran the focused recents visibility tests with one Gradle worker	verified signed and malformed IDs, independent lists, mixed-view union, exact replacement, resources, bindings, and J2K presenter integration	gradlew --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.recents.* -x :app:formatKotlin	VERIFIED
+ 2026-08-21T14:10:00Z	source-experience	added truthful source badges, built-in configurable-source routing, and effective E-Hentai browse/detail preferences	kept source behavior Hayai-owned, restored JavaScript plugin settings access, and avoided claiming audited enhanced wrappers as ports	SourcePresentation.kt; SourceSettingsController.kt; EhPreferences.kt; BrowseSourceController.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T14:20:00Z	validation	compiled the integrated source experience and ran focused preference and presentation tests with one Gradle worker	verified data binding for all badge layouts, built-in settings routing, SY category encoding, malformed preference fallback, and badge classification	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.settings.* --tests dev.ahmedmohamed.hayai.source.presentation.* -x :app:formatKotlin	VERIFIED
++2026-08-21T15:00:00Z	enhanced-sources	replaced registry-only enhanced labels with ID-preserving extension wrappers	delegated core source behavior, validated imported hosts and identities, bounded secondary details parsing, and retained the original extension result on enrichment failure	EnhancedSourceRegistry.kt; HayaiEnhancedHttpSource.kt; EnhancedSourceUrlMapper.kt; EnhancedDetailsParser.kt	IMPLEMENTED_UNVERIFIED
++2026-08-21T15:15:00Z	validation	compiled delegated enhanced sources and ran focused registry, URL, parser, and badge tests with one Gradle worker	verified all six family parsers, foreign-host rejection, positive identities, fixed and dynamic matching, idempotent wrapping, filter preservation, and direct URL search fallback	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.source.enhanced.* --tests dev.ahmedmohamed.hayai.source.presentation.* -x :app:formatKotlin	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/ConfigurableHayaiEnhancedHttpSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/ConfigurableHayaiEnhancedHttpSource.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a95adcba1dd3f6665fdc95ee019fc9e43178474b
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/ConfigurableHayaiEnhancedHttpSource.kt
+@@ -0,0 +1,16 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import androidx.preference.PreferenceScreen
++import eu.kanade.tachiyomi.source.ConfigurableSource
++import eu.kanade.tachiyomi.source.online.HttpSource
++
++class ConfigurableHayaiEnhancedHttpSource(
++    originalSource: HttpSource,
++    definition: EnhancedSourceDefinition,
++) : HayaiEnhancedHttpSource(originalSource, definition), ConfigurableSource {
++    private val configurable = requireNotNull(originalSource as? ConfigurableSource)
++
++    override fun getSourcePreferences() = configurable.getSourcePreferences()
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = configurable.setupPreferenceScreen(screen)
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..8d550c549a959bc045d6820d142fbf799f9e19a7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParser.kt
+@@ -0,0 +1,172 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.SourceFamily
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.JsonPrimitive
++import kotlinx.serialization.json.contentOrNull
++import kotlinx.serialization.json.jsonObject
++import org.jsoup.Jsoup
++
++data class EnhancedDetails(
++    val title: String? = null,
++    val alternateTitle: String? = null,
++    val author: String? = null,
++    val artist: String? = null,
++    val description: String? = null,
++    val genres: List<String> = emptyList(),
++    val thumbnailUrl: String? = null,
++)
++
++object EnhancedDetailsParser {
++    private val json = Json { ignoreUnknownKeys = true }
++
++    fun parse(
++        family: SourceFamily,
++        body: String,
++        location: String,
++    ): EnhancedDetails? = runCatching {
++        when (family) {
++            SourceFamily.NHentai -> parseNhentai(body)
++            SourceFamily.MangaDex -> parseMangaDex(body)
++            SourceFamily.Lanraragi -> parseLanraragi(body)
++            SourceFamily.EightMuses -> parseEightMuses(body, location)
++            SourceFamily.HBrowse -> parseHBrowse(body, location)
++            SourceFamily.Pururin -> parsePururin(body, location)
++            else -> null
++        }
++    }.getOrNull()
++
++    private fun parseEightMuses(body: String, location: String): EnhancedDetails {
++        val document = Jsoup.parse(body, location)
++        val crumbs = document.select(".top-menu-breadcrumb li a").map { it.text().trim() }.filter(String::isNotBlank)
++        val tags = document.select(".album-tags a").map { it.text().trim() }.filter(String::isNotBlank).distinct()
++        val artist = crumbs.getOrNull(1)
++        return EnhancedDetails(
++            title = crumbs.lastOrNull(),
++            artist = artist,
++            description = description(listOf("Artist" to artist, "Tags" to tags.joinToString().takeIf(String::isNotBlank))),
++            genres = tags,
++            thumbnailUrl = document.selectFirst(".gallery .c-tile .lazyload")?.absUrl("data-src")?.takeIf(String::isNotBlank),
++        )
++    }
++
++    private fun parseHBrowse(body: String, location: String): EnhancedDetails {
++        val document = Jsoup.parse(body, location)
++        val fields = document.select("#main .listTable tr").filter { it.childrenSize() > 1 }.associate {
++            it.child(0).text().trim().lowercase() to it.child(1)
++        }
++        val tags = fields.filterKeys { it !in setOf("title", "length") }.flatMap { (namespace, value) ->
++            value.select("a").map { "$namespace: ${it.text().trim()}" }
++        }
++        val length = fields["length"]?.text()?.substringBefore(' ')?.toIntOrNull()
++        return EnhancedDetails(
++            title = fields["title"]?.text()?.trim(),
++            description = description(listOf("Length" to length?.let { "$it pages" }, "Tags" to tags.joinToString().takeIf(String::isNotBlank))),
++            genres = tags,
++        )
++    }
++
++    private fun parsePururin(body: String, location: String): EnhancedDetails {
++        val document = Jsoup.parse(body, location)
++        val wrapper = document.selectFirst(".content-wrapper") ?: document
++        val fields = wrapper.select(".table-gallery-info > tbody > tr").filter { it.childrenSize() > 1 }
++        val tags = fields.flatMap { row ->
++            val namespace = row.child(0).text().trim().lowercase().removeSuffix(":")
++            row.child(1).select("a").map { "$namespace: ${it.text().trim()}" }
++        }.distinct()
++        val fieldText = fields.associate { it.child(0).text().trim().lowercase().removeSuffix(":") to it.child(1).text().trim() }
++        return EnhancedDetails(
++            title = wrapper.selectFirst(".title h1")?.text()?.trim(),
++            alternateTitle = wrapper.selectFirst(".alt-title")?.text()?.trim()?.takeIf(String::isNotBlank),
++            description = description(
++                listOf(
++                    "Pages" to fieldText["pages"],
++                    "Ratings" to fieldText["ratings"],
++                    "Uploader" to fieldText["uploader"],
++                    "Tags" to tags.joinToString().takeIf(String::isNotBlank),
++                ),
++            ),
++            genres = tags,
++            thumbnailUrl = wrapper.selectFirst(".cover-wrapper v-lazy-image")?.absUrl("src")?.takeIf(String::isNotBlank),
++        )
++    }
++
++    private fun parseNhentai(body: String): EnhancedDetails {
++        val root = json.parseToJsonElement(body).jsonObject
++        val titles = root.objectOrNull("title")
++        val tags = root.arrayOrEmpty("tags").mapNotNull { element ->
++            val tag = element as? JsonObject ?: return@mapNotNull null
++            val type = tag.string("type") ?: return@mapNotNull null
++            val name = tag.string("name") ?: return@mapNotNull null
++            "$type: $name"
++        }
++        return EnhancedDetails(
++            title = titles?.string("english") ?: titles?.string("pretty"),
++            alternateTitle = titles?.string("japanese"),
++            description = description(
++                listOf(
++                    "Pages" to root.long("num_pages")?.toString(),
++                    "Favorites" to root.long("num_favorites")?.toString(),
++                    "Scanlator" to root.string("scanlator"),
++                    "Tags" to tags.joinToString().takeIf(String::isNotBlank),
++                ),
++            ),
++            genres = tags,
++        )
++    }
++
++    private fun parseMangaDex(body: String): EnhancedDetails {
++        val root = json.parseToJsonElement(body).jsonObject
++        val data = root.objectOrNull("data") ?: root
++        val attributes = data.objectOrNull("attributes") ?: return EnhancedDetails()
++        val titleObject = attributes.objectOrNull("title")
++        val title = titleObject?.values?.firstNotNullOfOrNull { (it as? JsonPrimitive)?.contentOrNull }
++        val altTitles = attributes.arrayOrEmpty("altTitles").flatMap { (it as? JsonObject)?.values.orEmpty() }
++            .mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.distinct()
++        val descriptionMap = attributes.objectOrNull("description")
++        val descriptions = buildList {
++            descriptionMap?.string("en")?.let(::add)
++            descriptionMap?.forEach { (language, value) ->
++                if (language != "en") (value as? JsonPrimitive)?.contentOrNull?.let(::add)
++            }
++        }
++        val tags = attributes.arrayOrEmpty("tags").mapNotNull { element ->
++            val names = (element as? JsonObject)?.objectOrNull("attributes")?.objectOrNull("name") ?: return@mapNotNull null
++            names.string("en") ?: names.values.firstNotNullOfOrNull { (it as? JsonPrimitive)?.contentOrNull }
++        }.distinct()
++        return EnhancedDetails(
++            title = title,
++            alternateTitle = altTitles.firstOrNull(),
++            description = description(listOf("Description" to descriptions.firstOrNull(), "Alternative titles" to altTitles.joinToString().takeIf(String::isNotBlank))),
++            genres = tags,
++        )
++    }
++
++    private fun parseLanraragi(body: String): EnhancedDetails {
++        val root = json.parseToJsonElement(body).jsonObject
++        val tags = root.string("tags").orEmpty().split(',').map(String::trim).filter(String::isNotBlank)
++        return EnhancedDetails(
++            title = root.string("title"),
++            description = description(
++                listOf(
++                    "Summary" to root.string("summary"),
++                    "Pages" to root.long("pagecount")?.toString(),
++                    "File" to root.string("filename"),
++                    "Tags" to tags.joinToString().takeIf(String::isNotBlank),
++                ),
++            ),
++            genres = tags,
++        )
++    }
++
++    private fun description(rows: List<Pair<String, String?>>): String? =
++        rows.mapNotNull { (label, value) -> value?.trim()?.takeIf(String::isNotBlank)?.let { "**$label:** $it" } }
++            .takeIf(List<String>::isNotEmpty)?.joinToString("\n")
++
++    private fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
++    private fun JsonObject.long(key: String): Long? = string(key)?.toLongOrNull()
++    private fun JsonObject.objectOrNull(key: String): JsonObject? = get(key) as? JsonObject
++    private fun JsonObject.arrayOrEmpty(key: String): JsonArray = get(key) as? JsonArray ?: JsonArray(emptyList())
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceDefinition.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceDefinition.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..20eeaa65ec51ff5e862f7d688bdc8e3a064f6250
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceDefinition.kt
+@@ -0,0 +1,64 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.SourceCapabilityRegistry
++import dev.ahmedmohamed.hayai.source.SourceFamily
++import eu.kanade.tachiyomi.source.online.HttpSource
++import java.net.URI
++
++data class EnhancedSourceDefinition(
++    val family: SourceFamily,
++    val fixedIds: Set<Long> = emptySet(),
++    val classPrefixes: Set<String> = emptySet(),
++    val hosts: Set<String>,
++) {
++    fun matches(source: HttpSource): Boolean {
++        if (source.id in fixedIds) return true
++        val className = source.javaClass.name
++        if (classPrefixes.any(className::startsWith)) return true
++        val descriptor = SourceCapabilityRegistry.descriptor(source)
++        return descriptor.family == family && runCatching {
++            URI(source.baseUrl).host?.lowercase() in hosts
++        }.getOrDefault(false)
++    }
++}
++
++object EnhancedSourceDefinitions {
++    val all = listOf(
++        EnhancedSourceDefinition(
++            SourceFamily.EightMuses,
++            fixedIds = setOf(SourceCapabilityRegistry.EIGHT_MUSES_SOURCE_ID),
++            classPrefixes = setOf(
++                "eu.kanade.tachiyomi.extension.en.eightmuses.",
++                "eu.kanade.tachiyomi.extension.en.eromuse.",
++            ),
++            hosts = setOf("8muses.com", "www.8muses.com", "comics.8muses.com", "eromuse.com", "www.eromuse.com"),
++        ),
++        EnhancedSourceDefinition(
++            SourceFamily.HBrowse,
++            fixedIds = setOf(SourceCapabilityRegistry.HBROWSE_SOURCE_ID),
++            classPrefixes = setOf("eu.kanade.tachiyomi.extension.en.hbrowse."),
++            hosts = setOf("hbrowse.com", "www.hbrowse.com"),
++        ),
++        EnhancedSourceDefinition(
++            SourceFamily.Pururin,
++            fixedIds = setOf(SourceCapabilityRegistry.PURURIN_SOURCE_ID),
++            classPrefixes = setOf("eu.kanade.tachiyomi.extension.en.pururin.", "eu.kanade.tachiyomi.extension.en.puruin."),
++            hosts = setOf("pururin.to", "www.pururin.to", "pururin.me", "www.pururin.me", "puruin.com", "www.puruin.com"),
++        ),
++        EnhancedSourceDefinition(
++            SourceFamily.NHentai,
++            classPrefixes = setOf("eu.kanade.tachiyomi.extension.all.nhentai."),
++            hosts = setOf("nhentai.net", "www.nhentai.net"),
++        ),
++        EnhancedSourceDefinition(
++            SourceFamily.MangaDex,
++            classPrefixes = setOf("eu.kanade.tachiyomi.extension.all.mangadex"),
++            hosts = setOf("mangadex.org", "www.mangadex.org"),
++        ),
++        EnhancedSourceDefinition(
++            SourceFamily.Lanraragi,
++            classPrefixes = setOf("eu.kanade.tachiyomi.extension.all.lanraragi."),
++            hosts = emptySet(),
++        ),
++    )
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistry.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistry.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..bf291813a1b7b73377e45cfc7e579c00660a25cc
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistry.kt
+@@ -0,0 +1,16 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import eu.kanade.tachiyomi.source.online.HttpSource
++import eu.kanade.tachiyomi.source.ConfigurableSource
++
++object EnhancedSourceRegistry {
++    fun wrap(source: HttpSource): HttpSource {
++        if (source is HayaiEnhancedHttpSource) return source
++        val definition = EnhancedSourceDefinitions.all.firstOrNull { it.matches(source) } ?: return source
++        return if (source is ConfigurableSource) {
++            ConfigurableHayaiEnhancedHttpSource(source, definition)
++        } else {
++            HayaiEnhancedHttpSource(source, definition)
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapper.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapper.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..0defc4712dfea5d63e1b0fcf2483d173a02b1e52
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapper.kt
+@@ -0,0 +1,56 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.SourceFamily
++import java.net.URI
++
++object EnhancedSourceUrlMapper {
++    fun map(
++        definition: EnhancedSourceDefinition,
++        sourceBaseUrl: String,
++        input: String,
++    ): String? {
++        val uri = runCatching { URI(input.trim()) }.getOrNull() ?: return null
++        if (uri.scheme?.lowercase() !in setOf("http", "https")) return null
++        val sourceHost = runCatching { URI(sourceBaseUrl).host?.lowercase() }.getOrNull()
++        val host = uri.host?.lowercase() ?: return null
++        if (definition.family == SourceFamily.Lanraragi) {
++            if (sourceHost == null || host != sourceHost) return null
++        } else if (host !in definition.hosts) {
++            return null
++        }
++
++        val segments = uri.path.orEmpty().split('/').filter(String::isNotBlank)
++        return when (definition.family) {
++            SourceFamily.EightMuses -> mapEightMuses(segments)
++            SourceFamily.HBrowse -> segments.firstOrNull()?.takeIf(::isNumericId)?.let { "/$it/c00001/" }
++            SourceFamily.Pururin -> mapPururin(segments)
++            SourceFamily.NHentai -> segments.takeIf { it.firstOrNull().equals("g", true) }
++                ?.getOrNull(1)?.takeIf(::isNumericId)?.let { "/g/$it/" }
++            SourceFamily.MangaDex -> segments.takeIf { it.firstOrNull()?.lowercase() in setOf("title", "manga") }
++                ?.getOrNull(1)?.takeIf(::isUuid)?.let { "/manga/$it" }
++            SourceFamily.Lanraragi -> uri.rawPath.orEmpty().ifBlank { "/" } + uri.rawQuery?.let { "?$it" }.orEmpty()
++            else -> null
++        }
++    }
++
++    private fun mapEightMuses(segments: List<String>): String? {
++        val comics = segments.indexOfFirst { it.equals("comics", true) }
++        if (comics < 0) return null
++        val kind = segments.getOrNull(comics + 1)?.lowercase()
++        if (kind !in setOf("album", "picture")) return null
++        val content = segments.drop(comics + 2).filter(::isSafeSegment).toMutableList()
++        if (kind == "picture" && content.isNotEmpty()) content.removeAt(content.lastIndex)
++        return content.takeIf(List<String>::isNotEmpty)?.joinToString("/", prefix = "/comics/album/")
++    }
++
++    private fun mapPururin(segments: List<String>): String? {
++        if (!segments.firstOrNull().equals("gallery", true)) return null
++        val id = segments.getOrNull(1)?.takeIf(::isNumericId) ?: return null
++        val slug = segments.getOrNull(2)?.takeIf(::isSafeSegment) ?: "-"
++        return "/gallery/$id/$slug"
++    }
++
++    private fun isNumericId(value: String): Boolean = value.toLongOrNull()?.let { it > 0 } == true
++    private fun isSafeSegment(value: String): Boolean = value.matches(Regex("[A-Za-z0-9._~-]{1,200}"))
++    private fun isUuid(value: String): Boolean = value.matches(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"))
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..39c3cf1f64c217c8738fbcb6f973faa85d189d9b
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt
+@@ -0,0 +1,148 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import eu.kanade.tachiyomi.network.awaitSuccess
++import eu.kanade.tachiyomi.extension.ExtensionManager
++import eu.kanade.tachiyomi.source.model.FilterList
++import eu.kanade.tachiyomi.source.model.MangasPage
++import eu.kanade.tachiyomi.source.model.Page
++import eu.kanade.tachiyomi.source.model.SChapter
++import eu.kanade.tachiyomi.source.model.SManga
++import eu.kanade.tachiyomi.source.model.SMangaUpdate
++import eu.kanade.tachiyomi.source.online.HttpSource
++import eu.kanade.tachiyomi.util.system.runAsObservable
++import okhttp3.Response
++import rx.Observable
++import timber.log.Timber
++
++@Suppress("DEPRECATION", "OverridingDeprecatedMember")
++open class HayaiEnhancedHttpSource(
++    val originalSource: HttpSource,
++    val definition: EnhancedSourceDefinition,
++) : HttpSource() {
++    private val detailsCache = object : LinkedHashMap<String, EnhancedDetails>(16, 0.75f, true) {
++        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, EnhancedDetails>?): Boolean = size > MAX_CACHED_DETAILS
++    }
++    override val id: Long get() = originalSource.id
++    override val name: String get() = originalSource.name
++    override val lang: String get() = originalSource.lang
++    override val baseUrl: String get() = originalSource.baseUrl
++    override val supportsLatest: Boolean get() = originalSource.supportsLatest
++    override val versionId: Int get() = originalSource.versionId
++    override val client get() = originalSource.client
++    override val headers get() = originalSource.headers
++
++    override fun getHomeUrl(): String = originalSource.getHomeUrl()
++    override fun getExtension(extensionManager: ExtensionManager?) = originalSource.getExtension(extensionManager)
++    override fun extOnlyHasAllLanguage(extensionManager: ExtensionManager?) = originalSource.extOnlyHasAllLanguage(extensionManager)
++    override fun toString(): String = originalSource.toString()
++
++    override suspend fun getPopularManga(page: Int): MangasPage = originalSource.getPopularManga(page)
++
++    override suspend fun getLatestUpdates(page: Int): MangasPage = originalSource.getLatestUpdates(page)
++
++    override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
++        val mapped = query.takeIf { "://" in it }?.let { EnhancedSourceUrlMapper.map(definition, baseUrl, it) }
++            ?: return originalSource.getSearchManga(page, query, filters)
++        if (page > 1) return MangasPage(emptyList(), false)
++        val manga = SManga.create().apply { url = mapped }
++        return MangasPage(listOf(getMangaDetails(manga)), false)
++    }
++
++    override suspend fun getMangaDetails(manga: SManga): SManga {
++        val details = originalSource.getMangaDetails(manga)
++        details.url = details.url.ifBlank { manga.url }
++        val enhanced = fetchEnhancedDetails(details) ?: return details
++        enhanced.title?.takeIf { details.title.isBlank() }?.let { details.title = it }
++        enhanced.author?.let { details.author = it }
++        enhanced.artist?.let { details.artist = it }
++        val enhancedDescription = listOfNotNull(
++            enhanced.alternateTitle?.takeIf { it != details.title }?.let { "**Alternative title:** $it" },
++            enhanced.description,
++        ).joinToString("\n").takeIf(String::isNotBlank)
++        details.description = mergeDescription(enhancedDescription, details.description)
++        details.genre = mergeGenres(details.genre, enhanced.genres)
++        enhanced.thumbnailUrl?.takeIf { details.thumbnail_url.isNullOrBlank() }?.let { details.thumbnail_url = it }
++        details.initialized = true
++        return details
++    }
++
++    override suspend fun getMangaUpdate(
++        manga: SManga,
++        chapters: List<SChapter>,
++        fetchDetails: Boolean,
++        fetchChapters: Boolean,
++    ): SMangaUpdate {
++        val updatedManga = if (fetchDetails) getMangaDetails(manga) else manga
++        val updatedChapters = if (fetchChapters) originalSource.getChapterList(updatedManga) else chapters
++        return SMangaUpdate(updatedManga, updatedChapters)
++    }
++
++    override suspend fun getChapterList(manga: SManga): List<SChapter> = originalSource.getChapterList(manga)
++    override suspend fun getPageList(chapter: SChapter): List<Page> = originalSource.getPageList(chapter)
++    override suspend fun getImageUrl(page: Page): String = originalSource.getImageUrl(page)
++    override suspend fun getImage(page: Page): Response = originalSource.getImage(page)
++    override fun getMangaUrl(manga: SManga): String = originalSource.getMangaUrl(manga)
++    override fun getChapterUrl(chapter: SChapter): String = originalSource.getChapterUrl(chapter)
++    override fun getFilterList(): FilterList = originalSource.getFilterList()
++    override fun mangaDetailsRequest(manga: SManga) = originalSource.mangaDetailsRequest(manga)
++
++    override fun fetchPopularManga(page: Int): Observable<MangasPage> = originalSource.fetchPopularManga(page)
++    override fun fetchLatestUpdates(page: Int): Observable<MangasPage> = originalSource.fetchLatestUpdates(page)
++    override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> =
++        if (query.contains("://")) runAsObservable { getSearchManga(page, query, filters) } else originalSource.fetchSearchManga(page, query, filters)
++    override fun fetchMangaDetails(manga: SManga): Observable<SManga> = runAsObservable { getMangaDetails(manga) }
++    override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> = originalSource.fetchChapterList(manga)
++    override fun fetchPageList(chapter: SChapter): Observable<List<Page>> = originalSource.fetchPageList(chapter)
++    override fun fetchImageUrl(page: Page): Observable<String> = originalSource.fetchImageUrl(page)
++
++    private suspend fun fetchEnhancedDetails(manga: SManga): EnhancedDetails? {
++        synchronized(detailsCache) { detailsCache[manga.url] }?.let { return it }
++        val parsed = runCatching {
++            val request = originalSource.mangaDetailsRequest(manga)
++            originalSource.client.newCall(request).awaitSuccess().use { response ->
++                val declared = response.body.contentLength()
++                if (declared > MAX_DETAILS_BYTES) return@use null
++                val body = response.body.charStream().readTextBounded(MAX_DETAILS_BYTES)
++                EnhancedDetailsParser.parse(definition.family, body, request.url.toString())
++            }
++        }.onFailure { Timber.w(it, "Enhanced details failed for source %d", id) }.getOrNull()
++        if (parsed != null) synchronized(detailsCache) { detailsCache[manga.url] = parsed }
++        return parsed
++    }
++
++    private fun mergeDescription(enhanced: String?, original: String?): String? {
++        val first = enhanced?.trim()?.takeIf(String::isNotBlank)
++        val second = original?.trim()?.takeIf(String::isNotBlank)
++        return when {
++            first == null -> second
++            second == null -> first
++            first.contains(second) -> first
++            second.contains(first) -> second
++            else -> "$first\n\n$second"
++        }
++    }
++
++    private fun mergeGenres(original: String?, enhanced: List<String>): String? {
++        val values = linkedSetOf<String>()
++        original.orEmpty().split(',').map(String::trim).filterTo(values, String::isNotBlank)
++        enhanced.map(String::trim).filterTo(values, String::isNotBlank)
++        return values.takeIf(Set<String>::isNotEmpty)?.joinToString()
++    }
++
++    private fun java.io.Reader.readTextBounded(limit: Int): String {
++        val output = StringBuilder(minOf(limit, 16 * 1024))
++        val buffer = CharArray(DEFAULT_BUFFER_SIZE)
++        while (true) {
++            val read = read(buffer)
++            if (read < 0) break
++            require(output.length + read <= limit) { "Enhanced source details exceeded the size limit" }
++            output.append(buffer, 0, read)
++        }
++        return output.toString()
++    }
++
++    companion object {
++        private const val MAX_DETAILS_BYTES = 4 * 1024 * 1024
++        private const val MAX_CACHED_DETAILS = 128
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt
+index 7c5c4d5a629e2e4312f3b9776bcfbfae863f84c2..6f8b2b5d7006320d6ccfb76be26b5d787e9501ef 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt
+@@ -3,6 +3,9 @@ package dev.ahmedmohamed.hayai.source.presentation
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
+ import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
++import dev.ahmedmohamed.hayai.source.enhanced.HayaiEnhancedHttpSource
++import dev.ahmedmohamed.hayai.source.SourceCapability
++import dev.ahmedmohamed.hayai.source.SourceCapabilityRegistry
+ import eu.kanade.tachiyomi.source.Source
+ 
+ enum class SourceBadge(
+@@ -12,6 +15,7 @@ enum class SourceBadge(
+     JavaScript("JS"),
+     Novel("Novel"),
+     Adult("Adult"),
++    Enhanced("Enhanced"),
+ }
+ 
+ object SourcePresentation {
+@@ -21,7 +25,8 @@ object SourcePresentation {
+             source.id == LocalNovelSource.ID || EhSite.entries.any { it.sourceId == source.id } -> add(SourceBadge.Bundled)
+         }
+         if (source.isNovelSource) add(SourceBadge.Novel)
+-        if (EhSite.entries.any { it.sourceId == source.id }) add(SourceBadge.Adult)
++        if (SourceCapability.Adult in SourceCapabilityRegistry.descriptor(source).capabilities) add(SourceBadge.Adult)
++        if (source is HayaiEnhancedHttpSource) add(SourceBadge.Enhanced)
+     }
+ 
+     fun badgeText(source: Source): String? =
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt b/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
+index f6ac14457f19d9b0af445fcd60f4668c77639361..2a9497d82ca265abfd0cc353eb7c338d70126ddb 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
+@@ -6,6 +6,7 @@ import dev.ahmedmohamed.hayai.adult.eh.source.EhSourceProvider
+ import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.source.AdultSourceVisibility
++import dev.ahmedmohamed.hayai.source.enhanced.EnhancedSourceRegistry
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.source.model.Page
+@@ -83,8 +84,9 @@ class SourceManager(
+                         if (ehSourceProvider.owns(it.id)) {
+                             Timber.e("Rejected extension source %s: source ID %d is reserved by Hayai", it.name, it.id)
+                         } else {
+-                            mutableMap[it.id] = it
+-                            delegatedSources[it.id]?.delegatedHttpSource?.delegate = it as? HttpSource
++                            val registered = (it as? HttpSource)?.let(EnhancedSourceRegistry::wrap) ?: it
++                            mutableMap[it.id] = registered
++                            delegatedSources[it.id]?.delegatedHttpSource?.delegate = registered as? HttpSource
+                         }
+ //                            registerStubSource(it)
+                     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt b/app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt
+index 889ac4c4de5d59b155184f42d94af28644f85372..e109af6e0c3e03ac34d5e95359320a7b823aac5d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt
+@@ -86,7 +86,7 @@ abstract class HttpSource : CatalogueSource {
+     /**
+      * Headers used for requests.
+      */
+-    val headers: Headers by lazy { headersBuilder().build() }
++    open val headers: Headers by lazy { headersBuilder().build() }
+ 
+     /**
+      * Default network client for doing requests.
+@@ -150,10 +150,10 @@ abstract class HttpSource : CatalogueSource {
+                 popularMangaParse(response)
+             }
+ 
+-    fun getExtension(extensionManager: ExtensionManager? = null): Extension.Installed? =
++    open fun getExtension(extensionManager: ExtensionManager? = null): Extension.Installed? =
+         (extensionManager ?: Injekt.get()).installedExtensionsFlow.value.find { it.sources.contains(this) }
+ 
+-    fun extOnlyHasAllLanguage(extensionManager: ExtensionManager? = null) =
++    open fun extOnlyHasAllLanguage(extensionManager: ExtensionManager? = null) =
+         getExtension(extensionManager)?.sources?.all { it.lang == "all" } ?: true
+ 
+     /**
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParserTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParserTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..1d2313cb5aa9f658ead5a98205ec017112db728a
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsParserTest.kt
+@@ -0,0 +1,90 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.SourceFamily
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EnhancedDetailsParserTest {
++    @Test
++    fun `parses EightMuses album metadata`() {
++        val html = """
++            <div class="top-menu-breadcrumb"><ol><li><a>Comics</a></li><li><a>Artist</a></li><li><a>Album</a></li></ol></div>
++            <div class="album-tags"><a>color</a><a>series</a></div>
++            <div class="gallery"><div class="c-tile"><img class="lazyload" data-src="/cover.jpg"></div></div>
++        """.trimIndent()
++
++        val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.EightMuses, html, "https://8muses.com/album"))
++
++        assertEquals("Album", details.title)
++        assertEquals("Artist", details.artist)
++        assertEquals(listOf("color", "series"), details.genres)
++        assertEquals("https://8muses.com/cover.jpg", details.thumbnailUrl)
++    }
++
++    @Test
++    fun `parses HBrowse tables without assuming optional rows`() {
++        val html = """
++            <div id="main"><table class="listTable">
++            <tr><td>Title</td><td>Gallery</td></tr><tr><td>Length</td><td>20 pages</td></tr>
++            <tr><td>Artist</td><td><a>Alice</a></td></tr></table></div>
++        """.trimIndent()
++
++        val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.HBrowse, html, "https://hbrowse.com/1"))
++
++        assertEquals("Gallery", details.title)
++        assertTrue(details.description.orEmpty().contains("20 pages"))
++        assertEquals(listOf("artist: Alice"), details.genres)
++    }
++
++    @Test
++    fun `parses Pururin details and namespaced tags`() {
++        val html = """
++            <div class="content-wrapper"><div class="title"><h1>Title</h1></div><div class="alt-title">Alt</div>
++            <div class="cover-wrapper"><v-lazy-image src="/cover.jpg"></v-lazy-image></div>
++            <table class="table-gallery-info"><tbody><tr><td>Pages</td><td>12</td></tr>
++            <tr><td>Artists</td><td><a>Alice</a></td></tr></tbody></table></div>
++        """.trimIndent()
++
++        val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.Pururin, html, "https://pururin.me/gallery/1/a"))
++
++        assertEquals("Title", details.title)
++        assertEquals("Alt", details.alternateTitle)
++        assertEquals(listOf("artists: Alice"), details.genres)
++    }
++
++    @Test
++    fun `parses NHentai API details`() {
++        val body = """{"title":{"english":"English","japanese":"日本語"},"num_pages":12,"num_favorites":4,"tags":[{"type":"artist","name":"Alice"}]}"""
++
++        val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.NHentai, body, "https://nhentai.net/api/gallery/1"))
++
++        assertEquals("English", details.title)
++        assertEquals("日本語", details.alternateTitle)
++        assertEquals(listOf("artist: Alice"), details.genres)
++        assertTrue(details.description.orEmpty().contains("Favorites:** 4"))
++    }
++
++    @Test
++    fun `parses MangaDex API details`() {
++        val body = """{"data":{"attributes":{"title":{"en":"Title"},"altTitles":[{"ja":"別名"}],"description":{"en":"Summary"},"tags":[{"attributes":{"name":{"en":"Action"}}}]}}}"""
++
++        val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.MangaDex, body, "https://api.mangadex.org/manga/id"))
++
++        assertEquals("Title", details.title)
++        assertEquals("別名", details.alternateTitle)
++        assertEquals(listOf("Action"), details.genres)
++        assertTrue(details.description.orEmpty().contains("Summary"))
++    }
++
++    @Test
++    fun `parses LANraragi API details and tolerates missing fields`() {
++        val body = """{"title":"Archive","summary":"Summary","pagecount":9,"tags":"artist:Alice, language:English"}"""
++
++        val details = requireNotNull(EnhancedDetailsParser.parse(SourceFamily.Lanraragi, body, "http://server/api/archives/id/metadata"))
++
++        assertEquals("Archive", details.title)
++        assertEquals(listOf("artist:Alice", "language:English"), details.genres)
++        assertTrue(details.description.orEmpty().contains("Pages:** 9"))
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistryTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistryTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..805aee323c62219b3dacfa9d7455fa0487587728
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceRegistryTest.kt
+@@ -0,0 +1,88 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.SourceCapabilityRegistry
++import eu.kanade.tachiyomi.source.model.Filter
++import eu.kanade.tachiyomi.source.model.FilterList
++import eu.kanade.tachiyomi.source.model.MangasPage
++import eu.kanade.tachiyomi.source.model.SManga
++import eu.kanade.tachiyomi.source.online.HttpSource
++import kotlinx.coroutines.runBlocking
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertSame
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EnhancedSourceRegistryTest {
++    @Test
++    fun `wraps recognized dynamic families and preserves source identity and filters`() {
++        val original = FakeHttpSource(77L, "NHentai", "https://nhentai.net")
++
++        val wrapped = EnhancedSourceRegistry.wrap(original)
++
++        assertTrue(wrapped is HayaiEnhancedHttpSource)
++        assertEquals(original.id, wrapped.id)
++        assertEquals(original.name, wrapped.name)
++        assertEquals(original.lang, wrapped.lang)
++        assertEquals(original.getFilterList(), wrapped.getFilterList())
++    }
++
++    @Test
++    fun `fixed legacy source IDs remain enhanced after a host move`() {
++        val original = FakeHttpSource(SourceCapabilityRegistry.EIGHT_MUSES_SOURCE_ID, "Renamed source", "https://new.example")
++
++        assertTrue(EnhancedSourceRegistry.wrap(original) is HayaiEnhancedHttpSource)
++    }
++
++    @Test
++    fun `does not wrap a family name on an unrelated host`() {
++        val original = FakeHttpSource(88L, "NHentai mirror", "https://example.com")
++
++        assertSame(original, EnhancedSourceRegistry.wrap(original))
++    }
++
++    @Test
++    fun `wrapping is idempotent`() {
++        val wrapped = EnhancedSourceRegistry.wrap(FakeHttpSource(77L, "NHentai", "https://nhentai.net"))
++
++        assertSame(wrapped, EnhancedSourceRegistry.wrap(wrapped))
++    }
++
++    @Test
++    fun `matching URL search opens one gallery while a foreign URL remains a normal query`() = runBlocking {
++        val original = FakeHttpSource(77L, "NHentai", "https://nhentai.net")
++        val wrapped = EnhancedSourceRegistry.wrap(original)
++
++        val imported = wrapped.getSearchManga(1, "https://nhentai.net/g/123/4/", FilterList())
++        wrapped.getSearchManga(1, "https://example.com/g/123/", FilterList())
++
++        assertEquals(listOf("/g/123/"), original.detailUrls)
++        assertEquals(listOf("https://example.com/g/123/"), original.searchQueries)
++        assertEquals("Imported", imported.mangas.single().title)
++    }
++}
++
++private class FakeHttpSource(
++    override val id: Long,
++    override val name: String,
++    override val baseUrl: String,
++) : HttpSource() {
++    override val lang: String = "all"
++    override val supportsLatest: Boolean = true
++    private val filters = FilterList(object : Filter.CheckBox("Enabled") {})
++    val detailUrls = mutableListOf<String>()
++    val searchQueries = mutableListOf<String>()
++    override fun getFilterList(): FilterList = filters
++
++    override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
++        searchQueries += query
++        return MangasPage(emptyList(), false)
++    }
++
++    override suspend fun getMangaDetails(manga: SManga): SManga {
++        detailUrls += manga.url
++        return manga.apply {
++            title = "Imported"
++            initialized = true
++        }
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapperTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapperTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..288e7e9400bf72d6fd247479a8aa30c6833aab20
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedSourceUrlMapperTest.kt
+@@ -0,0 +1,42 @@
++package dev.ahmedmohamed.hayai.source.enhanced
++
++import dev.ahmedmohamed.hayai.source.SourceFamily
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class EnhancedSourceUrlMapperTest {
++    @Test
++    fun `maps supported gallery URLs to extension paths`() {
++        assertEquals(
++            "/comics/album/Foo/Bar",
++            map(SourceFamily.EightMuses, "https://comics.8muses.com/comics/picture/Foo/Bar/123"),
++        )
++        assertEquals("/123/c00001/", map(SourceFamily.HBrowse, "https://hbrowse.com/123/c00002/"))
++        assertEquals("/gallery/42/title", map(SourceFamily.Pururin, "https://pururin.me/gallery/42/title"))
++        assertEquals("/g/177013/", map(SourceFamily.NHentai, "https://nhentai.net/g/177013/3/"))
++        assertEquals(
++            "/manga/123e4567-e89b-12d3-a456-426614174000",
++            map(SourceFamily.MangaDex, "https://mangadex.org/title/123e4567-e89b-12d3-a456-426614174000/name"),
++        )
++        assertEquals("/reader?id=abc", map(SourceFamily.Lanraragi, "http://server.local/reader?id=abc", "http://server.local"))
++    }
++
++    @Test
++    fun `rejects foreign hosts malformed identities and active content schemes`() {
++        assertNull(map(SourceFamily.NHentai, "https://example.com/g/1/"))
++        assertNull(map(SourceFamily.NHentai, "https://nhentai.net/g/not-a-number/"))
++        assertNull(map(SourceFamily.MangaDex, "https://mangadex.org/title/not-a-uuid"))
++        assertNull(map(SourceFamily.Lanraragi, "http://other.local/reader?id=abc", "http://server.local"))
++        assertNull(map(SourceFamily.Pururin, "javascript:alert(1)"))
++    }
++
++    private fun map(
++        family: SourceFamily,
++        input: String,
++        baseUrl: String = "https://unused.invalid",
++    ): String? {
++        val definition = EnhancedSourceDefinitions.all.first { it.family == family }
++        return EnhancedSourceUrlMapper.map(definition, baseUrl, input)
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index a3dbd4729942d05cd8e0ee9dfcf09f1de749b549..5fa2d3b874f9c4ee8fbdefe3ab205093a69346f3 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -46,6 +46,8 @@ Built-in source settings are another deliberate adapter seam. `BrowseSourceContr
+ 
+ Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
+ 
++Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, and normal URLs to the installed extension. Hayai adds host-validated direct URL import and bounded detail enrichment for 8Muses, HBrowse, Pururin, NHentai, MangaDex, and LANraragi. A parser or secondary request failure returns the extension result. It never removes a usable source. `HttpSource.headers` is open so a wrapper can preserve extension authentication and request headers without copying them.
++
+ E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category strings fall back to showing every category. Remote uconfig, favorites sync, and the gallery update worker remain separate ports.
+ 
+ Recents source visibility uses one Hayai-owned policy seam. History and Updates retain independent
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 958acb93c38e9454b6184a43ca41200e096c5def..2455c9ba154b2274e3d25f76464faf9de765ecb5 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -15,8 +15,8 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | EH source settings, default filters, and enhanced details toggle | SY-compatible typed preferences plus Hayai account/settings activity | foundation verified; remote uconfig audit |
+ | EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
+ | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic manga-details feature seam | foundation verified; emulator details flow pending |
+-| 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | Registered enhanced-source families | registry foundation; behavior audit |
+-| Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | audit |
++| 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | URL import and detail foundation verified; source-specific parity audit |
++| Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | direct URL and description foundation; batch and relationship actions audit |
+ | Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI audit |
+ | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
+ | Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | preview foundation verified; remaining items audit |
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index cd1445316e5ae46facbe78a129c99d876c806f97..43788f58f226c49338ecc1352cd83b1cef767a5b 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -19,6 +19,7 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/source/NovelSource.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/model/Page.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/source/online/HttpSource.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt"
+-- 
+2.54.0.windows.1
+

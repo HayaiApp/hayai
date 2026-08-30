@@ -1,0 +1,571 @@
+From b4349258159ef65e4371b4fc5c4146c7db2ba6e9 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 13:20:06 +0300
+Subject: [PATCH] fix: close extension management review gaps
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index de73d725794a47aa32ef7cfa5197e263a6d91d41..4e4bafb112fffac8efa3dc72fbf89428faef9ce9 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -106,3 +106,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T12:15:00+03:00	extension-failure-reconciliation	surfaced identified APK load failures and JavaScript runtime failures and centralized duplicate package selection	preserved J2K versionCode-or-library update semantics while ensuring list, notification check, and download select the same newest repository copy	ApkLoadFailure.kt; ExtensionCatalogReconciler.kt; ExtensionLoader.kt; ExtensionManager.kt; NovelPluginManager.kt	VERIFIED
+ 2026-08-23T12:15:00+03:00	ehentai-details-repair	accepted current E-Hentai direct-anchor sprite previews, invalidated stale empty listings, removed duplicated flattened metadata, and repaired the details vertical chain	kept parsing, typed metadata, authenticated networking, and cache policy Hayai-owned behind the existing J2K details adapter	EhHtmlParser.kt; EhRequestBuilder.kt; EhentaiSource.kt; SourcePreviewCache.kt; manga_header_item.xml	VERIFIED
+ 2026-08-23T12:15:00+03:00	hayai-public-identity	rewrote the README and issue forms, restored Hayai 1.15.0 code 114 metadata, replaced product J2K links, and documented credits and no-stable-release policy	retained upstream J2K, SY, Tsundoku, LNReader, Mihon, and legacy provenance links only as explicit credits or technical references	README.md; .github/ISSUE_TEMPLATE; AboutLinksPreference.kt; Dependencies.kt; releases.md	IMPLEMENTED_UNVERIFIED
++2026-08-23T13:45:00+03:00	independent-review-closure	restored all-APK repository management, retained asynchronous JavaScript warm-up failures, and overlaid APK update failures on installed rows	closed the concrete extension-management gaps found by the final independent review before master promotion	RepoPresenter.kt; NovelApkExtensionManager.kt; NovelPluginManager.kt; ManagedExtensionProjectorTest.kt	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt
+index 35180520af1d98d05a6bc837bc5198de971fec8a..1bec650f264dc06e38c0bc0830183f56b5fe2590 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt
+@@ -13,12 +13,14 @@ object ManagedExtensionProjector {
+         filter: ManagedExtensionFilter,
+     ): ManagedExtensionState {
+         val apkAvailable = apk.available.associateBy(Extension.Available::pkgName)
++        val apkFailures = apk.failures.associateBy { it.packageName }
+         val jsAvailable = js.available.associateBy { it.id }
+         val jsInstalled = js.installed.associateBy { it.descriptor.id }
+ 
+         val entries = buildList {
+             apk.installed.forEach { installed ->
+                 val available = apkAvailable[installed.pkgName]
++                val failure = apkFailures[installed.pkgName]
+                 add(
+                     ManagedExtensionEntry(
+                         key = ManagedExtensionKey.Apk(installed.pkgName),
+@@ -29,7 +31,7 @@ object ManagedExtensionProjector {
+                         availableVersion = available?.versionName,
+                         installation = ManagedInstallation.Installed,
+                         update = if (installed.hasUpdate) ManagedUpdate.Available else ManagedUpdate.None,
+-                        health = ManagedHealth.Ready,
++                        health = failure?.let { ManagedHealth.LoadFailed(it.reason.name) } ?: ManagedHealth.Ready,
+                         contentKinds = installed.contentKinds(),
+                         isNsfw = installed.isNsfw,
+                         installedIcon = installed.icon,
+@@ -54,25 +56,29 @@ object ManagedExtensionProjector {
+                     ),
+                 )
+             }
+-            apk.failures.forEach { failure ->
+-                val available = apkAvailable[failure.packageName]
+-                add(
+-                    ManagedExtensionEntry(
+-                        key = ManagedExtensionKey.Apk(failure.packageName),
+-                        backend = ManagedExtensionBackend.Apk,
+-                        name = failure.displayName,
+-                        language = available?.lang,
+-                        installedVersion = failure.versionName,
+-                        availableVersion = available?.versionName,
+-                        installation = ManagedInstallation.Installed,
+-                        update = ManagedUpdate.None,
+-                        health = ManagedHealth.LoadFailed(failure.reason.name),
+-                        contentKinds = setOf(if (available?.isNovel == true) ContentKind.Novel else ContentKind.Manga),
+-                        isNsfw = available?.isNsfw == true,
+-                        iconUrl = available?.iconUrl,
+-                    ),
+-                )
+-            }
++            apk.failures
++                .filterNot { failure ->
++                    apk.installed.any { it.pkgName == failure.packageName } ||
++                        apk.untrusted.any { it.pkgName == failure.packageName }
++                }.forEach { failure ->
++                    val available = apkAvailable[failure.packageName]
++                    add(
++                        ManagedExtensionEntry(
++                            key = ManagedExtensionKey.Apk(failure.packageName),
++                            backend = ManagedExtensionBackend.Apk,
++                            name = failure.displayName,
++                            language = available?.lang,
++                            installedVersion = failure.versionName,
++                            availableVersion = available?.versionName,
++                            installation = ManagedInstallation.Installed,
++                            update = ManagedUpdate.None,
++                            health = ManagedHealth.LoadFailed(failure.reason.name),
++                            contentKinds = setOf(if (available?.isNovel == true) ContentKind.Novel else ContentKind.Manga),
++                            isNsfw = available?.isNsfw == true,
++                            iconUrl = available?.iconUrl,
++                        ),
++                    )
++                }
+             apk.available
+                 .filterNot { extension ->
+                     apk.installed.any { it.pkgName == extension.pkgName } ||
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
+index 40d826b277b5ccfec5a82c23dd8c7842740b89e6..c1f15d4dfc977aaabcd2a7ca3646e24fb4c90558 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
+@@ -7,8 +7,9 @@ interface NovelApkRepositoryRegistry {
+     suspend fun repositories(): Set<String>
+     fun repositoriesNow(): Set<String>
+     fun novelOnlyRepositoriesNow(): Set<String>
+-    suspend fun addMangaOwnership(indexUrl: String)
+-    suspend fun removeMangaOwnership(indexUrl: String)
++    suspend fun addGlobal(indexUrl: String)
++    suspend fun removeGlobal(indexUrl: String)
++    suspend fun replaceGlobal(oldUrl: String, newUrl: String)
+     suspend fun add(indexUrl: String)
+     suspend fun remove(indexUrl: String)
+     fun migrate(
+@@ -23,7 +24,7 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
+     override fun repositoriesNow(): Set<String> = tags.getStringSet(KEY, emptySet()).orEmpty().toSet()
+     override fun novelOnlyRepositoriesNow(): Set<String> = tags.getStringSet(OWNED_KEY, emptySet()).orEmpty().toSet()
+ 
+-    override suspend fun addMangaOwnership(indexUrl: String) {
++    override suspend fun addGlobal(indexUrl: String) {
+         val global = preferences.extensionRepos().get()
+         val novelOnly = novelOnlyRepositoriesNow()
+         if (indexUrl in novelOnly) {
+@@ -32,13 +33,20 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
+         if (indexUrl !in global) preferences.extensionRepos().set(global + indexUrl)
+     }
+ 
+-    override suspend fun removeMangaOwnership(indexUrl: String) {
+-        val global = preferences.extensionRepos().get()
+-        if (indexUrl in repositoriesNow()) {
+-            check(tags.edit().putStringSet(OWNED_KEY, novelOnlyRepositoriesNow() + indexUrl).commit())
+-        } else if (indexUrl in global) {
+-            preferences.extensionRepos().set(global - indexUrl)
+-        }
++    override suspend fun removeGlobal(indexUrl: String) {
++        preferences.extensionRepos().set(preferences.extensionRepos().get() - indexUrl)
++        check(
++            tags.edit()
++                .putStringSet(KEY, repositoriesNow() - indexUrl)
++                .putStringSet(OWNED_KEY, novelOnlyRepositoriesNow() - indexUrl)
++                .commit(),
++        )
++    }
++
++    override suspend fun replaceGlobal(oldUrl: String, newUrl: String) {
++        if (oldUrl == newUrl) return
++        preferences.extensionRepos().set(preferences.extensionRepos().get() - oldUrl + newUrl)
++        migrate(oldUrl, newUrl)
+     }
+ 
+     override suspend fun add(indexUrl: String) {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+index 9d71672b39160b8d2454791893c7cbf4c3eede65..8848fcf16d2708658ff776105a0525bcbc6eb8b3 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+@@ -59,9 +59,13 @@ class NovelPluginManager(
+             .build()
+     private val mutex = Mutex()
+     private val sourceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+-    private val _catalog = MutableStateFlow(loadLocal())
++    private val _catalog = MutableStateFlow(NovelPluginCatalog(repositories = store.repositories(), installed = store.installed()))
+     val catalog: StateFlow<NovelPluginCatalog> = _catalog.asStateFlow()
+ 
++    init {
++        rebuildAndPublish(_catalog.value)
++    }
++
+     suspend fun refresh(): NovelPluginCatalog =
+         mutex.withLock {
+             _catalog.value = _catalog.value.copy(repositories = store.repositories(), refreshing = true, repositoryErrors = emptyMap())
+@@ -91,15 +95,14 @@ class NovelPluginManager(
+                     availablePairs
+                         .map { it.first }
+                         .sortedWith(compareBy(NovelPluginDescriptor::normalizedLanguage, NovelPluginDescriptor::name))
+-                _catalog.value =
+-                    rebuild(
+-                        _catalog.value.copy(
+-                            available = available,
+-                            availableOrigins = availableOrigins,
+-                            repositoryErrors = errors,
+-                            refreshing = false,
+-                        ),
+-                    )
++                rebuildAndPublish(
++                    _catalog.value.copy(
++                        available = available,
++                        availableOrigins = availableOrigins,
++                        repositoryErrors = errors,
++                        refreshing = false,
++                    ),
++                )
+                 _catalog.value
+             } finally {
+                 if (_catalog.value.refreshing) _catalog.value = _catalog.value.copy(refreshing = false)
+@@ -115,7 +118,7 @@ class NovelPluginManager(
+             requireSafeUrl(url, allowLocalHttp = true)
+             store.saveRepository(NovelPluginRepository(name.trim(), url.trim(), true))
+             trustStore.trustUnsigned(url.trim())
+-            _catalog.value = rebuild(_catalog.value.copy(repositories = store.repositories()))
++            rebuildAndPublish(_catalog.value.copy(repositories = store.repositories()))
+             _catalog.value
+         }
+ 
+@@ -125,14 +128,14 @@ class NovelPluginManager(
+     ) = mutex.withLock {
+         val repository = store.repositories().firstOrNull { it.url == url } ?: novelFailure(NovelFailure.Code.PluginRepositoryMissing)
+         store.saveRepository(repository.copy(enabled = enabled))
+-        _catalog.value = rebuild(_catalog.value.copy(repositories = store.repositories()))
++        rebuildAndPublish(_catalog.value.copy(repositories = store.repositories()))
+     }
+ 
+     suspend fun removeRepository(url: String) =
+         mutex.withLock {
+             store.removeRepository(url)
+             trustStore.revoke(url)
+-            _catalog.value = rebuild(_catalog.value.copy(repositories = store.repositories()))
++            rebuildAndPublish(_catalog.value.copy(repositories = store.repositories()))
+         }
+ 
+     suspend fun install(pluginId: String): InstalledNovelPlugin =
+@@ -141,7 +144,7 @@ class NovelPluginManager(
+             val repositoryUrl = _catalog.value.availableOrigins[pluginId] ?: novelFailure(NovelFailure.Code.PluginRefreshRequired)
+             val bytes = download(descriptor.resolvedCodeUrl(repositoryUrl), NovelPluginStore.MAX_PLUGIN_BYTES)
+             val installed = installValidated(descriptor, repositoryUrl, bytes, replacementPreferences = null)
+-            _catalog.value = rebuild(_catalog.value.copy(installed = store.installed()))
++            rebuildAndPublish(_catalog.value.copy(installed = store.installed()))
+             installed
+         }
+ 
+@@ -156,13 +159,12 @@ class NovelPluginManager(
+             val installed = installValidated(descriptor, repositoryUrl, code, preferences)
+             val state = _catalog.value
+             val replacedSources = state.sources.filter { it.pluginId == descriptor.id }
+-            _catalog.value =
+-                rebuild(
+-                    state.copy(
+-                        installed = store.installed(),
+-                        sources = state.sources.filterNot { it.pluginId == descriptor.id },
+-                    ),
+-                )
++            rebuildAndPublish(
++                state.copy(
++                    installed = store.installed(),
++                    sources = state.sources.filterNot { it.pluginId == descriptor.id },
++                ),
++            )
+             replacedSources.forEach(NovelPluginSource::close)
+             installed
+         }
+@@ -175,12 +177,12 @@ class NovelPluginManager(
+     suspend fun uninstall(pluginId: String) =
+         mutex.withLock {
+             store.uninstall(pluginId)
+-            _catalog.value = rebuild(_catalog.value.copy(installed = store.installed()))
++            rebuildAndPublish(_catalog.value.copy(installed = store.installed()))
+         }
+ 
+     suspend fun reloadLocalState() =
+         mutex.withLock {
+-            _catalog.value = rebuild(_catalog.value.copy(repositories = store.repositories(), installed = store.installed()))
++            rebuildAndPublish(_catalog.value.copy(repositories = store.repositories(), installed = store.installed()))
+         }
+ 
+     fun hasUpdate(pluginId: String): Boolean {
+@@ -191,30 +193,60 @@ class NovelPluginManager(
+ 
+     fun sourceName(sourceId: Long): String? = store.sourceName(sourceId)
+ 
+-    private fun loadLocal(): NovelPluginCatalog =
+-        rebuild(NovelPluginCatalog(repositories = store.repositories(), installed = store.installed()))
++    private fun rebuildAndPublish(state: NovelPluginCatalog): NovelPluginCatalog {
++        val result = rebuild(state)
++        _catalog.value = result.catalog
++        result.sourcesToWarm.forEach(::warmUp)
++        return result.catalog
++    }
+ 
+-    private fun rebuild(state: NovelPluginCatalog): NovelPluginCatalog {
++    private fun rebuild(state: NovelPluginCatalog): RebuildResult {
+         val oldById = state.sources.associateBy(NovelPluginSource::pluginId)
++        val sourcesToWarm = mutableListOf<NovelPluginSource>()
+         val results =
+             state.installed.map { installed ->
+                 installed.descriptor.id to
+                     runCatching {
+-                    store.rememberSource(installed.descriptor)
+-                    oldById[installed.descriptor.id]?.takeIf { it.isSamePlugin(installed) }
+-                        ?: NovelPluginSource(appContext, installed, store.readCode(installed)).also { source ->
+-                            sourceScope.launch {
+-                                runCatching { source.warmUp() }
++                        store.rememberSource(installed.descriptor)
++                        oldById[installed.descriptor.id]?.takeIf { it.isSamePlugin(installed) }
++                            ?: NovelPluginSource(appContext, installed, store.readCode(installed)).also { source ->
++                                sourcesToWarm += source
+                             }
+-                        }
+                     }
+             }
+         val sources = results.mapNotNull { it.second.getOrNull() }
+-        val runtimeErrors = results.mapNotNull { (id, result) -> result.exceptionOrNull()?.let { id to it } }.toMap()
++        val installedIds = state.installed.mapTo(mutableSetOf()) { it.descriptor.id }
++        val runtimeErrors =
++            state.runtimeErrors.filterKeys { it in installedIds } +
++                results.mapNotNull { (id, result) -> result.exceptionOrNull()?.let { id to it } }.toMap()
+         state.sources.filterNot { it in sources }.forEach(NovelPluginSource::close)
+-        return state.copy(sources = sources, runtimeErrors = runtimeErrors)
++        return RebuildResult(state.copy(sources = sources, runtimeErrors = runtimeErrors), sourcesToWarm)
+     }
+ 
++    private fun warmUp(source: NovelPluginSource) {
++        sourceScope.launch {
++            val failure = runCatching { source.warmUp() }.exceptionOrNull()
++            mutex.withLock {
++                val current = _catalog.value
++                if (current.sources.none { it === source }) return@withLock
++                val runtimeErrors =
++                    if (failure == null) {
++                        current.runtimeErrors - source.pluginId
++                    } else {
++                        current.runtimeErrors + (source.pluginId to failure)
++                    }
++                if (runtimeErrors != current.runtimeErrors) {
++                    _catalog.value = current.copy(runtimeErrors = runtimeErrors)
++                }
++            }
++        }
++    }
++
++    private data class RebuildResult(
++        val catalog: NovelPluginCatalog,
++        val sourcesToWarm: List<NovelPluginSource>,
++    )
++
+     private suspend fun installValidated(
+         descriptor: NovelPluginDescriptor,
+         repositoryUrl: String,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
+index d4fcb95095e7616040cfe30c374ef2bf791117eb..bec4471b80da00d5aa79e09267197f4cc2eecfa8 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
+@@ -3,7 +3,6 @@ package dev.ahmedmohamed.hayai.novel.repository
+ import androidx.annotation.StringRes
+ import androidx.preference.PreferenceScreen
+ import com.bluelinelabs.conductor.Controller
+-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import dev.ahmedmohamed.hayai.extension.managed.ui.NovelPluginRepositoryController
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.ui.setting.SettingsController
+@@ -19,7 +18,7 @@ internal enum class NovelRepositoryKind(
+     @StringRes val summaryRes: Int,
+ ) {
+     ApkExtensions(
+-        titleRes = R.string.hayai_novel_extension_repos,
++        titleRes = R.string.extension_repos,
+         summaryRes = R.string.hayai_novel_extension_repository_warning,
+     ),
+     LnReaderPlugins(
+@@ -29,7 +28,7 @@ internal enum class NovelRepositoryKind(
+     ;
+ 
+     fun destination(): Controller = when (this) {
+-        ApkExtensions -> RepoController(ContentKind.Novel)
++        ApkExtensions -> RepoController()
+         LnReaderPlugins -> NovelPluginRepositoryController()
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+index cabb3f39c83da943f808ef1fb9bf30f6dc5a3ef7..9db343541c242b870562081d94c7259c72d8972f 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+@@ -5,7 +5,6 @@ import android.content.Intent
+ import android.provider.Settings
+ import androidx.preference.PreferenceScreen
+ import androidx.preference.SwitchPreferenceCompat
+-import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+ import dev.ahmedmohamed.hayai.novel.repository.NovelRepositoryHubController
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+@@ -24,7 +23,6 @@ import eu.kanade.tachiyomi.util.view.withFadeTransaction
+ import uy.kohesive.injekt.injectLazy
+ 
+ class SettingsBrowseController : SettingsController() {
+-    private val novelRepositories: NovelApkRepositoryRegistry by injectLazy()
+     val sourceManager: SourceManager by injectLazy()
+     var updatedExtNotifPref: SwitchPreferenceCompat? = null
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
+index 9cc032c277ec67ecb22d79390fbd978af7c18e42..6cb8b4ec50ea0e1128832f0a8421a871d63ae77c 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
+@@ -7,7 +7,6 @@ import androidx.core.net.toUri
+ import androidx.recyclerview.widget.LinearLayoutManager
+ import com.google.android.material.snackbar.BaseTransientBottomBar
+ import com.google.android.material.snackbar.Snackbar
+-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.databinding.CategoriesControllerBinding
+@@ -36,12 +35,6 @@ class RepoController(
+         },
+     )
+ 
+-    constructor(contentKind: ContentKind) : this(
+-        Bundle().apply { putString(CONTENT_KIND, contentKind.name) },
+-    )
+-
+-    private val contentKind = bundle?.getString(CONTENT_KIND)?.let(ContentKind::valueOf) ?: ContentKind.Manga
+-
+     /**
+      * URL to prefill into the "create repo" row once the list is first shown, awaiting the
+      * user's confirmation rather than being added automatically.
+@@ -61,13 +54,12 @@ class RepoController(
+     /**
+      * Creates the presenter for this controller. Not to be manually called.
+      */
+-    private val presenter = RepoPresenter(this, contentKind)
++    private val presenter = RepoPresenter(this)
+ 
+     /**
+      * Returns the toolbar title to show when this controller is attached.
+      */
+-    override fun getTitle(): String? =
+-        resources?.getString(if (contentKind == ContentKind.Novel) R.string.hayai_novel_extension_repos else R.string.extension_repos)
++    override fun getTitle(): String? = resources?.getString(R.string.extension_repos)
+ 
+     override fun createBinding(inflater: LayoutInflater) = CategoriesControllerBinding.inflate(inflater)
+ 
+@@ -267,6 +259,5 @@ class RepoController(
+ 
+     companion object {
+         const val REPO_URL = "repo_url"
+-        const val CONTENT_KIND = "content_kind"
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
+index c23b5878d9ee8f65b5d5c3cab2ff63091bb23cf2..9cf0510459a9e78cff2c8993693e38d3ca0755aa 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
+@@ -1,7 +1,6 @@
+ package eu.kanade.tachiyomi.ui.source.browse.repos
+ 
+ import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.api.ExtensionApi
+ import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
+@@ -19,7 +18,6 @@ import kotlin.coroutines.cancellation.CancellationException
+  */
+ class RepoPresenter(
+     private val controller: RepoController,
+-    private val contentKind: ContentKind,
+     private val preferences: PreferencesHelper = Injekt.get(),
+     private val novelRepositories: NovelApkRepositoryRegistry = Injekt.get(),
+ ) : BaseCoroutinePresenter<RepoController>() {
+@@ -30,34 +28,14 @@ class RepoPresenter(
+      * repo.json pointer resolved to) - no filename or path pattern is assumed.
+      */
+     private val repos: Set<String>
+-        get() =
+-            preferences
+-                .extensionRepos()
+-                .get()
+-                .let { all ->
+-                    if (contentKind == ContentKind.Novel) {
+-                        all.intersect(novelRepositories.repositoriesNow())
+-                    } else {
+-                        all - novelRepositories.novelOnlyRepositoriesNow()
+-                    }
+-                }
+-                .sorted()
+-                .toSet()
++        get() = preferences.extensionRepos().get().sorted().toSet()
+ 
+     private suspend fun addRepo(url: String) {
+-        if (contentKind == ContentKind.Novel) {
+-            novelRepositories.add(url)
+-        } else {
+-            novelRepositories.addMangaOwnership(url)
+-        }
++        novelRepositories.addGlobal(url)
+     }
+ 
+     private suspend fun removeRepo(url: String) {
+-        if (contentKind == ContentKind.Novel) {
+-            novelRepositories.remove(url)
+-        } else {
+-            novelRepositories.removeMangaOwnership(url)
+-        }
++        novelRepositories.removeGlobal(url)
+     }
+ 
+     /**
+@@ -90,8 +68,7 @@ class RepoPresenter(
+             try {
+                 val resolvedUrl = ExtensionApi().validateRepo(repo)
+                 if (resolvedUrl != repo) {
+-                    removeRepo(repo)
+-                    addRepo(resolvedUrl)
++                    novelRepositories.replaceGlobal(repo, resolvedUrl)
+                 }
+             } catch (e: CancellationException) {
+                 throw e
+diff --git a/app/src/main/res/values/strings_hayai_misc.xml b/app/src/main/res/values/strings_hayai_misc.xml
+index dfc33ceaf4b2477f8e1142f244439d8efb9305da..610874ee3e5014bb28fa4797f4c5316cdd55dae8 100644
+--- a/app/src/main/res/values/strings_hayai_misc.xml
++++ b/app/src/main/res/values/strings_hayai_misc.xml
+@@ -8,7 +8,7 @@
+     <string name="hayai_extension_available">Available</string>
+     <!-- Novel APK extensions -->
+     <string name="hayai_novel_extensions_title">Novel extensions</string>
+-    <string name="hayai_novel_repository_management">Novel repositories</string>
++    <string name="hayai_novel_repository_management">Extension repositories</string>
+     <string name="hayai_novel_repository_management_summary">Manage APK extension and LNReader plugin repositories</string>
+     <string name="hayai_add_repository">Add repository</string>
+     <string name="hayai_cancel_installation">Cancel installation</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
+index 5b918c27cca38a64c1769d1afbf1494af157268d..4cdf1089cc5dbee744926a29e8ac2bf54bb5ef95 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
+@@ -55,6 +55,23 @@ class ManagedExtensionProjectorTest {
+         assertTrue(state.installed.all { it.health is ManagedHealth.LoadFailed })
+     }
+ 
++    @Test
++    fun `failed apk update overlays the installed row instead of being discarded`() {
++        val state = ManagedExtensionProjector.project(
++            apk = ApkExtensionSnapshot(
++                installed = listOf(installedApk("broken-update.apk")),
++                untrusted = emptyList(),
++                available = listOf(availableApk("broken-update.apk", 2)),
++                failures = listOf(ApkLoadFailure("broken-update.apk", reason = ApkLoadFailure.Reason.SourceConstruction)),
++            ),
++            js = NovelPluginCatalog(),
++            filter = filter,
++        )
++
++        assertEquals(1, state.entries.size)
++        assertTrue(state.entries.single().health is ManagedHealth.LoadFailed)
++    }
++
+     @Test
+     fun `updates are projected without hiding the installed record`() {
+         val apk = installedApk("update.apk").copy(hasUpdate = true)
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 54286ca60ce0a70f12e159bafc3e438f1bc31710..2de7ac791713a47f71ff9f9062870c1d8914475a 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -26,9 +26,9 @@ The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one
+ 
+ Extension discovery uses one Hayai-owned `ContentKind` policy for browse, search, reader routing, and migration. Extension management deliberately does not partition the catalog by content kind. `ManagedExtensionProjector` unions J2K APK state and LNReader JavaScript plugin state into one Extensions list with namespaced `apk:` and `js:` identities, format and content badges, and shared Update, Installed, and Available sections. Installation, update, and health are orthogonal, so an installed plugin can remain visible while its runtime is unhealthy or its repository is offline. Language and adult-source filters apply only to remote available entries; installed, untrusted, and load-failed packages remain manageable. J2K continues to own APK loading, signature trust, package installation, source registration, and update semantics. `NovelPluginManager` continues to own JavaScript repository trust, checksums, signing keys, QuickJS warm-up, atomic storage, and semantic versions.
+ 
+-APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores only novel membership and novel-only ownership tags. Manga-only, novel-only, and shared ownership transitions are idempotent: removing one view never deletes a URL or its metadata while the other view still owns it. Repository redirects migrate both J2K URLs and Hayai tags together. Browse and Browse settings expose one repository destination with explicit APK-index and LNReader JavaScript sections. The distinct repository formats remain visible because their trust models differ, but neither section contains a second extension catalog.
++APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores novel membership tags only for backup, restore, and redirect compatibility. The unified APK repository section lists every global APK index, regardless of content kind; adding, removing, or replacing a URL updates the global set and Hayai tags together. Browse and Browse settings expose one repository destination with explicit APK-index and LNReader JavaScript sections. The distinct repository formats remain visible because their trust models differ, but neither section contains a second extension catalog.
+ 
+-LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. Android application context now enters explicitly through `NovelPluginManager`, `NovelPluginSource`, `NovelPluginRuntime`, and `NovelPluginLibrary`; the runtime never resolves an unregistered raw `Context` from global DI. Runtime construction failures remain attached to installed plugin IDs in the unified catalog instead of disappearing. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
++LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. Android application context now enters explicitly through `NovelPluginManager`, `NovelPluginSource`, `NovelPluginRuntime`, and `NovelPluginLibrary`; the runtime never resolves an unregistered raw `Context` from global DI. Source construction and asynchronous warm-up failures remain attached to the current installed plugin ID in the unified catalog instead of disappearing. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
+ 
+ ## Database reset and migration
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index c57ebeefb37d43b5b3745389dad70f81ff20e072..27c36c2700bb7c8bec7a3e7f4f4a0e11ae34bc3d 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -44,8 +44,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+ | Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | exact J2K shell and native renderer verified on emulator; WebView, prepend, and incognito emulator flows pending |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+-| Remote novel extension catalogs and installation | One unified Extensions list over J2K APK authority and Hayai JavaScript authority; namespaced identities; explicit load failures; consistent duplicate reconciliation; shared-safe tagged repository ownership | implemented unverified; focused projector tests and compilation pass; emulator APK install/trust/remove flows pending |
+-| LNReader JavaScript repository sources | Unified Extensions list, explicit application-context runtime construction, runtime-error retention, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, and full catalogue/chapter bridge | implemented unverified; focused mixed-catalog tests and compilation pass; emulator install/update/remove and runtime verification pending |
++| Remote novel extension catalogs and installation | One unified Extensions list over J2K APK authority and Hayai JavaScript authority; namespaced identities; explicit load failures; consistent duplicate reconciliation; all APK repositories manageable from one section; shared-safe tagged repository ownership | implemented unverified; focused projector tests, compilation, and unified screen emulator checks pass; APK install/trust/remove flows pending |
++| LNReader JavaScript repository sources | Unified Extensions list, explicit application-context runtime construction, construction and warm-up error retention, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, and full catalogue/chapter bridge | implemented unverified; focused mixed-catalog tests and compilation pass; emulator install/update/remove and runtime verification pending |
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+-- 
+2.54.0.windows.1
+

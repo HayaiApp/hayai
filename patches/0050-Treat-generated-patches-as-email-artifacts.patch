@@ -1,0 +1,20 @@
+From e637ed36c6d20b1adfd8bc09fb78a0524e523726 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 07:49:20 +0300
+Subject: [PATCH] Treat generated patches as email artifacts
+
+
+diff --git a/.gitattributes b/.gitattributes
+index 1ca443da48151f2994537037793f8ea55b821376..c57182ae2c2e3d84b38af18e4d7994e144a69dbf 100644
+--- a/.gitattributes
++++ b/.gitattributes
+@@ -22,3 +22,6 @@
+ *.woff binary
+ *.pyc binary
+ *.swp binary
++
++# Email patches contain diff markers and a mail footer that look like whitespace errors.
++/patches/*.patch whitespace=-blank-at-eol,-blank-at-eof
+-- 
+2.54.0.windows.1
+

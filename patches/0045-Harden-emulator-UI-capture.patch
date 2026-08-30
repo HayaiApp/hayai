@@ -1,0 +1,41 @@
+From cc780adbca9a68b3f65853d0651a852f42bcb6f8 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 04:59:30 +0300
+Subject: [PATCH] Harden emulator UI capture
+
+
+diff --git a/tools/verify-hayai-emulator.ps1 b/tools/verify-hayai-emulator.ps1
+index 3f8341595dfdf720375d469b0a18f771e0c1f7c2..ff544cda2d60199ed034eee943d7747b04ee2070 100644
+--- a/tools/verify-hayai-emulator.ps1
++++ b/tools/verify-hayai-emulator.ps1
+@@ -66,9 +66,11 @@ function Assert-TestAvd {
+     if ($actual -ne $AvdName) { throw "Connected emulator is '$actual', expected dedicated AVD '$AvdName'." }
+ }
+ function Dump-Window([string] $Name) {
+-    Invoke-Adb @("shell", "uiautomator", "dump", "/sdcard/hayai-window.xml") | Out-Null
++    $remote = "/data/local/tmp/hayai-window.xml"
++    Invoke-Adb @("shell", "rm", "-f", $remote) | Out-Null
++    Invoke-Adb @("shell", "uiautomator", "dump", $remote) | Out-Null
+     $path = Join-Path $script:evidence "$Name.xml"
+-    Invoke-Adb @("pull", "/sdcard/hayai-window.xml", $path) | Out-Null
++    Invoke-Adb @("pull", $remote, $path) | Out-Null
+     return [xml](Get-Content -Raw -LiteralPath $path)
+ }
+ function Find-Node([xml] $Window, [string] $Pattern) {
+@@ -86,7 +88,12 @@ function Tap-Node([string] $Pattern, [string] $EvidenceName) {
+ }
+ function Assert-Node([string] $Pattern, [string] $EvidenceName) { [void](Find-Node (Dump-Window $EvidenceName) $Pattern) }
+ function Dismiss-CompatibilityWarning {
+-    $window = Dump-Window "00-compatibility-warning"
++    try {
++        $window = Dump-Window "00-compatibility-warning"
++    } catch {
++        Write-Warning "Compatibility-dialog inspection was unavailable; continuing with app readiness checks. $($_.Exception.Message)"
++        return
++    }
+     $warning = $window.SelectNodes("//node") | Where-Object { $_.text -eq "Android App Compatibility" } | Select-Object -First 1
+     if ($warning) {
+         Tap-Node "Don't Show Again|OK" "00-compatibility-warning"
+-- 
+2.54.0.windows.1
+

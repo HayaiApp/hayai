@@ -1,0 +1,926 @@
+From fafd064d593d66d1d2bdd501a7bf48dda7817c30 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 01:06:09 +0300
+Subject: [PATCH] Integrate source badges and built-in settings
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index e60f83c6aa87882082c44a90a46a9803228cd4c3..c68733fb705ab3a92f552907d69cb62e49a28b73 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -50,3 +50,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T12:30:00Z	validation	compiled the integrated app and ran affected novel reader/settings and E-Hentai tests with one Gradle worker	verified resource binding, Kotlin integration, typed preview fixtures, document rendering, and customization safety without parallel CPU load	gradlew --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.reader.* --tests dev.ahmedmohamed.hayai.novel.settings.* --tests dev.ahmedmohamed.hayai.adult.eh.*	VERIFIED
+ 2026-08-21T13:00:00Z	recents-visibility	rebuilt per-source hiding for History, Updates, Grouped, and All behind one Hayai policy	retained legacy preference keys, kept J2K data authoritative, covered unavailable sources, and avoided source-filter drift between layouts	RecentSourceVisibility.kt; RecentSourceVisibilityEditor.kt; RecentsPresenter.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T13:08:00Z	validation	compiled the integrated app and ran the focused recents visibility tests with one Gradle worker	verified signed and malformed IDs, independent lists, mixed-view union, exact replacement, resources, bindings, and J2K presenter integration	gradlew --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.recents.* -x :app:formatKotlin	VERIFIED
++2026-08-21T14:10:00Z	source-experience	added truthful source badges, built-in configurable-source routing, and effective E-Hentai browse/detail preferences	kept source behavior Hayai-owned, restored JavaScript plugin settings access, and avoided claiming audited enhanced wrappers as ports	SourcePresentation.kt; SourceSettingsController.kt; EhPreferences.kt; BrowseSourceController.kt	IMPLEMENTED_UNVERIFIED
++2026-08-21T14:20:00Z	validation	compiled the integrated source experience and ran focused preference and presentation tests with one Gradle worker	verified data binding for all badge layouts, built-in settings routing, SY category encoding, malformed preference fallback, and badge classification	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.settings.* --tests dev.ahmedmohamed.hayai.source.presentation.* -x :app:formatKotlin	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..fd179007edc048354c553c216d80831ed0daa7d4
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt
+@@ -0,0 +1,36 @@
++package dev.ahmedmohamed.hayai.adult.eh.settings
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
++import eu.kanade.tachiyomi.data.preference.Preference
++import eu.kanade.tachiyomi.data.preference.PreferenceStore
++
++class EhPreferences(
++    store: PreferenceStore,
++) {
++    val imageQuality: Preference<String> = store.getString("ehentai_quality", "auto")
++    val useHentaiAtHome: Preference<Int> = store.getInt("eh_enable_hah", 0)
++    val useJapaneseTitle: Preference<Boolean> = store.getBoolean("use_jp_title", false)
++    val useOriginalImages: Preference<Boolean> = store.getBoolean("eh_useOrigImages", false)
++    val tagFilterThreshold: Preference<Int> = store.getInt("eh_tag_filtering_value", 0)
++    val tagWatchingThreshold: Preference<Int> = store.getInt("eh_tag_watching_value", 0)
++    val watchedListDefault: Preference<Boolean> = store.getBoolean("eh_watched_list_default_state", false)
++    val enhancedView: Preference<Boolean> = store.getBoolean("enhanced_e_hentai_view", true)
++
++    private val enabledCategories =
++        store.getString(
++            "eh_enabled_categories",
++            List(EhCategory.entries.size) { "false" }.joinToString(","),
++        )
++
++    fun excludedCategories(): Set<EhCategory> {
++        val values = enabledCategories.get().split(',')
++        if (values.size != EhCategory.entries.size) return emptySet()
++        return EhCategory.entries.filterIndexedTo(linkedSetOf()) { index, _ ->
++            values[index].trim().equals("true", ignoreCase = true)
++        }
++    }
++
++    fun setExcludedCategories(categories: Set<EhCategory>) {
++        enabledCategories.set(EhCategory.entries.joinToString(",") { (it in categories).toString() })
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt
+index 42504dea6be962b8fdfb109e3e380052810fe63c..f1326c6557b7babfb8d396a27759fdd416785ae3 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt
+@@ -6,13 +6,16 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchSpec
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagMode
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagTerm
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhToplist
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import eu.kanade.tachiyomi.source.model.Filter
+ import eu.kanade.tachiyomi.source.model.FilterList
+ 
+ internal class EhToplistFilter : Filter.Select<String>("Toplist", arrayOf("None", "All time", "Past year", "Past month", "Yesterday"))
+-internal class EhWatchedFilter : Filter.CheckBox("Watched list")
+-internal class EhCategoryFilter(val category: EhCategory) : Filter.CheckBox(category.name.replace("Cg", " CG").replace("NonH", "Non-H"))
+-internal class EhCategoriesFilter : Filter.Group<EhCategoryFilter>("Categories to exclude", EhCategory.entries.map(::EhCategoryFilter))
++internal class EhWatchedFilter(state: Boolean) : Filter.CheckBox("Watched list", state)
++internal class EhCategoryFilter(val category: EhCategory, state: Boolean) :
++    Filter.CheckBox(category.name.replace("Cg", " CG").replace("NonH", "Non-H"), state)
++internal class EhCategoriesFilter(excluded: Set<EhCategory>) :
++    Filter.Group<EhCategoryFilter>("Categories to exclude", EhCategory.entries.map { EhCategoryFilter(it, it in excluded) })
+ internal class EhTagFilter : Filter.Text("Tags (supports namespace, -, ~, and OR)")
+ internal class EhExpungedFilter : Filter.CheckBox("Browse expunged galleries")
+ internal class EhTorrentFilter : Filter.CheckBox("Require gallery torrent")
+@@ -25,11 +28,11 @@ internal class EhDisableTagFilter : Filter.CheckBox("Disable tag filter")
+ internal class EhReverseFilter : Filter.CheckBox("Reverse results")
+ internal class EhJumpFilter : Filter.Text("Jump or seek (date, year, 7d, 2w, 3m)")
+ 
+-internal fun ehFilterList(): FilterList = FilterList(
++internal fun ehFilterList(preferences: EhPreferences): FilterList = FilterList(
+     Filter.Header("A selected toplist ignores the query and other filters"),
+     EhToplistFilter(),
+-    EhWatchedFilter(),
+-    EhCategoriesFilter(),
++    EhWatchedFilter(preferences.watchedListDefault.get()),
++    EhCategoriesFilter(preferences.excludedCategories()),
+     EhTagFilter(),
+     EhExpungedFilter(),
+     EhTorrentFilter(),
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhSourceProvider.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhSourceProvider.kt
+index 322b258100d1634b4726257b044066e768c54b89..b49504ec1d20daf4d0ccbf334c00a5f5194aad14 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhSourceProvider.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhSourceProvider.kt
+@@ -7,13 +7,15 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
+ import eu.kanade.tachiyomi.source.Source
+ import kotlinx.coroutines.flow.Flow
+ import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ 
+ class EhSourceProvider(
+     private val gateway: EhHttpGateway,
+     private val sessions: EhSessionStore,
+     metadataStore: HayaiEhPersistenceStore,
++    preferences: EhPreferences,
+ ) {
+-    private val sources = EhSite.entries.map { EhentaiSource(it, gateway, metadataStore) }
++    private val sources = EhSite.entries.map { EhentaiSource(it, gateway, metadataStore, preferences) }
+     val discoveryChanges: Flow<EhSessionState> = sessions.state
+ 
+     fun allSources(): List<Source> = sources
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt
+index b07bf3148a8105d000666e4fb052db255a327eab..c3516f8f103a122d05e3fe6583c46e056a1d846b 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt
+@@ -13,6 +13,7 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMangaIdentity
+ import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadata
+ import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadataTag
+ import dev.ahmedmohamed.hayai.adult.eh.persistence.SourceMetadataTitle
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import eu.kanade.tachiyomi.network.awaitSuccess
+ import eu.kanade.tachiyomi.network.newCachelessCallWithProgress
+ import eu.kanade.tachiyomi.source.model.FilterList
+@@ -32,6 +33,7 @@ class EhentaiSource(
+     private val site: EhSite,
+     private val gateway: EhHttpGateway,
+     private val metadataStore: HayaiEhPersistenceStore,
++    private val preferences: EhPreferences,
+ ) : HttpSource() {
+     override val id: Long = site.sourceId
+     override val name: String = site.displayName
+@@ -115,7 +117,7 @@ class EhentaiSource(
+         }
+     }
+ 
+-    override fun getFilterList(): FilterList = ehFilterList()
++    override fun getFilterList(): FilterList = ehFilterList(preferences)
+ 
+     override fun getMangaUrl(manga: SManga): String = GalleryKey.parse(manga.url).absoluteUrl(site)
+ 
+@@ -131,7 +133,11 @@ class EhentaiSource(
+ 
+     private fun EhGalleryMetadata.toSManga(): SManga = SManga.create().apply {
+         url = key.normalizedPath
+-        title = alternateTitle?.takeIf(String::isNotBlank) ?: this@toSManga.title
++        title = if (preferences.useJapaneseTitle.get()) {
++            alternateTitle?.takeIf(String::isNotBlank) ?: this@toSManga.title
++        } else {
++            this@toSManga.title
++        }
+         val artists = tags.filter { it.namespace == "artist" }.map { it.name }
+         val groups = tags.filter { it.namespace == "group" }.map { it.name }
+         artist = artists.takeIf(List<String>::isNotEmpty)?.joinToString()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
+index 28d9d39bb8d373df8be15adba213a6bd43264e31..029a07726d37309f8f378d21f7d700b258c87e58 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
+@@ -7,14 +7,19 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
+ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import kotlinx.coroutines.CancellationException
+ 
+ class EhDetailsPreviewLoader(
+     private val gateway: EhHttpGateway,
+     private val preferences: HayaiPreferences,
++    private val ehPreferences: EhPreferences,
+ ) {
+-    fun owns(manga: Manga): Boolean = preferences.hentaiFeaturesEnabled.get() && EhSite.entries.any { it.sourceId == manga.source }
++    fun owns(manga: Manga): Boolean =
++        preferences.hentaiFeaturesEnabled.get() &&
++            ehPreferences.enhancedView.get() &&
++            EhSite.entries.any { it.sourceId == manga.source }
+ 
+     suspend fun load(manga: Manga): List<EhRenderedPreview> {
+         val site = EhSite.entries.firstOrNull { it.sourceId == manga.source } ?: return emptyList()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+index 51e4b6853e710d6d90006100b75b9d8ae7a1c18c..452de84b7d4b70743a63845b76da0f7aff9ec8c0 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+@@ -17,7 +17,10 @@ import androidx.lifecycle.repeatOnLifecycle
+ import androidx.viewbinding.ViewBinding
+ import com.google.android.material.appbar.MaterialToolbar
+ import com.google.android.material.button.MaterialButton
++import com.google.android.material.switchmaterial.SwitchMaterial
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionMutationResult
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionState
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
+@@ -25,6 +28,7 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionVerifier
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
++import eu.kanade.tachiyomi.ui.webview.WebViewActivity
+ import eu.kanade.tachiyomi.util.system.dpToPx
+ import eu.kanade.tachiyomi.util.system.materialAlertDialog
+ import kotlinx.coroutines.launch
+@@ -32,6 +36,7 @@ import uy.kohesive.injekt.injectLazy
+ 
+ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private val sessionStore by injectLazy<EhSessionStore>()
++    private val ehPreferences by injectLazy<EhPreferences>()
+     private val network by injectLazy<NetworkHelper>()
+     private val verifier by lazy { EhSessionVerifier(network.client) }
+ 
+@@ -39,6 +44,8 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private lateinit var recheck: MaterialButton
+     private lateinit var ehProfile: EditText
+     private lateinit var exhProfile: EditText
++    private lateinit var watchedTags: MaterialButton
++    private lateinit var categories: MaterialButton
+ 
+     private val loginLauncher =
+         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+@@ -99,6 +106,45 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         content.addView(recheck)
+         content.addView(button("Log out") { confirmLogout() })
+ 
++        content.addView(sectionLabel("Browsing and details"))
++        content.addView(
++            settingSwitch(
++                title = "Use Japanese gallery titles",
++                summary = "Prefer the Japanese title when a gallery provides one.",
++                checked = ehPreferences.useJapaneseTitle.get(),
++                onChanged = ehPreferences.useJapaneseTitle::set,
++            ),
++        )
++        content.addView(
++            settingSwitch(
++                title = "Open on watched list",
++                summary = "Enable the Watched list filter by default on a fresh filter sheet.",
++                checked = ehPreferences.watchedListDefault.get(),
++                onChanged = ehPreferences.watchedListDefault::set,
++            ),
++        )
++        content.addView(
++            settingSwitch(
++                title = "Enhanced gallery details",
++                summary = "Load tappable gallery page previews in manga details.",
++                checked = ehPreferences.enhancedView.get(),
++                onChanged = ehPreferences.enhancedView::set,
++            ),
++        )
++        categories = button(categoryButtonText(), ::editDefaultCategories)
++        content.addView(categories)
++        watchedTags = button("Manage watched tags") {
++            startActivity(
++                WebViewActivity.newIntent(
++                    this,
++                    "https://exhentai.org/mytags",
++                    EhSite.ExHentai.sourceId,
++                    "ExHentai watched tags",
++                ),
++            )
++        }
++        content.addView(watchedTags)
++
+         content.addView(sectionLabel("Server settings profiles"))
+         ehProfile = profileInput("E-Hentai profile", sessionStore.settingsProfile(EhSite.EHentai))
+         exhProfile = profileInput("ExHentai profile", sessionStore.settingsProfile(EhSite.ExHentai))
+@@ -122,6 +168,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+                 is EhSessionState.InvalidCredentials -> "Invalid credentials. ${state.reason}"
+             }
+         recheck.isEnabled = state !is EhSessionState.LoggedOut
++        watchedTags.isEnabled = state is EhSessionState.Verified
+     }
+ 
+     private fun recheckSession() {
+@@ -186,6 +233,60 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             setPadding(0, 24.dpToPx, 0, 8.dpToPx)
+         }
+ 
++    private fun settingSwitch(
++        title: String,
++        summary: String,
++        checked: Boolean,
++        onChanged: (Boolean) -> Unit,
++    ): LinearLayout =
++        LinearLayout(this).apply {
++            orientation = LinearLayout.VERTICAL
++            setPadding(0, 8.dpToPx, 0, 8.dpToPx)
++            addView(
++                SwitchMaterial(context).apply {
++                    text = title
++                    isChecked = checked
++                    setOnCheckedChangeListener { _, value -> onChanged(value) }
++                },
++                matchWidth(),
++            )
++            addView(
++                TextView(context).apply {
++                    text = summary
++                    alpha = 0.72f
++                    setPadding(48.dpToPx, 0, 0, 0)
++                },
++                matchWidth(),
++            )
++        }
++
++    private fun editDefaultCategories() {
++        val all = EhCategory.entries
++        val selected = ehPreferences.excludedCategories().toMutableSet()
++        materialAlertDialog()
++            .setTitle("Categories excluded by default")
++            .setMultiChoiceItems(
++                all.map(::categoryName).toTypedArray(),
++                BooleanArray(all.size) { all[it] in selected },
++            ) { _, index, checked ->
++                if (checked) selected += all[index] else selected -= all[index]
++            }
++            .setPositiveButton(android.R.string.ok) { _, _ ->
++                ehPreferences.setExcludedCategories(selected)
++                categories.text = categoryButtonText()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun categoryButtonText(): String {
++        val count = ehPreferences.excludedCategories().size
++        return if (count == 0) "Default category filters: show all" else "Default category filters: hide $count"
++    }
++
++    private fun categoryName(category: EhCategory): String =
++        category.name.replace("Cg", " CG").replace("NonH", "Non-H").replace("ImageSet", "Image Set").replace("AsianPorn", "Asian Porn")
++
+     private fun button(
+         text: String,
+         action: () -> Unit,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7c5c4d5a629e2e4312f3b9776bcfbfae863f84c2
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentation.kt
+@@ -0,0 +1,29 @@
++package dev.ahmedmohamed.hayai.source.presentation
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
++import eu.kanade.tachiyomi.source.Source
++
++enum class SourceBadge(
++    val label: String,
++) {
++    Bundled("Bundled"),
++    JavaScript("JS"),
++    Novel("Novel"),
++    Adult("Adult"),
++}
++
++object SourcePresentation {
++    fun badges(source: Source): List<SourceBadge> = buildList {
++        when {
++            source is NovelPluginSource -> add(SourceBadge.JavaScript)
++            source.id == LocalNovelSource.ID || EhSite.entries.any { it.sourceId == source.id } -> add(SourceBadge.Bundled)
++        }
++        if (source.isNovelSource) add(SourceBadge.Novel)
++        if (EhSite.entries.any { it.sourceId == source.id }) add(SourceBadge.Adult)
++    }
++
++    fun badgeText(source: Source): String? =
++        badges(source).takeIf { it.isNotEmpty() }?.joinToString(" · ") { it.label }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..162d0f9619c0a3321327bd50b21891b287b820cb
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt
+@@ -0,0 +1,58 @@
++package dev.ahmedmohamed.hayai.source.settings
++
++import androidx.preference.Preference
++import androidx.preference.PreferenceScreen
++import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
++import eu.kanade.tachiyomi.data.preference.SharedPreferencesDataStore
++import eu.kanade.tachiyomi.source.ConfigurableSource
++import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import timber.log.Timber
++import uy.kohesive.injekt.injectLazy
++
++class SourceSettingsController() : SettingsController() {
++    private val sourceManager by injectLazy<SourceManager>()
++
++    constructor(sourceId: Long) : this() {
++        args.putLong(SOURCE_ID_KEY, sourceId)
++    }
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen): PreferenceScreen = screen.apply {
++        val source = sourceManager.get(args.getLong(SOURCE_ID_KEY))
++        title = source?.name ?: "Source settings"
++        val configurable = source as? ConfigurableSource
++        if (configurable == null) {
++            addUnavailablePreference("This source does not expose settings.")
++            return@apply
++        }
++
++        preferenceManager.preferenceDataStore = SharedPreferencesDataStore(configurable.getSourcePreferences())
++        runCatching { configurable.setupPreferenceScreen(this) }
++            .onFailure { error ->
++                Timber.e(error, "Unable to create settings for source %d", configurable.id)
++                removeAll()
++                addUnavailablePreference("The source settings could not be loaded. Reinstall or update the source and try again.")
++            }
++
++        if (preferenceCount == 0) {
++            addUnavailablePreference(
++                SourcePresentation.badgeText(source)?.let { "$it source has no configurable options." }
++                    ?: "This source has no configurable options.",
++            )
++        }
++    }
++
++    private fun PreferenceScreen.addUnavailablePreference(message: String) {
++        addPreference(
++            Preference(context).apply {
++                title = "No settings available"
++                summary = message
++                isSelectable = false
++            },
++        )
++    }
++
++    companion object {
++        private const val SOURCE_ID_KEY = "hayai_source_id"
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+index 37d7ef34e9fdaba3f0a5da1ccb1bc6bc481d6261..eab51ac0fab5d40b792f35117ef06a3cb2e3d5d2 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+@@ -8,6 +8,7 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieStore
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
+ import dev.ahmedmohamed.hayai.adult.eh.source.EhSourceProvider
+ import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhDetailsPreviewLoader
+ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+@@ -67,9 +68,10 @@ class AppModule(
+         addSingletonFactory<EhCookieStore> { AndroidEhCookieStore() }
+         addSingletonFactory { EhSessionStore(get(), get()) }
+         addSingletonFactory { HayaiEhPersistenceStore(get()) }
++        addSingletonFactory { EhPreferences(get()) }
+         addSingletonFactory { EhHttpGateway(get<NetworkHelper>().client, get()) }
+-        addSingletonFactory { EhSourceProvider(get(), get(), get()) }
+-        addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get())) }
++        addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
++        addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
+         addSingletonFactory { SourceManager(app, get(), get(), get()) }
+         addSingletonFactory { NovelJ2kIntegration(get(), get()) }
+         addSingletonFactory { NovelMigrationPolicy(get(), get()) }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt
+index 6d5a4f751cec3535cd66f099ab20ed08c641ea78..8da3819f618565cd024fd249591504f07366eced 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt
+@@ -1,6 +1,7 @@
+ package eu.kanade.tachiyomi.ui.migration
+ 
+ import android.view.View
++import androidx.core.view.isVisible
+ import androidx.core.text.buildSpannedString
+ import androidx.core.text.color
+ import eu.kanade.tachiyomi.R
+@@ -10,6 +11,7 @@ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
+ import eu.kanade.tachiyomi.util.lang.withColor
+ import eu.kanade.tachiyomi.util.system.LocaleHelper
+ import eu.kanade.tachiyomi.util.system.getResourceColor
++import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
+ import java.util.Locale
+ 
+ class SourceHolder(
+@@ -30,6 +32,8 @@ class SourceHolder(
+         // Set source name
+         val sourceName = source.name.replaceFirstChar { it.titlecase(Locale.getDefault()) } + " (${item.numberOfItems})"
+         binding.title.text = sourceName
++        binding.sourceBadge.text = SourcePresentation.badgeText(source)
++        binding.sourceBadge.isVisible = binding.sourceBadge.text != null
+         binding.lang.text =
+             when {
+                 item.isUninstalled ->
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt
+index c91a4c5a44cbed784a18fcab55e621758bc2b1ca..826e8783ff32b8b91098f2d0a0641c56310a3e97 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt
+@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.migration.manga.design
+ 
+ import android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+ import android.view.View
++import androidx.core.view.isVisible
++import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
+ import eu.kanade.tachiyomi.databinding.MigrationSourceItemBinding
+ import eu.kanade.tachiyomi.source.icon
+ import eu.kanade.tachiyomi.source.online.HttpSource
+@@ -22,6 +24,8 @@ class MigrationSourceHolder(
+         sourceEnabled: Boolean,
+     ) {
+         binding.title.text = source.nameBasedOnEnabledLanguages(adapter.enabledLanguages, adapter.extensionManager)
++        binding.sourceBadge.text = SourcePresentation.badgeText(source)
++        binding.sourceBadge.isVisible = binding.sourceBadge.text != null
+         // Update circle letter image.
+         itemView.post {
+             val icon = source.icon()
+@@ -31,10 +35,12 @@ class MigrationSourceHolder(
+         if (sourceEnabled) {
+             binding.title.alpha = 1.0f
+             binding.sourceImage.alpha = 1.0f
++            binding.sourceBadge.alpha = 1.0f
+             binding.title.paintFlags = binding.title.paintFlags and STRIKE_THRU_TEXT_FLAG.inv()
+         } else {
+             binding.title.alpha = DISABLED_ALPHA
+             binding.sourceImage.alpha = DISABLED_ALPHA
++            binding.sourceBadge.alpha = DISABLED_ALPHA
+             binding.title.paintFlags = binding.title.paintFlags or STRIKE_THRU_TEXT_FLAG
+         }
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+index 184b9421a6052818313d265b86f5fe502930e14c..f58ad1ee6ab4536b6e3bca0a24ab1250055cb536 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.source
+ import android.content.res.ColorStateList
+ import android.view.View
+ import androidx.core.view.isVisible
++import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.databinding.SourceItemBinding
+ import eu.kanade.tachiyomi.source.LocalSource
+@@ -36,6 +37,8 @@ class SourceHolder(
+         val showLanguage = source.includeLangInName(adapter.enabledLanguages, adapter.extensionManager)
+         val sourceName = if (showLanguage && (underPinnedSection || underLastUsedSection)) source.toString() else source.name
+         binding.title.text = sourceName
++        binding.sourceBadge.text = SourcePresentation.badgeText(source)
++        binding.sourceBadge.isVisible = binding.sourceBadge.text != null
+ 
+         binding.sourcePin.apply {
+             iconTint =
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
+index 08789f5eb4799ab7e59dce513d92fd2965b71684..f4ebf9f0cd8cecb259306ce59da2fb8054ac1455 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
+@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
+ import eu.kanade.tachiyomi.source.pkgName
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity
++import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
+ import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
+ import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
+ import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
+@@ -537,13 +538,16 @@ open class BrowseSourceController(
+             activity?.let { startActivity(Intent(it, EhSettingsActivity::class.java)) }
+             return
+         }
+-        presenter.source.pkgName()?.let { pkgName ->
++        val pkgName = presenter.source.pkgName()
++        if (pkgName != null) {
+             router.pushController(
+                 ExtensionDetailsController(
+                     pkgName,
+                     presenter.source.id,
+                 ).withFadeTransaction(),
+             )
++        } else if (presenter.source is ConfigurableSource) {
++            router.pushController(SourceSettingsController(presenter.source.id).withFadeTransaction())
+         }
+     }
+ 
+diff --git a/app/src/main/res/drawable/source_badge_background.xml b/app/src/main/res/drawable/source_badge_background.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..24cf95b4196382c584d7d1ec2c1df55703ae16d7
+--- /dev/null
++++ b/app/src/main/res/drawable/source_badge_background.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android"
++    android:shape="rectangle">
++    <solid android:color="?attr/colorSecondaryContainer" />
++    <corners android:radius="6dp" />
++    <padding
++        android:left="6dp"
++        android:top="2dp"
++        android:right="6dp"
++        android:bottom="2dp" />
++</shape>
+diff --git a/app/src/main/res/layout/migration_card_item.xml b/app/src/main/res/layout/migration_card_item.xml
+index 7c394812827b41a079dabf3d1d4cd6018197ce65..09954e04999ccc272cf2f572f42917491b716f11 100644
+--- a/app/src/main/res/layout/migration_card_item.xml
++++ b/app/src/main/res/layout/migration_card_item.xml
+@@ -53,10 +53,26 @@
+             app:layout_constraintBottom_toBottomOf="parent"
+             app:layout_constraintTop_toBottomOf="@id/title"
+             app:layout_constraintStart_toStartOf="@id/title"
+-            app:layout_constraintEnd_toEndOf="@id/title"
++            app:layout_constraintEnd_toStartOf="@id/source_badge"
+             tools:text="English"
+             tools:visibility="visible" />
+ 
++        <TextView
++            android:id="@+id/source_badge"
++            style="?textAppearanceLabelSmall"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="6dp"
++            android:background="@drawable/source_badge_background"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:textColor="?attr/colorOnSecondaryContainer"
++            app:layout_constraintBottom_toBottomOf="@id/lang"
++            app:layout_constraintEnd_toEndOf="@id/title"
++            app:layout_constraintStart_toEndOf="@id/lang"
++            app:layout_constraintTop_toTopOf="@id/lang"
++            tools:text="Bundled · Adult" />
++
+         <com.google.android.material.button.MaterialButton
+             android:id="@+id/migration_all"
+             style="@style/Widget.Tachiyomi.Button.Small"
+diff --git a/app/src/main/res/layout/migration_source_item.xml b/app/src/main/res/layout/migration_source_item.xml
+index 155822826166ddc157d1b39aa4ff7fda8b2cbc54..c8162540694ae7722be71c5485e45f574a86c4cf 100644
+--- a/app/src/main/res/layout/migration_source_item.xml
++++ b/app/src/main/res/layout/migration_source_item.xml
+@@ -17,19 +17,37 @@
+         android:paddingEnd="0dp"
+         tools:src="@mipmap/ic_launcher_round"/>
+ 
+-    <TextView
+-        android:id="@+id/title"
++    <LinearLayout
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+-        android:layout_marginLeft="@dimen/material_component_lists_text_left_padding"
++        android:layout_gravity="center_vertical"
+         android:layout_marginStart="@dimen/material_component_lists_text_left_padding"
+-        android:layout_marginRight="@dimen/material_component_lists_single_line_with_avatar_height"
+         android:layout_marginEnd="@dimen/material_component_lists_single_line_with_avatar_height"
+-        android:ellipsize="end"
+-        android:maxLines="1"
+-        android:layout_gravity="center_vertical"
+-        style="?textAppearanceBodyLarge"
+-        tools:text="Title"/>
++        android:gravity="center_vertical"
++        android:orientation="horizontal">
++
++        <TextView
++            android:id="@+id/title"
++            style="?textAppearanceBodyLarge"
++            android:layout_width="0dp"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:ellipsize="end"
++            android:maxLines="1"
++            tools:text="Title" />
++
++        <TextView
++            android:id="@+id/source_badge"
++            style="?textAppearanceLabelSmall"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="6dp"
++            android:background="@drawable/source_badge_background"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:textColor="?attr/colorOnSecondaryContainer"
++            tools:text="JS · Novel" />
++    </LinearLayout>
+ 
+     <ImageView
+         android:id="@+id/reorder"
+@@ -40,4 +58,4 @@
+         app:srcCompat="@drawable/ic_drag_handle_24dp"
+         android:tint="?attr/colorOnBackground"/>
+ 
+-</FrameLayout>
+\ No newline at end of file
++</FrameLayout>
+diff --git a/app/src/main/res/layout/source_item.xml b/app/src/main/res/layout/source_item.xml
+index 023dfea04e71f722b0248025f9cf4c53dc24c53b..146288b786db1692bc09e873678fe7019b919b90 100644
+--- a/app/src/main/res/layout/source_item.xml
++++ b/app/src/main/res/layout/source_item.xml
+@@ -73,12 +73,27 @@
+             android:paddingStart="0dp"
+             android:paddingEnd="8dp"
+             android:textColor="?attr/colorOnBackground"
+-            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintBottom_toTopOf="@id/source_badge"
+             app:layout_constraintEnd_toStartOf="@+id/source_latest"
+             app:layout_constraintStart_toEndOf="@+id/source_image"
+             app:layout_constraintTop_toTopOf="parent"
+             tools:text="Source title" />
+ 
++        <TextView
++            android:id="@+id/source_badge"
++            style="?textAppearanceLabelSmall"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:background="@drawable/source_badge_background"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:textColor="?attr/colorOnSecondaryContainer"
++            app:layout_constraintBottom_toBottomOf="parent"
++            app:layout_constraintEnd_toEndOf="@id/title"
++            app:layout_constraintStart_toStartOf="@id/title"
++            app:layout_constraintTop_toBottomOf="@id/title"
++            tools:text="JS · Novel" />
++
+         <View
+             android:id="@+id/source_divider"
+             android:layout_width="1dp"
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferencesTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferencesTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..b2d601488ef9a43e5b5be37cd02ea8e0d1744eb1
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferencesTest.kt
+@@ -0,0 +1,88 @@
++package dev.ahmedmohamed.hayai.adult.eh.settings
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
++import eu.kanade.tachiyomi.data.preference.Preference
++import eu.kanade.tachiyomi.data.preference.PreferenceStore
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhPreferencesTest {
++    @Test
++    fun `category exclusions use SY order and converge`() {
++        val store = MemoryPreferenceStore()
++        val preferences = EhPreferences(store)
++        val excluded = linkedSetOf(EhCategory.Doujinshi, EhCategory.NonH, EhCategory.Misc)
++
++        preferences.setExcludedCategories(excluded)
++
++        assertEquals(excluded, preferences.excludedCategories())
++        assertEquals(
++            "true,false,false,false,false,true,false,false,false,true",
++            store.value<String>("eh_enabled_categories"),
++        )
++    }
++
++    @Test
++    fun `malformed category preference safely shows all`() {
++        val preferences = EhPreferences(MemoryPreferenceStore("eh_enabled_categories" to "true,false"))
++
++        assertTrue(preferences.excludedCategories().isEmpty())
++    }
++}
++
++private class MemoryPreferenceStore(
++    vararg initial: Pair<String, Any>,
++) : PreferenceStore {
++    private val values = initial.toMap().toMutableMap()
++    private val preferences = mutableMapOf<String, MemoryPreference<*>>()
++
++    @Suppress("UNCHECKED_CAST")
++    fun <T> value(key: String): T? = values[key] as? T
++
++    override fun getString(key: String, defaultValue: String): Preference<String> = preference(key, defaultValue)
++    override fun getLong(key: String, defaultValue: Long): Preference<Long> = preference(key, defaultValue)
++    override fun getInt(key: String, defaultValue: Int): Preference<Int> = preference(key, defaultValue)
++    override fun getFloat(key: String, defaultValue: Float): Preference<Float> = preference(key, defaultValue)
++    override fun getBoolean(key: String, defaultValue: Boolean): Preference<Boolean> = preference(key, defaultValue)
++    override fun getStringSet(key: String, defaultValue: Set<String>): Preference<Set<String>> = preference(key, defaultValue)
++    override fun <T> getObject(key: String, defaultValue: T, serializer: (T) -> String, deserializer: (String) -> T): Preference<T> =
++        preference(key, defaultValue)
++    override fun getAll(): Map<String, *> = values.toMap()
++
++    @Suppress("UNCHECKED_CAST")
++    private fun <T> preference(key: String, defaultValue: T): Preference<T> =
++        preferences.getOrPut(key) {
++            MemoryPreference(
++                key,
++                defaultValue,
++                { values[key] as? T ?: defaultValue },
++                { values[key] = it as Any },
++                { values.remove(key) },
++                { key in values },
++            )
++        } as Preference<T>
++}
++
++private class MemoryPreference<T>(
++    private val key: String,
++    private val defaultValue: T,
++    private val read: () -> T,
++    private val write: (T) -> Unit,
++    private val remove: () -> Unit,
++    private val contains: () -> Boolean,
++) : Preference<T> {
++    private val state = MutableStateFlow(read())
++    override fun key(): String = key
++    override fun get(): T = read()
++    override fun set(value: T) { write(value); state.value = value }
++    override fun isSet(): Boolean = contains()
++    override fun delete() { remove(); state.value = defaultValue }
++    override fun defaultValue(): T = defaultValue
++    override fun changes(): Flow<T> = state
++    override fun stateIn(scope: CoroutineScope): StateFlow<T> = state
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentationTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentationTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..bb705a12f2c245897696c6fdb39bc8898bfc4466
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/presentation/SourcePresentationTest.kt
+@@ -0,0 +1,38 @@
++package dev.ahmedmohamed.hayai.source.presentation
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
++import eu.kanade.tachiyomi.source.Source
++import eu.kanade.tachiyomi.source.model.Page
++import eu.kanade.tachiyomi.source.model.SChapter
++import eu.kanade.tachiyomi.source.model.SManga
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Test
++
++class SourcePresentationTest {
++    @Test
++    fun `EH sources are labeled as bundled adult sources`() {
++        assertEquals("Bundled · Adult", SourcePresentation.badgeText(FakeSource(EhSite.EHentai.sourceId)))
++    }
++
++    @Test
++    fun `local novels are labeled as bundled`() {
++        assertEquals("Bundled · Novel", SourcePresentation.badgeText(FakeSource(LocalNovelSource.ID, isNovelSource = true)))
++    }
++
++    @Test
++    fun `ordinary extensions do not receive a misleading badge`() {
++        assertNull(SourcePresentation.badgeText(FakeSource(42L)))
++    }
++}
++
++private class FakeSource(
++    override val id: Long,
++    override val isNovelSource: Boolean = false,
++) : Source {
++    override val name: String = "Fake"
++    override suspend fun getMangaDetails(manga: SManga): SManga = manga
++    override suspend fun getChapterList(manga: SManga): List<SChapter> = emptyList()
++    override suspend fun getPageList(chapter: SChapter): List<Page> = emptyList()
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index c62c9fb285fe105316503dc913df0f6153672b3d..a3dbd4729942d05cd8e0ee9dfcf09f1de749b549 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -42,7 +42,11 @@ Novel integration uses a small set of presentation adapters rather than parallel
+ 
+ Source-specific details use one generic adapter method on the manga header. E-Hentai implements that method through a Hayai-owned preview loader: authenticated listing requests are parsed into typed direct or sprite-crop previews, decoded with byte and dimension limits, and rendered in the existing details header. Tapping a preview uses J2K's authenticated source WebView. No E-Hentai parsing, cookies, bitmap cropping, or feature branching lives in the J2K holder.
+ 
+-Built-in source settings are another deliberate adapter seam. `BrowseSourceController` delegates settings navigation for Hayai-owned sources because J2K's extension-only package lookup cannot route a built-in source. The destination activity, session logic, remote controls, and failures remain under the Hayai namespace.
++Built-in source settings are another deliberate adapter seam. `BrowseSourceController` sends E-Hentai sources to the Hayai account screen and sends other built-in `ConfigurableSource` implementations to `SourceSettingsController`. This fixes JavaScript novel source settings without adding a second settings model. Extension sources continue to use `ExtensionDetailsController`.
++
++Source badges use a Hayai-owned presentation resolver. The browse list and both migration lists render only facts that the live source proves: `Bundled`, `JS`, `Novel`, and `Adult`. The resolver does not label an enhanced-source family until its delegated behavior exists. This keeps the badge UI honest while limiting J2K changes to three holders and their layouts.
++
++E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category strings fall back to showing every category. Remote uconfig, favorites sync, and the gallery update worker remain separate ports.
+ 
+ Recents source visibility uses one Hayai-owned policy seam. History and Updates retain independent
+ sets under the legacy Hayai preference keys; Grouped and All derive the union. The presenter takes
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 62556f5f0106c780e2a1fe289ff63fbab21960e0..958acb93c38e9454b6184a43ca41200e096c5def 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -12,6 +12,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | Library lewd filter show/only/hide (`pref_filter_library_lewd_v2`) | J2K library filter sheet plus typed `HayaiLibraryPolicy` | port |
+ | Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; emulator login pending |
++| EH source settings, default filters, and enhanced details toggle | SY-compatible typed preferences plus Hayai account/settings activity | foundation verified; remote uconfig audit |
+ | EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
+ | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic manga-details feature seam | foundation verified; emulator details flow pending |
+ | 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | Registered enhanced-source families | registry foundation; behavior audit |
+@@ -19,6 +20,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | Raised metadata, titles, and tags | Additive schema plus import | migration foundation; DAO/UI audit |
+ | Merged sources, feeds, saved searches, and update controls | Hayai-owned services and typed side data | legacy retained; runtime audit |
+ | Data saver, page preview, request interception, reader/source options | Opt-in source delegates; upstream image reader unchanged | preview foundation verified; remaining items audit |
++| Source type and origin badges | Hayai presentation resolver plus browse and migration adapters | foundation verified; delegated enhanced badges wait for their ports |
+ 
+ SY areas audited include its EH/ExHentai source, login and preferences; metadata models/parsers; adult classifier and library filters; favorites/update flows; enhanced source handlers; merged/feed/saved-search systems; and reader/network extras. Exact behavior is rebuilt behind Hayai contracts rather than copied into J2K presenters.
+ 
+@@ -31,6 +33,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+ | Remote novel extension catalogs and installation | J2K extension API plus repository adapters | audit |
+ | LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
++| JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Hayai-owned source-definition compiler and editor | audit |
+ | Local novels and EPUB import/export | Document storage and local novel source | import port; export audit |
+ | Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | integration foundation verified; emulator bulk-flow pending |
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index bdc61a561194827001dc0be4e6bc574fcbb8a3e3..cd1445316e5ae46facbe78a129c99d876c806f97 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -28,6 +28,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsController.kt"
+@@ -41,6 +43,7 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/util/manga/MangaShortcutManager.kt"
+-- 
+2.54.0.windows.1
+

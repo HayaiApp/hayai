@@ -1,0 +1,29 @@
+From 02ebd9f0a21472d5debe5acf3a6205aa17f91af1 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 21:48:02 +0300
+Subject: [PATCH] Tune E-Hentai details preview paging
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
+index 57da5594f2cb685a8c91d887731e179037c14bbb..12dd0ed7ad32b06cda51547293193c1be06a5352 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt
+@@ -157,11 +157,13 @@ class EhDetailsPreviewLoader(
+         }
+ 
+     private companion object {
+-        const val PREVIEWS_PER_PAGE = 12
++        // E-Hentai's gallery preview endpoint is itself paginated in 20-item pages.
++        // Keep that boundary intact so moving to the next UI page never skips thumbnails.
++        const val PREVIEWS_PER_PAGE = 20
+         const val MAX_LISTING_PAGES = 200
+         const val MAX_IMAGE_BYTES = 4L * 1024L * 1024L
+         const val MAX_ENCODED_SPRITE_BYTES = 12L * 1024L * 1024L
+-        const val MAX_DECODED_BYTES_PER_PAGE = 12L * 1024L * 1024L
++        const val MAX_DECODED_BYTES_PER_PAGE = 16L * 1024L * 1024L
+         const val MAX_SOURCE_DIMENSION = 16_384
+         const val MAX_RENDER_DIMENSION = 512
+     }
+-- 
+2.54.0.windows.1
+

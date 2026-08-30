@@ -1,0 +1,289 @@
+From 57644588cd998cc4e7cb6d43b84e118779c08f2b Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 13:05:20 +0300
+Subject: [PATCH] fix: repair E-Hentai details and previews
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
+index f80a79a0ea2c6faec49682bfecc996834ef131af..eb1a7e9b56eee37671df6f8c3dfc6062787e94dc 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
+@@ -48,11 +48,12 @@ object EhHtmlParser {
+         validateLocation(location, site)
+         guard(document)
+         val listingPage = runCatching { URI(location).query.orEmpty().split('&').firstOrNull { it.startsWith("p=") }?.substringAfter('=')?.toInt() }.getOrNull() ?: 0
+-        val cells = document.select("#gdt .gdtm, #gdt .gdtl")
++        val cells = document.select("#gdt .gdtm, #gdt .gdtl, #gdt > a[href]")
+         if (cells.size > maxItems) throw EhFailure.BoundsExceeded("E-Hentai preview page exceeds $maxItems entries")
+         val previews = cells
+             .mapNotNull { cell ->
+-                val link = cell.selectFirst("a[href]")?.absUrl("href").orEmpty()
++                val linkElement = cell.takeIf { it.`is`("a[href]") } ?: cell.selectFirst("a[href]")
++                val link = linkElement?.absUrl("href").orEmpty()
+                 if (!link.startsWith("https://")) return@mapNotNull null
+                 val index = previewIndex(cell, link) ?: return@mapNotNull null
+                 val image = cell.selectFirst("img[src], img[data-src]")
+@@ -93,7 +94,7 @@ object EhHtmlParser {
+     private val STYLE_URL = Regex("url\\(([^)]+)\\)", RegexOption.IGNORE_CASE)
+     private val STYLE_WIDTH = Regex("width\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
+     private val STYLE_HEIGHT = Regex("height\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
+-    private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)px\\s+(-?\\d+)px", RegexOption.IGNORE_CASE)
++    private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)(?:px)?\\s+(-?\\d+)(?:px)?", RegexOption.IGNORE_CASE)
+     private val PAGE_URL_INDEX = Regex("-(\\d+)(?:[/?#]|$)")
+ 
+     fun parseBrowse(
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
+index 007417f0e9a239e41e6a9141d7c7761381edb3a5..a22b82807d99f54d49a09f80a46f35073822fc46 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
+@@ -85,9 +85,8 @@ class EhHttpGateway(
+         key: GalleryKey,
+         page: Int = 0,
+     ): EhPreviewPage {
+-        require(page in 0..199)
+-        val url = site.baseUrl + key.normalizedPath + "&p=$page"
+-        return getDocument(site, url) { html, location -> EhHtmlParser.parsePreviewPage(html, location, site) }
++        val url = EhRequestBuilder.previews(site, key, page)
++        return getDocument(site, url.toString()) { html, location -> EhHtmlParser.parsePreviewPage(html, location, site) }
+     }
+ 
+     fun imageRequest(site: EhSite, imageUrl: String): Request = request(site, imageUrl)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt
+index 85c57eec11b10783dabb0654587ef824ec16a15e..97d042dda74ff3b7bde8d33625497a5a0b33101f 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt
+@@ -5,10 +5,25 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchCursor
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchSpec
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhToplist
++import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
+ import okhttp3.HttpUrl
+ import okhttp3.HttpUrl.Companion.toHttpUrl
+ 
+ object EhRequestBuilder {
++    fun previews(
++        site: EhSite,
++        key: GalleryKey,
++        page: Int,
++    ): HttpUrl {
++        require(page in 0..199)
++        return key
++            .absoluteUrl(site)
++            .toHttpUrl()
++            .newBuilder()
++            .addQueryParameter("p", page.toString())
++            .build()
++    }
++
+     fun latest(site: EhSite, cursor: EhSearchCursor.Gallery? = null): HttpUrl =
+         site.baseUrl.toHttpUrl().newBuilder().apply {
+             cursor?.let { addQueryParameter("next", it.id.value) }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt
+index ef28669300fe46ebffbeb72df008e486471c3fb3..b4e9e7ed527f304713fd8455376849a7ca6d07a5 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt
+@@ -1,7 +1,6 @@
+ package dev.ahmedmohamed.hayai.adult.eh.source
+ 
+ import android.content.Context
+-import android.text.format.Formatter
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhBrowseGallery
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryMetadata
+@@ -172,45 +171,16 @@ class EhentaiSource(
+         val groups = tags.filter { it.namespace == "group" }.map { it.name }
+         artist = artists.takeIf(List<String>::isNotEmpty)?.joinToString()
+         author = (artists + groups).distinct().takeIf(List<String>::isNotEmpty)?.joinToString()
+-        description = buildDescription(this@toSManga)
+-        genre = buildList {
+-            category?.let(::add)
+-            language?.let(::add)
+-            addAll(tags.map { "${it.namespace}: ${it.name}" })
+-        }.distinct().joinToString().takeIf(String::isNotBlank)
++        description = null
++        genre = tags.map { "${it.namespace}: ${it.name}" }
++            .distinct()
++            .joinToString()
++            .takeIf(String::isNotBlank)
+         status = SManga.UNKNOWN
+         thumbnail_url = this@toSManga.thumbnailUrl
+         initialized = true
+     }
+ 
+-    private fun buildDescription(metadata: EhGalleryMetadata): String = buildList {
+-        metadata.title.takeIf { it != metadata.alternateTitle }?.let { add(context.getString(R.string.hayai_eh_description_original_title, it)) }
+-        metadata.uploader?.let { add(context.getString(R.string.hayai_eh_description_uploader, it)) }
+-        metadata.category?.let { add(context.getString(R.string.hayai_eh_description_category, it)) }
+-        metadata.language?.let {
+-            add(
+-                context.getString(
+-                    R.string.hayai_eh_description_language,
+-                    it,
+-                    if (metadata.translated == true) context.getString(R.string.hayai_eh_description_translated) else "",
+-                ),
+-            )
+-        }
+-        metadata.pageCount?.let { add(context.getString(R.string.hayai_eh_description_pages, it)) }
+-        metadata.sizeBytes?.let { add(context.getString(R.string.hayai_eh_description_size, Formatter.formatShortFileSize(context, it))) }
+-        metadata.averageRating?.let { rating ->
+-            val votes = metadata.ratingCount?.let { context.resources.getQuantityString(R.plurals.hayai_eh_description_votes, it, it) }.orEmpty()
+-            add(context.getString(R.string.hayai_eh_description_rating, "%.2f".format(rating), votes))
+-        }
+-        metadata.favoriteCount?.let { add(context.getString(R.string.hayai_eh_description_favorites, it)) }
+-        metadata.visible?.let { add(context.getString(R.string.hayai_eh_description_visibility, it)) }
+-        if (metadata.tags.isNotEmpty()) {
+-            add("\n${context.getString(R.string.hayai_eh_description_tags)}\n" + metadata.tags.groupBy { it.namespace }.entries.joinToString("\n") { (namespace, tags) ->
+-                context.getString(R.string.hayai_eh_description_tag_group, namespace, tags.joinToString { it.name })
+-            })
+-        }
+-    }.joinToString("\n")
+-
+     private fun persistMetadata(metadata: EhGalleryMetadata) {
+         val payload = buildJsonObject {
+             put("gid", metadata.key.id.value)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
+index ab821665588949f3b920b3cd70dc2051bf9ffc4c..0dc0703de2fef5c5760934a8901904ead47ccaea 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourceDetailsPreview.kt
+@@ -72,7 +72,9 @@ class SourceDetailsPreviewRegistry(
+         val chapterIds = database.getChapters(manga).executeAsBlocking().mapNotNull { it.id }
+         val key = cache.listingKey(manga, chapterIds, page)
+         if (cacheControl != CacheControl.FORCE_NETWORK) cache.readListing(key)?.let { return it }
+-        return provider(manga).load(manga, page, cacheControl).also { cache.writeListing(key, it) }
++        return provider(manga).load(manga, page, cacheControl).also {
++            runCatching { cache.writeListing(key, it) }
++        }
+     }
+ 
+     override suspend fun loadImage(
+@@ -82,7 +84,9 @@ class SourceDetailsPreviewRegistry(
+     ): ByteArray {
+         val key = preview.cacheIdentity(manga.source)
+         if (cacheControl != CacheControl.FORCE_NETWORK) cache.readImage(key)?.let { return it }
+-        return provider(manga).loadImage(manga, preview, cacheControl).also { cache.writeImage(key, it) }
++        return provider(manga).loadImage(manga, preview, cacheControl).also {
++            runCatching { cache.writeImage(key, it) }
++        }
+     }
+ 
+     fun clearCache(): Int = cache.clear()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
+index b33c5472fc9aa680a5998d527c9b8e9d296bc1b5..3032fdd4c87558159777760f9c48d88f9b4d0dfa 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
+@@ -17,7 +17,7 @@ class SourcePreviewCache(private val context: Context) {
+         get() = Formatter.formatFileSize(context, root.walkTopDown().filter(File::isFile).sumOf(File::length))
+ 
+     fun listingKey(manga: Manga, chapterIds: List<Long>, page: Int): String =
+-        digest("${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
++        digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
+ 
+     @Synchronized
+     fun readListing(key: String): SourcePreviewPage? = read(listings, key)?.let {
+@@ -35,7 +35,7 @@ class SourcePreviewCache(private val context: Context) {
+ 
+     @Synchronized
+     fun writeImage(key: String, bytes: ByteArray) {
+-        require(bytes.size <= MAX_IMAGE_BYTES)
++        if (bytes.size > MAX_IMAGE_BYTES) return
+         write(images, digest(key), bytes)
+         trim()
+     }
+@@ -86,7 +86,8 @@ class SourcePreviewCache(private val context: Context) {
+         .joinToString("") { "%02x".format(it) }
+ 
+     private companion object {
+-        const val MAX_IMAGE_BYTES = 4 * 1024 * 1024
++        const val LISTING_SCHEMA = "v2"
++        const val MAX_IMAGE_BYTES = 12 * 1024 * 1024
+         const val MAX_CACHE_BYTES = 75L * 1024L * 1024L
+     }
+ }
+diff --git a/app/src/main/res/layout/manga_header_item.xml b/app/src/main/res/layout/manga_header_item.xml
+index 2733a88f52e4ec251bbb9b4957eb9986f66e87bd..55993e06b739b9cac76271481bf8f30b7705ac75 100644
+--- a/app/src/main/res/layout/manga_header_item.xml
++++ b/app/src/main/res/layout/manga_header_item.xml
+@@ -343,7 +343,7 @@
+         android:paddingEnd="0dp"
+         app:drawableTint="?colorPrimary"
+         android:visibility="gone"
+-        app:layout_constraintBottom_toTopOf="@id/start_reading_button"
++        app:layout_constraintBottom_toTopOf="@id/hayai_source_details_features"
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintTop_toBottomOf="@id/manga_genres_tags"
+@@ -373,6 +373,7 @@
+         android:visibility="gone"
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintBottom_toTopOf="@id/start_reading_button"
+         app:layout_constraintTop_toBottomOf="@id/less_button">
+ 
+         <LinearLayout
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
+index dec17cb17114d6a7d893cf3f275a9155a7fd820b..016e0748fe26f7451d677139edc5c9c608d2e3c5 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
+@@ -46,6 +46,30 @@ class EhHtmlParserTest {
+         assertEquals(true, page.hasNextPage)
+     }
+ 
++    @Test
++    fun `page previews parse current direct anchor sprite layout`() {
++        val html = """
++            <html><body><div id="gdt">
++              <a href="https://e-hentai.org/s/live/123-20">
++                <div title="Page 20" style="width:120px;height:180px;background:transparent url(https://ehgt.org/live.webp) -0px 0 no-repeat"></div>
++              </a>
++            </div></body></html>
++        """.trimIndent()
++
++        val preview = EhHtmlParser.parsePreviews(
++            html,
++            "https://e-hentai.org/g/123/token/?p=0",
++            EhSite.EHentai,
++        ).single()
++
++        assertEquals(20, preview.index)
++        assertEquals("https://ehgt.org/live.webp", preview.imageUrl)
++        assertEquals(0, preview.crop?.x)
++        assertEquals(0, preview.crop?.y)
++        assertEquals(120, preview.crop?.width)
++        assertEquals(180, preview.crop?.height)
++    }
++
+     @Test
+     fun `preview page rejects an oversized response instead of silently truncating it`() {
+         val cells = (1..3).joinToString("") { index ->
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhProtocolCodecTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhProtocolCodecTest.kt
+index 77d3ef097a5b6d813fe4c272459cb25cafb5e4c8..81595f1d451807b1249cd2d2e71f9facdc539b1c 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhProtocolCodecTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhProtocolCodecTest.kt
+@@ -10,11 +10,24 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagMode
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhToplist
+ import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryId
++import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertThrows
+ import org.junit.Test
+ 
+ class EhProtocolCodecTest {
++    @Test
++    fun `preview page number is encoded as a gallery query parameter`() {
++        val url =
++            EhRequestBuilder.previews(
++                EhSite.EHentai,
++                GalleryKey.parse("/g/123/token/"),
++                page = 2,
++            )
++
++        assertEquals("https://e-hentai.org/g/123/token/?nw=always&p=2", url.toString())
++    }
++
+     @Test
+     fun `text tag grammar supports namespaces phrases exclusion and OR`() {
+         val terms = EhTagQueryCodec.parse("female:\"big breasts\" -male:yaoi ~artist:someone misc")
+-- 
+2.54.0.windows.1
+

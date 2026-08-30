@@ -1,0 +1,470 @@
+From 4e8aa274d4b12c5e5aab64c0390aa3be312eaa91 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 22:15:41 +0300
+Subject: [PATCH] Sync novel reading progress and validate tracker sessions
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index 80e268cfc0fa0daf26fb664a3f76ceec47f4ea3b..0d98c2284b12f7c0d0cf2eb9cf18ff42498de097 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -41,11 +41,14 @@ import dev.ahmedmohamed.hayai.novel.settings.NovelCustomizationStore
+ import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationCache
+ import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationService
+ import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
++import dev.ahmedmohamed.hayai.novel.tracker.J2kNovelChapterTrackSync
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.preference.PreferenceStore
++import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.util.system.launchIO
+ import eu.kanade.tachiyomi.util.system.toast
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+@@ -66,11 +69,13 @@ class NovelReaderActivity :
+     private val preferences by lazy { HayaiPreferences(Injekt.get<PreferenceStore>()) }
+     private val json = Json { ignoreUnknownKeys = true }
+     private val session by lazy {
++        val database = Injekt.get<DatabaseHelper>()
+         NovelReaderSession(
+-            Injekt.get<DatabaseHelper>(),
++            database,
+             Injekt.get<SourceManager>(),
+             NovelDownloadStore(File(filesDir, "hayai/novel-downloads")),
+             Injekt.get<NetworkHelper>(),
++            J2kNovelChapterTrackSync(database, Injekt.get<PreferencesHelper>()),
+         )
+     }
+     private val contentProcessor = NovelContentProcessor()
+@@ -300,8 +305,9 @@ class NovelReaderActivity :
+         val chapter = loaded?.chapter ?: return
+         val progress = currentProgress
+         runBlocking(Dispatchers.IO) {
+-            session.saveProgress(chapter, progress, preferences.novelMarkAsReadThreshold.get())
++            session.saveProgress(chapter, progress, preferences.novelMarkAsReadThreshold.get(), syncTracking = false)
+         }
++        launchIO { session.syncTracking(chapter) }
+     }
+ 
+     private fun onReaderProgress(progress: Int) {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+index 26cf14ad0ebc62ad316b3d2cff4ff9ec18cbeca7..58a50b7e3a320f40a25c1b4e3b45b3f1e22649af 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+@@ -10,6 +10,8 @@ import dev.ahmedmohamed.hayai.novel.source.NovelSource
+ import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatStore
+ import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatistics
+ import dev.ahmedmohamed.hayai.novel.statistics.NovelStatisticsResolver
++import dev.ahmedmohamed.hayai.novel.tracker.NovelChapterTrackSync
++import dev.ahmedmohamed.hayai.novel.tracker.syncIfRead
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+ import eu.kanade.tachiyomi.data.database.models.History
+@@ -31,6 +33,7 @@ internal class NovelReaderSession(
+     private val sourceManager: SourceManager,
+     private val downloadStore: NovelDownloadStore,
+     private val network: NetworkHelper,
++    private val chapterTrackSync: NovelChapterTrackSync = NovelChapterTrackSync.None,
+ ) : NovelAssetProvider {
+     private val chapterStatStore = NovelChapterStatStore(database)
+     lateinit var manga: Manga
+@@ -91,10 +94,11 @@ internal class NovelReaderSession(
+         return loadCurrent()
+     }
+ 
+-    fun saveProgress(
++    suspend fun saveProgress(
+         chapter: Chapter,
+         progress: Int,
+         markReadAt: Int,
++        syncTracking: Boolean = true,
+     ) {
+         NovelProgress.apply(chapter, progress, markReadAt)
+         database.updateChapterProgress(chapter).executeAsBlocking()
+@@ -104,6 +108,11 @@ internal class NovelReaderSession(
+                     History.create(chapter).apply { last_read = System.currentTimeMillis() },
+                 ).executeAsBlocking()
+         }
++        if (syncTracking) syncTracking(chapter)
++    }
++
++    suspend fun syncTracking(chapter: Chapter) {
++        chapterTrackSync.syncIfRead(requireNotNull(manga.id), chapter)
+     }
+ 
+     suspend fun saveOffline(chapter: LoadedNovelChapter): NovelDownloadResult =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/NovelChapterTrackSync.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/NovelChapterTrackSync.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f28c7853ecb1e0a1bc7840af84f2a2ae74a16eb3
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/NovelChapterTrackSync.kt
+@@ -0,0 +1,43 @@
++package dev.ahmedmohamed.hayai.novel.tracker
++
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import eu.kanade.tachiyomi.data.preference.PreferencesHelper
++import eu.kanade.tachiyomi.util.chapter.updateTrackChapterRead
++import kotlinx.coroutines.CoroutineDispatcher
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++
++internal fun interface NovelChapterTrackSync {
++    suspend fun sync(mangaId: Long, chapterNumber: Float)
++
++    companion object {
++        val None = NovelChapterTrackSync { _, _ -> }
++    }
++}
++
++internal suspend fun NovelChapterTrackSync.syncIfRead(mangaId: Long, chapter: Chapter) {
++    if (chapter.read) sync(mangaId, chapter.chapter_number)
++}
++
++internal class J2kNovelChapterTrackSync(
++    database: DatabaseHelper,
++    preferences: PreferencesHelper,
++) : NovelChapterTrackSync by NovelChapterTrackSyncCoordinator(
++    enabled = preferences::autoUpdateTrack,
++    dispatcher = Dispatchers.IO,
++    update = { mangaId, chapterNumber ->
++        updateTrackChapterRead(database, preferences, mangaId, chapterNumber, retryWhenOnline = true)
++    },
++)
++
++internal class NovelChapterTrackSyncCoordinator(
++    private val enabled: () -> Boolean,
++    private val dispatcher: CoroutineDispatcher,
++    private val update: suspend (Long, Float) -> Unit,
++) : NovelChapterTrackSync {
++    override suspend fun sync(mangaId: Long, chapterNumber: Float) {
++        if (!enabled() || mangaId <= 0 || chapterNumber <= 0f || !chapterNumber.isFinite()) return
++        withContext(dispatcher) { update(mangaId, chapterNumber) }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelListService.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelListService.kt
+index d9b1d8837808be76e97b91d406c72befcbd5e911..37a62b35b5ce75a0d0ef9914bc4f771208896435 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelListService.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelListService.kt
+@@ -58,6 +58,15 @@ internal class NovelListApi(
+         payload["exp"]?.jsonPrimitive?.longOrNull?.let { expiry ->
+             if (expiry <= nowEpochSeconds()) throw NovelTrackerFailure.InvalidCredentials("NovelList access token has expired")
+         }
++        val request =
++            Request.Builder()
++                .url("$apiBaseUrl/api/users/current")
++                .get()
++                .authenticatedHeaders(secret)
++                .build()
++        if (parse(http.execute(request).body, "NovelList authenticated user") !is JsonObject) {
++            throw NovelTrackerFailure.InvalidResponse("NovelList authenticated user returned an invalid response")
++        }
+     }
+ 
+     override suspend fun search(query: String): List<NovelTrackerSearchItem> {
+@@ -148,14 +157,14 @@ internal class NovelListApi(
+             .header("Origin", websiteBaseUrl)
+             .header("Referer", "$websiteBaseUrl/")
+ 
+-    private fun Request.Builder.authenticatedHeaders(): Request.Builder =
+-        publicHeaders().header("Authorization", "Bearer ${requireSafeCredential(token(), "NovelList access token")}")
++    private fun Request.Builder.authenticatedHeaders(secret: String = token()): Request.Builder =
++        publicHeaders().header("Authorization", "Bearer ${requireSafeCredential(secret, "NovelList access token")}")
+ 
+     private fun parse(body: String, label: String): JsonElement =
+         try {
+             json.parseToJsonElement(body)
+-        } catch (error: Exception) {
+-            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON", error)
++        } catch (_: Exception) {
++            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON")
+         }
+ 
+     private fun JsonElement.asObject(label: String): JsonObject =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerContract.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerContract.kt
+index fcbcbccff34e34601c03fec9a8277a1c37db7f61..9b8ff7033040cf9f31d9233cfa5d5251a736d1a5 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerContract.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerContract.kt
+@@ -59,7 +59,7 @@ internal sealed class NovelTrackerFailure(message: String, cause: Throwable? = n
+             ?: "The tracker rate limit was reached. Try again later.",
+     )
+     class ResponseTooLarge(val maximumBytes: Long) : NovelTrackerFailure("The tracker returned more than $maximumBytes bytes")
+-    class InvalidResponse(message: String, cause: Throwable? = null) : NovelTrackerFailure(message, cause)
++    class InvalidResponse(message: String) : NovelTrackerFailure(message)
+     class Remote(val statusCode: Int, message: String) : NovelTrackerFailure(message)
+     class Network(cause: Throwable) : NovelTrackerFailure("The tracker could not be reached", cause)
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerHttp.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerHttp.kt
+index 0a9ef2e1f6ee277607fe8d56f0f98096a7df52aa..44ce30556c7bd42e533def77ab022561c234fa2f 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerHttp.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerHttp.kt
+@@ -29,6 +29,9 @@ internal class NovelTrackerHttp(
+                 401, 403 -> throw NovelTrackerFailure.SessionExpired()
+                 429 -> throw NovelTrackerFailure.RateLimited(it.header("Retry-After")?.toLongOrNull())
+             }
++            if (!it.isSuccessful) {
++                throw NovelTrackerFailure.Remote(it.code, "The tracker returned HTTP ${it.code}")
++            }
+             val body =
+                 try {
+                     val source = it.body.source()
+@@ -41,10 +44,6 @@ internal class NovelTrackerHttp(
+                     throw error
+                 } catch (error: IOException) {
+                     throw NovelTrackerFailure.Network(error)
+-                }
+-            if (!it.isSuccessful) {
+-                val safeMessage = body.lineSequence().firstOrNull()?.take(160).orEmpty()
+-                throw NovelTrackerFailure.Remote(it.code, safeMessage.ifBlank { "The tracker returned HTTP ${it.code}" })
+             }
+             return NovelTrackerHttpResponse(body, it.request.url.toString())
+         }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelUpdatesService.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelUpdatesService.kt
+index 961bfb1077c066fdc46ac458206ba5776718187c..0585dc65da70c14e88f2acb5fc9e3185bf645c50 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelUpdatesService.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelUpdatesService.kt
+@@ -206,8 +206,8 @@ internal class NovelUpdatesApi(
+                     ?: throw NovelTrackerFailure.InvalidResponse("NovelUpdates notes did not return an object")
+             } catch (error: NovelTrackerFailure) {
+                 throw error
+-            } catch (error: Exception) {
+-                throw NovelTrackerFailure.InvalidResponse("NovelUpdates notes returned invalid JSON", error)
++            } catch (_: Exception) {
++                throw NovelTrackerFailure.InvalidResponse("NovelUpdates notes returned invalid JSON")
+             }
+         val notes = root["notes"]?.jsonPrimitive?.contentOrNull.orEmpty()
+         val tags = root["tags"]?.jsonPrimitive?.contentOrNull.orEmpty()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt
+index b9776a72b0bff2268cd97fb74d508bab56613d58..f9c86e0e5117eece7a6e64b2acb1ad3aa704a2ea 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt
+@@ -52,6 +52,8 @@ internal class RanobeDbApi(
+         if (!cookie.substringAfter("auth_session=", "").substringBefore(';').trim().any()) {
+             throw NovelTrackerFailure.InvalidCredentials("RanobeDB requires the auth_session cookie")
+         }
++        val response = http.execute(Request.Builder().url("$baseUrl/api/v0/user/me").get().headers(secret = secret).build())
++        parseObject(response.body, "RanobeDB authenticated user")
+     }
+ 
+     override suspend fun search(query: String): List<NovelTrackerSearchItem> {
+@@ -128,12 +130,15 @@ internal class RanobeDbApi(
+         http.execute(request)
+     }
+ 
+-    private fun Request.Builder.headers(includeAuthentication: Boolean = true): Request.Builder =
++    private fun Request.Builder.headers(
++        includeAuthentication: Boolean = true,
++        secret: String? = null,
++    ): Request.Builder =
+         header("User-Agent", USER_AGENT)
+             .header("Accept", "application/json")
+             .header("Origin", baseUrl)
+             .header("Referer", "$baseUrl/")
+-            .apply { if (includeAuthentication) header("Cookie", normalizedCookie(sessionCookie())) }
++            .apply { if (includeAuthentication) header("Cookie", normalizedCookie(secret ?: sessionCookie())) }
+ 
+     private fun normalizedCookie(value: String): String {
+         val safe = requireSafeCredential(value, "RanobeDB session cookie")
+@@ -146,8 +151,8 @@ internal class RanobeDbApi(
+                 ?: throw NovelTrackerFailure.InvalidResponse("$label did not return an object")
+         } catch (error: NovelTrackerFailure) {
+             throw error
+-        } catch (error: Exception) {
+-            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON", error)
++        } catch (_: Exception) {
++            throw NovelTrackerFailure.InvalidResponse("$label returned invalid JSON")
+         }
+ 
+     private fun requirePositiveId(value: String): Long =
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/NovelChapterTrackSyncTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/NovelChapterTrackSyncTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..95116d2f193eaef3ac056c3060577e644e06303c
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/NovelChapterTrackSyncTest.kt
+@@ -0,0 +1,48 @@
++package dev.ahmedmohamed.hayai.novel.tracker
++
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.runBlocking
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class NovelChapterTrackSyncTest {
++    @Test
++    fun `valid completion delegates to J2K sync on the configured dispatcher`() = runBlocking {
++        val updates = mutableListOf<Pair<Long, Float>>()
++        val sync = NovelChapterTrackSyncCoordinator({ true }, Dispatchers.Unconfined) { mangaId, chapter ->
++            updates += mangaId to chapter
++        }
++
++        sync.sync(7, 12.5f)
++
++        assertEquals(listOf(7L to 12.5f), updates)
++    }
++
++    @Test
++    fun `disabled and invalid progress never reaches J2K sync`() = runBlocking {
++        var updates = 0
++        val disabled = NovelChapterTrackSyncCoordinator({ false }, Dispatchers.Unconfined) { _, _ -> updates++ }
++        val enabled = NovelChapterTrackSyncCoordinator({ true }, Dispatchers.Unconfined) { _, _ -> updates++ }
++
++        disabled.sync(7, 1f)
++        enabled.sync(0, 1f)
++        enabled.sync(7, 0f)
++        enabled.sync(7, Float.NaN)
++
++        assertEquals(0, updates)
++    }
++
++    @Test
++    fun `only a read chapter enters the J2K tracking path`() = runBlocking {
++        val updates = mutableListOf<Pair<Long, Float>>()
++        val sync = NovelChapterTrackSync { mangaId, chapter -> updates += mangaId to chapter }
++        val chapter = Chapter.create().apply { chapter_number = 8.5f }
++
++        sync.syncIfRead(4, chapter)
++        chapter.read = true
++        sync.syncIfRead(4, chapter)
++
++        assertEquals(listOf(4L to 8.5f), updates)
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelListApiTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelListApiTest.kt
+index ccfab2edf681f38530fe75925ea75fc90201ed92..4f2c20ad543608b5de9fc50a1eb86eac6877fa1e 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelListApiTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelListApiTest.kt
+@@ -52,6 +52,36 @@ class NovelListApiTest {
+         }
+     }
+ 
++    @Test
++    fun `valid token requires an authenticated bounded server round trip`() = runBlocking {
++        server.enqueue(MockResponse().setBody("{\"id\":\"51f55f33-2d67-46dc-a444-a9ad7fcc4198\"}"))
++        val token = jwt(4_000)
++        val api = NovelListApi(NovelTrackerHttp(OkHttpClient()), { "" }, server.url("").toString().removeSuffix("/")) { 1_000 }
++
++        api.validateSession("reader", token)
++
++        val request = server.takeRequest()
++        assertEquals("/api/users/current", request.path)
++        assertEquals("Bearer $token", request.getHeader("Authorization"))
++    }
++
++    @Test
++    fun `server authentication and rate limit failures remain distinct`() {
++        val token = jwt(4_000)
++        server.enqueue(MockResponse().setResponseCode(401))
++        server.enqueue(MockResponse().setResponseCode(429).setHeader("Retry-After", "30"))
++        val api = NovelListApi(NovelTrackerHttp(OkHttpClient()), { "" }, server.url("").toString().removeSuffix("/")) { 1_000 }
++
++        assertThrows(NovelTrackerFailure.SessionExpired::class.java) {
++            runBlocking { api.validateSession("reader", token) }
++        }
++        val limited =
++            assertThrows(NovelTrackerFailure.RateLimited::class.java) {
++                runBlocking { api.validateSession("reader", token) }
++            }
++        assertEquals(30L, limited.retryAfterSeconds)
++    }
++
+     @Test
+     fun `update maps chapter status and score and authenticates the request`() = runBlocking {
+         server.enqueue(MockResponse().setResponseCode(204))
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerHttpTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerHttpTest.kt
+index ef1eefbee7d8f5477d83f4ad8c68c310d596b74c..f90b4be45b837009b8c7b1cf99693422fa45b6d0 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerHttpTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/NovelTrackerHttpTest.kt
+@@ -7,6 +7,7 @@ import okhttp3.mockwebserver.MockResponse
+ import okhttp3.mockwebserver.MockWebServer
+ import org.junit.After
+ import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
+ import org.junit.Assert.assertThrows
+ import org.junit.Before
+ import org.junit.Test
+@@ -50,5 +51,18 @@ class NovelTrackerHttpTest {
+             }
+         assertEquals(42L, error.retryAfterSeconds)
+     }
+-}
+ 
++    @Test
++    fun `remote error body cannot leak reflected credentials`() {
++        val secret = "auth_session=do-not-report"
++        server.enqueue(MockResponse().setResponseCode(500).setBody("failed request with $secret"))
++        val http = NovelTrackerHttp(OkHttpClient())
++
++        val error =
++            assertThrows(NovelTrackerFailure.Remote::class.java) {
++                runBlocking { http.execute(Request.Builder().url(server.url("/error")).header("Cookie", secret).build()) }
++            }
++
++        assertFalse(error.message.orEmpty().contains(secret))
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbApiTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbApiTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f0647c0583683cdbb4e6d5acb38afde7e4de6514
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbApiTest.kt
+@@ -0,0 +1,54 @@
++package dev.ahmedmohamed.hayai.novel.tracker.services
++
++import kotlinx.coroutines.runBlocking
++import okhttp3.OkHttpClient
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertThrows
++import org.junit.Before
++import org.junit.Test
++
++class RanobeDbApiTest {
++    private lateinit var server: MockWebServer
++
++    @Before
++    fun setUp() {
++        server = MockWebServer()
++        server.start()
++    }
++
++    @After
++    fun tearDown() {
++        server.shutdown()
++    }
++
++    @Test
++    fun `valid cookie requires authenticated settings round trip`() = runBlocking {
++        server.enqueue(MockResponse().setBody("{\"id\":7,\"username\":\"reader\"}"))
++        val baseUrl = server.url("").toString().removeSuffix("/")
++        val api = RanobeDbApi(NovelTrackerHttp(OkHttpClient()), { "" }, baseUrl)
++
++        api.validateSession("reader", "auth_session=valid-session")
++
++        val request = server.takeRequest()
++        assertEquals("/api/v0/user/me", request.path)
++        assertEquals("auth_session=valid-session", request.getHeader("Cookie"))
++    }
++
++    @Test
++    fun `invalid payload and unauthorized response map to different credential failures`() {
++        server.enqueue(MockResponse().setBody("not-json"))
++        server.enqueue(MockResponse().setResponseCode(401))
++        val baseUrl = server.url("").toString().removeSuffix("/")
++        val api = RanobeDbApi(NovelTrackerHttp(OkHttpClient()), { "" }, baseUrl)
++
++        assertThrows(NovelTrackerFailure.InvalidResponse::class.java) {
++            runBlocking { api.validateSession("reader", "auth_session=expired") }
++        }
++        assertThrows(NovelTrackerFailure.SessionExpired::class.java) {
++            runBlocking { api.validateSession("reader", "auth_session=rejected") }
++        }
++    }
++}
+-- 
+2.54.0.windows.1
+

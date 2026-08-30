@@ -1,0 +1,1799 @@
+From 74a706cda3f8ee6c95317783c26cab1888d0580a Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 03:21:19 +0300
+Subject: [PATCH] Port durable E-Hentai favorites sync
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index d36d7040bb620841fb8e9dd20f460eddadd24ff7..a63e4ad398839c0c41a3968bf015ae3d33846dd5 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -55,4 +55,6 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T15:00:00Z	enhanced-sources	replaced registry-only enhanced labels with ID-preserving extension wrappers	delegated core source behavior, validated imported hosts and identities, bounded secondary details parsing, and retained the original extension result on enrichment failure	EnhancedSourceRegistry.kt; HayaiEnhancedHttpSource.kt; EnhancedSourceUrlMapper.kt; EnhancedDetailsParser.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T15:15:00Z	validation	compiled delegated enhanced sources and ran focused registry, URL, parser, and badge tests with one Gradle worker	verified all six family parsers, foreign-host rejection, positive identities, fixed and dynamic matching, idempotent wrapping, filter preservation, and direct URL search fallback	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.source.enhanced.* --tests dev.ahmedmohamed.hayai.source.presentation.* -x :app:formatKotlin	VERIFIED
+ 2026-08-21T16:30:00Z	eh-remote-uconfig	implemented the complete typed E-Hentai and ExHentai remote settings upload flow	preserved SY preference and cookie keys, encoded the full server matrix, reused owned profiles without destructive replacement, committed each site independently, and exposed pending state plus targeted retry	EhRemoteSettings.kt; EhUConfigFormCodec.kt; EhUConfigHttpRemote.kt; EhRemoteSettingsUploader.kt; EhSettingsActivity.kt	IMPLEMENTED_UNVERIFIED
++2026-08-21T18:00:00Z	eh-favorites-sync	implemented durable bidirectional and remote-only E-Hentai favorites reconciliation	planned from base/local/remote state, preserved notes and unrelated categories, made remote writes retryable by verified preconditions, applied local changes atomically with journal state, and retained interrupted runs for resume	adult/eh/favorites; HayaiEhPersistenceStore.kt; HayaiSchema.kt; EhSettingsActivity.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T17:15:00Z	validation	compiled the integrated app and ran focused E-Hentai session, settings, uconfig, and MockWebServer tests with one Gradle worker	verified exact form encoding, bounded response parsing, challenge rejection, cookie safety, idempotent profile reuse, partial retry, account marker reset, UI integration, and J2K dependency wiring	gradlew --no-daemon --no-parallel --max-workers=1 :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.uconfig.* --tests dev.ahmedmohamed.hayai.adult.eh.settings.* --tests dev.ahmedmohamed.hayai.adult.eh.session.* -x :app:formatKotlin	VERIFIED
++2026-08-21T19:00:00Z	validation	compiled the integrated favorites runtime and ran focused planner, protocol, recovery, persistence, and backup tests with one Gradle worker	verified three-way conflict rules, alias safety, bounded remote parsing, journal round trips, restart recovery, schema and backup integration, and J2K adapter compilation	gradlew --no-daemon --no-parallel --max-workers=1 :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.favorites.* --tests dev.ahmedmohamed.hayai.backup.* --tests dev.ahmedmohamed.hayai.adult.eh.persistence.* -x :app:formatKotlin	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteOperationCodec.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteOperationCodec.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..275b32614d1ba21786d55a6f4c207c1530a04cf7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteOperationCodec.kt
+@@ -0,0 +1,68 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonNull
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.buildJsonObject
++import kotlinx.serialization.json.int
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.long
++import kotlinx.serialization.json.put
++
++object EhFavoriteOperationCodec {
++    fun kind(operation: EhFavoriteOperation): String = when (operation) {
++        is EhFavoriteOperation.SetRemote -> "set_remote"
++        is EhFavoriteOperation.RemoveRemote -> "remove_remote"
++        is EhFavoriteOperation.SetLocal -> "set_local"
++        is EhFavoriteOperation.RemoveLocal -> "remove_local"
++    }
++
++    fun encode(operation: EhFavoriteOperation): String = buildJsonObject {
++        put("operationId", operation.operationId)
++        put("sequence", operation.sequence)
++        put("gid", operation.gallery.gid)
++        put("token", operation.gallery.token)
++        when (operation) {
++            is EhFavoriteOperation.SetRemote -> {
++                put("expected", operation.expected?.toJson() ?: JsonNull)
++                put("desired", operation.desired.toJson())
++            }
++            is EhFavoriteOperation.RemoveRemote -> put("expected", operation.expected.toJson())
++            is EhFavoriteOperation.SetLocal -> put("desired", operation.desired.toJson())
++            is EhFavoriteOperation.RemoveLocal -> Unit
++        }
++    }.toString()
++
++    fun decode(kind: String, payload: String): EhFavoriteOperation {
++        require(payload.length <= 1_048_576)
++        val json = Json.parseToJsonElement(payload).jsonObject
++        val identity = EhGalleryIdentity(json.string("gid"), json.string("token"))
++        val id = json.string("operationId")
++        val sequence = json.getValue("sequence").jsonPrimitive.long
++        return when (kind) {
++            "set_remote" -> EhFavoriteOperation.SetRemote(id, sequence, identity, (json["expected"] as? JsonObject)?.toState(), json.objectValue("desired").toState())
++            "remove_remote" -> EhFavoriteOperation.RemoveRemote(id, sequence, identity, json.objectValue("expected").toState())
++            "set_local" -> EhFavoriteOperation.SetLocal(id, sequence, identity, json.objectValue("desired").toState())
++            "remove_local" -> EhFavoriteOperation.RemoveLocal(id, sequence, identity)
++            else -> error("Unknown E-Hentai favorite operation $kind")
++        }
++    }
++
++    private fun EhFavoriteState.toJson() = buildJsonObject {
++        put("gid", gallery.gid)
++        put("token", gallery.token)
++        put("title", title)
++        put("category", category.value)
++    }
++
++    private fun JsonObject.toState() = EhFavoriteState(
++        gallery = EhGalleryIdentity(string("gid"), string("token")),
++        title = string("title"),
++        category = EhFavoriteSlot(getValue("category").jsonPrimitive.int),
++    )
++
++    private fun JsonObject.string(key: String): String = getValue(key).jsonPrimitive.content
++    private fun JsonObject.objectValue(key: String): JsonObject = getValue(key).jsonObject
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteRecovery.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteRecovery.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4238f75e1ae031615da8fb4bd81884d118dd7ea0
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteRecovery.kt
+@@ -0,0 +1,22 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++sealed interface EhRemoteRecoveryDecision {
++    data object AlreadyApplied : EhRemoteRecoveryDecision
++    data object Execute : EhRemoteRecoveryDecision
++    data class Conflict(val actual: EhFavoriteState?) : EhRemoteRecoveryDecision
++}
++
++object EhFavoriteRecovery {
++    fun decide(
++        actual: EhFavoriteState?,
++        expected: EhFavoriteState?,
++        desired: EhFavoriteState?,
++    ): EhRemoteRecoveryDecision = when {
++        sameRemoteState(actual, desired) -> EhRemoteRecoveryDecision.AlreadyApplied
++        sameRemoteState(actual, expected) -> EhRemoteRecoveryDecision.Execute
++        else -> EhRemoteRecoveryDecision.Conflict(actual)
++    }
++
++    fun sameRemoteState(first: EhFavoriteState?, second: EhFavoriteState?): Boolean =
++        if (first == null || second == null) first == null && second == null else first.gallery == second.gallery && first.category == second.category
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesHtmlParser.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesHtmlParser.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..3dba0fb07d7361126cd7b850f49edf6ecdd87449
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesHtmlParser.kt
+@@ -0,0 +1,22 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import org.jsoup.Jsoup
++
++object EhFavoritesHtmlParser {
++    fun categories(html: String): List<EhRemoteCategory> {
++        require(html.length <= MAX_DOCUMENT_CHARS)
++        val names = Jsoup.parse(html).select(".fp:not(.fps)").mapNotNull { element ->
++            element.children().getOrNull(2)?.text()?.trim()?.takeIf(String::isNotBlank)
++        }
++        require(names.size == 10) { "E-Hentai returned ${names.size} favorite categories instead of 10." }
++        return names.mapIndexed { index, name -> EhRemoteCategory(EhFavoriteSlot(index), name) }
++    }
++
++    fun existingNote(html: String): String {
++        require(html.length <= MAX_DOCUMENT_CHARS)
++        return Jsoup.parse(html).selectFirst("textarea[name=favnote]")?.text()?.take(MAX_NOTE_CHARS).orEmpty()
++    }
++
++    const val MAX_DOCUMENT_CHARS = 8 * 1024 * 1024
++    private const val MAX_NOTE_CHARS = 20_000
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesModels.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..346d2345b125bdfe18ed9458781dc2a47ed88e65
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesModels.kt
+@@ -0,0 +1,179 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import java.security.MessageDigest
++
++@JvmInline
++value class EhFavoriteSlot(val value: Int) {
++    init {
++        require(value in 0..9) { "E-Hentai favorite slots are between 0 and 9." }
++    }
++}
++
++data class EhFavoriteState(
++    val gallery: EhGalleryIdentity,
++    val title: String,
++    val category: EhFavoriteSlot,
++) {
++    init {
++        require(title.isNotBlank() && title.length <= 8_192)
++    }
++}
++
++data class EhRemoteCategory(val slot: EhFavoriteSlot, val name: String) {
++    init {
++        require(name.isNotBlank() && name.length <= 255)
++    }
++}
++
++data class EhRemoteFavoritesSnapshot(
++    val categories: List<EhRemoteCategory>,
++    val favorites: Map<EhGalleryIdentity, EhFavoriteState>,
++    val fingerprint: String,
++) {
++    init {
++        require(categories.size == 10 && categories.map { it.slot }.distinct().size == 10)
++        require(favorites.size <= 100_000)
++        require(fingerprint.isNotBlank() && fingerprint.length <= 512)
++    }
++}
++
++data class EhLocalFavoriteState(
++    val mangaIds: Set<Long>,
++    val state: EhFavoriteState,
++    val unrelatedCategoryIds: Set<Int>,
++) {
++    init {
++        require(mangaIds.isNotEmpty())
++    }
++}
++
++data class EhLocalFavoritesSnapshot(
++    val favorites: Map<EhGalleryIdentity, EhLocalFavoriteState>,
++    val conflicts: List<EhFavoriteConflict> = emptyList(),
++)
++
++data class EhFavoriteCategoryMapping(
++    val slot: EhFavoriteSlot,
++    val categoryId: Int,
++    val remoteName: String,
++)
++
++enum class EhFavoritesSyncMode(val storedValue: String) {
++    Bidirectional("bidirectional"),
++    RemoteOnly("remote_only"),
++}
++
++enum class EhConflictPolicy {
++    StopForReview,
++    PreferRemote,
++    PreferLocal,
++}
++
++data class EhSyncRequest(
++    val mode: EhFavoritesSyncMode,
++    val conflictPolicy: EhConflictPolicy = EhConflictPolicy.StopForReview,
++    val lenient: Boolean = false,
++)
++
++sealed interface EhFavoriteConflict {
++    val id: String
++    val gallery: EhGalleryIdentity?
++    val message: String
++
++    data class BothChanged(
++        override val id: String,
++        override val gallery: EhGalleryIdentity,
++        val base: EhFavoriteState?,
++        val local: EhFavoriteState?,
++        val remote: EhFavoriteState?,
++    ) : EhFavoriteConflict {
++        override val message = "The local and remote favorite changed differently."
++    }
++
++    data class MultipleMappedCategories(
++        override val id: String,
++        override val gallery: EhGalleryIdentity,
++        val slots: Set<EhFavoriteSlot>,
++    ) : EhFavoriteConflict {
++        override val message = "The gallery belongs to more than one mapped E-Hentai category."
++    }
++
++    data class DuplicateAliases(
++        override val id: String,
++        override val gallery: EhGalleryIdentity,
++        val mangaIds: Set<Long>,
++    ) : EhFavoriteConflict {
++        override val message = "Multiple favorite library rows represent the same E-Hentai gallery."
++    }
++
++    data class RemoteChanged(
++        override val id: String,
++        override val gallery: EhGalleryIdentity,
++        val expected: EhFavoriteState?,
++        val actual: EhFavoriteState?,
++    ) : EhFavoriteConflict {
++        override val message = "The remote favorite changed after this sync was planned."
++    }
++}
++
++sealed interface EhFavoriteOperation {
++    val operationId: String
++    val sequence: Long
++    val gallery: EhGalleryIdentity
++
++    data class SetRemote(
++        override val operationId: String,
++        override val sequence: Long,
++        override val gallery: EhGalleryIdentity,
++        val expected: EhFavoriteState?,
++        val desired: EhFavoriteState,
++    ) : EhFavoriteOperation
++
++    data class RemoveRemote(
++        override val operationId: String,
++        override val sequence: Long,
++        override val gallery: EhGalleryIdentity,
++        val expected: EhFavoriteState,
++    ) : EhFavoriteOperation
++
++    data class SetLocal(
++        override val operationId: String,
++        override val sequence: Long,
++        override val gallery: EhGalleryIdentity,
++        val desired: EhFavoriteState,
++    ) : EhFavoriteOperation
++
++    data class RemoveLocal(
++        override val operationId: String,
++        override val sequence: Long,
++        override val gallery: EhGalleryIdentity,
++    ) : EhFavoriteOperation
++}
++
++data class EhFavoritesPlan(
++    val operations: List<EhFavoriteOperation>,
++    val conflicts: List<EhFavoriteConflict>,
++    val expectedRemoteFingerprint: String,
++)
++
++sealed interface EhFavoritesStatus {
++    data object Idle : EhFavoritesStatus
++    data class Planning(val message: String) : EhFavoritesStatus
++    data class NeedsReview(val runId: String, val conflicts: List<EhFavoriteConflict>) : EhFavoritesStatus
++    data class Running(val runId: String, val completed: Int, val total: Int, val title: String?) : EhFavoritesStatus
++    data class Paused(val runId: String, val reason: String) : EhFavoritesStatus
++    data class Complete(val runId: String, val failures: List<String>) : EhFavoritesStatus
++}
++
++object EhFavoritesFingerprint {
++    fun create(categories: List<EhRemoteCategory>, favorites: Collection<EhFavoriteState>): String {
++        val canonical = buildString {
++            categories.sortedBy { it.slot.value }.forEach { append("c|").append(it.slot.value).append('|').append(it.name).append('\n') }
++            favorites.sortedWith(compareBy({ it.gallery.gid.toLong() }, { it.gallery.token })).forEach {
++                append("f|").append(it.gallery.gid).append('|').append(it.gallery.token).append('|').append(it.category.value).append('|').append(it.title).append('\n')
++            }
++        }
++        return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesPlanner.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesPlanner.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..266cab9e432edb7adea6f8593998e5d466b2d3c7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesPlanner.kt
+@@ -0,0 +1,96 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhFavoriteSnapshot
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import java.security.MessageDigest
++
++class EhFavoritesPlanner {
++    fun plan(
++        base: Collection<EhFavoriteSnapshot>,
++        local: EhLocalFavoritesSnapshot,
++        remote: EhRemoteFavoritesSnapshot,
++        aliases: EhGalleryAliasIndex,
++        request: EhSyncRequest,
++        runId: String,
++    ): EhFavoritesPlan {
++        val baseStates = base.associate { aliases.canonical(it.gallery) to EhFavoriteState(aliases.canonical(it.gallery), it.title, EhFavoriteSlot(it.categorySlot)) }
++        val localStates = local.favorites.mapKeys { aliases.canonical(it.key) }.mapValues { it.value.state.copy(gallery = aliases.canonical(it.key)) }
++        val conflicts = local.conflicts.toMutableList()
++        val remoteGroups = remote.favorites.entries.groupBy { aliases.canonical(it.key) }
++        remoteGroups.filterValues { it.size > 1 }.forEach { (canonical, entries) ->
++            conflicts += EhFavoriteConflict.DuplicateAliases(
++                id = conflictId(runId, canonical),
++                gallery = canonical,
++                mangaIds = entries.mapTo(linkedSetOf()) { it.key.gid.toLong() },
++            )
++        }
++        val remoteStates = remoteGroups.filterValues { it.size == 1 }.mapValues { (canonical, entries) -> entries.single().value.copy(gallery = canonical) }
++        val operations = mutableListOf<EhFavoriteOperation>()
++        var sequence = 0L
++
++        (baseStates.keys + localStates.keys + remoteStates.keys).sortedWith(compareBy({ it.gid.toLong() }, { it.token })).forEach { gallery ->
++            val baseState = baseStates[gallery]
++            val localState = localStates[gallery]
++            val remoteState = remoteStates[gallery]
++            if (localState == remoteState) return@forEach
++
++            val desiredDirection = when {
++                request.mode == EhFavoritesSyncMode.RemoteOnly -> Direction.RemoteToLocal
++                localState == baseState -> Direction.RemoteToLocal
++                remoteState == baseState -> Direction.LocalToRemote
++                request.conflictPolicy == EhConflictPolicy.PreferRemote -> Direction.RemoteToLocal
++                request.conflictPolicy == EhConflictPolicy.PreferLocal -> Direction.LocalToRemote
++                else -> null
++            }
++            if (desiredDirection == null) {
++                conflicts += EhFavoriteConflict.BothChanged(conflictId(runId, gallery), gallery, baseState, localState, remoteState)
++                return@forEach
++            }
++
++            val operationId = operationId(runId, gallery, desiredDirection.name)
++            when (desiredDirection) {
++                Direction.RemoteToLocal ->
++                    operations += if (remoteState == null) {
++                        EhFavoriteOperation.RemoveLocal(operationId, sequence++, gallery)
++                    } else {
++                        EhFavoriteOperation.SetLocal(operationId, sequence++, gallery, remoteState)
++                    }
++                Direction.LocalToRemote ->
++                    operations += if (localState == null) {
++                        remoteState?.let { EhFavoriteOperation.RemoveRemote(operationId, sequence++, gallery, it) } ?: return@forEach
++                    } else {
++                        EhFavoriteOperation.SetRemote(operationId, sequence++, gallery, remoteState, localState.copy(title = remoteState?.title ?: localState.title))
++                    }
++            }
++        }
++        val ordered = operations
++            .sortedWith(compareBy<EhFavoriteOperation> { it !is EhFavoriteOperation.SetRemote && it !is EhFavoriteOperation.RemoveRemote }.thenBy { it.sequence })
++            .mapIndexed { index, operation -> operation.withSequence(index.toLong()) }
++        val expectedRemote = remoteStates.toMutableMap()
++        ordered.forEach { operation ->
++            when (operation) {
++                is EhFavoriteOperation.SetRemote -> expectedRemote[operation.gallery] = operation.desired
++                is EhFavoriteOperation.RemoveRemote -> expectedRemote.remove(operation.gallery)
++                else -> Unit
++            }
++        }
++        return EhFavoritesPlan(
++            operations = ordered,
++            conflicts = conflicts,
++            expectedRemoteFingerprint = EhFavoritesFingerprint.create(remote.categories, expectedRemote.values),
++        )
++    }
++
++    private fun operationId(runId: String, gallery: EhGalleryIdentity, kind: String) = digest("op|$runId|${gallery.gid}|${gallery.token}|$kind")
++    private fun conflictId(runId: String, gallery: EhGalleryIdentity) = digest("conflict|$runId|${gallery.gid}|${gallery.token}")
++    private fun digest(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
++
++    private enum class Direction { RemoteToLocal, LocalToRemote }
++
++    private fun EhFavoriteOperation.withSequence(value: Long): EhFavoriteOperation = when (this) {
++        is EhFavoriteOperation.SetRemote -> copy(sequence = value)
++        is EhFavoriteOperation.RemoveRemote -> copy(sequence = value)
++        is EhFavoriteOperation.SetLocal -> copy(sequence = value)
++        is EhFavoriteOperation.RemoveLocal -> copy(sequence = value)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesRemote.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesRemote.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..3e09f13bf71376e9f32257aa03774ac1e5ff3ad6
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesRemote.kt
+@@ -0,0 +1,122 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.network.EhHtmlParser
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
++import eu.kanade.tachiyomi.network.awaitSuccess
++import kotlinx.coroutines.CancellationException
++import okhttp3.CacheControl
++import okhttp3.CookieJar
++import okhttp3.FormBody
++import okhttp3.OkHttpClient
++import okhttp3.Request
++import java.io.IOException
++import java.io.Reader
++
++interface EhFavoritesRemote {
++    suspend fun snapshot(): EhRemoteFavoritesSnapshot
++    suspend fun state(gallery: EhGalleryIdentity): EhFavoriteState?
++    suspend fun setFavorite(desired: EhFavoriteState)
++    suspend fun removeFavorite(expected: EhFavoriteState)
++}
++
++class EhFavoritesHttpRemote(
++    client: OkHttpClient,
++    private val sessions: EhSessionStore,
++    private val baseUrl: String = EhSite.ExHentai.baseUrl,
++) : EhFavoritesRemote {
++    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
++
++    override suspend fun snapshot(): EhRemoteFavoritesSnapshot {
++        val favorites = linkedMapOf<EhGalleryIdentity, EhFavoriteState>()
++        var categories: List<EhRemoteCategory>? = null
++        var next: String? = null
++        repeat(MAX_PAGES) {
++            val url = "$baseUrl/favorites.php" + (next?.let { cursor -> "?next=$cursor" } ?: "")
++            val html = get(url)
++            if (categories == null) categories = EhFavoritesHtmlParser.categories(html)
++            val page = EhHtmlParser.parseBrowse(html, url, EhSite.ExHentai)
++            page.galleries.forEach { gallery ->
++                val category = gallery.favoriteCategory ?: return@forEach
++                val identity = EhGalleryIdentity(gallery.metadata.key.id.value, gallery.metadata.key.token.value)
++                check(favorites.putIfAbsent(identity, EhFavoriteState(identity, gallery.metadata.title, EhFavoriteSlot(category))) == null) {
++                    "E-Hentai returned a duplicate favorite gallery."
++                }
++                require(favorites.size <= MAX_FAVORITES) { "E-Hentai returned too many favorites." }
++            }
++            next = page.nextCursor?.let { (it as? dev.ahmedmohamed.hayai.adult.eh.domain.EhSearchCursor.Gallery)?.id?.value }
++            if (next == null) {
++                val categoryList = requireNotNull(categories) { "E-Hentai returned no favorite categories." }
++                return EhRemoteFavoritesSnapshot(categoryList, favorites, EhFavoritesFingerprint.create(categoryList, favorites.values))
++            }
++        }
++        error("E-Hentai favorites pagination exceeded $MAX_PAGES pages.")
++    }
++
++    override suspend fun state(gallery: EhGalleryIdentity): EhFavoriteState? = snapshot().favorites[gallery]
++
++    override suspend fun setFavorite(desired: EhFavoriteState) {
++        val popupUrl = popupUrl(desired.gallery)
++        val currentHtml = get(popupUrl)
++        val note = EhFavoritesHtmlParser.existingNote(currentHtml)
++        post(
++            popupUrl,
++            FormBody.Builder()
++                .add("favcat", desired.category.value.toString())
++                .add("favnote", note)
++                .add("apply", "Add to Favorites")
++                .add("update", "1")
++                .build(),
++        )
++    }
++
++    override suspend fun removeFavorite(expected: EhFavoriteState) {
++        post(
++            "$baseUrl/favorites.php",
++            FormBody.Builder()
++                .add("ddact", "delete")
++                .add("modifygids[]", expected.gallery.gid)
++                .add("apply", "Apply")
++                .build(),
++        )
++    }
++
++    private suspend fun get(url: String): String = execute(
++        Request.Builder().url(url).cacheControl(CacheControl.FORCE_NETWORK).header("Cookie", sessions.cookieHeader(EhSite.ExHentai).value).build(),
++        ) { response -> response.body.charStream().use { it.readBounded(EhFavoritesHtmlParser.MAX_DOCUMENT_CHARS) } }
++
++    private suspend fun post(url: String, body: FormBody) {
++        execute(
++            Request.Builder().url(url).header("Cookie", sessions.cookieHeader(EhSite.ExHentai).value).post(body).build(),
++        ) { response -> response.body.close() }
++    }
++
++    private suspend fun <T> execute(request: Request, block: (okhttp3.Response) -> T): T = try {
++        client.newCall(request).awaitSuccess().use(block)
++    } catch (cancelled: CancellationException) {
++        throw cancelled
++    } catch (failure: IOException) {
++        throw IllegalStateException("The E-Hentai favorites request failed.", failure)
++    }
++
++    private fun popupUrl(gallery: EhGalleryIdentity) = "$baseUrl/gallerypopups.php?gid=${gallery.gid}&t=${gallery.token}&act=addfav"
++
++    private fun Reader.readBounded(maxChars: Int): String {
++        val output = StringBuilder(minOf(maxChars, 8192))
++        val buffer = CharArray(8192)
++        while (output.length <= maxChars) {
++            val remaining = maxChars + 1 - output.length
++            val count = read(buffer, 0, minOf(buffer.size, remaining))
++            if (count < 0) break
++            output.append(buffer, 0, count)
++        }
++        require(output.length <= maxChars) { "E-Hentai favorites response is too large." }
++        return output.toString()
++    }
++
++    private companion object {
++        const val MAX_PAGES = 2_000
++        const val MAX_FAVORITES = 100_000
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesSyncService.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesSyncService.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4829e248bc68db76ecf464747f08e19451e2be6f
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesSyncService.kt
+@@ -0,0 +1,156 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhFavoriteSnapshot
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhSyncMode
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhSyncOperationStatus
++import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import java.util.UUID
++
++class EhFavoritesSyncService(
++    private val remote: EhFavoritesRemote,
++    private val local: J2kEhFavoritesLocal,
++    private val persistence: HayaiEhPersistenceStore,
++    private val preferences: EhPreferences,
++    private val planner: EhFavoritesPlanner = EhFavoritesPlanner(),
++) {
++    private val mutex = Mutex()
++    private val mutableStatus = MutableStateFlow<EhFavoritesStatus>(
++        persistence.activeSyncRunId()?.let { EhFavoritesStatus.Paused(it, "An interrupted favorites sync can be resumed.") }
++            ?: EhFavoritesStatus.Idle,
++    )
++    val status: StateFlow<EhFavoritesStatus> = mutableStatus.asStateFlow()
++
++    fun categoryMappings(): List<EhFavoriteCategoryMapping> = persistence.categoryMappings()
++    fun availableCategories(): List<Pair<Int, String>> = local.availableCategories()
++    fun remapCategory(slot: EhFavoriteSlot, categoryId: Int) = local.remapCategory(slot, categoryId)
++
++    suspend fun preview(request: EhSyncRequest = preferences.favoritesSyncRequest()): EhFavoritesPlan = mutex.withLock {
++        check(persistence.activeSyncRunId() == null) { "Resume the interrupted sync before creating another preview." }
++        mutableStatus.value = EhFavoritesStatus.Planning("Building a read-only favorites preview")
++        val remoteSnapshot = remote.snapshot()
++        val mappings = local.ensureCategoryMappings(remoteSnapshot.categories)
++        val aliases = EhGalleryAliasIndex(persistence.aliases())
++        planner.plan(persistence.favorites(), local.snapshot(aliases, mappings), remoteSnapshot, aliases, request, "preview")
++            .also { mutableStatus.value = EhFavoritesStatus.Idle }
++    }
++
++    suspend fun start(request: EhSyncRequest = preferences.favoritesSyncRequest()): EhFavoritesStatus = mutex.withLock {
++        persistence.activeSyncRunId()?.let { return@withLock resumeLocked(it, request.lenient) }
++        mutableStatus.value = EhFavoritesStatus.Planning("Downloading remote favorites")
++        val remoteSnapshot = remote.snapshot()
++        val mappings = local.ensureCategoryMappings(remoteSnapshot.categories)
++        val aliases = EhGalleryAliasIndex(persistence.aliases())
++        mutableStatus.value = EhFavoritesStatus.Planning("Comparing the J2K library with the last completed snapshot")
++        val localSnapshot = local.snapshot(aliases, mappings)
++        val runId = UUID.randomUUID().toString()
++        val plan = planner.plan(persistence.favorites(), localSnapshot, remoteSnapshot, aliases, request, runId)
++        persistence.createSyncPlan(
++            runId = runId,
++            mode = if (request.mode == EhFavoritesSyncMode.RemoteOnly) EhSyncMode.RemoteOnly else EhSyncMode.Bidirectional,
++            plan = plan,
++        )
++        if (plan.conflicts.isNotEmpty()) {
++            persistence.failSync(runId, "Sync needs conflict review")
++            return@withLock EhFavoritesStatus.NeedsReview(runId, plan.conflicts).also { mutableStatus.value = it }
++        }
++        resumeLocked(runId, request.lenient)
++    }
++
++    suspend fun resumeActive(): EhFavoritesStatus = mutex.withLock {
++        val runId = persistence.activeSyncRunId()
++            ?: return@withLock EhFavoritesStatus.Idle.also { mutableStatus.value = it }
++        resumeLocked(runId, preferences.favoritesLenient.get())
++    }
++
++    private suspend fun resumeLocked(runId: String, lenient: Boolean): EhFavoritesStatus {
++        val aliases = EhGalleryAliasIndex(persistence.aliases())
++        val operations = persistence.typedPendingOperations(runId)
++        val failures = mutableListOf<String>()
++        try {
++            operations.forEachIndexed { index, operation ->
++                mutableStatus.value = EhFavoritesStatus.Running(runId, index, operations.size, operation.title())
++                persistence.markAttemptStarted(operation.operationId)
++                try {
++                    when (operation) {
++                        is EhFavoriteOperation.SetRemote -> applyRemoteSet(operation)
++                        is EhFavoriteOperation.RemoveRemote -> applyRemoteRemove(operation)
++                        is EhFavoriteOperation.SetLocal, is EhFavoriteOperation.RemoveLocal -> local.apply(operation, aliases)
++                    }
++                } catch (cancelled: CancellationException) {
++                    throw cancelled
++                } catch (failure: Exception) {
++                    val message = failure.message?.take(8_000) ?: "Favorite operation failed"
++                    persistence.markOperation(operation.operationId, EhSyncOperationStatus.Failed, message)
++                    failures += message
++                    if (!lenient) {
++                        return EhFavoritesStatus.Paused(runId, message).also { mutableStatus.value = it }
++                    }
++                }
++            }
++
++            if (failures.isNotEmpty()) {
++                return EhFavoritesStatus.Paused(runId, "${failures.size} favorite operations failed and can be retried.")
++                    .also { mutableStatus.value = it }
++            }
++
++            val finalRemote = remote.snapshot()
++            val expected = persistence.runExpectedFingerprint(runId)
++            if (finalRemote.fingerprint != expected) {
++                persistence.requireFullReconcile()
++                persistence.failSync(runId, "Remote favorites changed while the sync was running")
++                return EhFavoritesStatus.Paused(runId, "Remote favorites changed while the sync was running. Start a fresh reconciliation.")
++                    .also { mutableStatus.value = it }
++            }
++            val snapshot = finalRemote.favorites.values.map { EhFavoriteSnapshot(it.gallery, it.title, it.category.value) }
++            persistence.completeSyncWithSnapshot(runId, snapshot, finalRemote.fingerprint)
++            return EhFavoritesStatus.Complete(runId, failures).also { mutableStatus.value = it }
++        } catch (cancelled: CancellationException) {
++            mutableStatus.value = EhFavoritesStatus.Paused(runId, "Sync was interrupted and can be resumed.")
++            throw cancelled
++        }
++    }
++
++    private suspend fun applyRemoteSet(operation: EhFavoriteOperation.SetRemote) {
++        val actual = remote.state(operation.gallery)
++        when (EhFavoriteRecovery.decide(actual, operation.expected, operation.desired)) {
++            EhRemoteRecoveryDecision.AlreadyApplied -> {
++                persistence.markOperation(operation.operationId, EhSyncOperationStatus.Applied)
++                return
++            }
++            is EhRemoteRecoveryDecision.Conflict -> error("Remote favorite changed after planning.")
++            EhRemoteRecoveryDecision.Execute -> Unit
++        }
++        remote.setFavorite(operation.desired)
++        check(EhFavoriteRecovery.sameRemoteState(remote.state(operation.gallery), operation.desired)) { "Remote favorite update could not be verified." }
++        persistence.markOperation(operation.operationId, EhSyncOperationStatus.Applied)
++    }
++
++    private suspend fun applyRemoteRemove(operation: EhFavoriteOperation.RemoveRemote) {
++        val actual = remote.state(operation.gallery)
++        when (EhFavoriteRecovery.decide(actual, operation.expected, null)) {
++            EhRemoteRecoveryDecision.AlreadyApplied -> {
++                persistence.markOperation(operation.operationId, EhSyncOperationStatus.Applied)
++                return
++            }
++            is EhRemoteRecoveryDecision.Conflict -> error("Remote favorite changed after planning.")
++            EhRemoteRecoveryDecision.Execute -> Unit
++        }
++        remote.removeFavorite(operation.expected)
++        check(remote.state(operation.gallery) == null) { "Remote favorite removal could not be verified." }
++        persistence.markOperation(operation.operationId, EhSyncOperationStatus.Applied)
++    }
++
++    private fun EhFavoriteOperation.title(): String? = when (this) {
++        is EhFavoriteOperation.SetRemote -> desired.title
++        is EhFavoriteOperation.RemoveRemote -> expected.title
++        is EhFavoriteOperation.SetLocal -> desired.title
++        is EhFavoriteOperation.RemoveLocal -> null
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhGalleryAliasIndex.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhGalleryAliasIndex.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a174a78ff1ae51c05eda11e9be776c9d720e7c1b
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhGalleryAliasIndex.kt
+@@ -0,0 +1,37 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryAlias
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++
++class EhGalleryAliasIndex(aliases: Collection<EhGalleryAlias>) {
++    private val canonicalByIdentity: Map<EhGalleryIdentity, EhGalleryIdentity>
++    private val membersByCanonical: Map<EhGalleryIdentity, Set<EhGalleryIdentity>>
++
++    init {
++        val direct = linkedMapOf<EhGalleryIdentity, EhGalleryIdentity>()
++        aliases.forEach { alias ->
++            val previous = direct.putIfAbsent(alias.alternate, alias.canonical)
++            require(previous == null || previous == alias.canonical) { "An alternate gallery has conflicting canonical owners." }
++        }
++        val resolved = linkedMapOf<EhGalleryIdentity, EhGalleryIdentity>()
++        (direct.keys + direct.values).forEach { identity ->
++            val seen = linkedSetOf<EhGalleryIdentity>()
++            var current = identity
++            while (true) {
++                require(seen.add(current)) { "E-Hentai gallery aliases contain a cycle." }
++                current = direct[current] ?: break
++            }
++            resolved[identity] = current
++        }
++        canonicalByIdentity = resolved
++        membersByCanonical = resolved.entries.groupBy({ it.value }, { it.key }).mapValues { (canonical, members) -> members.toSet() + canonical }
++    }
++
++    fun canonical(identity: EhGalleryIdentity): EhGalleryIdentity = canonicalByIdentity[identity] ?: identity
++
++    fun equivalents(identity: EhGalleryIdentity): Set<EhGalleryIdentity> {
++        val canonical = canonical(identity)
++        return membersByCanonical[canonical] ?: setOf(canonical)
++    }
++}
++
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/J2kEhFavoritesLocal.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/J2kEhFavoritesLocal.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..17486d264a386b24c68b606b635b1990f7f793d5
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/J2kEhFavoritesLocal.kt
+@@ -0,0 +1,170 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhGalleryMetadata
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
++import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Category
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.data.database.models.MangaCategory
++import eu.kanade.tachiyomi.source.model.SManga
++
++class J2kEhFavoritesLocal(
++    private val database: DatabaseHelper,
++    private val persistence: HayaiEhPersistenceStore,
++    private val gateway: EhHttpGateway,
++) {
++    fun availableCategories(): List<Pair<Int, String>> =
++        database.getCategories().executeAsBlocking().mapNotNull { category -> category.id?.let { it to category.name } }
++
++    fun remapCategory(slot: EhFavoriteSlot, categoryId: Int) {
++        val category = database.getCategories().executeAsBlocking().singleOrNull { it.id == categoryId }
++            ?: error("The selected J2K category no longer exists.")
++        val current = persistence.categoryMappings().singleOrNull { it.slot == slot }
++            ?: error("Run a favorites preview once before editing category mappings.")
++        check(persistence.categoryMappings().none { it.slot != slot && it.categoryId == categoryId }) {
++            "That J2K category is already mapped to another E-Hentai slot."
++        }
++        persistence.upsertCategoryMapping(current.copy(categoryId = requireNotNull(category.id)))
++    }
++
++    fun ensureCategoryMappings(remote: List<EhRemoteCategory>): List<EhFavoriteCategoryMapping> {
++        require(remote.size == 10)
++        val existingMappings = persistence.categoryMappings().associateBy { it.slot }
++        val categories = database.getCategories().executeAsBlocking().toMutableList()
++        remote.forEach { remoteCategory ->
++            val mapping = existingMappings[remoteCategory.slot]
++            if (mapping != null) {
++                val category = categories.find { it.id == mapping.categoryId }
++                    ?: error("Mapped E-Hentai category ${remoteCategory.slot.value} was deleted. Repair the mapping before syncing.")
++                if (category.name != remoteCategory.name) {
++                    category.name = remoteCategory.name
++                    database.insertCategory(category).executeAsBlocking()
++                    persistence.upsertCategoryMapping(mapping.copy(remoteName = remoteCategory.name))
++                }
++            } else {
++                val usedNames = categories.mapTo(hashSetOf()) { it.name.lowercase() }
++                val safeName = uniqueCategoryName(remoteCategory.name, usedNames)
++                val category = Category.create(safeName).apply { order = (categories.maxOfOrNull { it.order } ?: -1) + 1 }
++                category.id = requireNotNull(database.insertCategory(category).executeAsBlocking().insertedId()).toInt()
++                categories += category
++                persistence.upsertCategoryMapping(EhFavoriteCategoryMapping(remoteCategory.slot, requireNotNull(category.id), remoteCategory.name))
++            }
++        }
++        return persistence.categoryMappings()
++    }
++
++    fun snapshot(
++        aliases: EhGalleryAliasIndex,
++        mappings: List<EhFavoriteCategoryMapping>,
++    ): EhLocalFavoritesSnapshot {
++        val byCategory = mappings.associateBy { it.categoryId }
++        val grouped = linkedMapOf<EhGalleryIdentity, MutableList<Pair<Manga, List<Category>>>>()
++        database.getFavoriteMangas().executeAsBlocking()
++            .filter { it.source == EhSite.EHentai.sourceId || it.source == EhSite.ExHentai.sourceId }
++            .forEach { manga ->
++                val key = runCatching { GalleryKey.parse(manga.url) }.getOrNull() ?: return@forEach
++                val identity = aliases.canonical(EhGalleryIdentity(key.id.value, key.token.value))
++                grouped.getOrPut(identity, ::mutableListOf) += manga to database.getCategoriesForManga(manga).executeAsBlocking()
++            }
++
++        val conflicts = mutableListOf<EhFavoriteConflict>()
++        val favorites = linkedMapOf<EhGalleryIdentity, EhLocalFavoriteState>()
++        grouped.forEach { (identity, rows) ->
++            if (rows.size > 1) {
++                conflicts += EhFavoriteConflict.DuplicateAliases("duplicate-${identity.gid}-${identity.token}", identity, rows.mapNotNullTo(linkedSetOf()) { it.first.id })
++                return@forEach
++            }
++            val (manga, categories) = rows.single()
++            val slots = categories.mapNotNullTo(linkedSetOf()) { byCategory[it.id]?.slot }
++            if (slots.size > 1) {
++                conflicts += EhFavoriteConflict.MultipleMappedCategories("categories-${identity.gid}-${identity.token}", identity, slots)
++                return@forEach
++            }
++            val slot = slots.singleOrNull() ?: return@forEach
++            favorites[identity] = EhLocalFavoriteState(
++                mangaIds = setOf(requireNotNull(manga.id)),
++                state = EhFavoriteState(identity, manga.originalTitle, slot),
++                unrelatedCategoryIds = categories.mapNotNullTo(linkedSetOf()) { it.id }.filterTo(linkedSetOf()) { it !in byCategory },
++            )
++        }
++        return EhLocalFavoritesSnapshot(favorites, conflicts)
++    }
++
++    suspend fun apply(operation: EhFavoriteOperation, aliases: EhGalleryAliasIndex) {
++        when (operation) {
++            is EhFavoriteOperation.SetLocal -> setLocal(operation, aliases)
++            is EhFavoriteOperation.RemoveLocal -> removeLocal(operation, aliases)
++            else -> error("Remote operation passed to the J2K favorites gateway")
++        }
++    }
++
++    private suspend fun setLocal(operation: EhFavoriteOperation.SetLocal, aliases: EhGalleryAliasIndex) {
++        val mappings = persistence.categoryMappings()
++        val target = mappings.singleOrNull { it.slot == operation.desired.category }
++            ?: error("No J2K category is mapped to E-Hentai slot ${operation.desired.category.value}.")
++        val existing = findEquivalent(aliases.equivalents(operation.gallery))
++        val prepared = if (existing == null) prepareManga(operation.desired) else null
++        persistence.applyLocalOperation(operation.operationId, mutation = {
++            val manga = existing ?: requireNotNull(prepared).also { created ->
++                created.id = requireNotNull(database.insertManga(created).executeAsBlocking().insertedId())
++            }
++            manga.favorite = true
++            if (manga.date_added == 0L) manga.date_added = System.currentTimeMillis()
++            database.updateMangaFavorite(manga).executeAsBlocking()
++            database.updateMangaAdded(manga).executeAsBlocking()
++            val mappedIds = mappings.mapTo(hashSetOf()) { it.categoryId }
++            val retained = database.getCategoriesForManga(manga).executeAsBlocking().filter { it.id !in mappedIds }
++            val targetCategory = database.getCategories().executeAsBlocking().single { it.id == target.categoryId }
++            val categories = (retained + targetCategory).distinctBy { it.id }
++            database.setMangaCategories(categories.map { MangaCategory.create(manga, it) }, listOf(manga))
++        })
++    }
++
++    private fun removeLocal(operation: EhFavoriteOperation.RemoveLocal, aliases: EhGalleryAliasIndex) {
++        val manga = findEquivalent(aliases.equivalents(operation.gallery))
++        persistence.applyLocalOperation(operation.operationId, mutation = {
++            if (manga != null) {
++                manga.favorite = false
++                database.updateMangaFavorite(manga).executeAsBlocking()
++                val mappedIds = persistence.categoryMappings().mapTo(hashSetOf()) { it.categoryId }
++                val retained = database.getCategoriesForManga(manga).executeAsBlocking().filter { it.id !in mappedIds }
++                database.setMangaCategories(retained.map { MangaCategory.create(manga, it) }, listOf(manga))
++            }
++        })
++    }
++
++    private fun findEquivalent(identities: Set<EhGalleryIdentity>): Manga? =
++        identities.asSequence().flatMap { identity ->
++            val path = "/g/${identity.gid}/${identity.token}/"
++            sequenceOf(EhSite.ExHentai, EhSite.EHentai).mapNotNull { database.getManga(path, it.sourceId).executeAsBlocking() }
++        }.firstOrNull()
++
++    private suspend fun prepareManga(state: EhFavoriteState): Manga {
++        val key = GalleryKey.parse("/g/${state.gallery.gid}/${state.gallery.token}/")
++        val metadata = gateway.details(EhSite.ExHentai, key)
++        return metadata.metadata.toManga(EhSite.ExHentai.sourceId)
++    }
++
++    private fun EhGalleryMetadata.toManga(sourceId: Long): Manga = Manga.create(key.normalizedPath, title, sourceId).apply {
++        artist = tags.filter { it.namespace == "artist" }.joinToString { it.name }.takeIf(String::isNotBlank)
++        author = tags.filter { it.namespace == "group" }.joinToString { it.name }.takeIf(String::isNotBlank)
++        description = uploader?.let { "Uploader: $it" }
++        genre = tags.joinToString { "${it.namespace}: ${it.name}" }.takeIf(String::isNotBlank)
++        thumbnail_url = this@toManga.thumbnailUrl
++        status = SManga.UNKNOWN
++        initialized = true
++        favorite = true
++        date_added = System.currentTimeMillis()
++    }
++
++    private fun uniqueCategoryName(remoteName: String, used: Set<String>): String {
++        if (remoteName.lowercase() !in used) return remoteName
++        val base = "$remoteName (E-Hentai)"
++        if (base.lowercase() !in used) return base
++        return generateSequence(2) { it + 1 }.map { "$base $it" }.first { it.lowercase() !in used }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt
+index 9a515fd204208ace94ae77090b763928b4310b8c..659986eaf503124ddd630390c558ece655553451 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/persistence/HayaiEhPersistenceStore.kt
+@@ -6,10 +6,166 @@ import com.pushtorefresh.storio.sqlite.queries.InsertQuery
+ import com.pushtorefresh.storio.sqlite.queries.RawQuery
+ import com.pushtorefresh.storio.sqlite.queries.UpdateQuery
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteCategoryMapping
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteConflict
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperation
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperationCodec
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteSlot
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesPlan
++import org.json.JSONObject
+ 
+ class HayaiEhPersistenceStore(
+     private val database: DatabaseHelper,
+ ) {
++    fun categoryMappings(): List<EhFavoriteCategoryMapping> =
++        query("SELECT slot, category_id, remote_name FROM hayai_eh_category_map ORDER BY slot").use { cursor ->
++            buildList {
++                while (cursor.moveToNext()) add(EhFavoriteCategoryMapping(EhFavoriteSlot(cursor.getInt(0)), cursor.getInt(1), cursor.getString(2)))
++            }
++        }
++
++    fun upsertCategoryMapping(mapping: EhFavoriteCategoryMapping) {
++        upsert(
++            table = "hayai_eh_category_map",
++            where = "slot = ?",
++            whereArgs = arrayOf(mapping.slot.value),
++            values = ContentValues(3).apply {
++                put("slot", mapping.slot.value)
++                put("category_id", mapping.categoryId)
++                put("remote_name", mapping.remoteName)
++            },
++        )
++    }
++
++    fun activeSyncRunId(): String? =
++        query("SELECT run_id FROM hayai_eh_sync_runs WHERE status = 'running' ORDER BY started_at LIMIT 1").use { cursor ->
++            if (cursor.moveToFirst()) cursor.getString(0) else null
++        }
++
++    fun runExpectedFingerprint(runId: String): String =
++        query("SELECT expected_fingerprint FROM hayai_eh_sync_runs WHERE run_id = ?", runId).use { cursor ->
++            check(cursor.moveToFirst()) { "Unknown E-Hentai sync run $runId" }
++            cursor.getString(0)
++        }
++
++    fun createSyncPlan(
++        runId: String,
++        mode: EhSyncMode,
++        plan: EhFavoritesPlan,
++        startedAt: Long = System.currentTimeMillis(),
++    ) {
++        database.inTransaction {
++            check(activeSyncRunId() == null) { "Another E-Hentai sync is already running" }
++            insert(
++                "hayai_eh_sync_runs",
++                ContentValues(7).apply {
++                    put("run_id", runId)
++                    put("mode", mode.storedValue)
++                    put("status", EhSyncRunStatus.Running.storedValue)
++                    put("started_at", startedAt)
++                    put("remote_fingerprint", plan.expectedRemoteFingerprint)
++                    put("expected_fingerprint", plan.expectedRemoteFingerprint)
++                },
++            )
++            plan.operations.forEach { operation ->
++                appendOperation(
++                    EhSyncJournalOperation(
++                        operationId = operation.operationId,
++                        runId = runId,
++                        sequence = operation.sequence,
++                        kind = EhFavoriteOperationCodec.kind(operation),
++                        gallery = operation.gallery,
++                        payloadJson = EhFavoriteOperationCodec.encode(operation),
++                        status = EhSyncOperationStatus.Pending,
++                        attempts = 0,
++                        lastError = null,
++                        createdAt = startedAt,
++                        updatedAt = startedAt,
++                    ),
++                )
++            }
++            plan.conflicts.forEach { conflict -> insertConflict(runId, conflict, startedAt) }
++        }
++    }
++
++    fun typedPendingOperations(runId: String): List<EhFavoriteOperation> =
++        pendingOperations(runId).map { EhFavoriteOperationCodec.decode(it.kind, it.payloadJson) }
++
++    fun unresolvedConflictMessages(runId: String): List<String> =
++        query("SELECT payload_json FROM hayai_eh_sync_conflicts WHERE run_id = ? AND resolution IS NULL ORDER BY created_at", runId).use { cursor ->
++            buildList { while (cursor.moveToNext()) add(JSONObject(cursor.getString(0)).getString("message")) }
++        }
++
++    fun markAttemptStarted(operationId: String, updatedAt: Long = System.currentTimeMillis()) {
++        val updated = database.lowLevel().update(
++            UpdateQuery.builder().table("hayai_eh_sync_journal").where("operation_id = ? AND status != 'applied'").whereArgs(operationId).build(),
++            ContentValues(2).apply {
++                put("attempts", operationAttempts(operationId) + 1)
++                put("updated_at", updatedAt)
++            },
++        )
++        check(updated == 1) { "Unknown or completed sync operation $operationId" }
++    }
++
++    fun applyLocalOperation(
++        operationId: String,
++        mutation: () -> Unit,
++        updatedAt: Long = System.currentTimeMillis(),
++    ) {
++        database.inTransaction {
++            mutation()
++            val updated = database.lowLevel().update(
++                UpdateQuery.builder().table("hayai_eh_sync_journal").where("operation_id = ? AND status != 'applied'").whereArgs(operationId).build(),
++                ContentValues(3).apply {
++                    put("status", EhSyncOperationStatus.Applied.storedValue)
++                    put("last_error", null as String?)
++                    put("updated_at", updatedAt)
++                },
++            )
++            check(updated == 1) { "Unknown or completed sync operation $operationId" }
++        }
++    }
++
++    fun completeSyncWithSnapshot(
++        runId: String,
++        snapshot: Collection<EhFavoriteSnapshot>,
++        remoteFingerprint: String,
++        completedAt: Long = System.currentTimeMillis(),
++    ) {
++        database.inTransaction {
++            check(pendingOperations(runId).isEmpty()) { "Sync run still has unapplied operations" }
++            execute("DELETE FROM hayai_eh_favorites")
++            snapshot.forEach { favorite ->
++                insert("hayai_eh_favorites", ContentValues(4).apply {
++                    put("gid", favorite.gallery.gid)
++                    put("token", favorite.gallery.token)
++                    put("title", favorite.title)
++                    put("category", favorite.categorySlot)
++                })
++            }
++            finishRun(runId, EhSyncRunStatus.Complete, null, completedAt)
++            execute(
++                "UPDATE hayai_eh_sync_checkpoint SET generation = generation + 1, completed_at = ?, remote_fingerprint = ?, requires_full_reconcile = 0 WHERE singleton = 1",
++                completedAt,
++                remoteFingerprint,
++            )
++        }
++    }
++
++    private fun insertConflict(runId: String, conflict: EhFavoriteConflict, createdAt: Long) {
++        insert(
++            "hayai_eh_sync_conflicts",
++            ContentValues(8).apply {
++                put("conflict_id", conflict.id)
++                put("run_id", runId)
++                put("gid", conflict.gallery?.gid)
++                put("token", conflict.gallery?.token)
++                put("conflict_kind", conflict::class.java.simpleName)
++                put("payload_json", JSONObject().put("message", conflict.message).toString())
++                put("created_at", createdAt)
++            },
++        )
++    }
+     fun metadata(identity: SourceMangaIdentity): SourceMetadata? =
+         query(
+             "SELECT uploader, extra, indexed_extra, extra_version FROM hayai_source_metadata WHERE source_id = ? AND manga_url = ?",
+@@ -239,7 +395,6 @@ class HayaiEhPersistenceStore(
+                     put("status", status.storedValue)
+                     put("last_error", error)
+                     put("updated_at", updatedAt)
+-                    put("attempts", operationAttempts(operationId) + 1)
+                 },
+             )
+         check(updated == 1) { "Unknown sync operation $operationId" }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt
+index 05f7099b88911b791f223eaa3de5d2f0a9d04a44..67f87880c159d75c1fb73819b2f1539ddc796100 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt
+@@ -2,6 +2,9 @@ package dev.ahmedmohamed.hayai.adult.eh.settings
+ 
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhConflictPolicy
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncMode
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhSyncRequest
+ import eu.kanade.tachiyomi.data.preference.Preference
+ import eu.kanade.tachiyomi.data.preference.PreferenceStore
+ 
+@@ -17,6 +20,9 @@ class EhPreferences(
+     val watchedListDefault: Preference<Boolean> = store.getBoolean("eh_watched_list_default_state", false)
+     val enhancedView: Preference<Boolean> = store.getBoolean("enhanced_e_hentai_view", true)
+     val showSettingsUploadWarning: Preference<Boolean> = store.getBoolean("eh_showSettingsUploadWarning2", true)
++    val favoritesReadOnly: Preference<Boolean> = store.getBoolean("eh_sync_read_only", false)
++    val favoritesLenient: Preference<Boolean> = store.getBoolean("eh_lenient_sync", false)
++    val favoritesConflictPolicy: Preference<String> = store.getString("hayai_eh_favorites_conflict_policy", "stop")
+ 
+     private val settingsLanguages = store.getString("eh_settings_languages", DEFAULT_LANGUAGES)
+     private val ehAppliedFingerprint = store.getString("hayai_eh_remote_settings_fingerprint_eh", "")
+@@ -104,6 +110,17 @@ class EhPreferences(
+ 
+     fun hasPendingRemoteSettings(site: EhSite): Boolean = appliedFingerprint(site) != remoteSettings().fingerprint()
+ 
++    fun favoritesSyncRequest(): EhSyncRequest =
++        EhSyncRequest(
++            mode = if (favoritesReadOnly.get()) EhFavoritesSyncMode.RemoteOnly else EhFavoritesSyncMode.Bidirectional,
++            conflictPolicy = when (favoritesConflictPolicy.get()) {
++                "remote" -> EhConflictPolicy.PreferRemote
++                "local" -> EhConflictPolicy.PreferLocal
++                else -> EhConflictPolicy.StopForReview
++            },
++            lenient = favoritesLenient.get(),
++        )
++
+     private fun defaultLanguages(): Map<EhLanguage, EhLanguageSelection> =
+         EhLanguage.entries.associateWithTo(linkedMapOf()) { EhLanguageSelection() }
+ 
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+index 2a8248435da17073e438379c078d562ce5f236f6..f4fc53ccc558ea25d0bd58a6236c5222d30d934e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+@@ -21,6 +21,11 @@ import com.google.android.material.button.MaterialButton
+ import com.google.android.material.switchmaterial.SwitchMaterial
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhConflictPolicy
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteOperation
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoriteSlot
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesStatus
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncService
+ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import dev.ahmedmohamed.hayai.adult.eh.settings.EhHentaiAtHome
+ import dev.ahmedmohamed.hayai.adult.eh.settings.EhImageQuality
+@@ -46,6 +51,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private val ehPreferences by injectLazy<EhPreferences>()
+     private val network by injectLazy<NetworkHelper>()
+     private val settingsUploader by injectLazy<EhRemoteSettingsUploader>()
++    private val favoritesSync by injectLazy<EhFavoritesSyncService>()
+     private val verifier by lazy { EhSessionVerifier(network.client) }
+ 
+     private lateinit var status: TextView
+@@ -60,6 +66,9 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private lateinit var remoteStatus: TextView
+     private lateinit var uploadSettings: MaterialButton
+     private lateinit var retryUpload: MaterialButton
++    private lateinit var favoritesStatus: TextView
++    private lateinit var conflictPolicy: MaterialButton
++    private lateinit var categoryMappings: MaterialButton
+     private val uploadResults = linkedMapOf<EhSite, EhSiteUploadResult>()
+     private var retrySites = emptySet<EhSite>()
+ 
+@@ -90,6 +99,11 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+                 sessionStore.state.collect(::renderState)
+             }
+         }
++        lifecycleScope.launch {
++            repeatOnLifecycle(Lifecycle.State.STARTED) {
++                favoritesSync.status.collect(::renderFavoritesStatus)
++            }
++        }
+     }
+ 
+     private fun buildContent(): LinearLayout {
+@@ -202,6 +216,40 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         }
+         content.addView(watchedTags)
+ 
++        content.addView(sectionLabel("Favorites synchronization"))
++        content.addView(
++            settingSwitch(
++                title = "Remote to device only",
++                summary = "Never upload local favorite additions, moves, or removals.",
++                checked = ehPreferences.favoritesReadOnly.get(),
++                onChanged = ehPreferences.favoritesReadOnly::set,
++            ),
++        )
++        content.addView(
++            settingSwitch(
++                title = "Continue independent errors",
++                summary = "Continue unrelated galleries after an error, but never guess how to resolve a conflict.",
++                checked = ehPreferences.favoritesLenient.get(),
++                onChanged = ehPreferences.favoritesLenient::set,
++            ),
++        )
++        conflictPolicy = button(conflictPolicyText(), ::chooseConflictPolicy)
++        content.addView(conflictPolicy)
++        categoryMappings = button("Edit E-Hentai category mappings", ::editCategoryMapping)
++        content.addView(categoryMappings)
++        content.addView(
++            TextView(this).apply {
++                text = "Category moves preserve existing remote favorite notes. Hayai does not edit note contents. Unrelated J2K categories are preserved."
++                alpha = 0.72f
++                setPadding(0, 4.dpToPx, 0, 8.dpToPx)
++            },
++            matchWidth(),
++        )
++        favoritesStatus = TextView(this)
++        content.addView(favoritesStatus, matchWidth())
++        content.addView(button("Preview favorites sync", ::previewFavoritesSync))
++        content.addView(button("Start or resume favorites sync", ::startFavoritesSync))
++
+         root.addView(
+             ScrollView(this).apply { addView(content) },
+             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+@@ -508,6 +556,85 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         return if (count == 0) "Language filters: none" else "Language filters: $count enabled"
+     }
+ 
++    private fun chooseConflictPolicy() {
++        val values = listOf("stop", "remote", "local")
++        val labels = arrayOf("Stop and review", "Prefer remote", "Prefer local")
++        val current = values.indexOf(ehPreferences.favoritesConflictPolicy.get()).coerceAtLeast(0)
++        materialAlertDialog()
++            .setTitle("Favorites conflict policy")
++            .setSingleChoiceItems(labels, current) { dialog, index ->
++                ehPreferences.favoritesConflictPolicy.set(values[index])
++                conflictPolicy.text = conflictPolicyText()
++                dialog.dismiss()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun editCategoryMapping() {
++        val mappings = favoritesSync.categoryMappings()
++        if (mappings.isEmpty()) {
++            favoritesStatus.text = "Run Preview favorites sync once to create safe dedicated category mappings."
++            return
++        }
++        val labels = mappings.map { "Slot ${it.slot.value}: ${it.remoteName} → category ${it.categoryId}" }.toTypedArray()
++        materialAlertDialog()
++            .setTitle("Choose remote slot")
++            .setItems(labels) { _, index -> chooseMappedCategory(mappings[index].slot) }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun chooseMappedCategory(slot: EhFavoriteSlot) {
++        val categories = favoritesSync.availableCategories()
++        materialAlertDialog()
++            .setTitle("J2K category for slot ${slot.value}")
++            .setItems(categories.map { it.second }.toTypedArray()) { _, index ->
++                runCatching { favoritesSync.remapCategory(slot, categories[index].first) }
++                    .onSuccess { favoritesStatus.text = "Category mapping updated." }
++                    .onFailure { favoritesStatus.text = it.message ?: "Category mapping failed." }
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun previewFavoritesSync() {
++        lifecycleScope.launch {
++            runCatching { favoritesSync.preview() }
++                .onSuccess { plan ->
++                    val remote = plan.operations.count { it is EhFavoriteOperation.SetRemote || it is EhFavoriteOperation.RemoveRemote }
++                    val local = plan.operations.size - remote
++                    val removals = plan.operations.count { it is EhFavoriteOperation.RemoveRemote || it is EhFavoriteOperation.RemoveLocal }
++                    favoritesStatus.text = "Preview: $remote remote changes, $local device changes, $removals removals, ${plan.conflicts.size} conflicts."
++                }
++                .onFailure { favoritesStatus.text = it.message ?: "Favorites preview failed." }
++        }
++    }
++
++    private fun startFavoritesSync() {
++        lifecycleScope.launch {
++            runCatching { favoritesSync.start() }
++                .onFailure { favoritesStatus.text = it.message ?: "Favorites sync failed." }
++        }
++    }
++
++    private fun renderFavoritesStatus(value: EhFavoritesStatus) {
++        favoritesStatus.text = when (value) {
++            EhFavoritesStatus.Idle -> "No favorites sync is running."
++            is EhFavoritesStatus.Planning -> value.message
++            is EhFavoritesStatus.NeedsReview -> "${value.conflicts.size} conflicts need review. Choose a conflict policy and start a new sync."
++            is EhFavoritesStatus.Running -> "${value.completed}/${value.total}: ${value.title ?: "Updating favorite"}"
++            is EhFavoritesStatus.Paused -> "Paused and resumable: ${value.reason}"
++            is EhFavoritesStatus.Complete -> if (value.failures.isEmpty()) "Favorites sync complete." else "Favorites sync complete with ${value.failures.size} errors."
++        }
++    }
++
++    private fun conflictPolicyText(): String = "Conflict policy: " + when (ehPreferences.favoritesConflictPolicy.get()) {
++        "remote" -> "prefer remote"
++        "local" -> "prefer local"
++        else -> "stop and review"
++    }
++
+     private fun button(
+         text: String,
+         action: () -> Unit,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupData.kt b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupData.kt
+index 0ae0803454842cec8726d49cdd3f1425462e0a4d..013a20208ed61081728f04ac3cc64538e38ef340 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupData.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupData.kt
+@@ -13,9 +13,10 @@ data class HayaiBackupData(
+     @ProtoNumber(6) val novelPlugins: List<HayaiBackupNovelPlugin> = emptyList(),
+     @ProtoNumber(7) val ehGalleryAliases: List<HayaiBackupEhGalleryAlias> = emptyList(),
+     @ProtoNumber(8) val sourceMetadata: List<HayaiBackupSourceMetadata> = emptyList(),
++    @ProtoNumber(9) val ehCategoryMappings: List<HayaiBackupEhCategoryMapping> = emptyList(),
+ ) {
+     companion object {
+-        const val CURRENT_VERSION = 2
++        const val CURRENT_VERSION = 3
+         const val MINIMUM_SUPPORTED_VERSION = 1
+     }
+ }
+@@ -65,6 +66,13 @@ data class HayaiBackupEhGalleryAlias(
+     @ProtoNumber(4) val alternateToken: String,
+ )
+ 
++@Serializable
++data class HayaiBackupEhCategoryMapping(
++    @ProtoNumber(1) val slot: Int,
++    @ProtoNumber(2) val remoteName: String,
++    @ProtoNumber(3) val localCategoryName: String,
++)
++
+ @Serializable
+ data class HayaiBackupSourceMetadata(
+     @ProtoNumber(1) val sourceId: Long,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt
+index 49967242826a6eabcf39aa4935721bd423246dfb..8320b0fa42dcbb589dc6f872c102dd907be61c5c 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt
+@@ -73,6 +73,7 @@ class HayaiBackupService(
+             novelPlugins = readNovelPlugins(),
+             ehGalleryAliases = readEhGalleryAliases(),
+             sourceMetadata = readSourceMetadata(mangas),
++            ehCategoryMappings = readEhCategoryMappings(),
+         )
+     }
+ 
+@@ -145,13 +146,36 @@ class HayaiBackupService(
+                     restoreEhGalleryAlias(alias)
+                 }.also { if (it) restored++ }
+             }
++            data.ehCategoryMappings.distinct().forEach { mapping ->
++                process("E-Hentai category mapping ${mapping.slot}", errors, { skipped++ }) {
++                    val categoryId = query("SELECT _id FROM categories WHERE name = ?", mapping.localCategoryName).use { cursor ->
++                        if (!cursor.moveToFirst()) return@process false
++                        val id = cursor.getInt(0)
++                        if (cursor.moveToNext()) return@process false
++                        id
++                    }
++                    upsert(
++                        table = "hayai_eh_category_map",
++                        where = "slot = ?",
++                        whereArgs = arrayOf(mapping.slot),
++                        values = ContentValues(3).apply {
++                            put("slot", mapping.slot)
++                            put("category_id", categoryId)
++                            put("remote_name", mapping.remoteName)
++                        },
++                    )
++                }.also { if (it) restored++ }
++            }
+             data.sourceMetadata.distinct().forEach { metadata ->
+                 process("source metadata ${metadata.mangaUrl}", errors, { skipped++ }) {
+                     val manga = findManga(metadata.sourceId, metadata.mangaUrl, mangaCache) ?: return@process false
+                     restoreSourceMetadata(metadata, requireNotNull(manga.id))
+                 }.also { if (it) restored++ }
+             }
+-            if (data.ehFavorites.isNotEmpty() || data.ehGalleryAliases.isNotEmpty() || data.sourceMetadata.isNotEmpty()) {
++            if (
++                data.ehFavorites.isNotEmpty() || data.ehGalleryAliases.isNotEmpty() ||
++                data.ehCategoryMappings.isNotEmpty() || data.sourceMetadata.isNotEmpty()
++            ) {
+                 database.lowLevel().executeSQL(
+                     RawQuery.builder().query(
+                         "UPDATE hayai_eh_sync_checkpoint SET requires_full_reconcile = 1 WHERE singleton = 1",
+@@ -288,6 +312,15 @@ class HayaiBackupService(
+             )
+         }
+ 
++    private fun readEhCategoryMappings(): List<HayaiBackupEhCategoryMapping> =
++        query(
++            "SELECT m.slot, m.remote_name, c.name FROM hayai_eh_category_map m JOIN categories c ON c._id = m.category_id ORDER BY m.slot",
++        ).use { cursor ->
++            buildList {
++                while (cursor.moveToNext()) add(HayaiBackupEhCategoryMapping(cursor.getInt(0), cursor.getString(1), cursor.getString(2)))
++            }
++        }
++
+     private fun readSourceMetadata(mangas: List<Manga>): List<HayaiBackupSourceMetadata> {
+         val store = HayaiEhPersistenceStore(database)
+         return mangas
+@@ -510,7 +543,7 @@ class HayaiBackupService(
+ 
+     private fun HayaiBackupData.itemCount() =
+         quotes.size + novelRepositories.size + chapterStats.size + ehFavorites.size + novelPlugins.size +
+-            ehGalleryAliases.size + sourceMetadata.size
++            ehGalleryAliases.size + sourceMetadata.size + ehCategoryMappings.size
+ 
+     private data class MangaIdentity(
+         val sourceId: Long,
+@@ -553,6 +586,7 @@ internal object HayaiBackupLimits {
+             if (data.chapterStats.size > 1_000_000) add("Too many novel chapter statistics")
+             if (data.ehFavorites.size > 100_000) add("Too many E-Hentai favorites")
+             if (data.ehGalleryAliases.size > 100_000) add("Too many E-Hentai gallery aliases")
++            if (data.ehCategoryMappings.size > 10) add("Too many E-Hentai category mappings")
+             if (data.sourceMetadata.size > 100_000) add("Too many source metadata records")
+             if (data.sourceMetadata.sumOf { it.extra.length.toLong() } > 64L * 1024 * 1024) {
+                 add("Source metadata backup data is too large")
+@@ -602,6 +636,9 @@ internal object HayaiBackupLimits {
+                         !validGalleryIdentity(it.alternateGid, it.alternateToken) ||
+                         (it.canonicalGid == it.alternateGid && it.canonicalToken == it.alternateToken)
+                 }?.let { add("Invalid E-Hentai gallery alias") }
++            data.ehCategoryMappings
++                .firstOrNull { it.slot !in 0..9 || it.remoteName.length !in 1..255 || it.localCategoryName.length !in 1..255 }
++                ?.let { add("Invalid E-Hentai category mapping") }
+             data.sourceMetadata
+                 .firstOrNull {
+                     it.mangaUrl.length !in 1..8_192 ||
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt b/app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt
+index 47fb2cf671caaa603774738146195431ee7fb14b..abe6361e60958b0b6aad521c8708a9b5e1260d2d 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt
+@@ -6,7 +6,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
+ import org.json.JSONObject
+ 
+ object HayaiSchema {
+-    const val VERSION = 2
++    const val VERSION = 3
+ 
+     fun ensure(db: SupportSQLiteDatabase) {
+         db.execSQL(
+@@ -117,6 +117,7 @@ object HayaiSchema {
+             arrayOf(System.currentTimeMillis()),
+         )
+         migrateToVersion2(db)
++        migrateToVersion3(db)
+     }
+ 
+     private fun migrateToVersion2(db: SupportSQLiteDatabase) {
+@@ -138,6 +139,49 @@ object HayaiSchema {
+         }
+     }
+ 
++    private fun migrateToVersion3(db: SupportSQLiteDatabase) {
++        if (hasMigration(db, 3)) return
++        val ownsTransaction = !db.inTransaction()
++        if (ownsTransaction) db.beginTransaction()
++        try {
++            db.execSQL(
++                """
++                CREATE TABLE IF NOT EXISTS hayai_eh_category_map(
++                    slot INTEGER NOT NULL PRIMARY KEY CHECK(slot BETWEEN 0 AND 9),
++                    category_id INTEGER NOT NULL UNIQUE,
++                    remote_name TEXT NOT NULL,
++                    FOREIGN KEY(category_id) REFERENCES categories(_id) ON DELETE CASCADE
++                )
++                """.trimIndent(),
++            )
++            db.execSQL(
++                """
++                CREATE TABLE IF NOT EXISTS hayai_eh_sync_conflicts(
++                    conflict_id TEXT NOT NULL PRIMARY KEY,
++                    run_id TEXT NOT NULL,
++                    gid TEXT,
++                    token TEXT,
++                    conflict_kind TEXT NOT NULL,
++                    payload_json TEXT NOT NULL,
++                    resolution TEXT,
++                    created_at INTEGER NOT NULL,
++                    FOREIGN KEY(run_id) REFERENCES hayai_eh_sync_runs(run_id) ON DELETE CASCADE
++                )
++                """.trimIndent(),
++            )
++            db.execSQL("CREATE INDEX IF NOT EXISTS hayai_eh_sync_conflicts_run ON hayai_eh_sync_conflicts(run_id, resolution)")
++            ensureColumn(db, "hayai_eh_sync_runs", "remote_fingerprint", "TEXT")
++            ensureColumn(db, "hayai_eh_sync_runs", "expected_fingerprint", "TEXT")
++            db.execSQL(
++                "INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (3, ?)",
++                arrayOf(System.currentTimeMillis()),
++            )
++            if (ownsTransaction) db.setTransactionSuccessful()
++        } finally {
++            if (ownsTransaction) db.endTransaction()
++        }
++    }
++
+     private fun createEhPersistenceTables(db: SupportSQLiteDatabase) {
+         db.execSQL(
+             """
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+index 47d0546965989e00b18230e6ee6cf1ba84788940..88ded18efca45159b2df07137b8b09fa3e62e017 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+@@ -14,6 +14,10 @@ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsRemote
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
+ import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUConfigHttpRemote
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesHttpRemote
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesRemote
++import dev.ahmedmohamed.hayai.adult.eh.favorites.EhFavoritesSyncService
++import dev.ahmedmohamed.hayai.adult.eh.favorites.J2kEhFavoritesLocal
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
+@@ -75,6 +79,9 @@ class AppModule(
+         addSingletonFactory { EhHttpGateway(get<NetworkHelper>().client, get()) }
+         addSingletonFactory<EhRemoteSettingsRemote> { EhUConfigHttpRemote(get<NetworkHelper>().client) }
+         addSingletonFactory { EhRemoteSettingsUploader(get(), get(), get()) }
++        addSingletonFactory<EhFavoritesRemote> { EhFavoritesHttpRemote(get<NetworkHelper>().client, get()) }
++        addSingletonFactory { J2kEhFavoritesLocal(get(), get(), get()) }
++        addSingletonFactory { EhFavoritesSyncService(get(), get(), get(), get()) }
+         addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
+         addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
+         addSingletonFactory { SourceManager(app, get(), get(), get()) }
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteRecoveryTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteRecoveryTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7c83457303d9835aa80a19f36eeef11dae13442f
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoriteRecoveryTest.kt
+@@ -0,0 +1,25 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhFavoriteRecoveryTest {
++    private val gallery = EhGalleryIdentity("1", "token")
++    private val before = EhFavoriteState(gallery, "Title", EhFavoriteSlot(1))
++    private val after = before.copy(category = EhFavoriteSlot(4))
++
++    @Test
++    fun `process death after remote mutation observes postcondition without repeating post`() {
++        assertEquals(EhRemoteRecoveryDecision.AlreadyApplied, EhFavoriteRecovery.decide(after, before, after))
++        assertEquals(EhRemoteRecoveryDecision.AlreadyApplied, EhFavoriteRecovery.decide(null, before, null))
++    }
++
++    @Test
++    fun `unchanged precondition executes and remote drift stops`() {
++        assertEquals(EhRemoteRecoveryDecision.Execute, EhFavoriteRecovery.decide(before, before, after))
++        val drift = before.copy(category = EhFavoriteSlot(7))
++        assertTrue(EhFavoriteRecovery.decide(drift, before, after) is EhRemoteRecoveryDecision.Conflict)
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesPlannerTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesPlannerTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f636390423172cf393da68436a52516337bf9217
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesPlannerTest.kt
+@@ -0,0 +1,75 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhFavoriteSnapshot
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhFavoritesPlannerTest {
++    private val planner = EhFavoritesPlanner()
++    private val aliases = EhGalleryAliasIndex(emptyList())
++    private val categories = (0..9).map { EhRemoteCategory(EhFavoriteSlot(it), "Category $it") }
++
++    @Test
++    fun `remote-only change becomes an atomic local operation`() {
++        val base = state(1, 0)
++        val remote = state(1, 2)
++
++        val plan = plan(listOf(base.toSnapshot()), mapOf(base.gallery to local(base)), mapOf(remote.gallery to remote))
++
++        assertEquals(listOf(EhFavoriteOperation.SetLocal::class), plan.operations.map { it::class })
++        assertEquals(EhFavoriteSlot(2), (plan.operations.single() as EhFavoriteOperation.SetLocal).desired.category)
++    }
++
++    @Test
++    fun `local-only change uploads in bidirectional mode`() {
++        val base = state(1, 0)
++        val local = state(1, 4)
++
++        val plan = plan(listOf(base.toSnapshot()), mapOf(local.gallery to local(local)), mapOf(base.gallery to base))
++
++        assertTrue(plan.operations.single() is EhFavoriteOperation.SetRemote)
++    }
++
++    @Test
++    fun `different local and remote changes require review`() {
++        val base = state(1, 0)
++        val local = state(1, 3)
++        val remote = state(1, 7)
++
++        val plan = plan(listOf(base.toSnapshot()), mapOf(local.gallery to local(local)), mapOf(remote.gallery to remote))
++
++        assertTrue(plan.operations.isEmpty())
++        assertTrue(plan.conflicts.single() is EhFavoriteConflict.BothChanged)
++    }
++
++    @Test
++    fun `remote operations are sequenced before local operations`() {
++        val localOnly = state(1, 1)
++        val remoteOnly = state(2, 2)
++        val plan = plan(emptyList(), mapOf(localOnly.gallery to local(localOnly)), mapOf(remoteOnly.gallery to remoteOnly))
++
++        assertTrue(plan.operations.first() is EhFavoriteOperation.SetRemote)
++        assertTrue(plan.operations.last() is EhFavoriteOperation.SetLocal)
++        assertEquals(listOf(0L, 1L), plan.operations.map { it.sequence })
++    }
++
++    private fun plan(
++        base: List<EhFavoriteSnapshot>,
++        local: Map<EhGalleryIdentity, EhLocalFavoriteState>,
++        remote: Map<EhGalleryIdentity, EhFavoriteState>,
++    ) = planner.plan(
++        base,
++        EhLocalFavoritesSnapshot(local),
++        EhRemoteFavoritesSnapshot(categories, remote, EhFavoritesFingerprint.create(categories, remote.values)),
++        aliases,
++        EhSyncRequest(EhFavoritesSyncMode.Bidirectional),
++        "run",
++    )
++
++    private fun state(id: Int, slot: Int) = EhFavoriteState(EhGalleryIdentity(id.toString(), "token$id"), "Gallery $id", EhFavoriteSlot(slot))
++    private fun local(state: EhFavoriteState) = EhLocalFavoriteState(setOf(state.gallery.gid.toLong()), state, emptySet())
++    private fun EhFavoriteState.toSnapshot() = EhFavoriteSnapshot(gallery, title, category.value)
++}
++
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesProtocolTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesProtocolTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..2f1f90fc6587ed2b6bbf2ad065130e81564cab3e
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesProtocolTest.kt
+@@ -0,0 +1,39 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertThrows
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhFavoritesProtocolTest {
++    @Test
++    fun `category parser requires all ten remote slots`() {
++        val html = (0..9).joinToString("", prefix = "<div>", postfix = "</div>") {
++            "<div class='fp'><span></span><span></span><span>Category $it</span></div>"
++        }
++
++        val categories = EhFavoritesHtmlParser.categories(html)
++
++        assertEquals((0..9).toList(), categories.map { it.slot.value })
++        assertThrows(IllegalArgumentException::class.java) { EhFavoritesHtmlParser.categories(html.replace("Category 9", "")) }
++    }
++
++    @Test
++    fun `favorite note parser preserves text`() {
++        assertEquals("Keep this note", EhFavoritesHtmlParser.existingNote("<textarea name='favnote'>Keep this note</textarea>"))
++    }
++
++    @Test
++    fun `journal operation codec round trips remote preconditions`() {
++        val gallery = EhGalleryIdentity("12", "token")
++        val expected = EhFavoriteState(gallery, "Title", EhFavoriteSlot(1))
++        val desired = expected.copy(category = EhFavoriteSlot(4))
++        val operation = EhFavoriteOperation.SetRemote("operation", 7, gallery, expected, desired)
++
++        val restored = EhFavoriteOperationCodec.decode(EhFavoriteOperationCodec.kind(operation), EhFavoriteOperationCodec.encode(operation))
++
++        assertEquals(operation, restored)
++        assertTrue(EhFavoriteOperationCodec.encode(operation).length < 1_048_576)
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhGalleryAliasIndexTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhGalleryAliasIndexTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..6a381706bbb0d9135d60d0242b35b6099df4e8b3
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhGalleryAliasIndexTest.kt
+@@ -0,0 +1,37 @@
++package dev.ahmedmohamed.hayai.adult.eh.favorites
++
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryAlias
++import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertThrows
++import org.junit.Test
++
++class EhGalleryAliasIndexTest {
++    @Test
++    fun `alias chains converge on one canonical gallery`() {
++        val canonical = gallery(1)
++        val middle = gallery(2)
++        val alternate = gallery(3)
++        val index = EhGalleryAliasIndex(listOf(EhGalleryAlias(canonical, middle), EhGalleryAlias(middle, alternate)))
++
++        assertEquals(canonical, index.canonical(alternate))
++        assertEquals(setOf(canonical, middle, alternate), index.equivalents(alternate))
++    }
++
++    @Test
++    fun `cycles and conflicting owners are rejected`() {
++        val first = gallery(1)
++        val second = gallery(2)
++        val third = gallery(3)
++
++        assertThrows(IllegalArgumentException::class.java) {
++            EhGalleryAliasIndex(listOf(EhGalleryAlias(first, second), EhGalleryAlias(second, first)))
++        }
++        assertThrows(IllegalArgumentException::class.java) {
++            EhGalleryAliasIndex(listOf(EhGalleryAlias(first, third), EhGalleryAlias(second, third)))
++        }
++    }
++
++    private fun gallery(id: Int) = EhGalleryIdentity(id.toString(), "token$id")
++}
++
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt
+index 1a2de90cb7dc288ceaa7b4d3766ee322fc1ab61b..6e3fff6aea052029b64af8d1794d3758850932f2 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt
+@@ -32,6 +32,7 @@ class HayaiBackupDataTest {
+                 chapterStats = listOf(HayaiBackupChapterStat(7, "/novel", "/chapter", 900)),
+                 ehFavorites = listOf(HayaiBackupEhFavorite("1", "token", "Gallery", 2)),
+                 ehGalleryAliases = listOf(HayaiBackupEhGalleryAlias("1", "token", "2", "replacement")),
++                ehCategoryMappings = listOf(HayaiBackupEhCategoryMapping(2, "Remote", "Remote (E-Hentai)")),
+                 sourceMetadata =
+                     listOf(
+                         HayaiBackupSourceMetadata(
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 17533bfa3798537ced1845f82d818b2d0659124b..0b8686e47c5d136720cae89263548264b8970ce5 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -48,7 +48,9 @@ Source badges use a Hayai-owned presentation resolver. The browse list and both
+ 
+ Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, and normal URLs to the installed extension. Hayai adds host-validated direct URL import and bounded detail enrichment for 8Muses, HBrowse, Pururin, NHentai, MangaDex, and LANraragi. A parser or secondary request failure returns the extension result. It never removes a usable source. `HttpSource.headers` is open so a wrapper can preserve extension authentication and request headers without copying them.
+ 
+-E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category and language strings fall back to safe defaults. Remote uconfig uses a Hayai-owned typed settings model and an idempotent per-site profile upsert. It reuses Hayai and legacy SY application profiles, creates only in slots 1 through 3, commits cookies and the selected slot only after a verified apply, and reports partial two-site results for targeted retry. The settings activity owns the complete matrix and explicit upload flow. Favorites sync and the gallery update worker remain separate ports.
++E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category and language strings fall back to safe defaults. Remote uconfig uses a Hayai-owned typed settings model and an idempotent per-site profile upsert. It reuses Hayai and legacy SY application profiles, creates only in slots 1 through 3, commits cookies and the selected slot only after a verified apply, and reports partial two-site results for targeted retry. The settings activity owns the complete matrix and explicit upload flow. The gallery update worker remains a separate port.
++
++Favorites synchronization uses a persisted three-way plan over the last completed Hayai snapshot, current J2K library state, and a bounded ExHentai snapshot. Remote mutations are journaled and executed before local mutations, use expected preconditions, preserve existing favorite notes during category moves, and verify their postconditions. Local favorite and category changes remain J2K-owned and transition the journal in the same database transaction. Ten explicit slot-to-category mappings prevent remote positions from renaming arbitrary J2K categories, while unrelated categories are retained. Alias components are canonicalized before comparison, ambiguous duplicates and multiple mapped categories become review conflicts, cancellation leaves an active resumable run, and the final remote fingerprint is verified before atomically advancing the baseline and checkpoint. The gallery update worker remains a separate port.
+ 
+ Recents source visibility uses one Hayai-owned policy seam. History and Updates retain independent
+ sets under the legacy Hayai preference keys; Grouped and All derive the union. The presenter takes
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index b7d8caf8070a50f45da2ed50348bc86834b7606f..9bb37eb1ef1a5e3239ba357d087f6066594733d1 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -13,7 +13,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; emulator login pending |
+ | EH source settings, default filters, enhanced details toggle, and remote uconfig | Typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
+-| EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
++| EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, watched-tags UI, and pending updater work | favorites sync implemented unverified; gallery updater audit |
+ | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic manga-details feature seam | foundation verified; emulator details flow pending |
+ | 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | URL import and detail foundation verified; source-specific parity audit |
+ | Custom descriptions, open-in-app, batch-add, related/recommendations | Capability-provided source actions | direct URL and description foundation; batch and relationship actions audit |
+-- 
+2.54.0.windows.1
+

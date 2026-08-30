@@ -1,0 +1,3164 @@
+From ac32043034f94311889b90c07d6d1a6bc5e69d42 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 13:05:11 +0300
+Subject: [PATCH] fix: unify extension management
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/ApkLoadFailure.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/ApkLoadFailure.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d30402e3d3604bdb70286de2a244f7885f269ac5
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/ApkLoadFailure.kt
+@@ -0,0 +1,23 @@
++package dev.ahmedmohamed.hayai.extension
++
++data class ApkLoadFailure(
++    val packageName: String,
++    val displayName: String = packageName,
++    val versionName: String? = null,
++    val reason: Reason = Reason.Unknown,
++) {
++    enum class Reason {
++        PackageMissing,
++        VersionMissing,
++        UnsupportedLibrary,
++        UnsupportedManifest,
++        Unsigned,
++        AdultSourcesDisabled,
++        ClassLoader,
++        ClassMetadata,
++        SourceConstruction,
++        EmptySources,
++        NovelContract,
++        Unknown,
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconciler.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconciler.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a9f3325e6812af6bea7fa8a9f50258bd980feb05
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconciler.kt
+@@ -0,0 +1,28 @@
++package dev.ahmedmohamed.hayai.extension
++
++import eu.kanade.tachiyomi.extension.model.Extension
++
++/**
++ * Gives every APK-extension consumer the same package and version decision.
++ *
++ * Repositories may publish the same package. Selecting different copies for the
++ * list, update check, and installer leaves an update permanently pending.
++ */
++object ExtensionCatalogReconciler {
++    fun newestCopies(extensions: List<Extension.Available>): List<Extension.Available> =
++        extensions
++            .groupBy(Extension.Available::pkgName)
++            .values
++            .map { copies ->
++                copies.maxWith(
++                    compareBy<Extension.Available>(Extension.Available::versionCode)
++                        .thenBy(Extension.Available::libVersion)
++                        .thenBy(Extension.Available::repoUrl),
++                )
++            }
++
++    fun hasUpdate(
++        installed: Extension.Installed,
++        available: Extension.Available,
++    ): Boolean = available.versionCode > installed.versionCode || available.libVersion > installed.libVersion
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f89e3a6a2213ead5ed1a254aea725253ed39c946
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt
+@@ -0,0 +1,76 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++import android.graphics.drawable.Drawable
++import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import eu.kanade.tachiyomi.extension.model.Extension
++
++sealed interface ManagedExtensionKey {
++    val stableValue: String
++
++    data class Apk(val packageName: String) : ManagedExtensionKey {
++        override val stableValue: String = "apk:$packageName"
++    }
++
++    data class Js(val pluginId: String) : ManagedExtensionKey {
++        override val stableValue: String = "js:$pluginId"
++    }
++}
++
++enum class ManagedExtensionBackend { Apk, JavaScript }
++
++enum class ManagedInstallation { Available, Installed, Untrusted }
++
++enum class ManagedUpdate { None, Available }
++
++sealed interface ManagedHealth {
++    data object Ready : ManagedHealth
++
++    data class LoadFailed(val diagnostic: String) : ManagedHealth
++}
++
++data class ManagedExtensionEntry(
++    val key: ManagedExtensionKey,
++    val backend: ManagedExtensionBackend,
++    val name: String,
++    val language: String?,
++    val installedVersion: String?,
++    val availableVersion: String?,
++    val installation: ManagedInstallation,
++    val update: ManagedUpdate,
++    val health: ManagedHealth,
++    val contentKinds: Set<ContentKind>,
++    val isNsfw: Boolean,
++    val installedIcon: Drawable? = null,
++    val iconUrl: String? = null,
++    val websiteUrl: String? = null,
++) {
++    val hasUpdate: Boolean get() = update == ManagedUpdate.Available
++}
++
++data class ApkExtensionSnapshot(
++    val installed: List<Extension.Installed>,
++    val untrusted: List<Extension.Untrusted>,
++    val available: List<Extension.Available>,
++    val failures: List<ApkLoadFailure>,
++)
++
++data class ManagedExtensionFilter(
++    val enabledLanguages: Set<String>,
++    val showNsfwSources: Boolean,
++)
++
++data class ManagedExtensionNotice(
++    val identity: String,
++    val diagnostic: String,
++)
++
++data class ManagedExtensionState(
++    val updates: List<ManagedExtensionEntry>,
++    val installed: List<ManagedExtensionEntry>,
++    val available: List<ManagedExtensionEntry>,
++    val notices: List<ManagedExtensionNotice>,
++    val refreshing: Boolean,
++) {
++    val entries: List<ManagedExtensionEntry> get() = updates + installed + available
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..35180520af1d98d05a6bc837bc5198de971fec8a
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt
+@@ -0,0 +1,146 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginVersions
++import eu.kanade.tachiyomi.extension.model.Extension
++import eu.kanade.tachiyomi.source.isNovelSource
++
++object ManagedExtensionProjector {
++    fun project(
++        apk: ApkExtensionSnapshot,
++        js: NovelPluginCatalog,
++        filter: ManagedExtensionFilter,
++    ): ManagedExtensionState {
++        val apkAvailable = apk.available.associateBy(Extension.Available::pkgName)
++        val jsAvailable = js.available.associateBy { it.id }
++        val jsInstalled = js.installed.associateBy { it.descriptor.id }
++
++        val entries = buildList {
++            apk.installed.forEach { installed ->
++                val available = apkAvailable[installed.pkgName]
++                add(
++                    ManagedExtensionEntry(
++                        key = ManagedExtensionKey.Apk(installed.pkgName),
++                        backend = ManagedExtensionBackend.Apk,
++                        name = installed.name,
++                        language = installed.lang,
++                        installedVersion = installed.versionName,
++                        availableVersion = available?.versionName,
++                        installation = ManagedInstallation.Installed,
++                        update = if (installed.hasUpdate) ManagedUpdate.Available else ManagedUpdate.None,
++                        health = ManagedHealth.Ready,
++                        contentKinds = installed.contentKinds(),
++                        isNsfw = installed.isNsfw,
++                        installedIcon = installed.icon,
++                        websiteUrl = available?.sources?.firstOrNull { it.baseUrl.isNotBlank() }?.baseUrl,
++                    ),
++                )
++            }
++            apk.untrusted.forEach { extension ->
++                add(
++                    ManagedExtensionEntry(
++                        key = ManagedExtensionKey.Apk(extension.pkgName),
++                        backend = ManagedExtensionBackend.Apk,
++                        name = extension.name,
++                        language = extension.lang,
++                        installedVersion = extension.versionName,
++                        availableVersion = apkAvailable[extension.pkgName]?.versionName,
++                        installation = ManagedInstallation.Untrusted,
++                        update = ManagedUpdate.None,
++                        health = ManagedHealth.Ready,
++                        contentKinds = setOf(if (extension.isNovel) ContentKind.Novel else ContentKind.Manga),
++                        isNsfw = extension.isNsfw,
++                    ),
++                )
++            }
++            apk.failures.forEach { failure ->
++                val available = apkAvailable[failure.packageName]
++                add(
++                    ManagedExtensionEntry(
++                        key = ManagedExtensionKey.Apk(failure.packageName),
++                        backend = ManagedExtensionBackend.Apk,
++                        name = failure.displayName,
++                        language = available?.lang,
++                        installedVersion = failure.versionName,
++                        availableVersion = available?.versionName,
++                        installation = ManagedInstallation.Installed,
++                        update = ManagedUpdate.None,
++                        health = ManagedHealth.LoadFailed(failure.reason.name),
++                        contentKinds = setOf(if (available?.isNovel == true) ContentKind.Novel else ContentKind.Manga),
++                        isNsfw = available?.isNsfw == true,
++                        iconUrl = available?.iconUrl,
++                    ),
++                )
++            }
++            apk.available
++                .filterNot { extension ->
++                    apk.installed.any { it.pkgName == extension.pkgName } ||
++                        apk.untrusted.any { it.pkgName == extension.pkgName } ||
++                        apk.failures.any { it.packageName == extension.pkgName }
++                }.filter { it.lang in filter.enabledLanguages && (filter.showNsfwSources || !it.isNsfw) }
++                .forEach { extension ->
++                    add(
++                        ManagedExtensionEntry(
++                            key = ManagedExtensionKey.Apk(extension.pkgName),
++                            backend = ManagedExtensionBackend.Apk,
++                            name = extension.name,
++                            language = extension.lang,
++                            installedVersion = null,
++                            availableVersion = extension.versionName,
++                            installation = ManagedInstallation.Available,
++                            update = ManagedUpdate.None,
++                            health = ManagedHealth.Ready,
++                            contentKinds = setOf(if (extension.isNovel) ContentKind.Novel else ContentKind.Manga),
++                            isNsfw = extension.isNsfw,
++                            iconUrl = extension.iconUrl,
++                            websiteUrl = extension.sources.firstOrNull { it.baseUrl.isNotBlank() }?.baseUrl,
++                        ),
++                    )
++                }
++
++            (jsAvailable.keys + jsInstalled.keys).forEach { id ->
++                val installed = jsInstalled[id]
++                val available = jsAvailable[id]
++                val descriptor = available ?: installed?.descriptor ?: return@forEach
++                if (installed == null && descriptor.normalizedLanguage() !in filter.enabledLanguages) return@forEach
++                val origin = js.availableOrigins[id] ?: installed?.repositoryUrl
++                val hasUpdate = installed != null && available != null && NovelPluginVersions.compare(available.version, installed.descriptor.version) > 0
++                add(
++                    ManagedExtensionEntry(
++                        key = ManagedExtensionKey.Js(id),
++                        backend = ManagedExtensionBackend.JavaScript,
++                        name = descriptor.name,
++                        language = descriptor.normalizedLanguage(),
++                        installedVersion = installed?.descriptor?.version,
++                        availableVersion = available?.version,
++                        installation = if (installed == null) ManagedInstallation.Available else ManagedInstallation.Installed,
++                        update = if (hasUpdate) ManagedUpdate.Available else ManagedUpdate.None,
++                        health = js.runtimeErrors[id]?.let { ManagedHealth.LoadFailed(it.message ?: it::class.java.simpleName) } ?: ManagedHealth.Ready,
++                        contentKinds = setOf(ContentKind.Novel),
++                        isNsfw = false,
++                        iconUrl = origin?.let { runCatching { descriptor.resolvedIconUrl(it) }.getOrNull() },
++                        websiteUrl = descriptor.site.takeIf(String::isNotBlank),
++                    ),
++                )
++            }
++        }.distinctBy { it.key }
++
++        val comparator = compareBy<ManagedExtensionEntry>({ it.name.lowercase() }, { it.key.stableValue })
++        val notices = buildList {
++            js.repositoryErrors.forEach { (url, error) -> add(ManagedExtensionNotice("js-repository:$url", error.message ?: error::class.java.simpleName)) }
++        }
++        return ManagedExtensionState(
++            updates = entries.filter { it.hasUpdate }.sortedWith(comparator),
++            installed = entries.filter { !it.hasUpdate && it.installation != ManagedInstallation.Available }.sortedWith(comparator),
++            available = entries.filter { it.installation == ManagedInstallation.Available }.sortedWith(comparator),
++            notices = notices,
++            refreshing = js.refreshing,
++        )
++    }
++
++    private fun Extension.Installed.contentKinds(): Set<ContentKind> =
++        sources.map { if (it.isNovelSource()) ContentKind.Novel else ContentKind.Manga }
++            .toSet()
++            .ifEmpty { setOf(if (isNovel) ContentKind.Novel else ContentKind.Manga) }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..bcd01bfe29ce47fd0d885101dfb922996402651a
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt
+@@ -0,0 +1,138 @@
++package dev.ahmedmohamed.hayai.extension.managed.ui
++
++import android.text.InputType
++import android.widget.EditText
++import android.widget.LinearLayout
++import androidx.appcompat.app.AlertDialog
++import androidx.preference.PreferenceCategory
++import androidx.preference.PreferenceScreen
++import androidx.preference.SwitchPreferenceCompat
++import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginRepository
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import eu.kanade.tachiyomi.ui.setting.onChange
++import eu.kanade.tachiyomi.ui.setting.onClick
++import eu.kanade.tachiyomi.ui.setting.preference
++import eu.kanade.tachiyomi.ui.setting.preferenceCategory
++import eu.kanade.tachiyomi.ui.setting.switchPreference
++import eu.kanade.tachiyomi.ui.setting.titleRes
++import eu.kanade.tachiyomi.util.system.materialAlertDialog
++import eu.kanade.tachiyomi.util.system.toast
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.collectLatest
++import kotlinx.coroutines.launch
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++
++class NovelPluginRepositoryController : SettingsController() {
++    private val manager: NovelPluginManager = Injekt.get()
++    private lateinit var repositories: PreferenceCategory
++    private var collectionJob: Job? = null
++    private var busy = false
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
++        titleRes = R.string.hayai_novel_plugins
++        preferenceCategory {
++            preference {
++                title = context.getString(R.string.refresh)
++                summary = context.getString(R.string.hayai_novel_plugins_security_summary)
++                onClick { runAction { manager.refresh() } }
++            }
++            preference {
++                title = context.getString(R.string.add)
++                summary = context.getString(R.string.hayai_add_novel_repository)
++                onClick { showAddRepository() }
++            }
++        }
++        repositories = preferenceCategory { title = context.getString(R.string.hayai_novel_repositories) }
++        collectionJob = viewScope.launch {
++            manager.catalog.collectLatest { catalog ->
++                repositories.removeAll()
++                if (catalog.repositories.isEmpty()) {
++                    repositories.preference {
++                        summary = context.getString(R.string.hayai_no_novel_repositories)
++                        isSelectable = false
++                    }
++                }
++                catalog.repositories.forEach(::addRepository)
++                catalog.repositoryErrors.values.firstOrNull()?.let { context.toast(context.novelFailureMessage(it, R.string.unknown_error)) }
++            }
++        }
++        runAction { manager.refresh() }
++    }
++
++    override fun onDestroy() {
++        collectionJob?.cancel()
++        super.onDestroy()
++    }
++
++    private fun addRepository(repository: NovelPluginRepository) {
++        repositories.switchPreference {
++            key = "hayai.plugin.repository.${repository.url.hashCode()}"
++            title = repository.name
++            summary = repository.url
++            isChecked = repository.enabled
++            isPersistent = false
++            isEnabled = !busy
++            onChange { enabled ->
++                runAction {
++                    manager.setRepositoryEnabled(repository.url, enabled as Boolean)
++                    manager.refresh()
++                }
++                false
++            }
++        }
++        repositories.preference {
++            title = requireNotNull(activity).getString(R.string.hayai_remove_named_item, repository.name)
++            summary = requireNotNull(activity).getString(R.string.remove)
++            onClick {
++                activity?.materialAlertDialog()
++                    ?.setTitle(R.string.remove)
++                    ?.setMessage(activity?.getString(R.string.hayai_remove_repository_confirmation, repository.name))
++                    ?.setNegativeButton(android.R.string.cancel, null)
++                    ?.setPositiveButton(R.string.remove) { _, _ -> runAction { manager.removeRepository(repository.url); manager.refresh() } }
++                    ?.show()
++            }
++        }
++    }
++
++    private fun showAddRepository() {
++        val context = activity ?: return
++        val form = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
++        val name = EditText(context).apply { setHint(R.string.name) }
++        val url = EditText(context).apply {
++            setHint(R.string.hayai_novel_plugin_repository_url_hint)
++            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
++        }
++        form.addView(name)
++        form.addView(url)
++        val dialog = context.materialAlertDialog()
++            .setTitle(R.string.hayai_add_novel_repository)
++            .setMessage(R.string.hayai_novel_repository_trust_warning)
++            .setView(form)
++            .setNegativeButton(android.R.string.cancel, null)
++            .setPositiveButton(R.string.add, null)
++            .create()
++        dialog.setOnShowListener {
++            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
++                viewScope.launch {
++                    runCatching { manager.addRepository(name.text.toString(), url.text.toString()); manager.refresh() }
++                        .onSuccess { dialog.dismiss() }
++                        .onFailure { url.error = context.novelFailureMessage(it, R.string.unknown_error) }
++                }
++            }
++        }
++        dialog.show()
++    }
++
++    private fun runAction(action: suspend () -> Any?) {
++        if (busy) return
++        busy = true
++        viewScope.launch {
++            runCatching { action() }.onFailure { activity?.toast(activity?.novelFailureMessage(it, R.string.unknown_error).orEmpty()) }
++            busy = false
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
+index 4adb73b99cb1b04478d797f1628a417573c2bc71..40d826b277b5ccfec5a82c23dd8c7842740b89e6 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt
+@@ -1,21 +1,7 @@
+ package dev.ahmedmohamed.hayai.novel.extension
+ 
+ import android.content.Context
+-import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+-import dev.ahmedmohamed.hayai.novel.error.novelFailure
+-import dev.ahmedmohamed.hayai.novel.error.novelRequire
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+-import eu.kanade.tachiyomi.extension.ExtensionManager
+-import eu.kanade.tachiyomi.extension.model.Extension
+-import eu.kanade.tachiyomi.source.isNovelSource
+-import eu.kanade.tachiyomi.ui.extension.ExtensionIntallInfo
+-import kotlinx.coroutines.CoroutineScope
+-import kotlinx.coroutines.flow.Flow
+-import kotlinx.coroutines.flow.MutableStateFlow
+-import kotlinx.coroutines.flow.StateFlow
+-import kotlinx.coroutines.flow.asStateFlow
+-import kotlinx.coroutines.flow.combine
+-import kotlinx.coroutines.launch
+ 
+ interface NovelApkRepositoryRegistry {
+     suspend fun repositories(): Set<String>
+@@ -96,99 +82,3 @@ class J2kNovelApkRepositoryRegistry(context: Context, private val preferences: P
+         const val OWNED_KEY = "owned_global_urls_v1"
+     }
+ }
+-
+-data class NovelApkExtensionCatalog(
+-    val updates: List<Extension.Available> = emptyList(),
+-    val installed: List<Extension.Installed> = emptyList(),
+-    val available: List<Extension.Available> = emptyList(),
+-    val untrusted: List<Extension.Untrusted> = emptyList(),
+-    val repositories: Set<String> = emptySet(),
+-    val refreshing: Boolean = false,
+-    val error: Throwable? = null,
+-)
+-
+-class NovelApkExtensionManager(
+-    private val j2k: ExtensionManager,
+-    private val repositories: NovelApkRepositoryRegistry,
+-    scope: CoroutineScope,
+-) {
+-    private val _catalog = MutableStateFlow(NovelApkExtensionCatalog())
+-    val catalog: StateFlow<NovelApkExtensionCatalog> = _catalog.asStateFlow()
+-
+-    init {
+-        scope.launch {
+-            combine(
+-                j2k.installedExtensionsFlow,
+-                j2k.availableExtensionsFlow,
+-                j2k.untrustedExtensionsFlow,
+-            ) { installed, available, untrusted ->
+-                Triple(installed, available, untrusted)
+-            }
+-                .collect { (installed, available, untrusted) -> rebuild(installed, available, untrusted) }
+-        }
+-    }
+-
+-    suspend fun refresh() {
+-        _catalog.value = _catalog.value.copy(refreshing = true, error = null)
+-        runCatching { j2k.findAvailableExtensions() }.onFailure {
+-            _catalog.value = _catalog.value.copy(error = NovelFailure(NovelFailure.Code.ExtensionCatalogRefresh, cause = it))
+-        }
+-        rebuild(j2k.installedExtensionsFlow.value, j2k.availableExtensionsFlow.value, j2k.untrustedExtensionsFlow.value)
+-        _catalog.value = _catalog.value.copy(refreshing = false)
+-    }
+-
+-    suspend fun addRepository(indexUrl: String) {
+-        validateRepositoryUrl(indexUrl); repositories.add(indexUrl); refresh()
+-    }
+-    suspend fun removeRepository(indexUrl: String) {
+-        repositories.remove(indexUrl)
+-        refresh()
+-    }
+-
+-    suspend fun install(extension: Extension.Available, scope: CoroutineScope): Flow<ExtensionIntallInfo> {
+-        novelRequire(extension in _catalog.value.available || extension in _catalog.value.updates, NovelFailure.Code.ExtensionNotConfigured)
+-        return j2k.installExtension(ExtensionManager.ExtensionInfo(extension), scope)
+-    }
+-
+-    suspend fun update(extension: Extension.Installed, scope: CoroutineScope): Flow<ExtensionIntallInfo> {
+-        val available = _catalog.value.updates.firstOrNull { it.pkgName == extension.pkgName } ?: novelFailure(NovelFailure.Code.ExtensionNoUpdate)
+-        return j2k.installExtension(ExtensionManager.ExtensionInfo(available), scope)
+-    }
+-
+-    fun remove(extension: Extension.Installed) {
+-        require(extension in _catalog.value.installed)
+-        j2k.uninstallExtension(extension.pkgName)
+-    }
+-
+-    fun trust(extension: Extension.Untrusted) {
+-        require(extension in _catalog.value.untrusted)
+-        j2k.trust(extension.pkgName, extension.versionCode, extension.signatureHash)
+-    }
+-
+-    private suspend fun rebuild(installed: List<Extension.Installed>, available: List<Extension.Available>, untrusted: List<Extension.Untrusted>) {
+-        val repos = repositories.repositories()
+-        val installedNovel = installed.filter { extension -> extension.sources.any { it.isNovelSource() } }
+-        val installedPackages = installedNovel.mapTo(mutableSetOf(), Extension.Installed::pkgName)
+-        val fromNovelRepos = available.filter { extension -> repos.any { sameRepository(it, extension.repoUrl) } || extension.pkgName in installedPackages }
+-        val updates = fromNovelRepos.filter { remote -> installedNovel.any { it.pkgName == remote.pkgName && remote.versionCode > it.versionCode } }
+-        val availableOnly = fromNovelRepos.filter { remote -> installedNovel.none { it.pkgName == remote.pkgName } }
+-        val untrustedNovel = untrusted.filter { it.pkgName in fromNovelRepos.map(Extension.Available::pkgName) || it.pkgName.contains(".novel.") }
+-        _catalog.value = _catalog.value.copy(
+-            updates = updates.sortedBy { it.name },
+-            installed = installedNovel.sortedBy { it.name },
+-            available = availableOnly.sortedBy { it.name },
+-            untrusted = untrustedNovel.sortedBy { it.name },
+-            repositories = repos,
+-        )
+-    }
+-
+-    private fun sameRepository(configured: String, actual: String): Boolean =
+-        configured.trimEnd('/').equals(actual.trimEnd('/'), true) ||
+-            actual.startsWith(configured.substringBeforeLast('/').trimEnd('/') + "/")
+-
+-    private fun validateRepositoryUrl(value: String) {
+-        val uri = runCatching { java.net.URI(value) }.getOrNull()
+-        novelRequire(uri?.scheme == "https" && uri.host != null && uri.userInfo == null, NovelFailure.Code.ExtensionRepositoryHttps)
+-        require(value.length <= 8_192)
+-    }
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerController.kt
+deleted file mode 100644
+index 812a9270351e5db924561e30de610ef2e363d9d6..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerController.kt
++++ /dev/null
+@@ -1,163 +0,0 @@
+-package dev.ahmedmohamed.hayai.novel.extension
+-
+-import androidx.preference.Preference
+-import androidx.preference.PreferenceCategory
+-import androidx.preference.PreferenceScreen
+-import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+-import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.extension.model.Extension
+-import eu.kanade.tachiyomi.extension.model.InstallStep
+-import eu.kanade.tachiyomi.ui.setting.SettingsController
+-import eu.kanade.tachiyomi.ui.setting.onClick
+-import eu.kanade.tachiyomi.ui.setting.preference
+-import eu.kanade.tachiyomi.ui.setting.preferenceCategory
+-import eu.kanade.tachiyomi.ui.setting.titleRes
+-import eu.kanade.tachiyomi.ui.source.browse.repos.RepoController
+-import eu.kanade.tachiyomi.util.system.materialAlertDialog
+-import eu.kanade.tachiyomi.util.view.withFadeTransaction
+-import kotlinx.coroutines.CancellationException
+-import kotlinx.coroutines.Job
+-import kotlinx.coroutines.flow.collect
+-import kotlinx.coroutines.launch
+-import uy.kohesive.injekt.Injekt
+-import uy.kohesive.injekt.api.get
+-
+-class NovelApkExtensionManagerController : SettingsController() {
+-    private val manager: NovelApkExtensionManager = Injekt.get()
+-    private lateinit var status: Preference
+-    private lateinit var cancelInstall: Preference
+-    private lateinit var updates: PreferenceCategory
+-    private lateinit var installed: PreferenceCategory
+-    private lateinit var available: PreferenceCategory
+-    private lateinit var untrusted: PreferenceCategory
+-    private var installJob: Job? = null
+-
+-    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
+-        titleRes = R.string.hayai_novel_extensions_title
+-        preferenceCategory {
+-            status = preference { isSelectable = false }
+-            preference {
+-                title = context.getString(R.string.refresh)
+-                onClick { launchAction { manager.refresh() } }
+-            }
+-            preference {
+-                title = context.getString(R.string.hayai_novel_extension_repos)
+-                onClick { router.pushController(RepoController(ContentKind.Novel).withFadeTransaction()) }
+-            }
+-            cancelInstall = preference {
+-                title = context.getString(R.string.hayai_cancel_installation)
+-                isEnabled = false
+-                onClick { installJob?.cancel(CancellationException()) }
+-            }
+-        }
+-        updates = preferenceCategory { title = context.getString(R.string.updates) }
+-        installed = preferenceCategory { title = context.getString(R.string.installed) }
+-        available = preferenceCategory { title = context.getString(R.string.hayai_available) }
+-        untrusted = preferenceCategory { title = context.getString(R.string.untrusted) }
+-
+-        viewScope.launch { manager.catalog.collect(::render) }
+-        launchAction { manager.refresh() }
+-    }
+-
+-    private fun render(state: NovelApkExtensionCatalog) {
+-        val context = activity ?: return
+-        status.summary = state.error?.let { context.novelFailureMessage(it, R.string.hayai_unknown_installer_error) }
+-            ?: if (state.refreshing) {
+-                context.getString(R.string.hayai_refreshing)
+-            } else {
+-                context.getString(R.string.hayai_novel_extension_catalog_status, state.installed.size, state.updates.size)
+-            }
+-        updates.removeAll()
+-        installed.removeAll()
+-        available.removeAll()
+-        untrusted.removeAll()
+-        state.updates.forEach { extension -> updates.extensionPreference(extension, R.string.update) { install(extension) } }
+-        state.installed.forEach { extension -> installed.extensionPreference(extension, R.string.remove) { confirmRemove(extension) } }
+-        state.available.forEach { extension -> available.extensionPreference(extension, R.string.install) { install(extension) } }
+-        state.untrusted.forEach { extension ->
+-            untrusted.extensionPreference(extension, R.string.hayai_trust_signature) { confirmTrust(extension) }
+-        }
+-        updates.isVisible = state.updates.isNotEmpty()
+-        installed.isVisible = state.installed.isNotEmpty()
+-        available.isVisible = state.available.isNotEmpty()
+-        untrusted.isVisible = state.untrusted.isNotEmpty()
+-    }
+-
+-    private fun PreferenceCategory.extensionPreference(extension: Extension, action: Int, click: () -> Unit) {
+-        preference {
+-            title = extension.name
+-            summary = context.getString(action)
+-            onClick(click)
+-        }
+-    }
+-
+-    private fun install(extension: Extension.Available) {
+-        if (installJob?.isActive == true) return
+-        val context = activity ?: return
+-        installJob = viewScope.launch {
+-            cancelInstall.isEnabled = true
+-            try {
+-                var terminal = false
+-                manager.install(extension, this).collect { info ->
+-                    terminal = info.first.isCompleted()
+-                    status.summary = when (info.first) {
+-                        InstallStep.Error -> context.getString(R.string.hayai_extension_install_failed, extension.name)
+-                        InstallStep.Installed, InstallStep.Done -> context.getString(R.string.hayai_extension_install_complete, extension.name)
+-                        else -> context.getString(R.string.hayai_extension_install_status, extension.name, installStepText(info.first))
+-                    }
+-                }
+-                if (!terminal) status.summary = context.getString(R.string.hayai_extension_install_stopped, extension.name)
+-            } catch (_: CancellationException) {
+-                status.summary = context.getString(R.string.hayai_extension_install_canceled, extension.name)
+-            } catch (error: Throwable) {
+-                status.summary = context.getString(
+-                    R.string.hayai_extension_install_error,
+-                    extension.name,
+-                    context.novelFailureMessage(error, R.string.hayai_unknown_installer_error),
+-                )
+-            } finally {
+-                cancelInstall.isEnabled = false
+-            }
+-        }
+-    }
+-
+-    private fun confirmTrust(extension: Extension.Untrusted) {
+-        val context = activity ?: return
+-        context.materialAlertDialog()
+-            .setTitle(R.string.hayai_trust_extension_signature_title)
+-            .setMessage(extension.signatureHash)
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.trust) { _, _ -> manager.trust(extension) }
+-            .show()
+-    }
+-
+-    private fun confirmRemove(extension: Extension.Installed) {
+-        val context = activity ?: return
+-        context.materialAlertDialog()
+-            .setTitle(context.getString(R.string.hayai_remove_named_item, extension.name))
+-            .setMessage(R.string.hayai_remove_extension_message)
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.remove) { _, _ -> manager.remove(extension) }
+-            .show()
+-    }
+-
+-    private fun launchAction(block: suspend () -> Unit) {
+-        val context = activity ?: return
+-        viewScope.launch {
+-            runCatching { block() }
+-                .onFailure { status.summary = context.novelFailureMessage(it, R.string.hayai_unknown_installer_error) }
+-        }
+-    }
+-
+-    private fun installStepText(step: InstallStep): String = requireNotNull(resources).getString(
+-        when (step) {
+-            InstallStep.Pending -> R.string.pending
+-            InstallStep.Downloading -> R.string.downloading
+-            InstallStep.Loading -> R.string.hayai_extension_install_loading
+-            InstallStep.Installing -> R.string.installing
+-            InstallStep.Installed, InstallStep.Done -> R.string.installed
+-            InstallStep.Error -> R.string.hayai_extension_install_failed_step
+-        },
+-    )
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+index 387defc565c0c709728faf0c915f5e7462647993..9d71672b39160b8d2454791893c7cbf4c3eede65 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+@@ -31,7 +31,9 @@ data class NovelPluginCatalog(
+     val available: List<NovelPluginDescriptor> = emptyList(),
+     val installed: List<InstalledNovelPlugin> = emptyList(),
+     val sources: List<NovelPluginSource> = emptyList(),
++    val availableOrigins: Map<String, String> = emptyMap(),
+     val repositoryErrors: Map<String, Throwable> = emptyMap(),
++    val runtimeErrors: Map<String, Throwable> = emptyMap(),
+     val refreshing: Boolean = false,
+ )
+ 
+@@ -57,7 +59,6 @@ class NovelPluginManager(
+             .build()
+     private val mutex = Mutex()
+     private val sourceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+-    private var availableOrigins: Map<String, String> = emptyMap()
+     private val _catalog = MutableStateFlow(loadLocal())
+     val catalog: StateFlow<NovelPluginCatalog> = _catalog.asStateFlow()
+ 
+@@ -85,12 +86,20 @@ class NovelPluginManager(
+                         .map { (_, versions) ->
+                             versions.maxWith { left, right -> NovelPluginVersions.compare(left.first.version, right.first.version) }
+                         }
+-                availableOrigins = availablePairs.associate { it.first.id to it.second }
++                val availableOrigins = availablePairs.associate { it.first.id to it.second }
+                 val available =
+                     availablePairs
+                         .map { it.first }
+                         .sortedWith(compareBy(NovelPluginDescriptor::normalizedLanguage, NovelPluginDescriptor::name))
+-                _catalog.value = rebuild(_catalog.value.copy(available = available, repositoryErrors = errors, refreshing = false))
++                _catalog.value =
++                    rebuild(
++                        _catalog.value.copy(
++                            available = available,
++                            availableOrigins = availableOrigins,
++                            repositoryErrors = errors,
++                            refreshing = false,
++                        ),
++                    )
+                 _catalog.value
+             } finally {
+                 if (_catalog.value.refreshing) _catalog.value = _catalog.value.copy(refreshing = false)
+@@ -129,7 +138,7 @@ class NovelPluginManager(
+     suspend fun install(pluginId: String): InstalledNovelPlugin =
+         mutex.withLock {
+             val descriptor = _catalog.value.available.firstOrNull { it.id == pluginId } ?: novelFailure(NovelFailure.Code.PluginUnavailable)
+-            val repositoryUrl = availableOrigins[pluginId] ?: novelFailure(NovelFailure.Code.PluginRefreshRequired)
++            val repositoryUrl = _catalog.value.availableOrigins[pluginId] ?: novelFailure(NovelFailure.Code.PluginRefreshRequired)
+             val bytes = download(descriptor.resolvedCodeUrl(repositoryUrl), NovelPluginStore.MAX_PLUGIN_BYTES)
+             val installed = installValidated(descriptor, repositoryUrl, bytes, replacementPreferences = null)
+             _catalog.value = rebuild(_catalog.value.copy(installed = store.installed()))
+@@ -187,20 +196,23 @@ class NovelPluginManager(
+ 
+     private fun rebuild(state: NovelPluginCatalog): NovelPluginCatalog {
+         val oldById = state.sources.associateBy(NovelPluginSource::pluginId)
+-        val sources =
+-            state.installed.mapNotNull { installed ->
+-                runCatching {
++        val results =
++            state.installed.map { installed ->
++                installed.descriptor.id to
++                    runCatching {
+                     store.rememberSource(installed.descriptor)
+                     oldById[installed.descriptor.id]?.takeIf { it.isSamePlugin(installed) }
+-                        ?: NovelPluginSource(installed, store.readCode(installed)).also { source ->
++                        ?: NovelPluginSource(appContext, installed, store.readCode(installed)).also { source ->
+                             sourceScope.launch {
+                                 runCatching { source.warmUp() }
+                             }
+                         }
+-                }.getOrNull()
++                    }
+             }
++        val sources = results.mapNotNull { it.second.getOrNull() }
++        val runtimeErrors = results.mapNotNull { (id, result) -> result.exceptionOrNull()?.let { id to it } }.toMap()
+         state.sources.filterNot { it in sources }.forEach(NovelPluginSource::close)
+-        return state.copy(sources = sources)
++        return state.copy(sources = sources, runtimeErrors = runtimeErrors)
+     }
+ 
+     private suspend fun installValidated(
+@@ -219,7 +231,7 @@ class NovelPluginManager(
+         try {
+             replacementPreferences?.let { novelRequire(replacePreferences(preferences, it), NovelFailure.Code.PluginRestoreSettings) }
+             val candidate = InstalledNovelPlugin(descriptor, repositoryUrl, System.currentTimeMillis(), codeHash)
+-            NovelPluginSource(candidate, code.toString(Charsets.UTF_8)).use { it.warmUp() }
++            NovelPluginSource(appContext, candidate, code.toString(Charsets.UTF_8)).use { it.warmUp() }
+             return store.install(descriptor, repositoryUrl, code)
+         } catch (error: Exception) {
+             runCatching { novelRequire(restorePreferences(preferences, previousPreferences), NovelFailure.Code.PluginRollbackSettings) }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/NovelPluginLibrary.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/NovelPluginLibrary.kt
+index 925b6cd8fa03d880c24fa295dfd09c166a2d3012..137a153df2fc362226f171fbe832a0cee5b5ca34 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/NovelPluginLibrary.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/NovelPluginLibrary.kt
+@@ -42,12 +42,13 @@ import javax.crypto.spec.SecretKeySpec
+  * - Browser polyfills (URL, URLSearchParams, etc.)
+  */
+ internal class NovelPluginLibrary(
++    context: Context,
+     private val pluginId: String,
+     private val siteUrl: String? = null,
+ ) {
+     private val networkHelper: NetworkHelper = Injekt.get()
+     private val client = networkHelper.client
+-    private val context: Context = Injekt.get()
++    private val context = context.applicationContext
+ 
+     // Prefer the bundled LNReader-compatible Cheerio implementation. The Jsoup bridge remains
+     // available as a fallback if the asset cannot be loaded or evaluated on a device.
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/NovelPluginRuntime.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/NovelPluginRuntime.kt
+index 212123b47437310f5ff148632c8fe0fc567a8ba5..2bc38ad582c0b6137200b4cdbeb321c1f7c6c0af 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/NovelPluginRuntime.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/runtime/NovelPluginRuntime.kt
+@@ -1,5 +1,6 @@
+ package dev.ahmedmohamed.hayai.novel.plugin.runtime
+ 
++import android.content.Context
+ import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+ import dev.ahmedmohamed.hayai.novel.error.novelRequire
+ import com.dokar.quickjs.QuickJs
+@@ -7,11 +8,12 @@ import kotlinx.coroutines.CoroutineDispatcher
+ import kotlinx.coroutines.withTimeout
+ 
+ internal class NovelPluginRuntime(
++    context: Context,
+     private val pluginId: String,
+     private val siteUrl: String,
+     private val dispatcher: CoroutineDispatcher,
+ ) {
+-    private val library = NovelPluginLibrary(pluginId, siteUrl)
++    private val library = NovelPluginLibrary(context, pluginId, siteUrl)
+ 
+     suspend fun open(code: String): NovelPluginInstance {
+         novelRequire(code.length in 1..MAX_CODE_CHARS, NovelFailure.Code.PluginCodeSize)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
+index 0a81e3c8e8dd3332d17d4bb3c7798b42724ee169..6fd2934225e936d1ad73cd28b180fa67b54f3f23 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
+@@ -53,6 +53,7 @@ import java.util.concurrent.Executors
+  * Executes LNReader-compatible plugins through NovelPluginDescriptorRuntime.
+  */
+ class NovelPluginSource(
++    context: Context,
+     private val installedPlugin: InstalledNovelPlugin,
+     private val jsCode: String,
+     private val siteOverride: String? = null,
+@@ -61,7 +62,7 @@ class NovelPluginSource(
+     ConfigurableSource,
+     AutoCloseable {
+     private val plugin: NovelPluginDescriptor = installedPlugin.descriptor
+-    private val context: Context = Injekt.get()
++    private val context = context.applicationContext
+     private val networkHelper: NetworkHelper = Injekt.get()
+     private val bridgeCache = context.getSharedPreferences("hayai_plugin_bridge_cache", Context.MODE_PRIVATE)
+     private val bridgeCacheKey = "${plugin.id}:${installedPlugin.codeSha256}"
+@@ -258,7 +259,7 @@ class NovelPluginSource(
+                     }
+                 if (existing != null) return@withLock existing
+ 
+-                val runtime = NovelPluginRuntime(pluginId, baseUrl, jsDispatcher)
++                val runtime = NovelPluginRuntime(context, pluginId, baseUrl, jsDispatcher)
+                 val newInstance =
+                     try {
+                         runtime.open(jsCode)
+@@ -319,7 +320,7 @@ class NovelPluginSource(
+ 
+     override fun close() = cleanup()
+ 
+-    fun withSiteOverride(site: String?): NovelPluginSource = NovelPluginSource(installedPlugin, jsCode, site)
++    fun withSiteOverride(site: String?): NovelPluginSource = NovelPluginSource(context, installedPlugin, jsCode, site)
+ 
+     /** True when this source was built from the same plugin version and code. */
+     fun isSamePlugin(other: InstalledNovelPlugin): Boolean =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt
+deleted file mode 100644
+index f44c7b904c560e0c71e90a03633d34c9d0d64660..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt
++++ /dev/null
+@@ -1,268 +0,0 @@
+-package dev.ahmedmohamed.hayai.novel.plugin.ui
+-
+-import android.text.InputType
+-import android.widget.EditText
+-import android.widget.LinearLayout
+-import androidx.appcompat.app.AlertDialog
+-import androidx.preference.Preference
+-import androidx.preference.PreferenceCategory
+-import androidx.preference.PreferenceScreen
+-import androidx.preference.SwitchPreferenceCompat
+-import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+-import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginRepository
+-import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.ui.setting.SettingsController
+-import eu.kanade.tachiyomi.ui.setting.onChange
+-import eu.kanade.tachiyomi.ui.setting.onClick
+-import eu.kanade.tachiyomi.ui.setting.preference
+-import eu.kanade.tachiyomi.ui.setting.preferenceCategory
+-import eu.kanade.tachiyomi.ui.setting.switchPreference
+-import eu.kanade.tachiyomi.ui.setting.titleRes
+-import eu.kanade.tachiyomi.util.system.materialAlertDialog
+-import eu.kanade.tachiyomi.util.system.toast
+-import kotlinx.coroutines.Job
+-import kotlinx.coroutines.flow.collect
+-import kotlinx.coroutines.launch
+-import uy.kohesive.injekt.Injekt
+-import uy.kohesive.injekt.api.get
+-
+-class NovelPluginManagerController : SettingsController() {
+-    private val manager: NovelPluginManager = Injekt.get()
+-    private lateinit var status: Preference
+-    private lateinit var repositories: PreferenceCategory
+-    private lateinit var plugins: PreferenceCategory
+-    private var query = ""
+-    private var latest = NovelPluginCatalog()
+-    private var actionInProgress: String? = null
+-    private var collectionJob: Job? = null
+-
+-    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
+-        titleRes = R.string.hayai_novel_plugins
+-        preferenceCategory {
+-            status = preference {
+-                summary = context.getString(R.string.hayai_novel_plugins_security_summary)
+-                isSelectable = false
+-            }
+-            preference {
+-                title = context.getString(R.string.refresh)
+-                onClick { runAction(context.getString(R.string.refresh)) { manager.refresh() } }
+-            }
+-            preference {
+-                title = context.getString(R.string.add)
+-                summary = context.getString(R.string.hayai_add_novel_repository)
+-                onClick { showAddRepository() }
+-            }
+-            preference {
+-                title = context.getString(R.string.search)
+-                onClick { editQuery() }
+-            }
+-        }
+-        repositories = preferenceCategory { title = context.getString(R.string.hayai_novel_repositories) }
+-        plugins = preferenceCategory { title = context.getString(R.string.hayai_novel_plugins) }
+-        collectionJob = viewScope.launch {
+-            manager.catalog.collect {
+-                latest = it
+-                render()
+-            }
+-        }
+-        runAction(context.getString(R.string.refresh)) { manager.refresh() }
+-    }
+-
+-    override fun onDestroy() {
+-        collectionJob?.cancel()
+-        super.onDestroy()
+-    }
+-
+-    private fun render() {
+-        val context = activity ?: return
+-        status.summary = buildString {
+-            append(context.getString(R.string.hayai_novel_plugins_security_summary))
+-            latest.repositoryErrors.forEach { (url, error) ->
+-                appendLine()
+-                append(context.getString(R.string.hayai_repository_error, url, context.novelFailureMessage(error, R.string.unknown_error)))
+-            }
+-            actionInProgress?.let {
+-                appendLine()
+-                append(it)
+-            }
+-        }
+-        repositories.removeAll()
+-        plugins.removeAll()
+-        if (latest.repositories.isEmpty()) {
+-            repositories.preference {
+-                summary = context.getString(R.string.hayai_no_novel_repositories)
+-                isSelectable = false
+-            }
+-        }
+-        latest.repositories.forEach(::addRepositoryPreferences)
+-
+-        val installedById = latest.installed.associateBy { it.descriptor.id }
+-        val availableById = latest.available.associateBy(NovelPluginDescriptor::id)
+-        val descriptors = (availableById.keys + installedById.keys)
+-            .mapNotNull { availableById[it] ?: installedById[it]?.descriptor }
+-            .filter { query.isBlank() || it.name.contains(query, true) || it.id.contains(query, true) || it.lang.contains(query, true) }
+-            .sortedWith(compareBy(NovelPluginDescriptor::normalizedLanguage, NovelPluginDescriptor::name))
+-        if (descriptors.isEmpty()) {
+-            plugins.preference {
+-                summary = context.getString(R.string.hayai_no_novel_plugins)
+-                isSelectable = false
+-            }
+-        }
+-        descriptors.forEach { descriptor -> addPluginPreference(descriptor, installedById[descriptor.id]) }
+-    }
+-
+-    private fun addRepositoryPreferences(repository: NovelPluginRepository) {
+-        val context = requireNotNull(activity)
+-        repositories.switchPreference {
+-            key = "hayai.plugin.repository.${repository.url.hashCode()}"
+-            title = repository.name
+-            summary = repository.url
+-            isChecked = repository.enabled
+-            isPersistent = false
+-            isEnabled = actionInProgress == null
+-            onChange { enabled ->
+-                runAction(repository.name) {
+-                    manager.setRepositoryEnabled(repository.url, enabled as Boolean)
+-                    manager.refresh()
+-                }
+-                false
+-            }
+-        }
+-        repositories.preference {
+-            title = context.getString(R.string.hayai_remove_named_item, repository.name)
+-            summary = context.getString(R.string.remove)
+-            isEnabled = actionInProgress == null
+-            onClick { confirmRepositoryRemoval(repository) }
+-        }
+-    }
+-
+-    private fun addPluginPreference(descriptor: NovelPluginDescriptor, installed: InstalledNovelPlugin?) {
+-        val context = requireNotNull(activity)
+-        val update = installed != null && manager.hasUpdate(descriptor.id)
+-        plugins.preference {
+-            title = descriptor.name
+-            summary = buildString {
+-                append(descriptor.lang).append(" · ").append(descriptor.id)
+-                appendLine()
+-                append(context.getString(R.string.version)).append(' ').append(descriptor.version)
+-                if (installed != null) append(" · ").append(context.getString(R.string.installed))
+-                appendLine()
+-                append(
+-                    context.getString(
+-                        when {
+-                            installed == null -> R.string.install
+-                            update -> R.string.update
+-                            else -> R.string.uninstall
+-                        },
+-                    ),
+-                )
+-            }
+-            isEnabled = actionInProgress == null
+-            onClick {
+-                when {
+-                    installed == null || update -> confirmPluginInstall(descriptor)
+-                    else -> runAction(descriptor.name) { manager.uninstall(descriptor.id) }
+-                }
+-            }
+-        }
+-    }
+-
+-    private fun editQuery() {
+-        val context = activity ?: return
+-        val input = EditText(context).apply {
+-            setText(query)
+-            setSelection(text.length)
+-        }
+-        context.materialAlertDialog()
+-            .setTitle(R.string.search)
+-            .setView(input)
+-            .setPositiveButton(android.R.string.ok) { _, _ ->
+-                query = input.text.toString()
+-                render()
+-            }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
+-    }
+-
+-    private fun confirmRepositoryRemoval(repository: NovelPluginRepository) {
+-        val context = activity ?: return
+-        context.materialAlertDialog()
+-            .setTitle(R.string.remove)
+-            .setMessage(context.getString(R.string.hayai_remove_repository_confirmation, repository.name))
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.remove) { _, _ ->
+-                runAction(repository.name) {
+-                    manager.removeRepository(repository.url)
+-                    manager.refresh()
+-                }
+-            }
+-            .show()
+-    }
+-
+-    private fun confirmPluginInstall(descriptor: NovelPluginDescriptor) {
+-        val context = activity ?: return
+-        context.materialAlertDialog()
+-            .setTitle(descriptor.name)
+-            .setMessage(R.string.hayai_novel_plugin_install_warning)
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.install) { _, _ -> runAction(descriptor.name) { manager.install(descriptor.id) } }
+-            .show()
+-    }
+-
+-    private fun showAddRepository() {
+-        val context = activity ?: return
+-        val form = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+-        val name = EditText(context).apply { setHint(R.string.name) }
+-        val url = EditText(context).apply {
+-            setHint(R.string.hayai_novel_plugin_repository_url_hint)
+-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+-        }
+-        form.addView(name)
+-        form.addView(url)
+-        val dialog = context.materialAlertDialog()
+-            .setTitle(R.string.hayai_add_novel_repository)
+-            .setMessage(R.string.hayai_novel_repository_trust_warning)
+-            .setView(form)
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.add, null)
+-            .create()
+-        dialog.setOnShowListener {
+-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+-                if (actionInProgress != null) return@setOnClickListener
+-                val label = name.text.toString().trim()
+-                actionInProgress = label.ifBlank { context.getString(R.string.hayai_add_novel_repository) }
+-                render()
+-                viewScope.launch {
+-                    runCatching {
+-                        manager.addRepository(label, url.text.toString().trim())
+-                        manager.refresh()
+-                    }.onSuccess {
+-                        dialog.dismiss()
+-                    }.onFailure {
+-                        url.error = context.novelFailureMessage(it, R.string.unknown_error)
+-                    }
+-                    actionInProgress = null
+-                    render()
+-                }
+-            }
+-        }
+-        dialog.show()
+-    }
+-
+-    private fun runAction(label: String, action: suspend () -> Any?) {
+-        if (actionInProgress != null) return
+-        val context = activity ?: return
+-        actionInProgress = label
+-        render()
+-        viewScope.launch {
+-            runCatching { action() }
+-                .onFailure { context.toast(context.novelFailureMessage(it, R.string.unknown_error)) }
+-            actionInProgress = null
+-            render()
+-        }
+-    }
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
+index 5be901bf11a6a86a6d4ee1aa1d4e3059910ae68a..d4fcb95095e7616040cfe30c374ef2bf791117eb 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
+@@ -4,7 +4,7 @@ import androidx.annotation.StringRes
+ import androidx.preference.PreferenceScreen
+ import com.bluelinelabs.conductor.Controller
+ import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+-import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerController
++import dev.ahmedmohamed.hayai.extension.managed.ui.NovelPluginRepositoryController
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.ui.setting.SettingsController
+ import eu.kanade.tachiyomi.ui.setting.onClick
+@@ -30,7 +30,7 @@ internal enum class NovelRepositoryKind(
+ 
+     fun destination(): Controller = when (this) {
+         ApkExtensions -> RepoController(ContentKind.Novel)
+-        LnReaderPlugins -> NovelPluginManagerController()
++        LnReaderPlugins -> NovelPluginRepositoryController()
+     }
+ }
+ 
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+index 8952e2c1ffbf4cc25e3cfc478b1142df0f9b7460..3932286c0e59d3b165594b2f031edeebd98d5614 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+@@ -14,7 +14,6 @@ import androidx.preference.PreferenceScreen
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+-import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerController
+ import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsController
+ import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
+ import dev.ahmedmohamed.hayai.novel.reader.NovelColorPickerDialog
+@@ -271,11 +270,6 @@ class NovelSettingsController : SettingsController() {
+                 summary = context.getString(R.string.hayai_novel_reader_source_builder_summary)
+                 onClick { router.pushController(NovelCustomSourceBuilderController().withFadeTransaction()) }
+             }
+-            preference {
+-                title = context.getString(R.string.hayai_novel_reader_remote_extensions)
+-                summary = context.getString(R.string.hayai_novel_reader_remote_extensions_summary)
+-                onClick { router.pushController(NovelApkExtensionManagerController().withFadeTransaction()) }
+-            }
+             preference {
+                 title = context.getString(R.string.hayai_novel_reader_import_external)
+                 summary = context.getString(R.string.hayai_novel_reader_import_external_summary)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+index 36825d884e9ca8cbd9a50f82b1a91aca43de08a0..b8a698a82074c5f937f6b58b3a169898601cea9d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+@@ -4,7 +4,6 @@ import android.app.Application
+ import androidx.core.content.ContextCompat
+ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+ import dev.ahmedmohamed.hayai.novel.extension.J2kNovelApkRepositoryRegistry
+-import dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManager
+ import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+ import dev.ahmedmohamed.hayai.adult.eh.session.AndroidEhCookieStore
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieStore
+@@ -53,9 +52,6 @@ import eu.kanade.tachiyomi.util.chapter.ChapterFilter
+ import eu.kanade.tachiyomi.util.manga.MangaShortcutManager
+ import kotlinx.serialization.json.Json
+ import kotlinx.serialization.protobuf.ProtoBuf
+-import kotlinx.coroutines.CoroutineScope
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.SupervisorJob
+ import uy.kohesive.injekt.api.InjektModule
+ import uy.kohesive.injekt.api.InjektRegistrar
+ import uy.kohesive.injekt.api.addSingleton
+@@ -89,13 +85,6 @@ class AppModule(
+         addSingletonFactory { ExtensionManager(app) }
+         addSingletonFactory { NovelPluginManager(app, get(), get()) }
+         addSingletonFactory<NovelApkRepositoryRegistry> { J2kNovelApkRepositoryRegistry(app, get()) }
+-        addSingletonFactory {
+-            NovelApkExtensionManager(
+-                get(),
+-                get(),
+-                CoroutineScope(SupervisorJob() + Dispatchers.IO),
+-            )
+-        }
+         addSingletonFactory<EhCookieStore> { AndroidEhCookieStore() }
+         addSingletonFactory { EhSessionStore(get(), get()) }
+         addSingletonFactory { HayaiEhPersistenceStore(get()) }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt
+index 9d8eecf6f56144f3bc3f73acf36838c19e5f1594..6f9472f4f7ca19abd343ee2d2945dc4cff46c313 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt
+@@ -1,6 +1,8 @@
+ package eu.kanade.tachiyomi.extension
+ 
+ import android.content.Context
++import dev.ahmedmohamed.hayai.extension.ExtensionCatalogReconciler
++import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
+ import android.graphics.drawable.Drawable
+ import android.os.Build
+ import android.os.Parcelable
+@@ -108,6 +110,9 @@ class ExtensionManager(
+     private val _untrustedExtensionsFlow = MutableStateFlow(emptyList<Extension.Untrusted>())
+     val untrustedExtensionsFlow = _untrustedExtensionsFlow.asStateFlow()
+ 
++    private val _failedExtensionsFlow = MutableStateFlow(emptyList<ApkLoadFailure>())
++    val failedExtensionsFlow = _failedExtensionsFlow.asStateFlow()
++
+     init {
+         initExtensions()
+         ExtensionInstallReceiver(InstallationListener()).register(context)
+@@ -128,6 +133,11 @@ class ExtensionManager(
+             extensions
+                 .filterIsInstance<LoadResult.Untrusted>()
+                 .map { it.extension }
++
++        _failedExtensionsFlow.value =
++            extensions
++                .filterIsInstance<LoadResult.Error>()
++                .map { it.failure }
+     }
+ 
+     fun isInstalledByApp(extension: Extension.Available): Boolean = ExtensionLoader.isExtensionInstalledByApp(context, extension.pkgName)
+@@ -142,17 +152,14 @@ class ExtensionManager(
+             } catch (e: Exception) {
+                 Timber.e(e, context.getString(R.string.extension_api_error))
+                 withUIContext { context.toast(R.string.extension_api_error) }
+-                emptyList()
++                emitToInstaller("Finished/Available/Error", (InstallStep.Error to null))
++                return
+             }
+         // Dedupe by pkgName so extensions served by multiple repos can't produce duplicate
+         // entries downstream (e.g. duplicate RecyclerView stable IDs). The newest copy wins, and
+         // every consumer below is handed the same list: picking a different duplicate for the
+         // update check than for the download leaves an update that can never install.
+-        val availableExtensions =
+-            extensions
+-                .groupBy { it.pkgName }
+-                .values
+-                .map { duplicates -> duplicates.maxBy(Extension.Available::versionCode) }
++        val availableExtensions = ExtensionCatalogReconciler.newestCopies(extensions)
+ 
+         enableAdditionalSubLanguages(availableExtensions)
+ 
+@@ -368,8 +375,16 @@ class ExtensionManager(
+             nowTrustedExtensions
+                 .map { extension ->
+                     async { ExtensionLoader.loadExtensionFromPkgName(context, extension.pkgName) }.await()
+-                }.filterIsInstance<LoadResult.Success>()
+-                .forEach { registerNewExtension(it.extension) }
++                }.forEach { result ->
++                    when (result) {
++                        is LoadResult.Success -> registerNewExtension(result.extension)
++                        is LoadResult.Error -> {
++                            _failedExtensionsFlow.value =
++                                failedExtensionsFlow.value.filterNot { it.packageName == result.failure.packageName } + result.failure
++                        }
++                        is LoadResult.Untrusted -> _untrustedExtensionsFlow.value += result.extension
++                    }
++                }
+         }
+     }
+ 
+@@ -379,6 +394,7 @@ class ExtensionManager(
+      * @param extension The extension to be registered.
+      */
+     private fun registerNewExtension(extension: Extension.Installed) {
++        _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == extension.pkgName }
+         _installedExtensionsFlow.value += extension
+         emitToInstaller(
+             "Finished/${extension.pkgName}",
+@@ -393,6 +409,7 @@ class ExtensionManager(
+      * @param extension The extension to be registered.
+      */
+     private fun registerUpdatedExtension(extension: Extension.Installed) {
++        _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == extension.pkgName }
+         val mutInstalledExtensions = _installedExtensionsFlow.value.toMutableList()
+         val oldExtension = mutInstalledExtensions.find { it.pkgName == extension.pkgName }
+         if (oldExtension != null) {
+@@ -418,6 +435,7 @@ class ExtensionManager(
+      * @param pkgName The package name of the uninstalled application.
+      */
+     private fun unregisterExtension(pkgName: String) {
++        _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == pkgName }
+         val installedExtension = installedExtensionsFlow.value.find { it.pkgName == pkgName }
+         if (installedExtension != null) {
+             _installedExtensionsFlow.value -= installedExtension
+@@ -444,6 +462,7 @@ class ExtensionManager(
+         }
+ 
+         override fun onExtensionUntrusted(extension: Extension.Untrusted) {
++            _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == extension.pkgName }
+             val installedExtension =
+                 _installedExtensionsFlow.value
+                     .find { it.pkgName == extension.pkgName }
+@@ -452,6 +471,11 @@ class ExtensionManager(
+             _untrustedExtensionsFlow.value += extension
+         }
+ 
++        override fun onExtensionLoadFailed(failure: ApkLoadFailure) {
++            _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == failure.packageName } + failure
++            emitToInstaller("Finished/${failure.packageName}/Error", ExtensionIntallInfo(InstallStep.Error, null))
++        }
++
+         override fun onPackageUninstalled(pkgName: String) {
+             unregisterExtension(pkgName)
+             preferences.extensionUpdatesCount().set(installedExtensionsFlow.value.count { it.hasUpdate })
+@@ -468,7 +492,7 @@ class ExtensionManager(
+             availableExtension ?: availableExtensionsFlow.value.find { it.pkgName == pkgName }
+                 ?: return false
+ 
+-        return (availableExt.versionCode > versionCode || availableExt.libVersion > libVersion)
++        return ExtensionCatalogReconciler.hasUpdate(this, availableExt)
+     }
+ 
+     @kotlinx.serialization.Serializable
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt
+index 029a5f067c65b46de3a7530134218388a0d3850e..a8cf6de870e45286dad5df1fb5298fd89193dc28 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/api/ExtensionApi.kt
+@@ -1,6 +1,7 @@
+ package eu.kanade.tachiyomi.extension.api
+ 
+ import android.content.Context
++import dev.ahmedmohamed.hayai.extension.ExtensionCatalogReconciler
+ import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+@@ -272,7 +273,7 @@ internal class ExtensionApi {
+         prefetchedExtensions: List<Extension.Available>? = null,
+     ): List<Extension.Available> =
+         withIOContext {
+-            val extensions = prefetchedExtensions ?: findExtensions()
++            val extensions = ExtensionCatalogReconciler.newestCopies(prefetchedExtensions ?: findExtensions())
+ 
+             val extensionManager: ExtensionManager = Injekt.get()
+             val installedExtensions =
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/model/LoadResult.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/model/LoadResult.kt
+index 1a87371042c72642d43e5480c0ca8089e7e722d9..5048648e9fdec3e80910ad7860db1ba60697a0b2 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/model/LoadResult.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/model/LoadResult.kt
+@@ -1,5 +1,7 @@
+ package eu.kanade.tachiyomi.extension.model
+ 
++import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
++
+ sealed interface LoadResult {
+     data class Success(
+         val extension: Extension.Installed,
+@@ -9,5 +11,7 @@ sealed interface LoadResult {
+         val extension: Extension.Untrusted,
+     ) : LoadResult
+ 
+-    data object Error : LoadResult
++    data class Error(
++        val failure: ApkLoadFailure,
++    ) : LoadResult
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt
+index 252bebcecd756632215bbee6af54009e7fa413d6..048f79087f6c9bfc5f41b2b4f7ba22959f5f6b5c 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallReceiver.kt
+@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.extension.model.LoadResult
++import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
+ import eu.kanade.tachiyomi.util.system.launchNow
+ import kotlinx.coroutines.CoroutineStart
+ import kotlinx.coroutines.Dispatchers
+@@ -62,7 +63,7 @@ internal class ExtensionInstallReceiver(
+                         when (val result = getExtensionFromIntent(context, intent)) {
+                             is LoadResult.Success -> listener.onExtensionInstalled(result.extension)
+                             is LoadResult.Untrusted -> listener.onExtensionUntrusted(result.extension)
+-                            else -> {}
++                            is LoadResult.Error -> listener.onExtensionLoadFailed(result.failure)
+                         }
+                     }
+                 }
+@@ -72,7 +73,7 @@ internal class ExtensionInstallReceiver(
+                     when (val result = getExtensionFromIntent(context, intent)) {
+                         is LoadResult.Success -> listener.onExtensionUpdated(result.extension)
+                         is LoadResult.Untrusted -> listener.onExtensionUntrusted(result.extension)
+-                        else -> {}
++                        is LoadResult.Error -> listener.onExtensionLoadFailed(result.failure)
+                     }
+                 }
+             }
+@@ -106,7 +107,7 @@ internal class ExtensionInstallReceiver(
+     ): LoadResult {
+         val pkgName =
+             getPackageNameFromIntent(intent)
+-                ?: return LoadResult.Error
++                ?: return LoadResult.Error(ApkLoadFailure("unknown", reason = ApkLoadFailure.Reason.PackageMissing))
+         return GlobalScope
+             .async(
+                 Dispatchers.Default,
+@@ -132,6 +133,8 @@ internal class ExtensionInstallReceiver(
+ 
+         fun onExtensionUntrusted(extension: Extension.Untrusted)
+ 
++        fun onExtensionLoadFailed(failure: ApkLoadFailure)
++
+         fun onPackageUninstalled(pkgName: String)
+     }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
+index 90245306b69dabf8d5d427057cdce27b4ae16f74..fc32a6bd259556782927bcfd00b39e5e5dcd8ad5 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
+@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.extension.util
+ 
+ import android.annotation.SuppressLint
+ import android.content.Context
++import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
+ import android.content.pm.ApplicationInfo
+ import android.content.pm.PackageInfo
+ import android.content.pm.PackageManager
+@@ -202,7 +203,7 @@ internal object ExtensionLoader {
+         val extensionPackage = getExtensionInfoFromPkgName(context, pkgName)
+         if (extensionPackage == null) {
+             Timber.e("Extension package is not found ($pkgName)")
+-            return LoadResult.Error
++            return LoadResult.Error(ApkLoadFailure(pkgName, reason = ApkLoadFailure.Reason.PackageMissing))
+         }
+         return loadExtension(context, extensionPackage)
+     }
+@@ -330,10 +331,12 @@ internal object ExtensionLoader {
+                 ).ifBlank { pkgName }
+         val versionName = pkgInfo.versionName
+         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
++        fun failure(reason: ApkLoadFailure.Reason) =
++            LoadResult.Error(ApkLoadFailure(pkgName, extName, versionName, reason))
+ 
+         if (versionName.isNullOrEmpty()) {
+             Timber.w("Missing versionName for extension $extName")
+-            return LoadResult.Error
++            return failure(ApkLoadFailure.Reason.VersionMissing)
+         }
+ 
+         // Validate lib version
+@@ -346,20 +349,20 @@ internal object ExtensionLoader {
+             Timber.w(
+                 "Lib version is $libVersion, while only versions $LIB_VERSION_MIN to $LIB_VERSION_MAX are allowed",
+             )
+-            return LoadResult.Error
++            return failure(ApkLoadFailure.Reason.UnsupportedLibrary)
+         }
+ 
+         val requiredFeatures = pkgInfo.reqFeatures.orEmpty().mapNotNull { it.name }.toSet()
+         val manifest = NovelExtensionManifest.resolve(requiredFeatures, metadata?.keySet().orEmpty())
+         if (manifest == null) {
+             Timber.w("Missing supported extension feature for $extName ($pkgName)")
+-            return LoadResult.Error
++            return failure(ApkLoadFailure.Reason.UnsupportedManifest)
+         }
+ 
+         val signatures = getSignatures(pkgInfo)
+         if (signatures.isNullOrEmpty()) {
+             Timber.w("Package $pkgName isn't signed")
+-            return LoadResult.Error
++            return failure(ApkLoadFailure.Reason.Unsigned)
+         } else if (isExtensionInstalledByApp(context, pkgName)) {
+             if (!trustSignatures.contains(signatures.last())) {
+                 trustSignatures.add(signatures.last())
+@@ -384,7 +387,7 @@ internal object ExtensionLoader {
+                 (metadata?.getInt(manifest.nsfwKey) ?: 0) == 1
+         if (!loadNsfwSource && isNsfw) {
+             Timber.w("NSFW extension $pkgName not allowed")
+-            return LoadResult.Error
++            return failure(ApkLoadFailure.Reason.AdultSourcesDisabled)
+         }
+ 
+         val classLoader =
+@@ -392,13 +395,13 @@ internal object ExtensionLoader {
+                 ChildFirstPathClassLoader(appInfo.sourceDir, null, context.classLoader)
+             } catch (error: Exception) {
+                 Timber.e(error, "Extension class loader error: $extName ($pkgName)")
+-                return LoadResult.Error
++                return failure(ApkLoadFailure.Reason.ClassLoader)
+             }
+ 
+         val declaredClasses = metadata?.getString(manifest.classKey)
+         if (declaredClasses.isNullOrBlank()) {
+             Timber.w("Missing ${manifest.classKey} for extension $extName ($pkgName)")
+-            return LoadResult.Error
++            return failure(ApkLoadFailure.Reason.ClassMetadata)
+         }
+ 
+         val sources =
+@@ -420,21 +423,21 @@ internal object ExtensionLoader {
+                             lastClassError = error
+                         } catch (error: Throwable) {
+                             Timber.e(error, "Extension load error: $extName ($className)")
+-                            return LoadResult.Error
++                            return failure(ApkLoadFailure.Reason.SourceConstruction)
+                         }
+                     }
+ 
+                     Timber.e(lastClassError, "Extension class not found: $extName ($declaredClass)")
+-                    return LoadResult.Error
++                    return failure(ApkLoadFailure.Reason.SourceConstruction)
+                 }
+ 
+         if (sources.isEmpty()) {
+             Timber.w("Extension $extName ($pkgName) did not declare any source classes")
+-            return LoadResult.Error
++            return failure(ApkLoadFailure.Reason.EmptySources)
+         }
+         if (manifest.isNovel && sources.none { it.isNovelSource() }) {
+             Timber.w("Novel extension $extName ($pkgName) did not expose a novel source")
+-            return LoadResult.Error
++            return failure(ApkLoadFailure.Reason.NovelContract)
+         }
+ 
+         val langs =
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
+index 1704f17f3957423d820e9660ef18fde0f4a22ca6..c32a13aefdca94e324bfc9a8c69fff5aee9db302 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
+@@ -1,300 +1,227 @@
+ package eu.kanade.tachiyomi.ui.extension
+ 
+ import android.content.pm.PackageInstaller
+-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import dev.ahmedmohamed.hayai.extension.managed.ApkExtensionSnapshot
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionEntry
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionFilter
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionKey
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionProjector
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionState
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.extension.ExtensionInstallerJob
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.extension.model.InstallStep
+-import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
+-import eu.kanade.tachiyomi.extension.util.ExtensionLoader
+ import eu.kanade.tachiyomi.ui.migration.BaseMigrationPresenter
+-import eu.kanade.tachiyomi.util.system.LocaleHelper
+ import eu.kanade.tachiyomi.util.system.isOnline
+ import eu.kanade.tachiyomi.util.system.toast
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.NonCancellable
+ import kotlinx.coroutines.async
+ import kotlinx.coroutines.awaitAll
++import kotlinx.coroutines.flow.collectLatest
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withContext
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
+ 
+-typealias ExtensionTuple =
+-    Triple<List<Extension.Installed>, List<Extension.Untrusted>, List<Extension.Available>>
+ typealias ExtensionIntallInfo = Pair<InstallStep, PackageInstaller.SessionInfo?>
+ 
+-/**
+- * Presenter of [ExtensionBottomSheet].
+- */
++/** J2K migration presenter with one Hayai-owned projection for APK and JS extensions. */
+ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() {
+-    private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
+-
++    private val pluginManager: NovelPluginManager = Injekt.get()
++    private var extensions = emptyList<ExtensionItem>()
+     private var currentDownloads = hashMapOf<String, ExtensionIntallInfo>()
+-
++    private var pluginOperations = emptySet<String>()
+     private var firstLoad = true
+ 
+     override fun onCreate() {
+         super.onCreate()
+         presenterScope.launch {
+-            val extensionJob =
+-                async {
+-                    extensionManager.findAvailableExtensions()
+-                    rebuildExtensions(updateController = false)
+-                }
+-            val migrationJob = async { firstTimeMigration() }
+-            listOf(migrationJob, extensionJob).awaitAll()
++            listOf(
++                async { extensionManager.findAvailableExtensions() },
++                async { pluginManager.refresh() },
++                async { firstTimeMigration() },
++            ).awaitAll()
++            rebuildExtensions(updateController = false)
+         }
+         presenterScope.launch {
+-            extensionManager.downloadSharedFlow
+-                .collect {
+-                    if (it.first.startsWith("Finished") || it.first.startsWith("Uninstalled")) {
+-                        if (it.first.startsWith("Finished")) {
+-                            firstLoad = true
+-                            currentDownloads.clear()
+-                        }
+-                        rebuildExtensions()
+-                        return@collect
+-                    }
+-                    val extension =
+-                        extensions.values.flatten().find { item ->
+-                            it.first == item.extension.pkgName
+-                        } ?: return@collect
+-                    when (it.second.first) {
+-                        InstallStep.Installed, InstallStep.Error -> {
+-                            currentDownloads.remove(extension.extension.pkgName)
+-                        }
+-                        else -> {
+-                            currentDownloads[extension.extension.pkgName] = it.second
+-                        }
+-                    }
+-                    val item = updateInstallStep(extension.extension, it.second.first, it.second.second)
+-                    if (item != null) {
+-                        withContext(NonCancellable + Dispatchers.Main) { view?.downloadUpdate(item) }
++            pluginManager.catalog.collectLatest { rebuildExtensions() }
++        }
++        presenterScope.launch {
++            extensionManager.downloadSharedFlow.collect { event ->
++                if (event.first.startsWith("Finished") || event.first.startsWith("Uninstalled")) {
++                    if (event.first.startsWith("Finished")) {
++                        firstLoad = true
++                        currentDownloads.clear()
+                     }
++                    rebuildExtensions()
++                    return@collect
++                }
++                val item = extensions.firstOrNull { row ->
++                    (row.extension.key as? ManagedExtensionKey.Apk)?.packageName == event.first
++                } ?: return@collect
++                val pkgName = (item.extension.key as ManagedExtensionKey.Apk).packageName
++                when (event.second.first) {
++                    InstallStep.Installed, InstallStep.Error -> currentDownloads.remove(pkgName)
++                    else -> currentDownloads[pkgName] = event.second
++                }
++                updateInstallStep(item.extension, event.second.first, event.second.second)?.let { updated ->
++                    withContext(NonCancellable + Dispatchers.Main) { view?.downloadUpdate(updated) }
+                 }
++            }
+         }
+     }
+ 
+     fun refreshExtensions() {
+-        presenterScope.launch {
+-            rebuildExtensions(updateController = false)
+-        }
++        presenterScope.launch { rebuildExtensions(updateController = false) }
+     }
+ 
+     private suspend fun rebuildExtensions(updateController: Boolean = true) {
+-        val tuple =
+-            Triple(
+-                extensionManager.installedExtensionsFlow.value,
+-                extensionManager.untrustedExtensionsFlow.value,
+-                extensionManager.availableExtensionsFlow.value,
+-            )
+-        val rebuilt = ContentKind.entries.associateWith { kind -> toItems(tuple, kind) }
+-        extensions = rebuilt
++        val projected = ManagedExtensionProjector.project(
++            apk = ApkExtensionSnapshot(
++                installed = extensionManager.installedExtensionsFlow.value,
++                untrusted = extensionManager.untrustedExtensionsFlow.value,
++                available = extensionManager.availableExtensionsFlow.value,
++                failures = extensionManager.failedExtensionsFlow.value,
++            ),
++            js = pluginManager.catalog.value,
++            filter = ManagedExtensionFilter(
++                enabledLanguages = preferences.enabledLanguages().get(),
++                showNsfwSources = preferences.showNsfwSources().get(),
++            ),
++        )
++        extensions = toItems(projected)
+         withContext(NonCancellable + Dispatchers.Main) {
+-            ContentKind.entries.forEachIndexed { index, kind ->
+-                view?.setExtensions(kind, rebuilt.getValue(kind), updateController && index == 0)
+-            }
++            view?.setExtensions(extensions, projected.notices, updateController)
+         }
+     }
+ 
+     @Synchronized
+-    private fun toItems(
+-        tuple: ExtensionTuple,
+-        contentKind: ContentKind,
+-    ): List<ExtensionItem> {
++    private fun toItems(state: ManagedExtensionState): List<ExtensionItem> {
+         val context = view?.context ?: return emptyList()
+-        val activeLangs = preferences.enabledLanguages().get()
+-        val showNsfwSources = preferences.showNsfwSources().get()
+-
+-        val (installed, untrusted, available) = tuple
+-
+-        val items = mutableListOf<ExtensionItem>()
+-
+         if (firstLoad) {
+-            val listOfExtensions = installed + untrusted + available
+-            listOfExtensions.forEach {
+-                val installInfo = extensionManager.getInstallInfo(it.pkgName) ?: return@forEach
+-                currentDownloads[it.pkgName] = installInfo
++            state.entries.forEach { entry ->
++                val pkg = (entry.key as? ManagedExtensionKey.Apk)?.packageName ?: return@forEach
++                extensionManager.getInstallInfo(pkg)?.let { currentDownloads[pkg] = it }
+             }
+             firstLoad = false
+         }
+-
+-        val updatesSorted = installed.filter { contentKind.accepts(it) && it.hasUpdate && (showNsfwSources || !it.isNsfw) }.sortedBy { it.name }
+-        val sortOrder = InstalledExtensionsOrder.fromPreference(preferences)
+-        val installedSorted =
+-            installed
+-                .filter { contentKind.accepts(it) && !it.hasUpdate && (showNsfwSources || !it.isNsfw) }
+-                .sortedWith(
+-                    compareBy(
+-                        { !it.isObsolete },
+-                        {
+-                            when (sortOrder) {
+-                                InstalledExtensionsOrder.Name -> it.name
+-                                InstalledExtensionsOrder.RecentlyUpdated ->
+-                                    Long.MAX_VALUE -
+-                                        ExtensionLoader.extensionUpdateDate(context, it)
+-                                InstalledExtensionsOrder.RecentlyInstalled ->
+-                                    Long.MAX_VALUE -
+-                                        ExtensionLoader.extensionInstallDate(context, it)
+-                                InstalledExtensionsOrder.Language -> it.lang
+-                            }
+-                        },
+-                        { it.name },
+-                    ),
++        return buildList {
++            if (state.updates.isNotEmpty()) {
++                val header = ExtensionGroupItem(
++                    context.resources.getQuantityString(R.plurals._updates_pending, state.updates.size, state.updates.size),
++                    state.updates.size,
++                    canUpdate = true,
+                 )
+-        val untrustedSorted = untrusted.filter(contentKind::accepts).sortedBy { it.name }
+-        val availableSorted =
+-            available
+-                // Filter out already installed extensions and disabled languages
+-                .filter { avail ->
+-                    contentKind.accepts(avail) &&
+-                    installed.none { it.pkgName == avail.pkgName } &&
+-                        untrusted.none { it.pkgName == avail.pkgName } &&
+-                        (avail.lang in activeLangs) &&
+-                        (showNsfwSources || !avail.isNsfw)
+-                }.sortedBy { it.name }
+-
+-        if (updatesSorted.isNotEmpty()) {
+-            val header =
+-                ExtensionGroupItem(
+-                    context.resources.getQuantityString(
+-                        R.plurals._updates_pending,
+-                        updatesSorted.size,
+-                        updatesSorted.size,
+-                    ),
+-                    updatesSorted.size,
+-                    items.count { it.extension.pkgName in currentDownloads.keys } != updatesSorted.size,
+-                )
+-            items +=
+-                updatesSorted.map { extension ->
+-                    ExtensionItem(extension, header, currentDownloads[extension.pkgName])
+-                }
+-        }
+-        if (installedSorted.isNotEmpty() || untrustedSorted.isNotEmpty()) {
+-            val header =
+-                ExtensionGroupItem(
+-                    context.getString(R.string.installed),
+-                    installedSorted.size + untrustedSorted.size,
+-                    installedSorting = preferences.installedExtensionsOrder().get(),
+-                )
+-            items +=
+-                installedSorted.map { extension ->
+-                    ExtensionItem(extension, header, currentDownloads[extension.pkgName])
+-                }
+-            items +=
+-                untrustedSorted.map { extension ->
+-                    ExtensionItem(extension, header)
+-                }
+-        }
+-        if (availableSorted.isNotEmpty()) {
+-            val availableGroupedByLang =
+-                availableSorted
+-                    .groupBy { LocaleHelper.getSourceDisplayName(it.lang, context) }
+-                    .toSortedMap()
+-
+-            availableGroupedByLang
+-                .forEach {
+-                    val header = ExtensionGroupItem(it.key, it.value.size)
+-                    items +=
+-                        it.value.map { extension ->
+-                            ExtensionItem(extension, header, currentDownloads[extension.pkgName])
+-                        }
+-                }
++                addAll(state.updates.map { it.toItem(header) })
++            }
++            if (state.installed.isNotEmpty()) {
++                val header = ExtensionGroupItem(context.getString(R.string.installed), state.installed.size)
++                addAll(state.installed.map { it.toItem(header) })
++            }
++            if (state.available.isNotEmpty()) {
++                val header = ExtensionGroupItem(context.getString(R.string.hayai_extension_available), state.available.size)
++                addAll(state.available.map { it.toItem(header) })
++            }
+         }
++    }
+ 
+-        return items
++    private fun ManagedExtensionEntry.toItem(header: ExtensionGroupItem): ExtensionItem {
++        val apkInfo = (key as? ManagedExtensionKey.Apk)?.packageName?.let(currentDownloads::get)
++        val pluginStep = (key as? ManagedExtensionKey.Js)?.pluginId?.takeIf(pluginOperations::contains)?.let { InstallStep.Loading }
++        return ExtensionItem(this, header, pluginStep ?: apkInfo?.first, apkInfo?.second)
+     }
+ 
+-    fun getExtensionUpdateCount(): Int = preferences.extensionUpdatesCount().get()
++    fun getExtensionUpdateCount(): Int = extensions.count { it.extension.hasUpdate }
+ 
+     @Synchronized
+     private fun updateInstallStep(
+-        extension: Extension,
++        extension: ManagedExtensionEntry,
+         state: InstallStep?,
+         session: PackageInstaller.SessionInfo?,
+     ): ExtensionItem? {
+-        var updatedItem: ExtensionItem? = null
+-        ContentKind.entries.filter { it.accepts(extension) }.forEach { kind ->
+-            val kindItems = extensions.getValue(kind).toMutableList()
+-            val position = kindItems.indexOfFirst { it.extension.pkgName == extension.pkgName }
+-            if (position != -1) {
+-                val item = kindItems[position].copy(installStep = state, session = session)
+-                kindItems[position] = item
+-                extensions = extensions + (kind to kindItems)
+-                updatedItem = updatedItem ?: item
+-            }
++        val position = extensions.indexOfFirst { it.extension.key == extension.key }
++        if (position == -1) return null
++        val item = extensions[position].copy(installStep = state, session = session)
++        extensions = extensions.toMutableList().also { it[position] = item }
++        return item
++    }
++
++    fun cancelExtensionInstall(item: ExtensionItem) {
++        item.session?.sessionId?.let(extensionManager::cancelInstallation)
++    }
++
++    fun install(entry: ManagedExtensionEntry) {
++        when (val key = entry.key) {
++            is ManagedExtensionKey.Apk -> installApk(key.packageName)
++            is ManagedExtensionKey.Js -> pluginAction(key.pluginId) { pluginManager.install(key.pluginId) }
+         }
+-        return updatedItem
+     }
+ 
+-    fun cancelExtensionInstall(extItem: ExtensionItem) {
+-        val sessionId = extItem.session?.sessionId ?: return
+-        extensionManager.cancelInstallation(sessionId)
++    fun update(entry: ManagedExtensionEntry) {
++        when (val key = entry.key) {
++            is ManagedExtensionKey.Apk -> installApk(key.packageName)
++            is ManagedExtensionKey.Js -> pluginAction(key.pluginId) { pluginManager.update(key.pluginId) }
++        }
+     }
+ 
+-    fun installExtension(extension: Extension.Available) {
++    private fun installApk(pkgName: String) {
+         val context = view?.context
+         if (context?.isOnline() == false) {
+             context.toast(R.string.no_network_connection)
+             return
+         }
++        val available = extensionManager.availableExtensionsFlow.value.firstOrNull { it.pkgName == pkgName } ?: return
+         presenterScope.launch {
+-            extensionManager
+-                .installExtension(
+-                    ExtensionManager.ExtensionInfo(extension),
+-                    presenterScope,
+-                ).collect {
+-                    when (it.first) {
+-                        InstallStep.Installed, InstallStep.Error -> {
+-                            currentDownloads.remove(extension.pkgName)
+-                        }
+-                        else -> {
+-                            currentDownloads[extension.pkgName] = it
+-                        }
+-                    }
+-                    val item = updateInstallStep(extension, it.first, it.second)
+-                    if (item != null) {
++            extensionManager.installExtension(ExtensionManager.ExtensionInfo(available), presenterScope).collect { info ->
++                when (info.first) {
++                    InstallStep.Installed, InstallStep.Error -> currentDownloads.remove(pkgName)
++                    else -> currentDownloads[pkgName] = info
++                }
++                extensions.firstOrNull { it.extension.key == ManagedExtensionKey.Apk(pkgName) }?.extension?.let { entry ->
++                    updateInstallStep(entry, info.first, info.second)?.let { item ->
+                         withContext(NonCancellable + Dispatchers.Main) { view?.downloadUpdate(item) }
+                     }
+                 }
++            }
+         }
+     }
+ 
+-    fun updateExtension(extension: Extension.Installed) {
+-        val availableExt =
+-            extensionManager.availableExtensionsFlow.value.find { it.pkgName == extension.pkgName } ?: return
+-        installExtension(availableExt)
+-    }
+-
+-    fun updateAllPendingExtensions(contentKind: ContentKind) {
+-        updateExtensions(extensionManager.installedExtensionsFlow.value.filter { contentKind.accepts(it) && it.hasUpdate })
++    fun updateAllPendingExtensions() {
++        val apkUpdates = extensionManager.installedExtensionsFlow.value.filter(Extension.Installed::hasUpdate)
++        updateExtensions(apkUpdates)
++        extensions.mapNotNull { (it.extension.key as? ManagedExtensionKey.Js)?.pluginId?.takeIf { _ -> it.extension.hasUpdate } }
++            .forEach { id -> pluginAction(id) { pluginManager.update(id) } }
+     }
+ 
+     fun updateExtensions(extensions: List<Extension.Installed>) {
+         if (extensions.isEmpty()) return
+         val context = view?.context ?: return
+-        extensions.forEach {
+-            val pkgName = it.pkgName
+-            currentDownloads[pkgName] = InstallStep.Pending to null
+-            val item = updateInstallStep(it, InstallStep.Pending, null) ?: return@forEach
+-            view?.downloadUpdate(item)
++        extensions.forEach { extension ->
++            currentDownloads[extension.pkgName] = InstallStep.Pending to null
++            this.extensions.firstOrNull { it.extension.key == ManagedExtensionKey.Apk(extension.pkgName) }?.extension?.let { entry ->
++                updateInstallStep(entry, InstallStep.Pending, null)?.let { view?.downloadUpdate(it) }
++            }
+         }
+         ExtensionInstallerJob.start(
+             context,
+-            extensions.mapNotNull { extension ->
+-                extensionManager.availableExtensionsFlow.value.find { it.pkgName == extension.pkgName }
+-            },
++            extensions.mapNotNull { installed -> extensionManager.availableExtensionsFlow.value.find { it.pkgName == installed.pkgName } },
+         )
+     }
+ 
+-    fun uninstallExtension(pkgName: String) {
+-        extensionManager.uninstallExtension(pkgName)
++    fun uninstall(entry: ManagedExtensionEntry) {
++        when (val key = entry.key) {
++            is ManagedExtensionKey.Apk -> extensionManager.uninstallExtension(key.packageName)
++            is ManagedExtensionKey.Js -> pluginAction(key.pluginId) { pluginManager.uninstall(key.pluginId) }
++        }
+     }
+ 
+     fun findAvailableExtensions() {
+         presenterScope.launch {
+-            extensionManager.findAvailableExtensions()
++            listOf(async { extensionManager.findAvailableExtensions() }, async { pluginManager.refresh() }).awaitAll()
++            rebuildExtensions()
+         }
+     }
+ 
+@@ -302,7 +229,24 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         pkgName: String,
+         versionCode: Long,
+         signatureHash: String,
+-    ) {
+-        extensionManager.trust(pkgName, versionCode, signatureHash)
++    ) = extensionManager.trust(pkgName, versionCode, signatureHash)
++
++    fun availableExtension(pkgName: String): Extension.Available? =
++        extensionManager.availableExtensionsFlow.value.firstOrNull { it.pkgName == pkgName }
++
++    fun untrustedExtension(pkgName: String): Extension.Untrusted? =
++        extensionManager.untrustedExtensionsFlow.value.firstOrNull { it.pkgName == pkgName }
++
++    private fun pluginAction(pluginId: String, action: suspend () -> Any?) {
++        if (pluginId in pluginOperations) return
++        pluginOperations += pluginId
++        presenterScope.launch {
++            rebuildExtensions()
++            runCatching { action() }.onFailure { failure ->
++                withContext(Dispatchers.Main) { view?.context?.toast(failure.message ?: view?.context?.getString(R.string.unknown_error).orEmpty()) }
++            }
++            pluginOperations -= pluginId
++            rebuildExtensions()
++        }
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
+index 74faa5455f78a106ae3640dd9f65a3e80d3b5304..dc34f43e19de3671fd1eb6ead91e2f72f70e9aa2 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
+@@ -12,14 +12,18 @@ import androidx.core.view.updatePaddingRelative
+ import androidx.recyclerview.widget.RecyclerView
+ import com.google.android.material.bottomsheet.BottomSheetBehavior
+ import com.google.android.material.tabs.TabLayout
+-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionBackend
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionEntry
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionKey
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionNotice
++import dev.ahmedmohamed.hayai.extension.managed.ManagedHealth
++import dev.ahmedmohamed.hayai.extension.managed.ManagedInstallation
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.databinding.ExtensionsBottomSheetBinding
+ import eu.kanade.tachiyomi.databinding.RecyclerWithScrollerBinding
+-import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.extension.model.InstallStep
+ import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
+ import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
+@@ -33,9 +37,10 @@ import eu.kanade.tachiyomi.ui.migration.SourceItem
+ import eu.kanade.tachiyomi.ui.migration.manga.design.PreMigrationController
+ import eu.kanade.tachiyomi.ui.source.BrowseController
+ import eu.kanade.tachiyomi.ui.webview.WebViewActivity
+-import eu.kanade.tachiyomi.util.system.isPackageInstalled
+ import eu.kanade.tachiyomi.util.system.materialAlertDialog
++import eu.kanade.tachiyomi.util.system.openInBrowser
+ import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
++import eu.kanade.tachiyomi.util.system.toast
+ import eu.kanade.tachiyomi.util.view.activityBinding
+ import eu.kanade.tachiyomi.util.view.collapse
+ import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
+@@ -65,17 +70,17 @@ class ExtensionBottomSheet
+         /**
+          * Adapter containing the list of extensions
+          */
+-        private var mangaExtAdapter: ExtensionAdapter? = null
+-        private var novelExtAdapter: ExtensionAdapter? = null
++        private var extAdapter: ExtensionAdapter? = null
+         private var migAdapter: FlexibleAdapter<IFlexible<*>>? = null
+ 
+         val adapters
+-            get() = listOf(mangaExtAdapter, novelExtAdapter, migAdapter)
++            get() = listOf(extAdapter, migAdapter)
+ 
+         val presenter = ExtensionBottomPresenter()
+         var currentSourceTitle: String? = null
+ 
+-        private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
++        private var extensions = emptyList<ExtensionItem>()
++        private var notices = emptyList<ManagedExtensionNotice>()
+         var canExpand = false
+         private lateinit var binding: ExtensionsBottomSheetBinding
+ 
+@@ -84,10 +89,8 @@ class ExtensionBottomSheet
+ 
+         val extensionFrameLayout: RecyclerWithScrollerView?
+             get() = binding.pager.findViewWithTag("TabbedRecycler0") as? RecyclerWithScrollerView
+-        val novelExtensionFrameLayout: RecyclerWithScrollerView?
+-            get() = binding.pager.findViewWithTag("TabbedRecycler1") as? RecyclerWithScrollerView
+         val migrationFrameLayout: RecyclerWithScrollerView?
+-            get() = binding.pager.findViewWithTag("TabbedRecycler2") as? RecyclerWithScrollerView
++            get() = binding.pager.findViewWithTag("TabbedRecycler1") as? RecyclerWithScrollerView
+ 
+         var isExpanding = false
+ 
+@@ -99,11 +102,8 @@ class ExtensionBottomSheet
+         fun onCreate(controller: BrowseController) {
+             // Initialize adapter, scroll listener and recycler views
+             presenter.attachView(this)
+-            mangaExtAdapter = ExtensionAdapter(this)
+-            novelExtAdapter = ExtensionAdapter(this)
+-            listOf(mangaExtAdapter, novelExtAdapter).forEach {
+-                it?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
+-            }
++            extAdapter = ExtensionAdapter(this)
++            extAdapter?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
+             if (migAdapter == null) {
+                 migAdapter = SourceAdapter(this)
+             }
+@@ -118,7 +118,6 @@ class ExtensionBottomSheet
+                 val bottomBar = controller.activityBinding?.bottomNav
+                 val bottomH = bottomBar?.height ?: insets.getInsets(systemBars()).bottom
+                 extensionFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
+-                novelExtensionFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
+                 migrationFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
+             }
+             binding.tabs.addOnTabSelectedListener(
+@@ -131,12 +130,10 @@ class ExtensionBottomSheet
+                         this@ExtensionBottomSheet.controller.updateTitleAndMenu()
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
+-                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = true
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
+-                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.requestLayout()
+                         sheetBehavior?.isDraggable = true
+@@ -146,10 +143,9 @@ class ExtensionBottomSheet
+                     override fun onTabUnselected(tab: TabLayout.Tab?) {
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
+-                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = false
+-                        if (tab?.position == 2) {
++                        if (tab?.position == 1) {
+                             presenter.deselectSource()
+                         }
+                     }
+@@ -159,14 +155,12 @@ class ExtensionBottomSheet
+                         this@ExtensionBottomSheet.sheetBehavior?.expand()
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
+-                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = true
+                         sheetBehavior?.isDraggable = true
+                         if (!isExpanding) {
+                             when (tab?.position) {
+                                 0 -> extensionFrameLayout
+-                                1 -> novelExtensionFrameLayout
+                                 else -> migrationFrameLayout
+                             }?.binding?.recycler?.smoothScrollToTop()
+                         }
+@@ -190,7 +184,7 @@ class ExtensionBottomSheet
+         fun isOnView(view: View): Boolean = "TabbedRecycler${binding.pager.currentItem}" == view.tag
+ 
+         fun updatedNestedRecyclers() {
+-            listOf(extensionFrameLayout, novelExtensionFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
++            listOf(extensionFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
+                 recyclerWithScrollerBinding?.binding?.recycler?.isNestedScrollingEnabled = binding.pager.currentItem == index
+             }
+         }
+@@ -203,39 +197,36 @@ class ExtensionBottomSheet
+         }
+ 
+         fun updateAllPendingExtensions() {
+-            presenter.updateAllPendingExtensions(selectedContentKind() ?: ContentKind.Manga)
++            presenter.updateAllPendingExtensions()
+         }
+ 
+         fun updateExtTitle() {
+-            ContentKind.entries.forEachIndexed { index, kind ->
+-                val extCount = extensions.getValue(kind).count { (it.extension as? Extension.Installed)?.hasUpdate == true }
+-                if (extCount > 0) binding.tabs.getTabAt(index)?.orCreateBadge?.number = extCount else binding.tabs.getTabAt(index)?.removeBadge()
+-            }
++            val extCount = extensions.count { it.extension.hasUpdate }
++            if (extCount > 0) binding.tabs.getTabAt(0)?.orCreateBadge?.number = extCount else binding.tabs.getTabAt(0)?.removeBadge()
+         }
+ 
+         override fun onButtonClick(position: Int) {
+             val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
+-            when (extension) {
+-                is Extension.Installed -> {
+-                    if (!extension.hasUpdate) {
+-                        openDetails(extension)
+-                    } else {
+-                        presenter.updateExtension(extension)
+-                    }
+-                }
+-                is Extension.Available -> {
+-                    presenter.installExtension(extension)
+-                }
+-                is Extension.Untrusted -> {
+-                    openTrustDialog(extension)
+-                }
++            when {
++                extension.installation == ManagedInstallation.Untrusted -> openTrustDialog(extension)
++                extension.health is ManagedHealth.LoadFailed && extension.availableVersion != null -> presenter.install(extension)
++                extension.hasUpdate -> presenter.update(extension)
++                extension.installation == ManagedInstallation.Available -> confirmInstall(extension)
++                else -> openDetails(extension)
+             }
+         }
+ 
+         override fun onWebViewClick(position: Int) {
+-            val extension =
+-                (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension as? Extension.Available ?: return
+-            val source = extension.sources.firstOrNull { it.baseUrl.isNotBlank() } ?: return
++            val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
++            val website = extension.websiteUrl ?: return
++            if (extension.backend == ManagedExtensionBackend.JavaScript) {
++                context.openInBrowser(website)
++                return
++            }
++            val pkgName = (extension.key as? ManagedExtensionKey.Apk)?.packageName ?: return
++            val source = presenter.availableExtension(pkgName)
++                ?.sources
++                ?.firstOrNull { it.baseUrl.isNotBlank() } ?: return
+             val activity = controller.activity ?: return
+             activity.startActivity(
+                 WebViewActivity.newIntent(activity, source.baseUrl, source.id, source.name),
+@@ -281,24 +272,7 @@ class ExtensionBottomSheet
+         }
+ 
+         private fun updateAllExtensions(position: Int) {
+-            val adapter = selectedExtensionAdapter() ?: return
+-            val header = (adapter.getSectionHeader(position)) as? ExtensionGroupItem ?: return
+-            val items = adapter.getSectionItemPositions(header)
+-            val extensions =
+-                items
+-                    ?.mapNotNull {
+-                        val extItem = (adapter.getItem(it) as? ExtensionItem) ?: return
+-                        val extension = (adapter.getItem(it) as? ExtensionItem)?.extension ?: return
+-                        if ((extItem.installStep == null || extItem.installStep == InstallStep.Error) &&
+-                            extension is Extension.Installed &&
+-                            extension.hasUpdate
+-                        ) {
+-                            extension
+-                        } else {
+-                            null
+-                        }
+-                    }.orEmpty()
+-            presenter.updateExtensions(extensions)
++            presenter.updateAllPendingExtensions()
+         }
+ 
+         override fun onItemClick(
+@@ -306,13 +280,13 @@ class ExtensionBottomSheet
+             position: Int,
+         ): Boolean {
+             when (binding.tabs.selectedTabPosition) {
+-                0, 1 -> {
++                0 -> {
+                     val extension =
+                         (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return false
+-                    if (extension is Extension.Installed) {
+-                        openDetails(extension)
+-                    } else if (extension is Extension.Untrusted) {
++                    if (extension.installation == ManagedInstallation.Untrusted) {
+                         openTrustDialog(extension)
++                    } else if (extension.installation == ManagedInstallation.Installed) {
++                        openDetails(extension)
+                     }
+                 }
+                 else -> {
+@@ -333,10 +307,10 @@ class ExtensionBottomSheet
+         }
+ 
+         override fun onItemLongClick(position: Int) {
+-            if (binding.tabs.selectedTabPosition < 2) {
++            if (binding.tabs.selectedTabPosition == 0) {
+                 val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
+-                if (extension is Extension.Installed || extension is Extension.Untrusted) {
+-                    uninstallExtension(extension.name, extension.pkgName)
++                if (extension.installation != ManagedInstallation.Available) {
++                    confirmUninstall(extension)
+                 }
+             }
+         }
+@@ -354,30 +328,75 @@ class ExtensionBottomSheet
+             )
+         }
+ 
+-        private fun openDetails(extension: Extension.Installed) {
+-            val controller = ExtensionDetailsController(extension.pkgName)
+-            this.controller.router.pushController(controller.withFadeTransaction())
++        private fun openDetails(extension: ManagedExtensionEntry) {
++            val apk = extension.key as? ManagedExtensionKey.Apk
++            if (apk != null && extension.health !is ManagedHealth.LoadFailed) {
++                val controller = ExtensionDetailsController(apk.packageName)
++                this.controller.router.pushController(controller.withFadeTransaction())
++                return
++            }
++            controller.activity?.materialAlertDialog()
++                ?.setTitle(extension.name)
++                ?.setMessage(
++                    buildString {
++                        append(extension.backend.name)
++                        extension.installedVersion?.let { append("\n").append(context.getString(R.string.version)).append(" ").append(it) }
++                        (extension.health as? ManagedHealth.LoadFailed)?.let { append("\n").append(it.diagnostic) }
++                    },
++                )
++                ?.setPositiveButton(android.R.string.ok, null)
++                ?.setNegativeButton(R.string.uninstall) { _, _ -> confirmUninstall(extension) }
++                ?.show()
+         }
+ 
+-        private fun openTrustDialog(extension: Extension.Untrusted) {
++        private fun openTrustDialog(extension: ManagedExtensionEntry) {
+             val activity = controller.activity ?: return
++            val pkgName = (extension.key as? ManagedExtensionKey.Apk)?.packageName ?: return
++            val untrusted = presenter.untrustedExtension(pkgName) ?: return
+             activity
+                 .materialAlertDialog()
+                 .setTitle(R.string.untrusted_extension)
+                 .setMessage(R.string.untrusted_extension_message)
+                 .setPositiveButton(R.string.trust) { _, _ ->
+-                    trustExtension(extension.pkgName, extension.versionCode, extension.signatureHash)
++                    trustExtension(untrusted.pkgName, untrusted.versionCode, untrusted.signatureHash)
+                 }.setNegativeButton(R.string.uninstall) { _, _ ->
+-                    uninstallExtension(extension.pkgName)
++                    presenter.uninstall(extension)
+                 }.show()
+         }
+ 
++        private fun confirmInstall(extension: ManagedExtensionEntry) {
++            if (extension.backend == ManagedExtensionBackend.Apk) {
++                presenter.install(extension)
++                return
++            }
++            controller.activity?.materialAlertDialog()
++                ?.setTitle(extension.name)
++                ?.setMessage(R.string.hayai_novel_plugin_install_warning)
++                ?.setNegativeButton(android.R.string.cancel, null)
++                ?.setPositiveButton(R.string.install) { _, _ -> presenter.install(extension) }
++                ?.show()
++        }
++
++        private fun confirmUninstall(extension: ManagedExtensionEntry) {
++            controller.activity?.materialAlertDialog()
++                ?.setTitle(extension.name)
++                ?.setMessage(context.getString(R.string.hayai_extension_uninstall_confirmation, extension.name))
++                ?.setNegativeButton(android.R.string.cancel, null)
++                ?.setPositiveButton(R.string.uninstall) { _, _ -> presenter.uninstall(extension) }
++                ?.show()
++        }
++
+         fun setExtensions(
+-            contentKind: ContentKind,
+             extensions: List<ExtensionItem>,
++            notices: List<ManagedExtensionNotice>,
+             updateController: Boolean = true,
+         ) {
+-            this.extensions = this.extensions + (contentKind to extensions)
++            val newNotice = notices.firstOrNull { notice ->
++                this.notices.none { it.identity == notice.identity && it.diagnostic == notice.diagnostic }
++            }
++            this.extensions = extensions
++            this.notices = notices
++            newNotice?.let { context.toast(context.getString(R.string.hayai_extension_catalog_problem, it.diagnostic)) }
+             if (updateController) {
+                 controller.presenter.updateSources()
+             }
+@@ -412,22 +431,19 @@ class ExtensionBottomSheet
+         }
+ 
+         fun drawExtensions() {
+-            ContentKind.entries.forEach { kind ->
+-                val items = extensions.getValue(kind)
+-                extensionAdapter(kind)?.updateDataSet(
+-                    if (controller.extQuery.isBlank()) items else items.filter { it.extension.name.contains(controller.extQuery, ignoreCase = true) },
+-                )
+-            }
++            extAdapter?.updateDataSet(
++                if (controller.extQuery.isBlank()) extensions else extensions.filter { it.extension.name.contains(controller.extQuery, ignoreCase = true) },
++            )
+             updateExtTitle()
+             updateExtUpdateAllButton()
+         }
+ 
+         fun canStillGoBack(): Boolean =
+-            (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) ||
+-                (binding.tabs.selectedTabPosition < 2 && binding.sheetToolbar.hasExpandedActionView())
++            (binding.tabs.selectedTabPosition == 1 && migAdapter is MangaAdapter) ||
++                (binding.tabs.selectedTabPosition == 0 && binding.sheetToolbar.hasExpandedActionView())
+ 
+         fun canGoBack(): Boolean =
+-            if (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) {
++            if (binding.tabs.selectedTabPosition == 1 && migAdapter is MangaAdapter) {
+                 presenter.deselectSource()
+                 false
+             } else if (binding.sheetToolbar.hasExpandedActionView()) {
+@@ -438,9 +454,7 @@ class ExtensionBottomSheet
+             }
+ 
+         fun downloadUpdate(item: ExtensionItem) {
+-            ContentKind.entries.filter { it.accepts(item.extension) }.forEach { kind ->
+-                extensionAdapter(kind)?.updateItem(item, item.installStep)
+-            }
++            extAdapter?.updateItem(item, item.installStep)
+             updateExtUpdateAllButton()
+         }
+ 
+@@ -466,29 +480,8 @@ class ExtensionBottomSheet
+             presenter.trustExtension(pkgName, versionCode, signatureHash)
+         }
+ 
+-        private fun uninstallExtension(pkgName: String) {
+-            presenter.uninstallExtension(pkgName)
+-        }
+-
+-        private fun uninstallExtension(
+-            extName: String,
+-            pkgName: String,
+-        ) {
+-            if (context.isPackageInstalled(pkgName)) {
+-                presenter.uninstallExtension(pkgName)
+-            } else {
+-                controller.activity!!
+-                    .materialAlertDialog()
+-                    .setTitle(extName)
+-                    .setPositiveButton(R.string.remove) { _, _ ->
+-                        presenter.uninstallExtension(pkgName)
+-                    }.setNegativeButton(android.R.string.cancel, null)
+-                    .show()
+-            }
+-        }
+-
+         fun setCanInstallPrivately(installPrivately: Boolean) {
+-            listOf(mangaExtAdapter, novelExtAdapter).forEach { it?.installPrivately = installPrivately }
++            extAdapter?.installPrivately = installPrivately
+         }
+ 
+         fun onDestroy() {
+@@ -496,13 +489,12 @@ class ExtensionBottomSheet
+         }
+ 
+         private inner class TabbedSheetAdapter : RecyclerViewPagerAdapter() {
+-            override fun getCount(): Int = 3
++            override fun getCount(): Int = 2
+ 
+             override fun getPageTitle(position: Int): CharSequence =
+                 context.getString(
+                     when (position) {
+-                        0 -> R.string.manga
+-                        1 -> R.string.hayai_novels
++                        0 -> R.string.extensions
+                         else -> R.string.migration
+                     },
+                 )
+@@ -570,11 +562,5 @@ class ExtensionBottomSheet
+             }
+         }
+ 
+-        private fun selectedContentKind(): ContentKind? =
+-            binding.tabs.selectedTabPosition.takeIf { it in 0..1 }?.let(ContentKind::fromPosition)
+-
+-        private fun extensionAdapter(kind: ContentKind): ExtensionAdapter? =
+-            if (kind == ContentKind.Manga) mangaExtAdapter else novelExtAdapter
+-
+-        private fun selectedExtensionAdapter(): ExtensionAdapter? = selectedContentKind()?.let(::extensionAdapter)
++        private fun selectedExtensionAdapter(): ExtensionAdapter? = extAdapter.takeIf { binding.tabs.selectedTabPosition == 0 }
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
+index 3bcaf492d9b60ee8d929358749539957db91be3b..9423a6b1a8af356a3b8f412d00fcdf54756e7bb4 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
+@@ -3,25 +3,20 @@ package eu.kanade.tachiyomi.ui.extension
+ import android.content.res.ColorStateList
+ import android.view.View
+ import android.view.ViewGroup
+-import androidx.core.text.buildSpannedString
+-import androidx.core.text.color
+-import androidx.core.text.scale
+-import androidx.core.view.isGone
+ import androidx.core.view.isVisible
+ import androidx.core.view.updateLayoutParams
+ import coil.dispose
+ import coil.load
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionBackend
++import dev.ahmedmohamed.hayai.extension.managed.ManagedHealth
++import dev.ahmedmohamed.hayai.extension.managed.ManagedInstallation
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
+ import eu.kanade.tachiyomi.databinding.ExtensionCardItemBinding
+-import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.extension.model.InstallStep
+-import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
+-import eu.kanade.tachiyomi.extension.util.ExtensionLoader
+ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
+ import eu.kanade.tachiyomi.util.system.LocaleHelper
+ import eu.kanade.tachiyomi.util.system.getResourceColor
+-import eu.kanade.tachiyomi.util.system.timeSpanFromNow
+ import eu.kanade.tachiyomi.util.view.applyStyle
+ import eu.kanade.tachiyomi.util.view.applyStyleFromAttr
+ import eu.kanade.tachiyomi.util.view.makeContainerShape
+@@ -34,168 +29,114 @@ class ExtensionHolder(
+     private val binding = ExtensionCardItemBinding.bind(view)
+ 
+     init {
+-        binding.extButton.setOnClickListener {
+-            adapter.buttonClickListener.onButtonClick(flexibleAdapterPosition)
+-        }
+-        binding.cancelButton.setOnClickListener {
+-            adapter.buttonClickListener.onCancelClick(flexibleAdapterPosition)
+-        }
+-        binding.webviewButton.setOnClickListener {
+-            adapter.buttonClickListener.onWebViewClick(flexibleAdapterPosition)
+-        }
++        binding.extButton.setOnClickListener { adapter.buttonClickListener.onButtonClick(flexibleAdapterPosition) }
++        binding.cancelButton.setOnClickListener { adapter.buttonClickListener.onCancelClick(flexibleAdapterPosition) }
++        binding.webviewButton.setOnClickListener { adapter.buttonClickListener.onWebViewClick(flexibleAdapterPosition) }
+     }
+ 
+     fun bind(item: ExtensionItem) {
+         val extension = item.extension
+-
+-        // Set source name
+-
+-        val infoText = mutableListOf(extension.versionName)
+         binding.date.isVisible = false
+-        binding.extDivider.isVisible = extension is Extension.Installed && extension.hasUpdate
+-        if (extension is Extension.Installed && !extension.hasUpdate) {
+-            when (InstalledExtensionsOrder.fromValue(adapter.installedSortOrder)) {
+-                InstalledExtensionsOrder.RecentlyUpdated -> {
+-                    ExtensionLoader
+-                        .extensionUpdateDate(itemView.context, extension)
+-                        .takeUnless { it == 0L }
+-                        ?.let {
+-                            binding.date.isVisible = true
+-                            binding.date.text = itemView.context.timeSpanFromNow(R.string.updated_, it)
+-                            infoText.add("")
+-                        }
+-                }
+-                InstalledExtensionsOrder.RecentlyInstalled -> {
+-                    ExtensionLoader
+-                        .extensionInstallDate(itemView.context, extension)
+-                        .takeUnless { it == 0L }
+-                        ?.let {
+-                            binding.date.isVisible = true
+-                            binding.date.text =
+-                                itemView.context.timeSpanFromNow(
+-                                    if (extension.isShared) {
+-                                        R.string.installed_
+-                                    } else {
+-                                        R.string.added_
+-                                    },
+-                                    it,
+-                                )
+-                            infoText.add("")
+-                        }
+-                }
+-                else -> binding.date.isVisible = false
+-            }
+-        } else {
+-            binding.date.isVisible = false
+-        }
+-        binding.lang.isVisible = binding.date.isGone && extension !is Extension.Untrusted
+-        binding.extTitle.text =
+-            if (infoText.size > 1) {
+-                buildSpannedString {
+-                    append(extension.name + " ")
+-                    color(binding.extTitle.context.getResourceColor(android.R.attr.textColorSecondary)) {
+-                        scale(0.75f) {
+-                            append(LocaleHelper.getDisplayName(extension.lang))
+-                        }
+-                    }
+-                }
+-            } else {
+-                extension.name
+-            }
+-
+-        binding.version.text = infoText.joinToString(" • ")
+-        binding.lang.text = LocaleHelper.getDisplayName(extension.lang)
++        binding.extDivider.isVisible = extension.hasUpdate
++        binding.extTitle.text = extension.name
++        binding.version.text = buildList {
++            add(extension.installedVersion ?: extension.availableVersion.orEmpty())
++            add(
++                itemView.context.getString(
++                    if (extension.backend == ManagedExtensionBackend.JavaScript) {
++                        R.string.hayai_extension_javascript
++                    } else {
++                        R.string.hayai_extension_apk
++                    },
++                ),
++            )
++        }.filter(String::isNotBlank).joinToString(" • ")
++        binding.lang.isVisible = extension.language != null && extension.installation != ManagedInstallation.Untrusted
++        binding.lang.text = extension.language?.let(LocaleHelper::getDisplayName).orEmpty()
+         binding.warning.text =
+             when {
+-                (extension as? Extension.Installed)?.isObsolete == true ->
+-                    itemView.context.getString(R.string.orphaned)
++                extension.health is ManagedHealth.LoadFailed -> itemView.context.getString(R.string.hayai_extension_load_failed)
++                extension.installation == ManagedInstallation.Untrusted -> itemView.context.getString(R.string.untrusted)
+                 extension.isNsfw -> itemView.context.getString(R.string.nsfw_short)
++                extension.backend == ManagedExtensionBackend.JavaScript -> itemView.context.getString(R.string.hayai_extension_javascript)
+                 else -> ""
+             }.uppercase(Locale.ROOT)
+         binding.installProgress.progress = item.sessionProgress ?: 0
+         binding.installProgress.isVisible = item.sessionProgress != null
+         binding.cancelButton.isVisible = item.sessionProgress != null
+-        binding.webviewButton.isVisible =
+-            extension is Extension.Available &&
+-            extension.sources.any { it.baseUrl.isNotBlank() }
++        binding.webviewButton.isVisible = extension.websiteUrl != null && item.sessionProgress == null
+ 
+         binding.sourceImage.dispose()
+-
+         binding.sourceImage.imageTintList = null
+-        when (extension) {
+-            is Extension.Available ->
+-                binding.sourceImage.load(extension.iconUrl) {
+-                    target(CoverViewTarget(binding.sourceImage))
+-                }
+-            is Extension.Installed -> binding.sourceImage.load(extension.icon)
+-            is Extension.Untrusted -> {
+-                binding.sourceImage.imageTintList =
+-                    ColorStateList.valueOf(itemView.context.getResourceColor(R.attr.colorError))
++        when {
++            extension.installation == ManagedInstallation.Untrusted || extension.health is ManagedHealth.LoadFailed -> {
++                binding.sourceImage.imageTintList = ColorStateList.valueOf(itemView.context.getResourceColor(R.attr.colorError))
+                 binding.sourceImage.setImageResource(R.drawable.ic_app_untrusted_24dp)
+             }
++            extension.installedIcon != null -> binding.sourceImage.load(extension.installedIcon)
++            extension.iconUrl != null -> binding.sourceImage.load(extension.iconUrl) { target(CoverViewTarget(binding.sourceImage)) }
++            extension.backend == ManagedExtensionBackend.JavaScript -> binding.sourceImage.setImageResource(R.drawable.ic_code_24dp)
++            else -> binding.sourceImage.setImageResource(R.mipmap.ic_launcher)
+         }
+         bindButton(item)
+     }
+ 
+     @Suppress("ResourceType")
+-    fun bindButton(item: ExtensionItem) =
+-        with(binding.extButton) {
+-            if (item.installStep == InstallStep.Done) return@with
+-            val installStep = item.installStep
+-            val extension = item.extension
+-            isEnabled = true
+-            isClickable = true
+-
+-            binding.installProgress.progress = item.sessionProgress ?: 0
+-            binding.cancelButton.isVisible = item.sessionProgress != null
+-            binding.installProgress.isVisible = item.sessionProgress != null
+-
+-            binding.webviewButton.isVisible =
+-                extension is Extension.Available &&
+-                extension.sources.any { it.baseUrl.isNotBlank() } &&
+-                item.sessionProgress == null
+-            if (installStep != null) {
+-                applyStyle(R.style.Widget_Tachiyomi_Button_TextButton)
+-                setText(
+-                    when (installStep) {
+-                        InstallStep.Pending -> R.string.pending
+-                        InstallStep.Downloading -> R.string.downloading
+-                        InstallStep.Loading -> R.string.loading
+-                        InstallStep.Installing -> R.string.installing
+-                        InstallStep.Installed -> R.string.installed
+-                        InstallStep.Error -> R.string.retry
+-                        InstallStep.Done -> return@with
+-                    },
+-                )
+-                if (installStep != InstallStep.Error) {
+-                    isEnabled = false
+-                    isClickable = false
++    fun bindButton(item: ExtensionItem) = with(binding.extButton) {
++        if (item.installStep == InstallStep.Done) return@with
++        val installStep = item.installStep
++        val extension = item.extension
++        isEnabled = true
++        isClickable = true
++        binding.installProgress.progress = item.sessionProgress ?: 0
++        binding.cancelButton.isVisible = item.sessionProgress != null
++        binding.installProgress.isVisible = item.sessionProgress != null
++        binding.webviewButton.isVisible = extension.websiteUrl != null && item.sessionProgress == null
++        if (installStep != null) {
++            applyStyle(R.style.Widget_Tachiyomi_Button_TextButton)
++            setText(
++                when (installStep) {
++                    InstallStep.Pending -> R.string.pending
++                    InstallStep.Downloading -> R.string.downloading
++                    InstallStep.Loading -> R.string.loading
++                    InstallStep.Installing -> R.string.installing
++                    InstallStep.Installed -> R.string.installed
++                    InstallStep.Error -> R.string.retry
++                    InstallStep.Done -> return@with
++                },
++            )
++            if (installStep != InstallStep.Error) {
++                isEnabled = false
++                isClickable = false
++            }
++        } else {
++            when {
++                extension.installation == ManagedInstallation.Untrusted -> {
++                    applyStyleFromAttr(R.attr.materialButtonOutlinedStyle)
++                    setText(R.string.trust)
++                }
++                extension.health is ManagedHealth.LoadFailed && extension.availableVersion != null -> {
++                    applyStyleFromAttr(R.attr.materialButtonOutlinedStyle)
++                    setText(R.string.retry)
+                 }
+-            } else if (extension is Extension.Installed) {
+-                when {
+-                    extension.hasUpdate -> {
+-                        applyStyleFromAttr(R.attr.materialButtonStyle)
+-                        setText(R.string.update)
+-                    }
+-                    else -> {
+-                        applyStyle(R.style.Widget_Tachiyomi_Button_TextButton)
+-                        setText(R.string.settings)
+-                    }
++                extension.hasUpdate -> {
++                    applyStyleFromAttr(R.attr.materialButtonStyle)
++                    setText(R.string.update)
++                }
++                extension.installation == ManagedInstallation.Installed -> {
++                    applyStyle(R.style.Widget_Tachiyomi_Button_TextButton)
++                    setText(R.string.settings)
++                }
++                else -> {
++                    applyStyleFromAttr(R.attr.materialButtonOutlinedStyle)
++                    setText(if (extension.backend == ManagedExtensionBackend.Apk && adapter.installPrivately) R.string.add else R.string.install)
+                 }
+-            } else if (extension is Extension.Untrusted) {
+-                applyStyleFromAttr(R.attr.materialButtonOutlinedStyle)
+-                setText(R.string.trust)
+-            } else {
+-                applyStyleFromAttr(R.attr.materialButtonOutlinedStyle)
+-                setText(if (adapter.installPrivately) R.string.add else R.string.install)
+             }
+-            updateLayoutParams { width = ViewGroup.LayoutParams.WRAP_CONTENT }
+         }
++        updateLayoutParams { width = ViewGroup.LayoutParams.WRAP_CONTENT }
++    }
+ 
+-    fun setCorners(
+-        top: Boolean,
+-        bottom: Boolean,
+-    ) {
++    fun setCorners(top: Boolean, bottom: Boolean) {
+         binding.extCard.shapeAppearanceModel = binding.extCard.makeContainerShape(top, bottom)
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
+index 366b67338aca82051fccf31cbeaa058856506ec4..beb6a3aa28efab6dc63f9a8550a885e9b282a217 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
+@@ -3,11 +3,11 @@ package eu.kanade.tachiyomi.ui.extension
+ import android.content.pm.PackageInstaller
+ import android.view.View
+ import androidx.recyclerview.widget.RecyclerView
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionEntry
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.AbstractSectionableItem
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.extension.model.InstallStep
+ import eu.kanade.tachiyomi.source.CatalogueSource
+ 
+@@ -18,17 +18,11 @@ import eu.kanade.tachiyomi.source.CatalogueSource
+  * @param header The header for this item.
+  */
+ data class ExtensionItem(
+-    val extension: Extension,
++    val extension: ManagedExtensionEntry,
+     val header: ExtensionGroupItem? = null,
+     val installStep: InstallStep? = null,
+     val session: PackageInstaller.SessionInfo? = null,
+ ) : AbstractSectionableItem<ExtensionHolder, ExtensionGroupItem>(header) {
+-    constructor(
+-        extension: Extension,
+-        header: ExtensionGroupItem? = null,
+-        installInfo: ExtensionIntallInfo?,
+-    ) : this(extension, header, installInfo?.first, installInfo?.second)
+-
+     val sessionProgress: Int?
+         get() = (session?.progress?.times(100)?.toInt())
+ 
+@@ -68,8 +62,8 @@ data class ExtensionItem(
+     override fun equals(other: Any?): Boolean {
+         if (this === other) return true
+         if (javaClass != other?.javaClass) return false
+-        return extension.pkgName == (other as ExtensionItem).extension.pkgName
++        return extension.key == (other as ExtensionItem).extension.key
+     }
+ 
+-    override fun hashCode(): Int = extension.pkgName.hashCode()
++    override fun hashCode(): Int = extension.key.hashCode()
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+index 63e5a578eba8352ae84e103258dd6ad997c6ca7f..e8ce41cd65dcc30a8b8023e26825d4d328e32e1b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+@@ -15,7 +15,6 @@ import androidx.core.net.toUri
+ import androidx.lifecycle.lifecycleScope
+ import androidx.preference.PreferenceScreen
+ import dev.ahmedmohamed.hayai.migration.LegacyMigrationRetryRequest
+-import dev.ahmedmohamed.hayai.novel.plugin.ui.NovelPluginManagerController
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddController
+@@ -108,12 +107,6 @@ class SettingsAdvancedController : SettingsController() {
+                     defaultValue = hayaiPreferences.hentaiFeaturesEnabled.defaultValue()
+                 }
+ 
+-                preference {
+-                    titleRes = R.string.hayai_novel_plugins
+-                    summaryRes = R.string.hayai_novel_plugins_summary
+-                    onClick { router.pushController(NovelPluginManagerController().withFadeTransaction()) }
+-                }
+-
+                 preference {
+                     titleRes = R.string.hayai_eh_account
+                     summaryRes = R.string.hayai_eh_account_summary
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+index 71ec32e8b51f3a59c0ace8a92fad642978505404..cabb3f39c83da943f808ef1fb9bf30f6dc5a3ef7 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+@@ -6,7 +6,6 @@ import android.provider.Settings
+ import androidx.preference.PreferenceScreen
+ import androidx.preference.SwitchPreferenceCompat
+ import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
+-import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import dev.ahmedmohamed.hayai.novel.repository.NovelRepositoryHubController
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+@@ -20,7 +19,6 @@ import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
+ import eu.kanade.tachiyomi.source.SourceManager
+ import eu.kanade.tachiyomi.ui.main.MainActivity
+ import eu.kanade.tachiyomi.ui.migration.MigrationController
+-import eu.kanade.tachiyomi.ui.source.browse.repos.RepoController
+ import eu.kanade.tachiyomi.util.view.snack
+ import eu.kanade.tachiyomi.util.view.withFadeTransaction
+ import uy.kohesive.injekt.injectLazy
+@@ -62,15 +60,6 @@ class SettingsBrowseController : SettingsController() {
+                 preference {
+                     key = "pref_edit_extension_repos"
+ 
+-                    val repoCount = (preferences.extensionRepos().get() - novelRepositories.novelOnlyRepositoriesNow()).count()
+-                    titleRes = R.string.extension_repos
+-                    if (repoCount > 0) summary = context.resources.getQuantityString(R.plurals.num_repos, repoCount, repoCount)
+-
+-                    onClick { router.pushController(RepoController(ContentKind.Manga).withFadeTransaction()) }
+-                }
+-                preference {
+-                    key = "pref_edit_novel_extension_repos"
+-
+                     titleRes = R.string.hayai_novel_repository_management
+                     summaryRes = R.string.hayai_novel_repository_management_summary
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
+index 9007c62e3c10a6a7464c765e5d3d9f5f0b16c155..b747b048231da2f8484eb2b7ec6004fda68217d6 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
+@@ -47,7 +47,6 @@ import eu.kanade.tachiyomi.ui.main.TabbedInterface
+ import eu.kanade.tachiyomi.ui.setting.SettingsBrowseController
+ import eu.kanade.tachiyomi.ui.setting.SettingsSourcesController
+ import eu.kanade.tachiyomi.ui.source.browse.BrowseSourceController
+-import eu.kanade.tachiyomi.ui.source.browse.repos.RepoController
+ import eu.kanade.tachiyomi.ui.source.globalsearch.GlobalSearchController
+ import eu.kanade.tachiyomi.util.system.dpToPx
+ import eu.kanade.tachiyomi.util.system.getBottomGestureInsets
+@@ -338,7 +337,7 @@ class BrowseController :
+     }
+ 
+     private fun updateSheetMenu() {
+-        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition < 2
++        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition == 0
+         binding.bottomSheet.sheetToolbar.title =
+             if (!onExtensionTab) {
+                 binding.bottomSheet.root.currentSourceTitle
+@@ -428,14 +427,7 @@ class BrowseController :
+                     router.pushController(SettingsBrowseController().withFadeTransaction())
+                 }
+                 R.id.action_ext_repos -> {
+-                    val kind = ContentKind.fromPosition(binding.bottomSheet.tabs.selectedTabPosition)
+-                    val destination =
+-                        if (kind == ContentKind.Novel) {
+-                            NovelRepositoryHubController()
+-                        } else {
+-                            RepoController(kind)
+-                        }
+-                    router.pushController(destination.withFadeTransaction())
++                    router.pushController(NovelRepositoryHubController().withFadeTransaction())
+                 }
+             }
+             return@setOnMenuItemClickListener true
+@@ -531,9 +523,6 @@ class BrowseController :
+         binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+             bottomMargin = -pad.toInt()
+         }
+-        binding.bottomSheet.root.novelExtensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+-            bottomMargin = -pad.toInt()
+-        }
+         binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+             bottomMargin = -pad.toInt()
+         }
+diff --git a/app/src/main/res/values/strings_hayai_misc.xml b/app/src/main/res/values/strings_hayai_misc.xml
+index 61afede3d81ed8f86feaf9900e256b892d1be659..dfc33ceaf4b2477f8e1142f244439d8efb9305da 100644
+--- a/app/src/main/res/values/strings_hayai_misc.xml
++++ b/app/src/main/res/values/strings_hayai_misc.xml
+@@ -1,5 +1,11 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
++    <string name="hayai_extension_apk">APK</string>
++    <string name="hayai_extension_javascript">JavaScript</string>
++    <string name="hayai_extension_catalog_problem">Extension catalog: %1$s</string>
++    <string name="hayai_extension_load_failed">Load failed</string>
++    <string name="hayai_extension_uninstall_confirmation">Remove %1$s from Hayai?</string>
++    <string name="hayai_extension_available">Available</string>
+     <!-- Novel APK extensions -->
+     <string name="hayai_novel_extensions_title">Novel extensions</string>
+     <string name="hayai_novel_repository_management">Novel repositories</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconcilerTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconcilerTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..241447a5cef22f3ce02a4ed80af651e22a731e2b
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconcilerTest.kt
+@@ -0,0 +1,70 @@
++package dev.ahmedmohamed.hayai.extension
++
++import eu.kanade.tachiyomi.extension.model.Extension
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ExtensionCatalogReconcilerTest {
++    @Test
++    fun `newest package copy is shared by every catalog consumer`() {
++        val copies = listOf(
++            available(versionCode = 2, libVersion = 1.5, repo = "https://old.example/repo.json"),
++            available(versionCode = 2, libVersion = 1.6, repo = "https://new.example/repo.json"),
++            available(versionCode = 1, libVersion = 1.6, repo = "https://other.example/repo.json"),
++        )
++
++        val selected = ExtensionCatalogReconciler.newestCopies(copies).single()
++
++        assertEquals(2, selected.versionCode)
++        assertEquals(1.6, selected.libVersion, 0.0)
++        assertEquals("https://new.example/repo.json", selected.repoUrl)
++    }
++
++    @Test
++    fun `update comparison clears after both installed values catch up`() {
++        val installed = installed(versionCode = 2, libVersion = 1.6)
++
++        assertFalse(ExtensionCatalogReconciler.hasUpdate(installed, available(2, 1.6)))
++        assertTrue(ExtensionCatalogReconciler.hasUpdate(installed, available(3, 1.6)))
++        assertTrue(ExtensionCatalogReconciler.hasUpdate(installed, available(2, 1.7)))
++    }
++
++    private fun available(
++        versionCode: Long,
++        libVersion: Double,
++        repo: String = "https://repo.example/repo.json",
++    ) = Extension.Available(
++        name = "Example",
++        pkgName = "dev.example.extension",
++        versionName = "$libVersion.$versionCode",
++        versionCode = versionCode,
++        libVersion = libVersion,
++        lang = "en",
++        isNsfw = false,
++        isNovel = false,
++        apkName = "example.apk",
++        iconUrl = "https://repo.example/icon.png",
++        sources = emptyList(),
++        repoUrl = repo,
++    )
++
++    private fun installed(
++        versionCode: Long,
++        libVersion: Double,
++    ) = Extension.Installed(
++        name = "Example",
++        pkgName = "dev.example.extension",
++        versionName = "$libVersion.$versionCode",
++        versionCode = versionCode,
++        libVersion = libVersion,
++        lang = "en",
++        isNsfw = false,
++        isNovel = false,
++        pkgFactory = null,
++        sources = emptyList(),
++        icon = null,
++        isShared = true,
++    )
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b918c27cca38a64c1769d1afbf1494af157268d
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
+@@ -0,0 +1,116 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
++import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
++import eu.kanade.tachiyomi.extension.model.Extension
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ManagedExtensionProjectorTest {
++    private val filter = ManagedExtensionFilter(setOf("en"), showNsfwSources = false)
++
++    @Test
++    fun `apk and javascript identities cannot collide`() {
++        val state = ManagedExtensionProjector.project(
++            apk = ApkExtensionSnapshot(emptyList(), emptyList(), listOf(availableApk("same")), emptyList()),
++            js = NovelPluginCatalog(available = listOf(plugin("same", "1.0.0")), availableOrigins = mapOf("same" to REPO)),
++            filter = filter,
++        )
++
++        assertEquals(setOf("apk:same", "js:same"), state.available.map { it.key.stableValue }.toSet())
++    }
++
++    @Test
++    fun `installed entries survive filters and missing repositories`() {
++        val installedApk = installedApk("adult.apk", nsfw = true)
++        val installedJs = InstalledNovelPlugin(plugin("offline-js", "1.0.0"), REPO, 1L, "a".repeat(64))
++
++        val state = ManagedExtensionProjector.project(
++            apk = ApkExtensionSnapshot(listOf(installedApk), emptyList(), emptyList(), emptyList()),
++            js = NovelPluginCatalog(installed = listOf(installedJs)),
++            filter = filter,
++        )
++
++        assertEquals(setOf("apk:adult.apk", "js:offline-js"), state.installed.map { it.key.stableValue }.toSet())
++    }
++
++    @Test
++    fun `failed installed apk and failed javascript runtime stay visible`() {
++        val installedJs = InstalledNovelPlugin(plugin("broken-js", "1.0.0"), REPO, 1L, "b".repeat(64))
++        val state = ManagedExtensionProjector.project(
++            apk = ApkExtensionSnapshot(
++                emptyList(),
++                emptyList(),
++                emptyList(),
++                listOf(ApkLoadFailure("broken.apk", "Broken APK", "1.0", ApkLoadFailure.Reason.ClassLoader)),
++            ),
++            js = NovelPluginCatalog(installed = listOf(installedJs), runtimeErrors = mapOf("broken-js" to IllegalStateException("boom"))),
++            filter = filter,
++        )
++
++        assertEquals(2, state.installed.size)
++        assertTrue(state.installed.all { it.health is ManagedHealth.LoadFailed })
++    }
++
++    @Test
++    fun `updates are projected without hiding the installed record`() {
++        val apk = installedApk("update.apk").copy(hasUpdate = true)
++        val installedJs = InstalledNovelPlugin(plugin("update-js", "1.0.0"), REPO, 1L, "c".repeat(64))
++        val state = ManagedExtensionProjector.project(
++            apk = ApkExtensionSnapshot(listOf(apk), emptyList(), listOf(availableApk("update.apk", 2)), emptyList()),
++            js = NovelPluginCatalog(
++                available = listOf(plugin("update-js", "2.0.0")),
++                installed = listOf(installedJs),
++                availableOrigins = mapOf("update-js" to REPO),
++            ),
++            filter = filter,
++        )
++
++        assertEquals(setOf("apk:update.apk", "js:update-js"), state.updates.map { it.key.stableValue }.toSet())
++    }
++
++    private fun plugin(id: String, version: String) = NovelPluginDescriptor(
++        id = id,
++        name = id,
++        lang = "en",
++        version = version,
++        url = "https://repo.example/$id.js",
++    )
++
++    private fun availableApk(pkg: String, version: Long = 1) = Extension.Available(
++        name = pkg,
++        pkgName = pkg,
++        versionName = "1.6.$version",
++        versionCode = version,
++        libVersion = 1.6,
++        lang = "en",
++        isNsfw = false,
++        isNovel = false,
++        apkName = "$pkg.apk",
++        iconUrl = "https://repo.example/icon.png",
++        sources = emptyList(),
++        repoUrl = REPO,
++    )
++
++    private fun installedApk(pkg: String, nsfw: Boolean = false) = Extension.Installed(
++        name = pkg,
++        pkgName = pkg,
++        versionName = "1.6.1",
++        versionCode = 1,
++        libVersion = 1.6,
++        lang = "fr",
++        isNsfw = nsfw,
++        isNovel = false,
++        pkgFactory = null,
++        sources = emptyList(),
++        icon = null,
++        isShared = true,
++    )
++
++    private companion object {
++        const val REPO = "https://repo.example/repo.json"
++    }
++}
+-- 
+2.54.0.windows.1
+
