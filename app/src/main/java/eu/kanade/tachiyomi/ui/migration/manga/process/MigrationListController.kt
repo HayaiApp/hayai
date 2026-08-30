@@ -18,6 +18,7 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
 import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
@@ -85,6 +86,10 @@ class MigrationListController(
     private val novelMigrationPolicy: NovelMigrationPolicy by injectLazy()
 
     private val smartSearchEngine = SmartSearchEngine(coroutineContext, config?.extraSearchParams)
+
+    private val contentKind: ContentKind by lazy {
+        novelMigrationPolicy.contentKind(config?.mangaIds.orEmpty()) ?: ContentKind.Manga
+    }
 
     var migrationsJob: Job? = null
         private set
@@ -346,7 +351,7 @@ class MigrationListController(
             if (res != null) {
                 activity?.toast(
                     res.getQuantityString(
-                        R.plurals.manga_migrated,
+                        if (contentKind == ContentKind.Novel) R.plurals.hayai_novels_migrated else R.plurals.manga_migrated,
                         manaulMigrations,
                         manaulMigrations,
                     ),
@@ -576,7 +581,13 @@ class MigrationListController(
         mangaSkipped: Int,
     ) {
         val activity = activity ?: return
-        val confirmRes = if (copy) R.plurals.copy_manga else R.plurals.migrate_manga
+        val confirmRes =
+            when {
+                contentKind == ContentKind.Novel && copy -> R.plurals.hayai_copy_novels
+                contentKind == ContentKind.Novel -> R.plurals.hayai_migrate_novels
+                copy -> R.plurals.copy_manga
+                else -> R.plurals.migrate_manga
+            }
         val skipping by lazy { activity.getString(R.string.skipping_, mangaSkipped) }
         val additionalString = if (mangaSkipped > 0) " $skipping" else ""
         val confirmString =

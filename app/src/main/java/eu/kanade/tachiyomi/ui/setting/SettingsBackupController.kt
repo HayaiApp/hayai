@@ -4,16 +4,13 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
-import android.os.Bundle
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
-import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.core.net.toUri
 import androidx.preference.PreferenceScreen
-import com.hippo.unifile.UniFile
+import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.backup.BackupConst
 import eu.kanade.tachiyomi.data.backup.BackupCreatorJob
@@ -26,7 +23,6 @@ import eu.kanade.tachiyomi.util.system.disableItems
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
-import eu.kanade.tachiyomi.util.view.requestFilePermissionsSafe
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
@@ -35,14 +31,6 @@ class SettingsBackupController : SettingsController() {
      * Flags containing information of what to backup.
      */
     private var backupFlags = 0
-
-    override fun onViewCreated(
-        view: View,
-        savedInstanceState: Bundle?,
-    ) {
-        super.onViewCreated(view, savedInstanceState)
-        requestFilePermissionsSafe(500, preferences)
-    }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) =
         screen.apply {
@@ -118,7 +106,13 @@ class SettingsBackupController : SettingsController() {
 
                     onClick {
                         try {
-                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                            val intent =
+                                Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                                        Intent.FLAG_GRANT_PREFIX_URI_PERMISSION,
+                                )
                             startActivityForResult(intent, CODE_BACKUP_DIR)
                         } catch (e: ActivityNotFoundException) {
                             activity?.toast(R.string.file_picker_error)
@@ -131,8 +125,7 @@ class SettingsBackupController : SettingsController() {
                         .backupsDirectory()
                         .asFlow()
                         .onEach { path ->
-                            val dir = UniFile.fromUri(context, path.toUri())
-                            summary = dir.filePath + "/automatic"
+                            summary = StorageLocationAccess.displayName(context, path) + "/automatic"
                         }.launchIn(viewScope)
                 }
                 intListPreference(activity) {
@@ -178,21 +171,17 @@ class SettingsBackupController : SettingsController() {
 
             when (requestCode) {
                 CODE_BACKUP_DIR -> {
-                    // Get UriPermission so it's possible to write files
-                    val flags =
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-
-                    activity.contentResolver.takePersistableUriPermission(uri, flags)
-                    preferences.backupsDirectory().set(uri.toString())
+                    StorageLocationAccess.persistTreePermission(activity, uri, data.flags)
+                        .onFailure { activity.toast(it.message ?: activity.getString(R.string.backup_restore_invalid_uri)) }
+                        .onSuccess {
+                            StorageLocationAccess.openDirectory(activity, uri.toString())
+                                .onFailure {
+                                    activity.toast(it.message ?: activity.getString(R.string.backup_restore_invalid_uri))
+                                }.onSuccess { preferences.backupsDirectory().set(uri.toString()) }
+                        }
                 }
 
                 CODE_BACKUP_CREATE -> {
-                    val flags =
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-
-                    activity.contentResolver.takePersistableUriPermission(uri, flags)
                     activity.toast(R.string.creating_backup)
                     BackupCreatorJob.startNow(activity, uri, backupFlags)
                 }

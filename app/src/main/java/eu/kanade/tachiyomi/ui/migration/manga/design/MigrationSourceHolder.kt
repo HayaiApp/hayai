@@ -4,9 +4,9 @@ import android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
 import android.view.View
 import androidx.core.view.isVisible
 import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
+import dev.ahmedmohamed.hayai.source.presentation.bindSourceArtwork
 import eu.kanade.tachiyomi.databinding.MigrationSourceItemBinding
 import eu.kanade.tachiyomi.source.CatalogueSource
-import eu.kanade.tachiyomi.source.icon
 import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
 
 class MigrationSourceHolder(
@@ -28,8 +28,7 @@ class MigrationSourceHolder(
         binding.sourceBadge.isVisible = binding.sourceBadge.text != null
         // Update circle letter image.
         itemView.post {
-            val icon = source.icon()
-            if (icon != null) binding.sourceImage.setImageDrawable(icon)
+            binding.sourceImage.bindSourceArtwork(source)
         }
 
         if (sourceEnabled) {

@@ -27,7 +27,7 @@ class SelectionHeader(
     override fun createViewHolder(
         view: View,
         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
-    ): Holder = Holder(view, adapter, titleRes)
+    ): Holder = Holder(view, adapter)
 
     /**
      * Binds this item to the given view holder.
@@ -38,16 +38,16 @@ class SelectionHeader(
         position: Int,
         payloads: MutableList<Any?>?,
     ) {
-        // Intentionally empty
+        holder.bind(titleRes)
     }
 
     class Holder(
         view: View,
         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
-        @StringRes titleRes: Int,
     ) : BaseFlexibleViewHolder(view, adapter) {
-        init {
-            val binding = SourceHeaderItemBinding.bind(view)
+        private val binding = SourceHeaderItemBinding.bind(view)
+
+        fun bind(@StringRes titleRes: Int) {
             binding.title.setText(titleRes)
         }
     }

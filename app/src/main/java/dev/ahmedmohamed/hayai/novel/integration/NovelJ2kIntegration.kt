@@ -6,8 +6,6 @@ import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.LibraryManga
 import eu.kanade.tachiyomi.data.database.models.Manga
-import eu.kanade.tachiyomi.source.SourceManager
-import eu.kanade.tachiyomi.source.isNovelSource
 import kotlin.math.ceil
 
 /**
@@ -16,12 +14,12 @@ import kotlin.math.ceil
  */
 class NovelJ2kIntegration(
     database: DatabaseHelper,
-    private val sources: SourceManager,
+    private val contentIdentity: NovelContentIdentity,
 ) {
     private val stats = NovelChapterStatStore(database)
     private val database = database
 
-    fun isNovel(manga: Manga): Boolean = sources.getOrStub(manga.source).isNovelSource()
+    fun isNovel(manga: Manga): Boolean = contentIdentity.isNovel(manga)
 
     fun chapterPresentations(
         manga: Manga,

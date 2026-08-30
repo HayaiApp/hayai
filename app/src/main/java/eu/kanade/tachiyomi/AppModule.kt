@@ -33,6 +33,7 @@ import dev.ahmedmohamed.hayai.source.metadata.EnhancedSourceMetadataProvider
 import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
 import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
 import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
+import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -121,8 +122,9 @@ class AppModule(
                 ),
             )
         }
-        addSingletonFactory { NovelJ2kIntegration(get(), get()) }
-        addSingletonFactory { NovelMigrationPolicy(get(), get()) }
+        addSingletonFactory { NovelContentIdentity(get<DatabaseHelper>(), get<SourceManager>()) }
+        addSingletonFactory { NovelJ2kIntegration(get<DatabaseHelper>(), get<NovelContentIdentity>()) }
+        addSingletonFactory { NovelMigrationPolicy(get<DatabaseHelper>(), get<NovelContentIdentity>()) }
 
         addSingletonFactory { DownloadManager(app) }
 

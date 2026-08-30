@@ -1,14 +1,13 @@
 package eu.kanade.tachiyomi.data.preference
 
 import android.content.Context
-import android.net.Uri
-import android.os.Environment
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.preference.PreferenceManager
 import com.fredporciuncula.flow.preferences.FlowSharedPreferences
 import com.fredporciuncula.flow.preferences.Preference
 import com.fredporciuncula.flow.preferences.Serializer
 import com.google.android.material.color.DynamicColors
+import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
 import dev.ahmedmohamed.hayai.preferences.getCompatibleEnum
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
@@ -37,7 +36,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.File
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -84,23 +82,9 @@ class PreferencesHelper(
     private val prefs = TypeSafeSharedPreferences(PreferenceManager.getDefaultSharedPreferences(context))
     private val flowPrefs = FlowSharedPreferences(prefs)
 
-    private val defaultDownloadsDir =
-        Uri.fromFile(
-            File(
-                Environment.getExternalStorageDirectory().absolutePath + File.separator +
-                    context.getString(R.string.app_name),
-                "downloads",
-            ),
-        )
+    private val defaultDownloadsDir = StorageLocationAccess.defaultDirectory(context, "downloads")
 
-    private val defaultBackupDir =
-        Uri.fromFile(
-            File(
-                Environment.getExternalStorageDirectory().absolutePath + File.separator +
-                    context.getString(R.string.app_name),
-                "backup",
-            ),
-        )
+    private val defaultBackupDir = StorageLocationAccess.defaultDirectory(context, "backup")
 
     fun getInt(
         key: String,

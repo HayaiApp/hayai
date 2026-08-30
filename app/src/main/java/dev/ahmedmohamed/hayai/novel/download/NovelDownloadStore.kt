@@ -78,7 +78,7 @@ class NovelDownloadStore(
         novelRequire(chapterUrl.isNotBlank(), NovelFailure.Code.OfflineChapterUrl)
         ensureRoot()
         val references = NovelAssetReferences.extract(document)
-        val offlinePaths = references.associateWith { reference -> "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}" }
+        val offlinePaths = references.associateWith(::offlineAssetPath)
         val offlineDocument = NovelAssetReferences.rewrite(document, offlinePaths)
         val documentBytes = offlineDocument.content.toByteArray(Charsets.UTF_8)
         novelRequire(documentBytes.size <= MAX_DOCUMENT_BYTES, NovelFailure.Code.OfflineTextTooLarge)
@@ -228,6 +228,12 @@ class NovelDownloadStore(
 
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
 
+    private fun offlineAssetPath(reference: String): String {
+        val cleanPath = reference.substringBefore('#').substringBefore('?')
+        val extension = cleanPath.substringAfterLast('.', "").lowercase().takeIf { it.matches(SAFE_EXTENSION) }
+        return "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}${extension?.let { ".$it" }.orEmpty()}"
+    }
+
     private fun normalizeAssetPath(path: String): String? =
         path.replace('\\', '/').trimStart('/').takeIf { normalized ->
             normalized.isNotBlank() && normalized.length <= MAX_ASSET_PATH_LENGTH && normalized.split('/').none { it == ".." }
@@ -263,6 +269,7 @@ class NovelDownloadStore(
         const val MAX_TOTAL_ASSET_BYTES = 256L * 1024 * 1024
         const val MAX_ASSET_PATH_LENGTH = 2048
         val SAFE_ASSET_FILE = Regex("[0-9a-f]{64}")
+        val SAFE_EXTENSION = Regex("[a-z0-9]{1,10}")
     }
 }
 
