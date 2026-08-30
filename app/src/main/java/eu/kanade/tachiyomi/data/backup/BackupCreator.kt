@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.hippo.unifile.UniFile
 import dev.ahmedmohamed.hayai.backup.HayaiBackupService
+import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS
 import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS_MASK
@@ -106,8 +107,9 @@ class BackupCreator(
             file = (
                 if (isAutoBackup) {
                     // Get dir of file and create
-                    var dir = UniFile.fromUri(context, uri)
-                    dir = dir.createDirectory("automatic")
+                    val root = StorageLocationAccess.openDirectory(context, uri.toString()).getOrThrow()
+                    val dir = root.createDirectory("automatic")
+                        ?: error(context.getString(R.string.hayai_storage_location_unavailable))
 
                     // Delete older backups
                     val numberOfBackups = preferences.numberOfBackups().get()

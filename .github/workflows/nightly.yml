@@ -47,7 +47,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          latest_tag=$(gh api repos/HayaiApp/hayai-nightly/releases/latest --jq '.tag_name')
+          latest_release=$(gh api repos/HayaiApp/hayai-nightly/releases/latest)
+          latest_tag=$(jq -r '.tag_name' <<< "$latest_release")
           if [[ ! "$latest_tag" =~ ^r([0-9]+)$ ]]; then
             echo "Unexpected latest nightly tag: $latest_tag" >&2
             exit 1
@@ -62,6 +63,18 @@ jobs:
           echo "NIGHTLY_BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
           echo "VERSION_TAG=r$build_number" >> "$GITHUB_ENV"
           echo "COMMIT_SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          latest_body=$(jq -r '.body // ""' <<< "$latest_release")
+          if [[ "$latest_body" =~ HayaiApp/hayai/commit/([0-9a-fA-F]{40}) ]]; then
+            echo "PREVIOUS_NIGHTLY_SHA=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Generate nightly changelog
+        shell: pwsh
+        run: >-
+          ./tools/new-nightly-changelog.ps1
+          -PreviousSha '${{ env.PREVIOUS_NIGHTLY_SHA }}'
+          -CurrentSha '${{ github.sha }}'
+          -OutputPath nightly-release-notes.md
 
       - name: Build and test
         # This project only creates a unit-test component for DevDebug. Exercise
@@ -118,10 +131,7 @@ jobs:
           repository: HayaiApp/hayai-nightly
           tag_name: ${{ env.VERSION_TAG }}
           name: Hayai Nightly ${{ env.VERSION_TAG }}
-          body: |
-            This test build comes from [`${{ env.COMMIT_SHORT_SHA }}`](https://github.com/HayaiApp/hayai/commit/${{ github.sha }}).
-
-            Back up your library before installing a nightly build.
+          body_path: nightly-release-notes.md
           files: |
             hayai-${{ env.VERSION_TAG }}.apk
             hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk

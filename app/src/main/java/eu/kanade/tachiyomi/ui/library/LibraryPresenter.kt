@@ -88,7 +88,7 @@ class LibraryPresenter(
     private val customMangaManager: CustomMangaManager = Injekt.get(),
 ) : BaseCoroutinePresenter<LibraryController>() {
     private val context = preferences.context
-    private val hayaiLibraryPolicy = HayaiLibraryPolicy(HayaiPreferences(Injekt.get()), sourceManager)
+    private val hayaiLibraryPolicy = HayaiLibraryPolicy(HayaiPreferences(Injekt.get()), sourceManager, Injekt.get())
     private val viewContext
         get() = view?.view?.context
 

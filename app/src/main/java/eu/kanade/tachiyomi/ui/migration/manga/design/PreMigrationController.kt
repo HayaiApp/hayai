@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.bluelinelabs.conductor.Router
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import dev.ahmedmohamed.hayai.novel.integration.ContentKind
 import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.kanade.tachiyomi.R
@@ -89,7 +90,12 @@ class PreMigrationController(
 
         binding.fab.setOnClickListener {
             if (dialog?.isShowing != true) {
-                dialog = MigrationBottomSheetDialog(activity!!, this)
+                dialog =
+                    MigrationBottomSheetDialog(
+                        activity!!,
+                        this,
+                        novelMigrationPolicy.contentKind(config.toList()) ?: ContentKind.Manga,
+                    )
                 dialog?.show()
                 val bottomSheet =
                     dialog?.findViewById<FrameLayout>(

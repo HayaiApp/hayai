@@ -8,12 +8,16 @@ try {
     $allowedUpstreamKotlin = @(
         "app/src/main/java/eu/kanade/tachiyomi/AppModule.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt"
+        # Approved in docs/architecture/j2k-reset.md. Reports automatic-backup storage failures through J2K's existing notification path.
+        "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreatorJob.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
         # Approved in docs/architecture/j2k-reset.md. Routes novel storage through J2K's authoritative download queue.
         "app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt"
+        # Approved in docs/architecture/j2k-reset.md. Validates the configured root through Hayai's shared SAF boundary.
+        "app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadProvider.kt"
         # Approved in docs/architecture/j2k-reset.md. Restores novel queue items through the same queue-only source adapter.
         "app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadStore.kt"
         # Approved in docs/architecture/j2k-reset.md. Routes enum preferences through Hayai's legacy-safe decoder.
@@ -36,6 +40,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/data/track/TrackManager.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/updater/GithubRelease.kt"
+        # Approved in docs/architecture/j2k-reset.md. Lets Hayai novel sources supply authenticated cover requests to J2K's fetcher.
+        "app/src/main/java/eu/kanade/tachiyomi/data/image/coil/MangaCoverFetcher.kt"
         # Approved in docs/architecture/j2k-reset.md. Applies one Hayai-owned content seed before activity view inflation.
         "app/src/main/java/eu/kanade/tachiyomi/ui/base/activity/BaseActivity.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/base/activity/BaseThemedActivity.kt"
@@ -58,11 +64,14 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt"
+        # Approved in docs/architecture/j2k-reset.md. Selects localized manga or novel migration vocabulary.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/MigrationFlags.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt"
         # Approved in docs/architecture/j2k-reset.md. Reuses J2K migration sections and delegates novel side-data transfer to Hayai.
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/BaseMigrationPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SelectionHeader.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationBottomSheetDialog.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
@@ -88,6 +97,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/loader/ChapterLoader.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Persists and validates the user's SAF backup destination.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt"
         # Approved in docs/architecture/j2k-reset.md. Projects the conditional Hayai E-Hentai settings destination.
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt"
