@@ -1,0 +1,95 @@
+From ac0e38c44f7d299a6b8285d3a7350b8a37d0a278 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 09:09:45 +0300
+Subject: [PATCH] Document source grouping and LNReader boundaries
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 0c290fd74c19372aea328fc038711bad917a534d..66a5c6a1198e406a4fc81dbaac4ace127626dbbb 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -98,3 +98,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T16:40:00+03:00	sy-eh-metadata-responsiveness	fixed the emulator-discovered empty gallery badge and clipped metadata action at large display and font scales	kept the SY information hierarchy while using J2K's Material 3 text-button style, wrap-content height, two-line fallback, and an explicit localized unknown type for absent upstream category data; verified after reinstall with restored migration fixture	hayai_sy_description_eh.xml; SourceMetadataUi.kt; artifacts/emulator-verification/reader-settings-refactor-eh-detail-fixed.png	VERIFIED
+ 2026-08-23T06:03:48+03:00	release-safety	preserved Injekt generic type metadata and Hayai serializers in minified builds, and gated publication on launching the signed nightly APK on Android 12	prevents release-only startup crashes hidden by debug-only emulator verification	app/proguard-rules.pro; tools/verify-apk-startup.ps1; .github/workflows/nightly.yml	VERIFIED
+ 2026-08-23T08:20:00Z	legacy-preferences-and-tabs	replaced throwing FlowPreferences enum reads with one Hayai compatibility decoder and prevented tabbed roots from clearing the destination tab strip	preserved all current enum values, mapped legacy BySource to BySeries without rewriting it, audited removed theme values, and verified the fixture plus repeated Browse/Recents navigation on emulator	CompatibleEnumPreferenceTest; legacy-by-source-preferences.xml; CompatibleEnumPreference.kt; PreferencesHelper.kt; BrowseController.kt; RecentsController.kt; legacy-preference-audit.md; verify-navigation-tabs.ps1	VERIFIED
++2026-08-23T09:10:00Z	recents-bysource	restored History BySource as a real J2K Recents grouping mode	kept J2K history rows, chapter expansion, downloads, swipe actions, and reader routing authoritative while moving only source-section ordering and visibility mutation into Hayai-owned policy	RecentSourceGrouper.kt; RecentMangaHeaderItem.kt; RecentsPresenter.kt; RecentSourceVisibility.kt; upstream-feature-audit.md	IMPLEMENTED_UNVERIFIED
++2026-08-23T09:25:00Z	lnreader-v3-repository	restored the production LNReader v3 catalogue	accepted root and enveloped documents, encoded raw brackets outside URL authorities, stripped Unicode format marks from language labels, and ignored invalid optional site metadata without weakening required plugin URL validation	NovelPluginRepositoryDocument.kt; NovelPluginModels.kt; NovelPluginRepositoryDocumentTest.kt	IMPLEMENTED_UNVERIFIED
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 53e11cdc921f91c0c8338c6f05b47800a5ebeb19..c56695223fdd6fa7abcbdf3c71167010e0d01823 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -28,7 +28,7 @@ Extension discovery uses one Hayai-owned `ContentKind` policy at the J2K present
+ 
+ APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores only novel membership and novel-only ownership tags. Manga-only, novel-only, and shared ownership transitions are idempotent: removing one view never deletes a URL or its metadata while the other view still owns it. Repository redirects migrate both J2K URLs and Hayai tags together. The typed Manga/Novel repository controllers and Manga/Novel/Migration extension tabs are narrow UI adapters over those contracts; they do not introduce a second downloader or extension catalog.
+ 
+-LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. It also caches filter and setting schemas so J2K's synchronous source UI never starts QuickJS on the main thread. Chapter documents expose an absolute base URL. Source-owned asset requests retain cookies and a referrer and enforce a 16 MiB stream limit. Users explicitly accept repository and install warnings because TLS and file integrity do not authenticate a repository publisher. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
++LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. It also caches filter and setting schemas so J2K's synchronous source UI never starts QuickJS on the main thread. Chapter documents expose an absolute base URL. Source-owned asset requests retain cookies and a referrer and enforce a 16 MiB stream limit. Users explicitly accept repository and install warnings because TLS and file integrity do not authenticate a repository publisher. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
+ 
+ ## Database reset and migration
+ 
+@@ -46,7 +46,7 @@ The Advanced setting `eh_is_hentai_enabled` controls adult source discovery. Dis
+ 
+ `SettingsSearchHelper` contains one registration seam for `NovelSettingsController`. The controller and all novel preferences remain under the Hayai namespace. This seam makes the full novel reader settings searchable without moving reader behavior into J2K. Novel language tools, custom-source building, APK extensions, JavaScript plugins, import/export, enhanced batch add, and E-Hentai account controls are J2K `SettingsController` screens. Their feature state, validation, jobs, and persistence remain Hayai-owned. Only reader and authenticated WebView lifecycles retain dedicated activities.
+ 
+-`PreferencesHelper` has one compatibility seam that routes its enum-backed FlowPreferences through Hayai's non-throwing name decoder. Current enum names round-trip unchanged, known legacy aliases retain the closest supported behavior, and removed or future values use each preference's declared default without rewriting the stored value. This protects startup, shortcuts, widgets, settings, and presenters before they consume restored pre-reset preferences. The legacy `group_chapters_history_type=BySource` value currently projects to J2K's `BySeries`; exact source-section rendering remains an audited port rather than being represented by a nonfunctional enum entry. The complete reset-era preference comparison is recorded in `docs/development/legacy-preference-audit.md`.
++`PreferencesHelper` has one compatibility seam that routes its enum-backed FlowPreferences through Hayai's non-throwing name decoder. Current enum names round-trip unchanged, known legacy aliases retain the closest supported behavior, and removed or future values use each preference's declared default without rewriting the stored value. This protects startup, shortcuts, widgets, settings, and presenters before they consume restored pre-reset preferences. The legacy `group_chapters_history_type=BySource` value is a live enum member again and renders History source sections instead of projecting to `BySeries`. The complete reset-era preference comparison is recorded in `docs/development/legacy-preference-audit.md`.
+ 
+ Browse and Recents share J2K's activity-owned tab strip. Their controller exit callbacks must not hide or clear that strip when the destination implements J2K's `TabbedInterface`; the entering controller remains responsible for replacing the tab contents. This keeps tab ownership inside existing J2K controller lifecycle and avoids changes to `MainActivity`.
+ 
+@@ -93,6 +93,12 @@ sheet delegates source discovery and editing to Hayai, including installed sourc
+ referenced by J2K manga rows, and unavailable sources that were hidden previously. This is strictly
+ a presentation filter: J2K remains authoritative for every manga, chapter, history, and update row,
+ and pagination advances over hidden rows so a page containing only hidden sources cannot loop.
++History `BySource` is an approved Recents presentation adapter. `RecentsPresenter` still loads J2K
++history rows, chapter expansion, download state, swipe actions, and reader routing. Hayai's
++`RecentSourceGrouper` owns only source-section ordering. The existing J2K
++`RecentMangaHeaderItem` renders source sections with `SourceManager.getOrStub`, `Source.icon()`,
++local source artwork, and a normal J2K popup action to add the section source to the same
++`RecentSourceVisibility` policy. No parallel source-header layout is introduced.
+ 
+ ## Backup ownership
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index af2c02d688f547b42ff79b36640f900ed783f1df..e8e8d398f7c1b3de13e6de1ae446d4a00b52514e 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -45,7 +45,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | exact J2K shell and native renderer verified on emulator; WebView, prepend, and incognito emulator flows pending |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+ | Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership and separate management entry points | implemented unverified; compile and emulator install flows pending |
+-| LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
++| LNReader JavaScript repository sources | Hayai manager, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+@@ -68,7 +68,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
+-| Group History by source | Legacy `BySource` is decoded safely and projected to J2K `BySeries` without rewriting the stored value | audit; exact source sections, source headers, and source actions remain |
++| Group History by source | Restored `BySource` enum mode with J2K Recents rows, source headers, source icons, per-section hide action, and legacy preference compatibility | port |
+ | Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, and isolated nightly publishing | implemented unverified; hosted nightly run pending |
+ | Localized Hayai interface | `hayai_` Android resources, typed presentation failures, a reviewed nonlocalizable-literal inventory, per-locale coverage, and deterministic SY translation imports | implemented; static gate verified; translation coverage remains incomplete and is reported per locale |
+ | Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
+diff --git a/docs/development/legacy-preference-audit.md b/docs/development/legacy-preference-audit.md
+index 36206880e6e15b4f0758212793ee2e4a1dd0e786..6f81c40d9456904e5840499e970b2c3da8ebbaf1 100644
+--- a/docs/development/legacy-preference-audit.md
++++ b/docs/development/legacy-preference-audit.md
+@@ -7,12 +7,12 @@ This audit compares the read-only `legacy/hayai-pre-j2k` preference accessors wi
+ - Legacy accessors inspected: 186.
+ - Current accessors inspected: 197.
+ - Removed or structurally changed legacy accessors: 25.
+-- Same-key enum incompatibilities capable of throwing during a read: theme values and `group_chapters_history_type=BySource`.
++- Same-key enum incompatibilities capable of throwing during a read: theme values and older builds that lacked `group_chapters_history_type=BySource`.
+ - Other current enum preferences retain the legacy member names used by reader navigation inversion, reader chrome hiding, secure-screen behavior, and Recents download badges.
+ 
+ All eight enum-backed accessors in `PreferencesHelper` now use the Hayai-owned compatible decoder. It resolves current names first, then a declared legacy alias, then the accessor's normal default. It never calls `Enum.valueOf`, and it does not rewrite unknown stored data.
+ 
+-`BySource` maps to `BySeries` until the full source-header and source-section behavior is rebuilt against current J2K Recents. Removed legacy themes (`DOKI`, `SAKURA`, `PINK_ROMANCE`, `SUMI_E`, `KIMONO`, `WAGASHI`, `NORDIC`, and `ROSE`) safely resolve to the current light or dark theme default. This is a compatibility fallback, not a claim that those visual themes were ported.
++`BySource` is a live History grouping mode again. Legacy saved values now decode to the restored enum member, then render source sections through current J2K Recents rows. Removed legacy themes (`DOKI`, `SAKURA`, `PINK_ROMANCE`, `SUMI_E`, `KIMONO`, `WAGASHI`, `NORDIC`, and `ROSE`) safely resolve to the current light or dark theme default. This is a compatibility fallback, not a claim that those visual themes were ported.
+ 
+ ## Dormant removed keys
+ 
+-- 
+2.54.0.windows.1
+

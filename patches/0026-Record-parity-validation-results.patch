@@ -1,0 +1,27 @@
+From 428d1dc88c84c852f1ba6fa9dcae542148b06268 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 22:02:25 +0300
+Subject: [PATCH] Record parity validation results
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index bd7d72aeedd007b47042adc255b9cbd0bcc0d408..18622db215eb683f402b90202659406229fcb4f8 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -60,3 +60,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T19:00:00Z	validation	compiled the integrated favorites runtime and ran focused planner, protocol, recovery, persistence, and backup tests with one Gradle worker	verified three-way conflict rules, alias safety, bounded remote parsing, journal round trips, restart recovery, schema and backup integration, and J2K adapter compilation	gradlew --no-daemon --no-parallel --max-workers=1 :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.favorites.* --tests dev.ahmedmohamed.hayai.backup.* --tests dev.ahmedmohamed.hayai.adult.eh.persistence.* -x :app:formatKotlin	VERIFIED
+ 2026-08-21T22:05:00Z	novel-parity	added narrow J2K seams for novel export, remote extension ownership, and concrete tracking services	kept novel state and network behavior Hayai-owned while J2K remains authoritative for library, chapters, history, tracking, extensions, and backup order	AppModule.kt; BackupRestorer.kt; MangaDetailsController.kt; TrackManager.kt; SettingsTrackingController.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T22:12:00Z	novel-tracking-seam	superseded the earlier tracking seam record to include manga-details service filtering	novel-only trackers must remain hidden for image sources while the normal J2K tracking presenter stays authoritative	TrackManager.kt; SettingsTrackingController.kt; MangaDetailsPresenter.kt	IMPLEMENTED_UNVERIFIED
++2026-08-21T22:02:00Z	validation	compiled the integrated parity batch and ran 241 focused tests with one Gradle worker	confirmed the new Hayai modules and their narrow J2K adapter seams compile together without parallel validation load	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin with focused Hayai test filters	VERIFIED
+diff --git a/.audit/parity-completion.tsv b/.audit/parity-completion.tsv
+index 8b72b8d421c8d62cdaa81b2d852d8886dd907658..ed2da6a93f7b1e9df1eaad19a6bacb98e08556fc 100644
+--- a/.audit/parity-completion.tsv
++++ b/.audit/parity-completion.tsv
+@@ -9,3 +9,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T22:00:00Z	novel-parity	implemented highlights, translation, dictionary, visual sources, remote APK extensions, EPUB export, and external imports	the requested novel tools now use stable identities and J2K-owned library, chapter, history, category, extension, and reader-routing data	app/src/main/java/dev/ahmedmohamed/hayai/novel	implemented-unverified
+ 2026-08-21T22:05:00Z	novel-persistence	added schema v4 and backup v4 for highlights, visual source definitions, and tagged novel APK repositories	durable user-created data must survive database ID remapping without backing up secrets, downloads, trust fingerprints, or import completion markers	HayaiSchema.kt; HayaiBackupData.kt; HayaiBackupService.kt	implemented-unverified
+ 2026-08-21T22:12:00Z	novel-trackers	implemented NovelUpdates, NovelList, and RanobeDB as J2K tracking services	durable remote keys and bounded typed protocol adapters preserve J2K tracking rows and automatic progress updates without a parallel tracker store	app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services; TrackManager.kt; MangaDetailsPresenter.kt	implemented-unverified
++2026-08-21T22:02:00Z	validation	compiled the integrated parity batch and ran its focused unit suite with one Gradle worker	verified novel persistence, language tools, imports, EPUB export, trackers, enhanced sources, details previews, E-Hentai updater, migration, and backup without parallel CPU load	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin with focused Hayai test filters	verified-241-tests
+-- 
+2.54.0.windows.1
+

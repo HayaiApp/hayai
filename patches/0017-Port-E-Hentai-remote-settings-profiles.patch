@@ -1,0 +1,1766 @@
+From e0b29e41064ce3cf0fa7f43ea6f37ae8d0ab72e0 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 02:55:02 +0300
+Subject: [PATCH] Port E-Hentai remote settings profiles
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 80e28578e1d0f4ae0ff1b1bf5daf6039f2444a31..d36d7040bb620841fb8e9dd20f460eddadd24ff7 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -54,3 +54,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T14:20:00Z	validation	compiled the integrated source experience and ran focused preference and presentation tests with one Gradle worker	verified data binding for all badge layouts, built-in settings routing, SY category encoding, malformed preference fallback, and badge classification	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.settings.* --tests dev.ahmedmohamed.hayai.source.presentation.* -x :app:formatKotlin	VERIFIED
+ 2026-08-21T15:00:00Z	enhanced-sources	replaced registry-only enhanced labels with ID-preserving extension wrappers	delegated core source behavior, validated imported hosts and identities, bounded secondary details parsing, and retained the original extension result on enrichment failure	EnhancedSourceRegistry.kt; HayaiEnhancedHttpSource.kt; EnhancedSourceUrlMapper.kt; EnhancedDetailsParser.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T15:15:00Z	validation	compiled delegated enhanced sources and ran focused registry, URL, parser, and badge tests with one Gradle worker	verified all six family parsers, foreign-host rejection, positive identities, fixed and dynamic matching, idempotent wrapping, filter preservation, and direct URL search fallback	gradlew --no-daemon --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.source.enhanced.* --tests dev.ahmedmohamed.hayai.source.presentation.* -x :app:formatKotlin	VERIFIED
++2026-08-21T16:30:00Z	eh-remote-uconfig	implemented the complete typed E-Hentai and ExHentai remote settings upload flow	preserved SY preference and cookie keys, encoded the full server matrix, reused owned profiles without destructive replacement, committed each site independently, and exposed pending state plus targeted retry	EhRemoteSettings.kt; EhUConfigFormCodec.kt; EhUConfigHttpRemote.kt; EhRemoteSettingsUploader.kt; EhSettingsActivity.kt	IMPLEMENTED_UNVERIFIED
++2026-08-21T17:15:00Z	validation	compiled the integrated app and ran focused E-Hentai session, settings, uconfig, and MockWebServer tests with one Gradle worker	verified exact form encoding, bounded response parsing, challenge rejection, cookie safety, idempotent profile reuse, partial retry, account marker reset, UI integration, and J2K dependency wiring	gradlew --no-daemon --no-parallel --max-workers=1 :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.eh.uconfig.* --tests dev.ahmedmohamed.hayai.adult.eh.settings.* --tests dev.ahmedmohamed.hayai.adult.eh.session.* -x :app:formatKotlin	VERIFIED
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 599a8f603f57fb90864a8b58acb534ba92c98c61..91f4ffc6d003c3769aef1a038512a7968f95c60e 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -299,6 +299,7 @@ dependencies {
+     implementation("org.conscrypt:conscrypt-android:2.6.1")
+ 
+     testImplementation("junit:junit:4.13.2")
++    testImplementation("com.squareup.okhttp3:mockwebserver:$okhttpVersion")
+ 
+     // Android Chart
+     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt
+index 7f6c40dcc1883f6855564c45b51756359a2270d6..209ef606f86ca56c4da72b427b947dab99ced4a8 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt
+@@ -1,6 +1,8 @@
+ package dev.ahmedmohamed.hayai.adult.eh.session
+ 
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhProfileSlot
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteCookies
+ import eu.kanade.tachiyomi.data.preference.Preference
+ import eu.kanade.tachiyomi.data.preference.PreferenceStore
+ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -134,6 +136,21 @@ class EhSessionStore(
+         }
+     }
+ 
++    @Synchronized
++    fun commitRemoteProfile(
++        site: EhSite,
++        slot: EhProfileSlot,
++        cookies: EhRemoteCookies,
++    ) {
++        when (site) {
++            EhSite.EHentai -> ehSettingsProfile.set(slot.value)
++            EhSite.ExHentai -> exhSettingsProfile.set(slot.value)
++        }
++        cookies.settingsKey?.let(settingsKey::set)
++        cookies.session?.let(sessionCookie::set)
++        cookies.hathPerks?.let(hathPerksCookie::set)
++    }
++
+     private fun readState(): EhSessionState {
+         val hasAnyCredential = memberId.get().isNotEmpty() || passHash.get().isNotEmpty() || igneous.get().isNotEmpty()
+         if (!hasAnyCredential) return EhSessionState.LoggedOut
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt
+index fd179007edc048354c553c216d80831ed0daa7d4..05f7099b88911b791f223eaa3de5d2f0a9d04a44 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferences.kt
+@@ -1,6 +1,7 @@
+ package dev.ahmedmohamed.hayai.adult.eh.settings
+ 
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import eu.kanade.tachiyomi.data.preference.Preference
+ import eu.kanade.tachiyomi.data.preference.PreferenceStore
+ 
+@@ -15,6 +16,11 @@ class EhPreferences(
+     val tagWatchingThreshold: Preference<Int> = store.getInt("eh_tag_watching_value", 0)
+     val watchedListDefault: Preference<Boolean> = store.getBoolean("eh_watched_list_default_state", false)
+     val enhancedView: Preference<Boolean> = store.getBoolean("enhanced_e_hentai_view", true)
++    val showSettingsUploadWarning: Preference<Boolean> = store.getBoolean("eh_showSettingsUploadWarning2", true)
++
++    private val settingsLanguages = store.getString("eh_settings_languages", DEFAULT_LANGUAGES)
++    private val ehAppliedFingerprint = store.getString("hayai_eh_remote_settings_fingerprint_eh", "")
++    private val exhAppliedFingerprint = store.getString("hayai_eh_remote_settings_fingerprint_exh", "")
+ 
+     private val enabledCategories =
+         store.getString(
+@@ -33,4 +39,75 @@ class EhPreferences(
+     fun setExcludedCategories(categories: Set<EhCategory>) {
+         enabledCategories.set(EhCategory.entries.joinToString(",") { (it in categories).toString() })
+     }
++
++    fun languageSelections(): Map<EhLanguage, EhLanguageSelection> {
++        val rows = settingsLanguages.get().lines()
++        if (rows.size != EhLanguage.entries.size) return defaultLanguages()
++        val parsed = linkedMapOf<EhLanguage, EhLanguageSelection>()
++        EhLanguage.entries.forEachIndexed { index, language ->
++            val values = rows[index].split('*')
++            if (values.size != 3 || values.any { it !in setOf("true", "false") }) return defaultLanguages()
++            parsed[language] =
++                EhLanguageSelection(
++                    original = language.originalCode != null && values[0].toBoolean(),
++                    translated = values[1].toBoolean(),
++                    rewritten = values[2].toBoolean(),
++                )
++        }
++        return parsed
++    }
++
++    fun setLanguageSelections(selections: Map<EhLanguage, EhLanguageSelection>) {
++        require(selections.keys == EhLanguage.entries.toSet())
++        settingsLanguages.set(
++            EhLanguage.entries.joinToString("\n") { language ->
++                val selection = selections.getValue(language)
++                listOf(
++                    language.originalCode != null && selection.original,
++                    selection.translated,
++                    selection.rewritten,
++                ).joinToString("*")
++            },
++        )
++    }
++
++    fun remoteSettings(): EhRemoteSettings =
++        EhRemoteSettings(
++            imageQuality = EhImageQuality.fromPreference(imageQuality.get()),
++            hentaiAtHome = EhHentaiAtHome.fromPreference(useHentaiAtHome.get()),
++            japaneseTitles = useJapaneseTitle.get(),
++            originalImages = useOriginalImages.get(),
++            tagFilterThreshold = tagFilterThreshold.get().coerceIn(-9999, 0),
++            tagWatchingThreshold = tagWatchingThreshold.get().coerceIn(0, 9999),
++            languages = languageSelections(),
++            excludedCategories = excludedCategories(),
++        )
++
++    fun appliedFingerprint(site: EhSite): String =
++        when (site) {
++            EhSite.EHentai -> ehAppliedFingerprint.get()
++            EhSite.ExHentai -> exhAppliedFingerprint.get()
++        }
++
++    fun markRemoteSettingsApplied(site: EhSite, fingerprint: String) {
++        require(fingerprint.length == 64 && fingerprint.all { it.isDigit() || it in 'a'..'f' })
++        when (site) {
++            EhSite.EHentai -> ehAppliedFingerprint.set(fingerprint)
++            EhSite.ExHentai -> exhAppliedFingerprint.set(fingerprint)
++        }
++    }
++
++    fun clearRemoteSettingsApplied() {
++        ehAppliedFingerprint.delete()
++        exhAppliedFingerprint.delete()
++    }
++
++    fun hasPendingRemoteSettings(site: EhSite): Boolean = appliedFingerprint(site) != remoteSettings().fingerprint()
++
++    private fun defaultLanguages(): Map<EhLanguage, EhLanguageSelection> =
++        EhLanguage.entries.associateWithTo(linkedMapOf()) { EhLanguageSelection() }
++
++    private companion object {
++        val DEFAULT_LANGUAGES = List(EhLanguage.entries.size) { "false*false*false" }.joinToString("\n")
++    }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7cec4346b6bbec688b1a7a616601a259b483bec2
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt
+@@ -0,0 +1,102 @@
++package dev.ahmedmohamed.hayai.adult.eh.settings
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
++import java.security.MessageDigest
++
++enum class EhImageQuality(
++    val preferenceValue: String,
++    val serverValue: String,
++) {
++    Auto("auto", "0"),
++    Size2400("ovrs_2400", "5"),
++    Size1600("ovrs_1600", "4"),
++    Size1280("high", "3"),
++    Size980("med", "2"),
++    Size780("low", "1"),
++    ;
++
++    companion object {
++        fun fromPreference(value: String): EhImageQuality = entries.find { it.preferenceValue == value } ?: Auto
++    }
++}
++
++enum class EhHentaiAtHome(
++    val preferenceValue: Int,
++    val serverValue: String,
++) {
++    Any(0, "0"),
++    DefaultOnly(1, "1"),
++    Never(2, "2"),
++    ;
++
++    companion object {
++        fun fromPreference(value: Int): EhHentaiAtHome = entries.find { it.preferenceValue == value } ?: Any
++    }
++}
++
++enum class EhLanguage(
++    val displayName: String,
++    val originalCode: Int?,
++) {
++    Japanese("Japanese", null),
++    English("English", 1),
++    Chinese("Chinese", 10),
++    Dutch("Dutch", 20),
++    French("French", 30),
++    German("German", 40),
++    Hungarian("Hungarian", 50),
++    Italian("Italian", 60),
++    Korean("Korean", 70),
++    Polish("Polish", 80),
++    Portuguese("Portuguese", 90),
++    Russian("Russian", 100),
++    Spanish("Spanish", 110),
++    Thai("Thai", 120),
++    Vietnamese("Vietnamese", 130),
++    NotAvailable("N/A", 254),
++    Other("Other", 255),
++}
++
++data class EhLanguageSelection(
++    val original: Boolean = false,
++    val translated: Boolean = false,
++    val rewritten: Boolean = false,
++)
++
++data class EhRemoteSettings(
++    val imageQuality: EhImageQuality,
++    val hentaiAtHome: EhHentaiAtHome,
++    val japaneseTitles: Boolean,
++    val originalImages: Boolean,
++    val tagFilterThreshold: Int,
++    val tagWatchingThreshold: Int,
++    val languages: Map<EhLanguage, EhLanguageSelection>,
++    val excludedCategories: Set<EhCategory>,
++) {
++    init {
++        require(tagFilterThreshold in -9999..0) { "Tag filtering threshold must be between -9999 and 0." }
++        require(tagWatchingThreshold in 0..9999) { "Tag watching threshold must be between 0 and 9999." }
++        require(languages.keys == EhLanguage.entries.toSet()) { "Every E-Hentai language must have a selection." }
++        require(languages.getValue(EhLanguage.Japanese).original.not()) { "Japanese original filtering is not available." }
++    }
++
++    fun fingerprint(): String {
++        val canonical = buildString {
++            append(imageQuality.preferenceValue).append('|')
++            append(hentaiAtHome.preferenceValue).append('|')
++            append(japaneseTitles).append('|').append(originalImages).append('|')
++            append(tagFilterThreshold).append('|').append(tagWatchingThreshold).append('|')
++            EhLanguage.entries.forEach { language ->
++                val value = languages.getValue(language)
++                append(language.name).append('=')
++                append(value.original).append(',').append(value.translated).append(',').append(value.rewritten).append(';')
++            }
++            append('|')
++            EhCategory.entries.forEach { append(it.name).append('=').append(it in excludedCategories).append(';') }
++        }
++        return MessageDigest.getInstance("SHA-256")
++            .digest(canonical.toByteArray())
++            .joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
++    }
++}
++
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d65e44b8c994c254543ade47e3e3566c67801122
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt
+@@ -0,0 +1,147 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieHeader
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhRemoteSettings
++import eu.kanade.tachiyomi.network.awaitSuccess
++import eu.kanade.tachiyomi.network.HttpException
++import kotlinx.coroutines.CancellationException
++import okhttp3.CacheControl
++import okhttp3.CookieJar
++import okhttp3.FormBody
++import okhttp3.OkHttpClient
++import okhttp3.Request
++import okhttp3.Response
++import java.io.IOException
++import java.io.Reader
++
++interface EhRemoteSettingsRemote {
++    suspend fun fetchHathPerks(cookie: EhCookieHeader): EhHathPerks
++
++    suspend fun profiles(site: EhSite, cookie: EhCookieHeader): List<EhRemoteProfile>
++
++    suspend fun createProfile(
++        site: EhSite,
++        slot: EhProfileSlot,
++        name: String,
++        cookie: EhCookieHeader,
++    ): EhRemoteCookies
++
++    suspend fun applyProfile(
++        site: EhSite,
++        slot: EhProfileSlot,
++        settings: EhRemoteSettings,
++        perks: EhHathPerks,
++        cookie: EhCookieHeader,
++    ): EhRemoteCookies
++}
++
++class EhUConfigHttpRemote(
++    client: OkHttpClient,
++    private val uconfigUrl: (EhSite) -> String = { it.baseUrl + "/uconfig.php" },
++    private val hathPerksUrl: String = "https://e-hentai.org/hathperks.php",
++) : EhRemoteSettingsRemote {
++    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
++
++    override suspend fun fetchHathPerks(cookie: EhCookieHeader): EhHathPerks =
++        executeDocument(request(hathPerksUrl, cookieForSlot(cookie, EhProfileSlot(1))), EhUConfigHtmlParser::hathPerks)
++
++    override suspend fun profiles(site: EhSite, cookie: EhCookieHeader): List<EhRemoteProfile> =
++        executeDocument(request(uconfigUrl(site), cookie), EhUConfigHtmlParser::profiles)
++
++    override suspend fun createProfile(
++        site: EhSite,
++        slot: EhProfileSlot,
++        name: String,
++        cookie: EhCookieHeader,
++    ): EhRemoteCookies {
++        require(name.isNotBlank() && name.length <= 128)
++        val body = FormBody.Builder()
++            .add("profile_action", "create")
++            .add("profile_name", name)
++            .add("profile_set", slot.value.toString())
++            .build()
++        return execute(request(uconfigUrl(site), cookieForSlot(cookie, EhProfileSlot(1)), body)) { response ->
++            val cookies = EhRemoteCookieParser.parse(response.headers.values("Set-Cookie"))
++            EhUConfigHtmlParser.profiles(response.body.charStream().use { it.readBounded(EhUConfigHtmlParser.MAX_DOCUMENT_CHARS) })
++            cookies
++        }
++    }
++
++    override suspend fun applyProfile(
++        site: EhSite,
++        slot: EhProfileSlot,
++        settings: EhRemoteSettings,
++        perks: EhHathPerks,
++        cookie: EhCookieHeader,
++    ): EhRemoteCookies =
++        execute(request(uconfigUrl(site), cookieForSlot(cookie, slot), EhUConfigFormCodec.form(settings, perks))) { response ->
++            val cookies = EhRemoteCookieParser.parse(response.headers.values("Set-Cookie"))
++            val expected = EhUConfigFormCodec.entries(settings, perks).toMap()
++            val actual = EhUConfigHtmlParser.settingsValues(
++                response.body.charStream().use { it.readBounded(EhUConfigHtmlParser.MAX_DOCUMENT_CHARS) },
++                expected.keys,
++            )
++            val mismatch = actual.entries.firstOrNull { (key, value) -> expected[key] != value }
++            require(mismatch == null) { "E-Hentai did not retain the ${mismatch?.key} setting." }
++            cookies
++        }
++
++    private fun request(
++        url: String,
++        cookie: EhCookieHeader,
++        body: FormBody? = null,
++    ): Request =
++        Request.Builder()
++            .url(url)
++            .cacheControl(CacheControl.FORCE_NETWORK)
++            .header("Cookie", cookie.value)
++            .header("Referer", url)
++            .apply { if (body != null) post(body) }
++            .build()
++
++    private fun cookieForSlot(header: EhCookieHeader, slot: EhProfileSlot): EhCookieHeader {
++        val values = linkedMapOf<String, String>()
++        header.value.split(';').forEach { part ->
++            val separator = part.indexOf('=')
++            if (separator > 0) values[part.substring(0, separator).trim()] = part.substring(separator + 1).trim()
++        }
++        values["sp"] = slot.value.toString()
++        return EhCookieHeader(values.entries.joinToString("; ") { (name, value) -> "$name=$value" })
++    }
++
++    private suspend fun <T> executeDocument(
++        request: Request,
++        parser: (String) -> T,
++    ): T = execute(request) { response -> parser(response.body.charStream().use { it.readBounded(EhUConfigHtmlParser.MAX_DOCUMENT_CHARS) }) }
++
++    private suspend fun <T> execute(request: Request, block: (Response) -> T): T =
++        try {
++            client.newCall(request).awaitSuccess().use(block)
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (failure: HttpException) {
++            throw when (failure.code) {
++                401, 403 -> EhRemoteSettingsFailure.AuthenticationRequired()
++                429 -> EhRemoteSettingsFailure.RateLimited(null)
++                else -> EhRemoteSettingsFailure.RemoteRejected(failure.code)
++            }
++        } catch (failure: IllegalArgumentException) {
++            throw EhRemoteSettingsFailure.MalformedResponse(failure.message ?: "E-Hentai returned malformed settings data.", failure)
++        } catch (failure: IOException) {
++            throw EhRemoteSettingsFailure.Network("The E-Hentai settings request failed.", failure)
++        }
++
++    private fun Reader.readBounded(maxChars: Int): String {
++        val output = StringBuilder(minOf(maxChars, 8192))
++        val buffer = CharArray(8192)
++        while (output.length <= maxChars) {
++            val remaining = maxChars + 1 - output.length
++            val count = read(buffer, 0, minOf(buffer.size, remaining))
++            if (count < 0) break
++            output.append(buffer, 0, count)
++        }
++        if (output.length > maxChars) throw IllegalArgumentException("E-Hentai settings response is too large.")
++        return output.toString()
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsUploader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsUploader.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..37425dc9cf80c1994f5b6767b06beb0e445003ad
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsUploader.kt
+@@ -0,0 +1,94 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionState
++import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhRemoteSettings
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++class EhRemoteSettingsUploader(
++    private val remote: EhRemoteSettingsRemote,
++    private val sessions: EhSessionStore,
++    private val preferences: EhPreferences,
++) {
++    private val uploadMutex = Mutex()
++
++    suspend fun upload(
++        desired: EhRemoteSettings,
++        targets: Set<EhSite> = EhSite.entries.toSet(),
++        onProgress: (EhUploadProgress) -> Unit = {},
++    ): EhUploadReport = uploadMutex.withLock {
++        if (targets.isEmpty()) return@withLock EhUploadReport(emptyMap())
++        if (sessions.state.value !is EhSessionState.Verified) {
++            val results = targets.associateWith { site ->
++                EhSiteUploadResult.Failed(site, EhRemoteSettingsFailure.AuthenticationRequired())
++            }
++            return@withLock EhUploadReport(results)
++        }
++
++        val perks = try {
++            remote.fetchHathPerks(sessions.cookieHeader(EhSite.EHentai))
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (failure: Exception) {
++            val typed = failure.asRemoteFailure()
++            return@withLock EhUploadReport(targets.associateWith { EhSiteUploadResult.Failed(it, typed) })
++        }
++
++        val results = linkedMapOf<EhSite, EhSiteUploadResult>()
++        targets.sortedBy { it.ordinal }.forEach { site ->
++            onProgress(EhUploadProgress.Started(site))
++            val result = try {
++                uploadSite(site, desired, perks)
++            } catch (cancelled: CancellationException) {
++                throw cancelled
++            } catch (failure: Exception) {
++                EhSiteUploadResult.Failed(site, failure.asRemoteFailure())
++            }
++            results[site] = result
++            onProgress(EhUploadProgress.Finished(result))
++        }
++        EhUploadReport(results)
++    }
++
++    private suspend fun uploadSite(
++        site: EhSite,
++        desired: EhRemoteSettings,
++        perks: EhHathPerks,
++    ): EhSiteUploadResult.Applied {
++        val initialCookie = sessions.cookieHeader(site)
++        val profiles = remote.profiles(site, initialCookie)
++        val owned = profiles.filter { it.name in OWNED_PROFILE_NAMES }.minByOrNull { it.slot.value }
++        val slot = owned?.slot ?: firstFreeSlot(profiles, site)
++        val createdCookies =
++            if (owned == null) remote.createProfile(site, slot, PROFILE_NAME, initialCookie) else EhRemoteCookies()
++        val configuredCookie = createdCookies.overlay(initialCookie)
++        val appliedCookies = remote.applyProfile(site, slot, desired, perks, configuredCookie)
++        val mergedCookies = createdCookies.merge(appliedCookies)
++        val verificationCookie = mergedCookies.overlay(configuredCookie)
++        val verified = remote.profiles(site, verificationCookie).any { it.slot == slot && it.name in OWNED_PROFILE_NAMES }
++        if (!verified) throw EhRemoteSettingsFailure.MalformedResponse("${site.displayName} did not retain the configured profile.")
++
++        sessions.commitRemoteProfile(site, slot, mergedCookies)
++        preferences.markRemoteSettingsApplied(site, desired.fingerprint())
++        return EhSiteUploadResult.Applied(site, slot)
++    }
++
++    private fun firstFreeSlot(profiles: List<EhRemoteProfile>, site: EhSite): EhProfileSlot {
++        val occupied = profiles.mapTo(hashSetOf()) { it.slot.value }
++        return (1..3).firstOrNull { it !in occupied }?.let(::EhProfileSlot)
++            ?: throw EhRemoteSettingsFailure.OutOfProfileSlots(site)
++    }
++
++    private fun Throwable.asRemoteFailure(): EhRemoteSettingsFailure =
++        this as? EhRemoteSettingsFailure
++            ?: EhRemoteSettingsFailure.Network(message ?: "The E-Hentai settings upload failed.", this)
++
++    companion object {
++        const val PROFILE_NAME = "Hayai App"
++        val OWNED_PROFILE_NAMES = setOf(PROFILE_NAME, "TachiyomiEH App")
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigFormCodec.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigFormCodec.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..34d724d892601b0a4a10ce11fa609d56a22866bf
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigFormCodec.kt
+@@ -0,0 +1,52 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhLanguage
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhRemoteSettings
++import okhttp3.FormBody
++
++object EhUConfigFormCodec {
++    fun entries(settings: EhRemoteSettings, perks: EhHathPerks): List<Pair<String, String>> = buildList {
++        add("xr" to settings.imageQuality.serverValue)
++        add("uh" to settings.hentaiAtHome.serverValue)
++        add("tl" to if (settings.japaneseTitles) "1" else "0")
++        add("oi" to if (settings.originalImages) "1" else "0")
++        add("tr" to perks.thumbnailRowsValue)
++        add("rc" to perks.resultCountValue)
++        add("dm" to "2")
++        add("qb" to "0")
++        add("pp" to "1")
++        add("ft" to settings.tagFilterThreshold.toString())
++        add("wt" to settings.tagWatchingThreshold.toString())
++
++        EhLanguage.entries.forEach { language ->
++            val selection = settings.languages.getValue(language)
++            language.originalCode?.let { add("xl_$it" to selection.original.checkedValue()) }
++            val base = language.originalCode ?: 0
++            add("xl_${base + 1024}" to selection.translated.checkedValue())
++            add("xl_${base + 2048}" to selection.rewritten.checkedValue())
++        }
++
++        CATEGORY_KEYS.forEach { (category, key) -> add(key to if (category in settings.excludedCategories) "1" else "0") }
++        add("apply" to "Apply")
++    }
++
++    fun form(settings: EhRemoteSettings, perks: EhHathPerks): FormBody =
++        FormBody.Builder().apply { entries(settings, perks).forEach { (key, value) -> add(key, value) } }.build()
++
++    private fun Boolean.checkedValue(): String = if (this) "checked" else ""
++
++    private val CATEGORY_KEYS =
++        linkedMapOf(
++            EhCategory.Doujinshi to "ct_doujinshi",
++            EhCategory.Manga to "ct_manga",
++            EhCategory.ArtistCg to "ct_artistcg",
++            EhCategory.GameCg to "ct_gamecg",
++            EhCategory.Western to "ct_western",
++            EhCategory.NonH to "ct_non-h",
++            EhCategory.ImageSet to "ct_imageset",
++            EhCategory.Cosplay to "ct_cosplay",
++            EhCategory.AsianPorn to "ct_asianporn",
++            EhCategory.Misc to "ct_misc",
++        )
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHtmlParser.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHtmlParser.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..611441a33d9eeb5e216ba5d7f5e2de9e2b4ac4c2
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHtmlParser.kt
+@@ -0,0 +1,93 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import org.jsoup.Jsoup
++import java.util.Locale
++
++object EhUConfigHtmlParser {
++    fun profiles(html: String): List<EhRemoteProfile> {
++        require(html.length <= MAX_DOCUMENT_CHARS) { "E-Hentai profile response is too large." }
++        val document = Jsoup.parse(html)
++        val selector = document.selectFirst("[name=profile_set]")
++        require(selector != null) { "E-Hentai did not return a settings profile page." }
++        val profiles = selector
++            .select(":root > option")
++            .mapNotNull { option ->
++                val slot = option.attr("value").toIntOrNull()?.takeIf { it in 1..3 } ?: return@mapNotNull null
++                EhRemoteProfile(EhProfileSlot(slot), option.text().trim().take(MAX_PROFILE_NAME_LENGTH))
++            }
++        require(profiles.groupBy(EhRemoteProfile::slot).values.none { entries -> entries.map(EhRemoteProfile::name).distinct().size > 1 }) {
++            "E-Hentai returned conflicting settings profiles."
++        }
++        return profiles.distinctBy(EhRemoteProfile::slot)
++    }
++
++    fun hathPerks(html: String): EhHathPerks {
++        require(html.length <= MAX_DOCUMENT_CHARS) { "E-Hentai H@H perks response is too large." }
++        val purchased = linkedSetOf<String>()
++        val rows = Jsoup.parse(html).select(".stuffbox tr")
++        require(rows.isNotEmpty()) { "E-Hentai did not return the H@H perks page." }
++        rows.forEach { row ->
++            val cells = row.children()
++            if (cells.size < 3 || cells[2].getElementsByTag("form").isNotEmpty()) return@forEach
++            purchased += cells[0].text().trim().lowercase(Locale.ROOT)
++        }
++        return EhHathPerks(
++            moreThumbs = "more thumbs" in purchased,
++            thumbsUp = "thumbs up" in purchased,
++            allThumbs = "all thumbs" in purchased,
++            pagingI = "paging enlargement i" in purchased,
++            pagingII = "paging enlargement ii" in purchased,
++            pagingIII = "paging enlargement iii" in purchased,
++        )
++    }
++
++    fun settingsValues(
++        html: String,
++        expectedKeys: Set<String>,
++    ): Map<String, String> {
++        require(html.length <= MAX_DOCUMENT_CHARS) { "E-Hentai settings response is too large." }
++        val document = Jsoup.parse(html)
++        require(document.selectFirst("[name=profile_set]") != null) { "E-Hentai did not return a settings profile page." }
++        val values = linkedMapOf<String, String>()
++        document.select("input[name], select[name]").forEach { field ->
++            val name = field.attr("name")
++            if (name !in expectedKeys) return@forEach
++            values[name] =
++                when (field.tagName()) {
++                    "select" -> field.selectFirst("option[selected]")?.attr("value") ?: field.`val`()
++                    else -> if (field.attr("type").equals("checkbox", true)) {
++                        if (field.hasAttr("checked")) "checked" else ""
++                    } else {
++                        field.attr("value")
++                    }
++                }
++        }
++        return values
++    }
++
++    const val MAX_DOCUMENT_CHARS = 2 * 1024 * 1024
++    private const val MAX_PROFILE_NAME_LENGTH = 128
++}
++
++object EhRemoteCookieParser {
++    fun parse(setCookieHeaders: List<String>): EhRemoteCookies {
++        val values = linkedMapOf<String, String>()
++        setCookieHeaders.forEach { header ->
++            val pair = header.substringBefore(';')
++            val separator = pair.indexOf('=')
++            if (separator <= 0) return@forEach
++            val name = pair.substring(0, separator).trim().lowercase(Locale.ROOT)
++            if (name !in COOKIE_NAMES) return@forEach
++            val value = pair.substring(separator + 1).trim()
++            val previous = values.putIfAbsent(name, value)
++            require(previous == null || previous == value) { "Conflicting $name cookies were returned." }
++        }
++        return EhRemoteCookies(
++            settingsKey = values["sk"],
++            session = values["s"],
++            hathPerks = values["hath_perks"],
++        )
++    }
++
++    private val COOKIE_NAMES = setOf("sk", "s", "hath_perks")
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigModels.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..eaf25386079f87dff7601d1f9fbc727cabce7713
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigModels.kt
+@@ -0,0 +1,122 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieHeader
++
++data class EhHathPerks(
++    val moreThumbs: Boolean = false,
++    val thumbsUp: Boolean = false,
++    val allThumbs: Boolean = false,
++    val pagingI: Boolean = false,
++    val pagingII: Boolean = false,
++    val pagingIII: Boolean = false,
++) {
++    val thumbnailRowsValue: String
++        get() = when {
++            allThumbs -> "3"
++            thumbsUp -> "2"
++            moreThumbs -> "1"
++            else -> "0"
++        }
++
++    val resultCountValue: String
++        get() = when {
++            pagingIII -> "3"
++            pagingII -> "2"
++            pagingI -> "1"
++            else -> "0"
++        }
++}
++
++@JvmInline
++value class EhProfileSlot(val value: Int) {
++    init {
++        require(value in 1..3) { "E-Hentai application profile slots are between 1 and 3." }
++    }
++}
++
++data class EhRemoteProfile(
++    val slot: EhProfileSlot,
++    val name: String,
++)
++
++data class EhRemoteCookies(
++    val settingsKey: String? = null,
++    val session: String? = null,
++    val hathPerks: String? = null,
++) {
++    init {
++        validate("settings key", settingsKey)
++        validate("session", session)
++        validate("H@H perks", hathPerks)
++    }
++
++    fun merge(other: EhRemoteCookies): EhRemoteCookies =
++        EhRemoteCookies(
++            settingsKey = other.settingsKey ?: settingsKey,
++            session = other.session ?: session,
++            hathPerks = other.hathPerks ?: hathPerks,
++        )
++
++    fun overlay(header: EhCookieHeader): EhCookieHeader {
++        val values = linkedMapOf<String, String>()
++        header.value.split(';').forEach { part ->
++            val separator = part.indexOf('=')
++            if (separator > 0) values[part.substring(0, separator).trim()] = part.substring(separator + 1).trim()
++        }
++        settingsKey?.let { values["sk"] = it }
++        session?.let { values["s"] = it }
++        hathPerks?.let { values["hath_perks"] = it }
++        return EhCookieHeader(values.entries.joinToString("; ") { (name, value) -> "$name=$value" })
++    }
++
++    private fun validate(label: String, value: String?) {
++        if (value == null) return
++        require(value.isNotBlank() && value.length <= 512) { "The $label cookie is invalid." }
++        require(value.all { it.code in 0x21..0x7e && it !in setOf('"', ',', ';', '\\') }) {
++            "The $label cookie contains unsafe characters."
++        }
++    }
++}
++
++sealed class EhRemoteSettingsFailure(message: String, cause: Throwable? = null) : RuntimeException(message, cause) {
++    class AuthenticationRequired : EhRemoteSettingsFailure("Verify an ExHentai session before uploading settings.")
++    class RateLimited(val retryAfterSeconds: Long?) :
++        EhRemoteSettingsFailure(
++            retryAfterSeconds?.let { "E-Hentai rate-limited settings upload. Retry in $it seconds." }
++                ?: "E-Hentai rate-limited settings upload.",
++        )
++    class RemoteRejected(code: Int) : EhRemoteSettingsFailure("E-Hentai rejected the settings request with HTTP $code.")
++    class OutOfProfileSlots(site: EhSite) : EhRemoteSettingsFailure("${site.displayName} has no free application profile slot.")
++    class MalformedResponse(message: String, cause: Throwable? = null) : EhRemoteSettingsFailure(message, cause)
++    class Network(message: String, cause: Throwable? = null) : EhRemoteSettingsFailure(message, cause)
++}
++
++sealed interface EhSiteUploadResult {
++    val site: EhSite
++
++    data class Applied(
++        override val site: EhSite,
++        val slot: EhProfileSlot,
++    ) : EhSiteUploadResult
++
++    data class Failed(
++        override val site: EhSite,
++        val failure: EhRemoteSettingsFailure,
++    ) : EhSiteUploadResult
++}
++
++data class EhUploadReport(
++    val results: Map<EhSite, EhSiteUploadResult>,
++) {
++    val failedSites: Set<EhSite>
++        get() = results.values.filterIsInstance<EhSiteUploadResult.Failed>().mapTo(linkedSetOf()) { it.site }
++
++    val successfulSites: Set<EhSite>
++        get() = results.values.filterIsInstance<EhSiteUploadResult.Applied>().mapTo(linkedSetOf()) { it.site }
++}
++
++sealed interface EhUploadProgress {
++    data class Started(val site: EhSite) : EhUploadProgress
++    data class Finished(val result: EhSiteUploadResult) : EhUploadProgress
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+index 452de84b7d4b70743a63845b76da0f7aff9ec8c0..2a8248435da17073e438379c078d562ce5f236f6 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhSettingsActivity.kt
+@@ -11,6 +11,7 @@ import android.widget.ScrollView
+ import android.widget.TextView
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.core.view.setPadding
++import androidx.core.view.isVisible
+ import androidx.lifecycle.Lifecycle
+ import androidx.lifecycle.lifecycleScope
+ import androidx.lifecycle.repeatOnLifecycle
+@@ -21,11 +22,17 @@ import com.google.android.material.switchmaterial.SwitchMaterial
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhHentaiAtHome
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhImageQuality
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhLanguage
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionMutationResult
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionState
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionVerifier
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhSiteUploadResult
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUploadProgress
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
+ import eu.kanade.tachiyomi.ui.webview.WebViewActivity
+@@ -38,19 +45,31 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private val sessionStore by injectLazy<EhSessionStore>()
+     private val ehPreferences by injectLazy<EhPreferences>()
+     private val network by injectLazy<NetworkHelper>()
++    private val settingsUploader by injectLazy<EhRemoteSettingsUploader>()
+     private val verifier by lazy { EhSessionVerifier(network.client) }
+ 
+     private lateinit var status: TextView
+     private lateinit var recheck: MaterialButton
+-    private lateinit var ehProfile: EditText
+-    private lateinit var exhProfile: EditText
+     private lateinit var watchedTags: MaterialButton
+     private lateinit var categories: MaterialButton
++    private lateinit var imageQuality: MaterialButton
++    private lateinit var hentaiAtHome: MaterialButton
++    private lateinit var filterThreshold: MaterialButton
++    private lateinit var watchingThreshold: MaterialButton
++    private lateinit var languages: MaterialButton
++    private lateinit var remoteStatus: TextView
++    private lateinit var uploadSettings: MaterialButton
++    private lateinit var retryUpload: MaterialButton
++    private val uploadResults = linkedMapOf<EhSite, EhSiteUploadResult>()
++    private var retrySites = emptySet<EhSite>()
+ 
+     private val loginLauncher =
+         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+             val outcome = result.data?.getStringExtra(EhLoginActivity.EXTRA_OUTCOME)
+-            if (outcome != null && outcome != EhLoginOutcome.Success.name) {
++            if (outcome == EhLoginOutcome.Success.name) {
++                ehPreferences.clearRemoteSettingsApplied()
++                remoteChanged()
++            } else if (outcome != null) {
+                 status.text =
+                     when (outcome) {
+                         EhLoginOutcome.Cloudflare.name -> "Cloudflare interrupted login. Reopen login and complete the challenge."
+@@ -106,15 +125,55 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         content.addView(recheck)
+         content.addView(button("Log out") { confirmLogout() })
+ 
+-        content.addView(sectionLabel("Browsing and details"))
++        content.addView(sectionLabel("Server gallery settings"))
++        remoteStatus = TextView(this).apply { setPadding(0, 0, 0, 8.dpToPx) }
++        content.addView(remoteStatus, matchWidth())
++        imageQuality = button(imageQualityText(), ::chooseImageQuality)
++        content.addView(imageQuality)
++        hentaiAtHome = button(hentaiAtHomeText(), ::chooseHentaiAtHome)
++        content.addView(hentaiAtHome)
+         content.addView(
+             settingSwitch(
+                 title = "Use Japanese gallery titles",
+                 summary = "Prefer the Japanese title when a gallery provides one.",
+                 checked = ehPreferences.useJapaneseTitle.get(),
+-                onChanged = ehPreferences.useJapaneseTitle::set,
++                onChanged = { ehPreferences.useJapaneseTitle.set(it); remoteChanged() },
++            ),
++        )
++        content.addView(
++            settingSwitch(
++                title = "Use original images",
++                summary = "Request original gallery images instead of resampled images.",
++                checked = ehPreferences.useOriginalImages.get(),
++                onChanged = { ehPreferences.useOriginalImages.set(it); remoteChanged() },
+             ),
+         )
++        filterThreshold = button(filterThresholdText()) {
++            editThreshold("Tag filtering threshold", ehPreferences.tagFilterThreshold.get(), -9999..0) {
++                ehPreferences.tagFilterThreshold.set(it)
++                filterThreshold.text = filterThresholdText()
++                remoteChanged()
++            }
++        }
++        content.addView(filterThreshold)
++        watchingThreshold = button(watchingThresholdText()) {
++            editThreshold("Tag watching threshold", ehPreferences.tagWatchingThreshold.get(), 0..9999) {
++                ehPreferences.tagWatchingThreshold.set(it)
++                watchingThreshold.text = watchingThresholdText()
++                remoteChanged()
++            }
++        }
++        content.addView(watchingThreshold)
++        languages = button(languageButtonText(), ::editLanguages)
++        content.addView(languages)
++        categories = button(categoryButtonText(), ::editDefaultCategories)
++        content.addView(categories)
++        uploadSettings = button("Apply to E-Hentai and ExHentai") { requestUpload(EhSite.entries.toSet()) }
++        content.addView(uploadSettings)
++        retryUpload = button("Retry failed sites") { requestUpload(retrySites) }.apply { isVisible = false }
++        content.addView(retryUpload)
++
++        content.addView(sectionLabel("Browsing and details"))
+         content.addView(
+             settingSwitch(
+                 title = "Open on watched list",
+@@ -131,8 +190,6 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+                 onChanged = ehPreferences.enhancedView::set,
+             ),
+         )
+-        categories = button(categoryButtonText(), ::editDefaultCategories)
+-        content.addView(categories)
+         watchedTags = button("Manage watched tags") {
+             startActivity(
+                 WebViewActivity.newIntent(
+@@ -145,13 +202,6 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         }
+         content.addView(watchedTags)
+ 
+-        content.addView(sectionLabel("Server settings profiles"))
+-        ehProfile = profileInput("E-Hentai profile", sessionStore.settingsProfile(EhSite.EHentai))
+-        exhProfile = profileInput("ExHentai profile", sessionStore.settingsProfile(EhSite.ExHentai))
+-        content.addView(ehProfile, matchWidth())
+-        content.addView(exhProfile, matchWidth())
+-        content.addView(button("Save profiles") { saveProfiles() })
+-
+         root.addView(
+             ScrollView(this).apply { addView(content) },
+             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+@@ -169,6 +219,9 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             }
+         recheck.isEnabled = state !is EhSessionState.LoggedOut
+         watchedTags.isEnabled = state is EhSessionState.Verified
++        uploadSettings.isEnabled = state is EhSessionState.Verified
++        retryUpload.isEnabled = state is EhSessionState.Verified
++        refreshRemoteState()
+     }
+ 
+     private fun recheckSession() {
+@@ -193,39 +246,14 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         materialAlertDialog()
+             .setTitle("Log out of E-Hentai?")
+             .setMessage("Hayai will remove only E-Hentai and ExHentai credentials and cookies. Other website sessions are untouched.")
+-            .setPositiveButton("Log out") { _, _ -> sessionStore.logout() }
++            .setPositiveButton("Log out") { _, _ ->
++                ehPreferences.clearRemoteSettingsApplied()
++                sessionStore.logout()
++            }
+             .setNegativeButton(android.R.string.cancel, null)
+             .show()
+     }
+ 
+-    private fun saveProfiles() {
+-        val eh = parseProfile(ehProfile) ?: return
+-        val exh = parseProfile(exhProfile) ?: return
+-        sessionStore.setSettingsProfile(EhSite.EHentai, eh)
+-        sessionStore.setSettingsProfile(EhSite.ExHentai, exh)
+-        status.text = "Server settings profiles saved."
+-    }
+-
+-    private fun parseProfile(input: EditText): Int? {
+-        val text = input.text?.toString()?.trim().orEmpty()
+-        if (text.isEmpty()) return null
+-        val profile = text.toIntOrNull()
+-        if (profile == null || profile !in 0..3) {
+-            input.error = "Use 0 to 3, or leave blank for automatic."
+-            throw InvalidProfileException()
+-        }
+-        return profile
+-    }
+-
+-    private fun profileInput(
+-        label: String,
+-        value: Int?,
+-    ) = EditText(this).apply {
+-        hint = "$label, blank for automatic"
+-        inputType = InputType.TYPE_CLASS_NUMBER
+-        setText(value?.toString().orEmpty())
+-    }
+-
+     private fun sectionLabel(text: String) =
+         TextView(this).apply {
+             this.text = text
+@@ -274,6 +302,7 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+             .setPositiveButton(android.R.string.ok) { _, _ ->
+                 ehPreferences.setExcludedCategories(selected)
+                 categories.text = categoryButtonText()
++                remoteChanged()
+             }
+             .setNegativeButton(android.R.string.cancel, null)
+             .show()
+@@ -287,16 +316,205 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+     private fun categoryName(category: EhCategory): String =
+         category.name.replace("Cg", " CG").replace("NonH", "Non-H").replace("ImageSet", "Image Set").replace("AsianPorn", "Asian Porn")
+ 
++    private fun chooseImageQuality() {
++        val values = EhImageQuality.entries
++        val labels = arrayOf("Automatic", "2400 px", "1600 px", "1280 px", "980 px", "780 px")
++        val current = values.indexOf(EhImageQuality.fromPreference(ehPreferences.imageQuality.get()))
++        materialAlertDialog()
++            .setTitle("Image resolution")
++            .setSingleChoiceItems(labels, current) { dialog, index ->
++                ehPreferences.imageQuality.set(values[index].preferenceValue)
++                imageQuality.text = imageQualityText()
++                remoteChanged()
++                dialog.dismiss()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun chooseHentaiAtHome() {
++        val values = EhHentaiAtHome.entries
++        val labels = arrayOf("Any client", "Default client only", "Never")
++        val current = values.indexOf(EhHentaiAtHome.fromPreference(ehPreferences.useHentaiAtHome.get()))
++        materialAlertDialog()
++            .setTitle("Hentai@Home")
++            .setSingleChoiceItems(labels, current) { dialog, index ->
++                ehPreferences.useHentaiAtHome.set(values[index].preferenceValue)
++                hentaiAtHome.text = hentaiAtHomeText()
++                remoteChanged()
++                dialog.dismiss()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun editThreshold(
++        title: String,
++        current: Int,
++        range: IntRange,
++        save: (Int) -> Unit,
++    ) {
++        val input = EditText(this).apply {
++            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
++            setText(current.toString())
++            selectAll()
++        }
++        val dialog = materialAlertDialog()
++            .setTitle(title)
++            .setMessage("Allowed range: ${range.first} to ${range.last}")
++            .setView(input)
++            .setPositiveButton(android.R.string.ok, null)
++            .setNegativeButton(android.R.string.cancel, null)
++            .create()
++        dialog.setOnShowListener {
++            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
++                val value = input.text?.toString()?.trim()?.toIntOrNull()
++                if (value == null || value !in range) {
++                    input.error = "Enter a value from ${range.first} to ${range.last}."
++                } else {
++                    save(value)
++                    dialog.dismiss()
++                }
++            }
++        }
++        dialog.show()
++    }
++
++    private fun editLanguages() {
++        data class Option(val language: EhLanguage, val field: Int, val label: String)
++
++        val selected = ehPreferences.languageSelections().toMutableMap()
++        val options = buildList {
++            EhLanguage.entries.forEach { language ->
++                if (language.originalCode != null) add(Option(language, 0, "${language.displayName} · Original"))
++                add(Option(language, 1, "${language.displayName} · Translated"))
++                add(Option(language, 2, "${language.displayName} · Rewrite"))
++            }
++        }
++        val checked = BooleanArray(options.size) { index ->
++            val value = selected.getValue(options[index].language)
++            when (options[index].field) { 0 -> value.original; 1 -> value.translated; else -> value.rewritten }
++        }
++        materialAlertDialog()
++            .setTitle("Language filtering")
++            .setMultiChoiceItems(options.map(Option::label).toTypedArray(), checked) { _, index, enabled ->
++                val option = options[index]
++                val old = selected.getValue(option.language)
++                selected[option.language] = when (option.field) {
++                    0 -> old.copy(original = enabled)
++                    1 -> old.copy(translated = enabled)
++                    else -> old.copy(rewritten = enabled)
++                }
++            }
++            .setPositiveButton(android.R.string.ok) { _, _ ->
++                ehPreferences.setLanguageSelections(selected)
++                languages.text = languageButtonText()
++                remoteChanged()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun requestUpload(targets: Set<EhSite>) {
++        if (targets.isEmpty()) return
++        if (sessionStore.state.value !is EhSessionState.Verified) {
++            status.text = "Verify ExHentai access before uploading settings."
++            return
++        }
++        if (ehPreferences.showSettingsUploadWarning.get()) {
++            materialAlertDialog()
++                .setTitle("Create remote Hayai profiles?")
++                .setMessage("Hayai will create or reuse one application profile on each site and replace every setting in those profiles. Your other profiles are left untouched.")
++                .setPositiveButton("Continue") { _, _ ->
++                    ehPreferences.showSettingsUploadWarning.set(false)
++                    performUpload(targets)
++                }
++                .setNegativeButton(android.R.string.cancel, null)
++                .show()
++        } else {
++            performUpload(targets)
++        }
++    }
++
++    private fun performUpload(targets: Set<EhSite>) {
++        uploadSettings.isEnabled = false
++        retryUpload.isEnabled = false
++        lifecycleScope.launch {
++            try {
++                val report = settingsUploader.upload(ehPreferences.remoteSettings(), targets) { progress ->
++                    if (progress is EhUploadProgress.Started) remoteStatus.text = "Uploading ${progress.site.displayName} settings…"
++                }
++                uploadResults.putAll(report.results)
++                retrySites = uploadResults.values.filterIsInstance<EhSiteUploadResult.Failed>().mapTo(linkedSetOf()) { it.site }
++                retryUpload.isVisible = retrySites.isNotEmpty()
++                refreshRemoteState()
++            } finally {
++                val verified = sessionStore.state.value is EhSessionState.Verified
++                uploadSettings.isEnabled = verified
++                retryUpload.isEnabled = verified
++            }
++        }
++    }
++
++    private fun remoteChanged() {
++        retrySites = emptySet()
++        retryUpload.isVisible = false
++        uploadResults.clear()
++        refreshRemoteState()
++    }
++
++    private fun refreshRemoteState() {
++        val pending = EhSite.entries.filter(ehPreferences::hasPendingRemoteSettings)
++        val summary = buildList {
++            add(if (pending.isEmpty()) "Remote settings match this device." else "Changes are pending for ${pending.joinToString { it.displayName }}.")
++            EhSite.entries.forEach { site ->
++                when (val result = uploadResults[site]) {
++                    is EhSiteUploadResult.Applied -> add("${site.displayName}: applied in profile ${result.slot.value}.")
++                    is EhSiteUploadResult.Failed -> add("${site.displayName}: ${result.failure.message}")
++                    null -> Unit
++                }
++            }
++        }
++        remoteStatus.text = summary.joinToString("\n")
++    }
++
++    private fun imageQualityText(): String {
++        val value = EhImageQuality.fromPreference(ehPreferences.imageQuality.get())
++        val label = when (value) {
++            EhImageQuality.Auto -> "Automatic"
++            EhImageQuality.Size2400 -> "2400 px"
++            EhImageQuality.Size1600 -> "1600 px"
++            EhImageQuality.Size1280 -> "1280 px"
++            EhImageQuality.Size980 -> "980 px"
++            EhImageQuality.Size780 -> "780 px"
++        }
++        return "Image resolution: $label"
++    }
++
++    private fun hentaiAtHomeText(): String =
++        "Hentai@Home: " + when (EhHentaiAtHome.fromPreference(ehPreferences.useHentaiAtHome.get())) {
++            EhHentaiAtHome.Any -> "any client"
++            EhHentaiAtHome.DefaultOnly -> "default client only"
++            EhHentaiAtHome.Never -> "never"
++        }
++
++    private fun filterThresholdText() = "Tag filtering threshold: ${ehPreferences.tagFilterThreshold.get()}"
++    private fun watchingThresholdText() = "Tag watching threshold: ${ehPreferences.tagWatchingThreshold.get()}"
++
++    private fun languageButtonText(): String {
++        val count = ehPreferences.languageSelections().values.sumOf { selection ->
++            listOf(selection.original, selection.translated, selection.rewritten).count { it }
++        }
++        return if (count == 0) "Language filters: none" else "Language filters: $count enabled"
++    }
++
+     private fun button(
+         text: String,
+         action: () -> Unit,
+     ) = MaterialButton(this).apply {
+         this.text = text
+         setOnClickListener {
+-            try {
+-                action()
+-            } catch (_: InvalidProfileException) {
+-            }
++            action()
+         }
+     }
+ 
+@@ -307,5 +525,3 @@ class EhSettingsActivity : BaseActivity<ViewBinding>() {
+         fun newIntent(context: Context): Intent = Intent(context, EhSettingsActivity::class.java)
+     }
+ }
+-
+-private class InvalidProfileException : IllegalArgumentException()
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+index eab51ac0fab5d40b792f35117ef06a3cb2e3d5d2..47d0546965989e00b18230e6ee6cf1ba84788940 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+@@ -11,6 +11,9 @@ import dev.ahmedmohamed.hayai.adult.eh.persistence.HayaiEhPersistenceStore
+ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhDetailsPreviewLoader
+ import dev.ahmedmohamed.hayai.adult.eh.network.EhHttpGateway
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsRemote
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteSettingsUploader
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhUConfigHttpRemote
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
+@@ -70,6 +73,8 @@ class AppModule(
+         addSingletonFactory { HayaiEhPersistenceStore(get()) }
+         addSingletonFactory { EhPreferences(get()) }
+         addSingletonFactory { EhHttpGateway(get<NetworkHelper>().client, get()) }
++        addSingletonFactory<EhRemoteSettingsRemote> { EhUConfigHttpRemote(get<NetworkHelper>().client) }
++        addSingletonFactory { EhRemoteSettingsUploader(get(), get(), get()) }
+         addSingletonFactory { EhSourceProvider(get(), get(), get(), get()) }
+         addSingletonFactory { EhDetailsPreviewLoader(get(), HayaiPreferences(get()), get()) }
+         addSingletonFactory { SourceManager(app, get(), get(), get()) }
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStoreTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStoreTest.kt
+index ce327bcf6a6f1b635e4563d31b38971a9e837950..830f0f1af392d29668bb5524aae10faec1dce1ce 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStoreTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStoreTest.kt
+@@ -1,6 +1,8 @@
+ package dev.ahmedmohamed.hayai.adult.eh.session
+ 
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhProfileSlot
++import dev.ahmedmohamed.hayai.adult.eh.uconfig.EhRemoteCookies
+ import eu.kanade.tachiyomi.data.preference.Preference
+ import eu.kanade.tachiyomi.data.preference.PreferenceStore
+ import kotlinx.coroutines.CoroutineScope
+@@ -140,6 +142,28 @@ class EhSessionStoreTest {
+         assertEquals("keep-me", preferences.value<String>("unrelated"))
+         assertEquals(1, cookies.clearCount)
+     }
++
++    @Test
++    fun `remote profile commit retains absent cookies and updates returned cookies`() {
++        val preferences =
++            FakePreferenceStore(
++                EhSessionStore.KEY_SETTINGS_KEY to "old-settings",
++                EhSessionStore.KEY_SESSION_COOKIE to "old-session",
++                EhSessionStore.KEY_HATH_PERKS_COOKIE to "old-perks",
++            )
++        val store = EhSessionStore(preferences, FakeCookieStore())
++
++        store.commitRemoteProfile(
++            EhSite.ExHentai,
++            EhProfileSlot(3),
++            EhRemoteCookies(settingsKey = "new-settings"),
++        )
++
++        assertEquals(3, store.settingsProfile(EhSite.ExHentai))
++        assertEquals("new-settings", preferences.value<String>(EhSessionStore.KEY_SETTINGS_KEY))
++        assertEquals("old-session", preferences.value<String>(EhSessionStore.KEY_SESSION_COOKIE))
++        assertEquals("old-perks", preferences.value<String>(EhSessionStore.KEY_HATH_PERKS_COOKIE))
++    }
+ }
+ 
+ private class FakeCookieStore : EhCookieStore {
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferencesTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferencesTest.kt
+index b2d601488ef9a43e5b5be37cd02ea8e0d1744eb1..7f0989f85f717b218fc73fe947951717b9f7b354 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferencesTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhPreferencesTest.kt
+@@ -33,6 +33,31 @@ class EhPreferencesTest {
+ 
+         assertTrue(preferences.excludedCategories().isEmpty())
+     }
++
++    @Test
++    fun `language matrix round trips in SY order without Japanese original`() {
++        val store = MemoryPreferenceStore()
++        val preferences = EhPreferences(store)
++        val selections = EhLanguage.entries.associateWithTo(linkedMapOf()) { language ->
++            EhLanguageSelection(original = true, translated = language == EhLanguage.Japanese, rewritten = language == EhLanguage.Other)
++        }
++
++        preferences.setLanguageSelections(selections)
++
++        val restored = preferences.languageSelections()
++        assertEquals(false, restored.getValue(EhLanguage.Japanese).original)
++        assertEquals(true, restored.getValue(EhLanguage.Japanese).translated)
++        assertEquals(true, restored.getValue(EhLanguage.English).original)
++        assertEquals(true, restored.getValue(EhLanguage.Other).rewritten)
++        assertEquals(17, store.value<String>("eh_settings_languages")?.lines()?.size)
++    }
++
++    @Test
++    fun `malformed language matrix safely disables every language filter`() {
++        val preferences = EhPreferences(MemoryPreferenceStore("eh_settings_languages" to "true*false"))
++
++        assertTrue(preferences.languageSelections().values.all { it == EhLanguageSelection() })
++    }
+ }
+ 
+ private class MemoryPreferenceStore(
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsUploaderTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsUploaderTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..ba583ea345f7990d87d0c97ae2493d344f6a4045
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsUploaderTest.kt
+@@ -0,0 +1,151 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieHeader
++import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieStore
++import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhRemoteSettings
++import eu.kanade.tachiyomi.data.preference.Preference
++import eu.kanade.tachiyomi.data.preference.PreferenceStore
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.runBlocking
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhRemoteSettingsUploaderTest {
++    @Test
++    fun `partial failure commits success and retry reuses created profile`() = runBlocking {
++        val preferenceStore = TestPreferenceStore()
++        val sessions = EhSessionStore(preferenceStore, TestCookieStore())
++        sessions.stage(listOf("ipb_member_id=12345; ipb_pass_hash=pass-token; igneous=igneous-token"))
++        sessions.markVerified()
++        val preferences = EhPreferences(preferenceStore)
++        val remote = FakeRemote().apply {
++            profiles.getValue(EhSite.EHentai) += EhRemoteProfile(EhProfileSlot(2), "TachiyomiEH App")
++            failApply += EhSite.ExHentai
++        }
++        val uploader = EhRemoteSettingsUploader(remote, sessions, preferences)
++        val desired = preferences.remoteSettings()
++
++        val first = uploader.upload(desired)
++
++        assertEquals(setOf(EhSite.ExHentai), first.failedSites)
++        assertEquals(2, sessions.settingsProfile(EhSite.EHentai))
++        assertEquals(null, sessions.settingsProfile(EhSite.ExHentai))
++        assertEquals(1, remote.createCalls[EhSite.ExHentai])
++        assertEquals(desired.fingerprint(), preferences.appliedFingerprint(EhSite.EHentai))
++
++        remote.failApply.clear()
++        val retry = uploader.upload(desired, first.failedSites)
++
++        assertTrue(retry.failedSites.isEmpty())
++        assertEquals(1, sessions.settingsProfile(EhSite.ExHentai))
++        assertEquals(1, remote.createCalls[EhSite.ExHentai])
++        assertEquals(desired.fingerprint(), preferences.appliedFingerprint(EhSite.ExHentai))
++    }
++
++    @Test
++    fun `occupied profile slots return typed failure without deletion`() = runBlocking {
++        val preferenceStore = TestPreferenceStore()
++        val sessions = EhSessionStore(preferenceStore, TestCookieStore())
++        sessions.stage(listOf("ipb_member_id=12345; ipb_pass_hash=pass-token; igneous=igneous-token"))
++        sessions.markVerified()
++        val preferences = EhPreferences(preferenceStore)
++        val remote = FakeRemote().apply {
++            profiles.getValue(EhSite.EHentai) += (1..3).map { EhRemoteProfile(EhProfileSlot(it), "Personal $it") }
++        }
++        val uploader = EhRemoteSettingsUploader(remote, sessions, preferences)
++
++        val report = uploader.upload(preferences.remoteSettings(), setOf(EhSite.EHentai))
++
++        assertTrue((report.results.getValue(EhSite.EHentai) as EhSiteUploadResult.Failed).failure is EhRemoteSettingsFailure.OutOfProfileSlots)
++        assertEquals(null, remote.createCalls[EhSite.EHentai])
++    }
++}
++
++private class FakeRemote : EhRemoteSettingsRemote {
++    val profiles = EhSite.entries.associateWith { mutableListOf<EhRemoteProfile>() }
++    val createCalls = mutableMapOf<EhSite, Int>()
++    val failApply = mutableSetOf<EhSite>()
++
++    override suspend fun fetchHathPerks(cookie: EhCookieHeader) = EhHathPerks()
++
++    override suspend fun profiles(site: EhSite, cookie: EhCookieHeader): List<EhRemoteProfile> = profiles.getValue(site).toList()
++
++    override suspend fun createProfile(
++        site: EhSite,
++        slot: EhProfileSlot,
++        name: String,
++        cookie: EhCookieHeader,
++    ): EhRemoteCookies {
++        createCalls[site] = createCalls.getOrDefault(site, 0) + 1
++        profiles.getValue(site) += EhRemoteProfile(slot, name)
++        return EhRemoteCookies(settingsKey = "settings-key")
++    }
++
++    override suspend fun applyProfile(
++        site: EhSite,
++        slot: EhProfileSlot,
++        settings: EhRemoteSettings,
++        perks: EhHathPerks,
++        cookie: EhCookieHeader,
++    ): EhRemoteCookies {
++        if (site in failApply) throw EhRemoteSettingsFailure.Network("forced failure")
++        return EhRemoteCookies(session = "session-key")
++    }
++}
++
++private class TestCookieStore : EhCookieStore {
++    override fun get(origin: String): String? = null
++    override fun clearEhDomains() = Unit
++}
++
++private class TestPreferenceStore : PreferenceStore {
++    private val values = mutableMapOf<String, Any>()
++    private val preferences = mutableMapOf<String, TestPreference<*>>()
++
++    override fun getString(key: String, defaultValue: String): Preference<String> = preference(key, defaultValue)
++    override fun getLong(key: String, defaultValue: Long): Preference<Long> = preference(key, defaultValue)
++    override fun getInt(key: String, defaultValue: Int): Preference<Int> = preference(key, defaultValue)
++    override fun getFloat(key: String, defaultValue: Float): Preference<Float> = preference(key, defaultValue)
++    override fun getBoolean(key: String, defaultValue: Boolean): Preference<Boolean> = preference(key, defaultValue)
++    override fun getStringSet(key: String, defaultValue: Set<String>): Preference<Set<String>> = preference(key, defaultValue)
++    override fun <T> getObject(key: String, defaultValue: T, serializer: (T) -> String, deserializer: (String) -> T): Preference<T> =
++        preference(key, defaultValue)
++    override fun getAll(): Map<String, *> = values.toMap()
++
++    @Suppress("UNCHECKED_CAST")
++    private fun <T> preference(key: String, defaultValue: T): Preference<T> =
++        preferences.getOrPut(key) {
++            TestPreference(
++                key,
++                defaultValue,
++                read = { values[key] as? T ?: defaultValue },
++                write = { values[key] = it as Any },
++                remove = { values.remove(key) },
++            )
++        } as Preference<T>
++}
++
++private class TestPreference<T>(
++    private val key: String,
++    private val defaultValue: T,
++    private val read: () -> T,
++    private val write: (T) -> Unit,
++    private val remove: () -> Unit,
++) : Preference<T> {
++    private val state = MutableStateFlow(read())
++    override fun key(): String = key
++    override fun get(): T = read()
++    override fun set(value: T) { write(value); state.value = value }
++    override fun isSet(): Boolean = read() != defaultValue
++    override fun delete() { remove(); state.value = defaultValue }
++    override fun defaultValue(): T = defaultValue
++    override fun changes(): Flow<T> = state
++    override fun stateIn(scope: CoroutineScope): StateFlow<T> = state
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigCodecTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigCodecTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..27000d87236cea5735fd5f01625e851dd1a6f13b
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigCodecTest.kt
+@@ -0,0 +1,78 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhHentaiAtHome
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhImageQuality
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhLanguage
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhLanguageSelection
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhRemoteSettings
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhUConfigCodecTest {
++    @Test
++    fun `form contains complete SY settings matrix`() {
++        val languages = EhLanguage.entries.associateWithTo(linkedMapOf()) {
++            EhLanguageSelection(original = it.originalCode != null, translated = true, rewritten = false)
++        }
++        val settings = settings(languages = languages, excluded = setOf(EhCategory.Doujinshi, EhCategory.Misc))
++
++        val entries = EhUConfigFormCodec.entries(settings, EhHathPerks(allThumbs = true, pagingIII = true)).toMap()
++
++        assertEquals("5", entries["xr"])
++        assertEquals("1", entries["uh"])
++        assertEquals("1", entries["tl"])
++        assertEquals("1", entries["oi"])
++        assertEquals("3", entries["tr"])
++        assertEquals("3", entries["rc"])
++        assertEquals("2", entries["dm"])
++        assertEquals("0", entries["qb"])
++        assertEquals("1", entries["pp"])
++        assertEquals("-120", entries["ft"])
++        assertEquals("75", entries["wt"])
++        assertEquals("checked", entries["xl_1"])
++        assertEquals("checked", entries["xl_1024"])
++        assertEquals("", entries["xl_2048"])
++        assertFalse("xl_0" in entries)
++        assertEquals("1", entries["ct_doujinshi"])
++        assertEquals("0", entries["ct_manga"])
++        assertEquals("1", entries["ct_misc"])
++        assertEquals("Apply", entries["apply"])
++    }
++
++    @Test
++    fun `perk fallbacks and priorities match SY`() {
++        assertEquals("0", EhHathPerks().thumbnailRowsValue)
++        assertEquals("0", EhHathPerks().resultCountValue)
++        assertEquals("3", EhHathPerks(moreThumbs = true, thumbsUp = true, allThumbs = true).thumbnailRowsValue)
++        assertEquals("3", EhHathPerks(pagingI = true, pagingII = true, pagingIII = true).resultCountValue)
++    }
++
++    @Test
++    fun `fingerprint is stable and changes with desired state`() {
++        val first = settings()
++        val same = settings()
++        val changed = settings(excluded = setOf(EhCategory.Manga))
++
++        assertEquals(first.fingerprint(), same.fingerprint())
++        assertTrue(first.fingerprint() != changed.fingerprint())
++        assertEquals(64, first.fingerprint().length)
++    }
++
++    private fun settings(
++        languages: Map<EhLanguage, EhLanguageSelection> = EhLanguage.entries.associateWith { EhLanguageSelection() },
++        excluded: Set<EhCategory> = emptySet(),
++    ) = EhRemoteSettings(
++        imageQuality = EhImageQuality.Size2400,
++        hentaiAtHome = EhHentaiAtHome.DefaultOnly,
++        japaneseTitles = true,
++        originalImages = true,
++        tagFilterThreshold = -120,
++        tagWatchingThreshold = 75,
++        languages = languages,
++        excludedCategories = excluded,
++    )
++}
++
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHtmlParserTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHtmlParserTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..5f069215c8b9682135d09243fa9925189a082bdc
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHtmlParserTest.kt
+@@ -0,0 +1,59 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import org.junit.Assert.assertThrows
++
++class EhUConfigHtmlParserTest {
++    @Test
++    fun `profile parser accepts only bounded application slots`() {
++        val profiles = EhUConfigHtmlParser.profiles(
++            """
++            <select name="profile_set">
++              <option value="0">Default</option>
++              <option value="1">Hayai App</option>
++              <option value="2">Personal</option>
++              <option value="99">Invalid</option>
++              <option value="broken">Broken</option>
++            </select>
++            """.trimIndent(),
++        )
++
++        assertEquals(listOf(1, 2), profiles.map { it.slot.value })
++        assertEquals(listOf("Hayai App", "Personal"), profiles.map { it.name })
++    }
++
++    @Test
++    fun `perks parser distinguishes purchased rows from purchase forms`() {
++        val perks = EhUConfigHtmlParser.hathPerks(
++            """
++            <div class="stuffbox"><table>
++              <tr><td>All Thumbs</td><td></td><td>Purchased</td></tr>
++              <tr><td>Paging Enlargement III</td><td></td><td>Purchased</td></tr>
++              <tr><td>Thumbs Up</td><td></td><td><form>Buy</form></td></tr>
++            </table></div>
++            """.trimIndent(),
++        )
++
++        assertTrue(perks.allThumbs)
++        assertTrue(perks.pagingIII)
++        assertFalse(perks.thumbsUp)
++    }
++
++    @Test
++    fun `cookie parser preserves only expected cookies`() {
++        val cookies = EhRemoteCookieParser.parse(
++            listOf("sk=settings; Path=/", "s=session; Secure", "ignored=value", "hath_perks=perks"),
++        )
++
++        assertEquals(EhRemoteCookies("settings", "session", "perks"), cookies)
++    }
++
++    @Test
++    fun `login and challenge pages are rejected`() {
++        assertThrows(IllegalArgumentException::class.java) { EhUConfigHtmlParser.profiles("<form id=login></form>") }
++        assertThrows(IllegalArgumentException::class.java) { EhUConfigHtmlParser.hathPerks("<title>Just a moment</title>") }
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHttpRemoteTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHttpRemoteTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..84e0655b4bf78ae271008c905e958f4e641daf64
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigHttpRemoteTest.kt
+@@ -0,0 +1,91 @@
++package dev.ahmedmohamed.hayai.adult.eh.uconfig
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieHeader
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhHentaiAtHome
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhImageQuality
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhLanguage
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhLanguageSelection
++import dev.ahmedmohamed.hayai.adult.eh.settings.EhRemoteSettings
++import kotlinx.coroutines.runBlocking
++import okhttp3.OkHttpClient
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++
++class EhUConfigHttpRemoteTest {
++    private lateinit var server: MockWebServer
++    private lateinit var remote: EhUConfigHttpRemote
++
++    @Before
++    fun setUp() {
++        server = MockWebServer()
++        server.start()
++        remote = EhUConfigHttpRemote(
++            client = OkHttpClient(),
++            uconfigUrl = { server.url("/uconfig.php").toString() },
++            hathPerksUrl = server.url("/hathperks.php").toString(),
++        )
++    }
++
++    @After
++    fun tearDown() {
++        server.shutdown()
++    }
++
++    @Test
++    fun `create sends profile action and captures returned cookies`() = runBlocking {
++        server.enqueue(
++            MockResponse()
++                .setResponseCode(200)
++                .addHeader("Set-Cookie", "sk=settings-key; Path=/")
++                .addHeader("Set-Cookie", "s=session-key; Path=/")
++                .setBody(profilePage()),
++        )
++
++        val cookies = remote.createProfile(EhSite.EHentai, EhProfileSlot(2), "Hayai App", EhCookieHeader("ipb_member_id=1"))
++        val request = server.takeRequest()
++
++        assertEquals("settings-key", cookies.settingsKey)
++        assertEquals("session-key", cookies.session)
++        assertEquals("1", request.headers["Cookie"]?.substringAfter("sp=")?.substringBefore(';'))
++        val body = request.body.readUtf8()
++        assertTrue("profile_action=create" in body)
++        assertTrue("profile_name=Hayai%20App" in body || "profile_name=Hayai+App" in body)
++        assertTrue("profile_set=2" in body)
++    }
++
++    @Test
++    fun `apply selects target slot and posts complete form`() = runBlocking {
++        server.enqueue(MockResponse().setResponseCode(200).setBody(profilePage()))
++        remote.applyProfile(EhSite.ExHentai, EhProfileSlot(3), settings(), EhHathPerks(), EhCookieHeader("sk=value; sp=1"))
++        val request = server.takeRequest()
++
++        assertTrue(request.headers["Cookie"].orEmpty().contains("sp=3"))
++        val body = request.body.readUtf8()
++        assertTrue("xr=0" in body)
++        assertTrue("dm=2" in body)
++        assertTrue("ct_misc=0" in body)
++        assertTrue("apply=Apply" in body)
++    }
++
++    private fun settings() = EhRemoteSettings(
++        imageQuality = EhImageQuality.Auto,
++        hentaiAtHome = EhHentaiAtHome.Any,
++        japaneseTitles = false,
++        originalImages = false,
++        tagFilterThreshold = 0,
++        tagWatchingThreshold = 0,
++        languages = EhLanguage.entries.associateWith { EhLanguageSelection() },
++        excludedCategories = emptySet(),
++    )
++
++    private fun profilePage() =
++        """
++        <select name="profile_set"><option value="1">Hayai App</option></select>
++        """.trimIndent()
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 5fa2d3b874f9c4ee8fbdefe3ab205093a69346f3..17533bfa3798537ced1845f82d818b2d0659124b 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -48,7 +48,7 @@ Source badges use a Hayai-owned presentation resolver. The browse list and both
+ 
+ Enhanced extension sources pass through `EnhancedSourceRegistry` during J2K source registration. A matching wrapper keeps the extension source ID and delegates filters, settings, browse pages, chapters, pages, images, and normal URLs to the installed extension. Hayai adds host-validated direct URL import and bounded detail enrichment for 8Muses, HBrowse, Pururin, NHentai, MangaDex, and LANraragi. A parser or secondary request failure returns the extension result. It never removes a usable source. `HttpSource.headers` is open so a wrapper can preserve extension authentication and request headers without copying them.
+ 
+-E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category strings fall back to showing every category. Remote uconfig, favorites sync, and the gallery update worker remain separate ports.
++E-Hentai preferences retain SY keys and affect the source directly. Japanese-title selection changes `SManga.title`, watched-list and category choices initialize each fresh filter sheet, and the enhanced-view switch controls page previews. Malformed category and language strings fall back to safe defaults. Remote uconfig uses a Hayai-owned typed settings model and an idempotent per-site profile upsert. It reuses Hayai and legacy SY application profiles, creates only in slots 1 through 3, commits cookies and the selected slot only after a verified apply, and reports partial two-site results for targeted retry. The settings activity owns the complete matrix and explicit upload flow. Favorites sync and the gallery update worker remain separate ports.
+ 
+ Recents source visibility uses one Hayai-owned policy seam. History and Updates retain independent
+ sets under the legacy Hayai preference keys; Grouped and All derive the union. The presenter takes
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 2455c9ba154b2274e3d25f76464faf9de765ecb5..b7d8caf8070a50f45da2ed50348bc86834b7606f 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -12,7 +12,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | Library lewd filter show/only/hide (`pref_filter_library_lewd_v2`) | J2K library filter sheet plus typed `HayaiLibraryPolicy` | port |
+ | Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; emulator login pending |
+-| EH source settings, default filters, and enhanced details toggle | SY-compatible typed preferences plus Hayai account/settings activity | foundation verified; remote uconfig audit |
++| EH source settings, default filters, enhanced details toggle, and remote uconfig | Typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
+ | EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
+ | EH metadata, gallery versions, thumbnails/previews, and tag filtering | Metadata gateway, EH delegate, and generic manga-details feature seam | foundation verified; emulator details flow pending |
+ | 8Muses/EroMuse, HBrowse, MangaDex, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | URL import and detail foundation verified; source-specific parity audit |
+-- 
+2.54.0.windows.1
+

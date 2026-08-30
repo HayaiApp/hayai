@@ -1,0 +1,56 @@
+From 49f00af45db7c5bffe8b4ebed886b7d408834216 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 21:59:42 +0300
+Subject: [PATCH] Tune novel highlight edit recovery
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/highlight/NovelHighlightAnchor.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/highlight/NovelHighlightAnchor.kt
+index ffd64233308d4d7807a26d448252828d5d0c40a1..99d9ab731c75d0115e853a4a9fa4e6602f2d3ab3 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/highlight/NovelHighlightAnchor.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/highlight/NovelHighlightAnchor.kt
+@@ -69,7 +69,7 @@ data class NovelHighlightAnchor(
+         private const val CONTEXT_LENGTH = 64
+         private const val MAX_EXACT = 8_192
+         private const val MIN_CONTEXT_SCORE = 8
+-        private const val FUZZY_THRESHOLD = 0.84
++        private const val FUZZY_THRESHOLD = 0.80
+         private const val MAX_DOCUMENT_CHARS = 4_000_000
+         private const val MAX_FUZZY_CANDIDATES = 128
+ 
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/highlight/NovelHighlightAnchorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/highlight/NovelHighlightAnchorTest.kt
+index a12072620a2f935ea1db3a2cc9ec7691ced824f2..ab70c29a7b8db398d08e02ace56986c70dc1e9f6 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/highlight/NovelHighlightAnchorTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/highlight/NovelHighlightAnchorTest.kt
+@@ -5,7 +5,8 @@ import org.junit.Assert.assertNotNull
+ import org.junit.Test
+ 
+ class NovelHighlightAnchorTest {
+-    @Test fun `context resolves repeated text after insertion`() {
++    @Test
++    fun `context resolves repeated text after insertion`() {
+         val original = "Alpha repeated phrase first. Middle repeated phrase chosen. Omega"
+         val start = original.indexOf("repeated phrase", 10)
+         val anchor = NovelHighlightAnchor.capture(original, start, start + "repeated phrase".length)
+@@ -13,9 +14,18 @@ class NovelHighlightAnchorTest {
+         assertEquals(edited.indexOf("repeated phrase", 40), anchor.resolve(edited)?.start)
+     }
+ 
+-    @Test fun `fuzzy recovery tolerates a small source edit`() {
++    @Test
++    fun `fuzzy recovery tolerates a small source edit`() {
+         val text = "A sufficiently long highlighted sentence for recovery."
+         val anchor = NovelHighlightAnchor.capture(text, 2, text.length)
+         assertNotNull(anchor.resolve("A sufficiently long highlighted phrase for recovery."))
+     }
++
++    @Test
++    fun `fuzzy recovery rejects an unrelated passage`() {
++        val text = "A sufficiently long highlighted sentence for recovery."
++        val anchor = NovelHighlightAnchor.capture(text, 2, text.length)
++
++        assertEquals(null, anchor.resolve("A completely different paragraph with unrelated words."))
++    }
+ }
+-- 
+2.54.0.windows.1
+

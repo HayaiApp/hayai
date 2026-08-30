@@ -1,0 +1,2338 @@
+From 81ce5367aaf01fce8e2f9b5a107960bf0709ddc7 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 17:14:45 +0300
+Subject: [PATCH] fix: restore SY source and J2K reader parity
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 9ef528c3e40afccca9f0216b2df5d045f6cd5190..f632e398e9bbafc77a3f0effb9e1d00c3af2bf3f 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -108,3 +108,9 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T12:15:00+03:00	hayai-public-identity	rewrote the README and issue forms, restored Hayai 1.15.0 code 114 metadata, replaced product J2K links, and documented credits and no-stable-release policy	retained upstream J2K, SY, Tsundoku, LNReader, Mihon, and legacy provenance links only as explicit credits or technical references	README.md; .github/ISSUE_TEMPLATE; AboutLinksPreference.kt; Dependencies.kt; releases.md	IMPLEMENTED_UNVERIFIED
+ 2026-08-23T13:45:00+03:00	independent-review-closure	restored all-APK repository management, retained asynchronous JavaScript warm-up failures, and overlaid APK update failures on installed rows	closed the concrete extension-management gaps found by the final independent review before master promotion	RepoPresenter.kt; NovelApkExtensionManager.kt; NovelPluginManager.kt; ManagedExtensionProjectorTest.kt	VERIFIED
+ 2026-08-23T15:04:01+03:00	j2k-extension-sheet-restoration	restored the Manga, Novels, and Migration tabs and returned standard APK loading to J2K's exact version-name compatibility path	novel APKs and JavaScript plugins share the J2K extension cards and actions in the Novels tab; both repository types reuse J2K's inline repository UI; the supplied Keiyoushi, Cursed Manga, and LNReader catalogs seed once and remain removable; plugin icons resolve against their repository and load in Browse; checksum-verified Comikey 1.6.9 and production LNReader Komga 1.0.2 passed install, registration, settings, QuickJS execution, and icon checks on emulator	ExtensionLoader.kt; NovelExtensionManifest.kt; ExtensionRepositoryDefaults.kt; ExtensionBottomPresenter.kt; ExtensionBottomSheet.kt; ExtensionHolder.kt; RepoController.kt; RepoPresenter.kt; SourceHolder.kt; BrowseController.kt	VERIFIED
++2026-08-23T16:33:30+03:00	novel-reader-overlay-supersedes-insets-fixture	superseded the earlier below-toolbar viewport evidence: the unmodified J2K reader shell now overlays toolbar chrome over the novel viewport and reserves only system-bar and display-cutout insets	prevents toolbar visibility from pushing or reflowing native and Web novel content; the earlier y=351 fixture remains historical evidence for the replaced behavior	J2kNovelReaderChrome.kt; NovelReaderActivity.kt; novel-reader-parity.md	IMPLEMENTED_UNVERIFIED
++2026-08-23T16:50:00+03:00	novel-reader-overlay-safe-inset	superseded the unverified raw-overlay claim after emulator evidence showed novel text under the toolbar; viewer bounds still match J2K while content uses one constant status-bar plus action-bar safe inset	keeps chrome visibility from reflowing text and prevents native or Web content from being obscured by the overlaid toolbar	J2kNovelReaderChrome.kt; artifacts/emulator-verification/20260823-134151/02-novel-reader.png	IMPLEMENTED_UNVERIFIED
++2026-08-23T17:12:00+03:00	novel-reader-overlay-safe-inset-verified	measured native novel content top y=351 against J2K toolbar bottom y=351 on the Pixel_10_Pro_XL fixture and passed the complete reader workflow	confirms the constant safe inset prevents overlap without a protected image-reader edit or visibility-driven viewport reflow	J2kNovelReaderChrome.kt; verify-hayai-emulator.ps1; artifacts/emulator-verification/20260823-135641/02-novel-reader-actions.xml	VERIFIED
++2026-08-23T17:12:00+03:00	novel-repository-bootstrap-race	made repository save atomic after device logs exposed concurrent first-run LNReader seeding against a migrated identical base URL	prevents the asynchronous UNIQUE constraint crash while keeping the canonical base URL authoritative	NovelPluginStore.kt; artifacts/emulator-verification/20260823-134936/logcat.txt; artifacts/emulator-verification/20260823-135641/logcat.txt	VERIFIED
++2026-08-23T17:40:00+03:00	novel-repository-bootstrap-preservation	superseded replace-on-conflict for first-run defaults with an atomic insert-if-absent operation	prevents the startup uniqueness crash without overwriting a concurrently imported or user-edited repository row	NovelPluginStore.kt; NovelPluginManager.kt	TESTED
++2026-08-23T17:40:00+03:00	novel-reader-fullscreen-inset-modes	made the stable reader content inset reserve the status bar only while system bars are overlaid	prevents a second status-bar gap in non-fullscreen mode while retaining the verified fullscreen toolbar clearance	J2kNovelReaderChrome.kt; J2kNovelReaderChromeTest.kt	TESTED
+diff --git a/.audit/sy-j2k-reader-parity.tsv b/.audit/sy-j2k-reader-parity.tsv
+new file mode 100644
+index 0000000000000000000000000000000000000000..cc557a78bebc4b58307b88591aab9fdcd7ee2d8d
+--- /dev/null
++++ b/.audit/sy-j2k-reader-parity.tsv
+@@ -0,0 +1,13 @@
++ts	phase	decision	why	evidence	result
++2026-08-23T16:15:00+03:00	frame	set six product predicates for preview paging, filter parity, detail categories, J2K reader chrome, selection actions, and semantic icons	the screenshots show multiple independent regressions and each needs a direct pass or fail signal	user screenshots; docs/architecture/j2k-reset.md	OPEN
++2026-08-23T16:16:00+03:00	ground	located the blank-preview parser precedence and unused preview-next state	SY parses sprite containers before image fallback; Hayai accepted nested blank.gif as a direct image and exposed only a go-to dialog	sy/master EHentai.kt; EhHtmlParser.kt; SourcePreviewController.kt	CONFIRMED
++2026-08-23T16:17:00+03:00	red-test	added a live-shape outer gdtm fixture containing an inner sprite and blank.gif placeholder	the focused test failed by returning blank.gif, reproducing the visible empty-preview bug	EhHtmlParserTest; gradlew focused test	RED
++2026-08-23T16:18:00+03:00	architecture	selected the small adapter design over new source-details and novel-reader reducers	existing typed contracts already model the domain; fixing their interaction seams avoids a second reader/details state system	docs/architecture/sy-j2k-reader-parity.md; architect arena candidates A and B	SELECTED
++2026-08-23T16:19:00+03:00	eh-preview	ported sprite-first parsing, rejected blank placeholders, invalidated old listings, and exposed previous next and direct-page controls	matches SY markup precedence while retaining Hayai bounded decoding and J2K ReaderLauncher handoff	EhHtmlParser.kt; SourcePreviewCache.kt; SourcePreviewController.kt	IMPLEMENTED_UNVERIFIED
++2026-08-23T16:20:00+03:00	eh-filter-details	grouped Genres-to-exclude and Advanced options and split metadata and previews into independent phone and tablet anchors	preserves one EhSearchSpec and normal J2K details lifecycle while matching SY information hierarchy	EhFilters.kt; MangaDetailsController.kt; manga_header_item.xml	IMPLEMENTED_UNVERIFIED
++2026-08-23T16:21:00+03:00	novel-reader	made J2K chrome overlay the viewport and repaired native and Web selection interaction and anchor retention	removes text reflow and ensures floating-toolbar actions survive Web selection collapse	NovelReaderActivity.kt; NativeNovelRenderer.kt; WebNovelRenderer.kt; NovelHtmlDocumentBuilder.kt	IMPLEMENTED_UNVERIFIED
++2026-08-23T16:33:30+03:00	adapter-graft	moved source-details jobs, generation guards, rendering, and bitmap cleanup out of the J2K controller into one Hayai host and isolated exact J2K reader-shell IDs and insets in one concrete chrome adapter	keeps the J2K seams declarative without duplicating existing preview, metadata, or reader domain models	SourceDetailsHost.kt; MangaDetailsController.kt; J2kNovelReaderChrome.kt; NovelReaderActivity.kt	IMPLEMENTED_UNVERIFIED
++2026-08-23T16:50:00+03:00	device-layout-finding	fixture validation passed migration, reader, TTS, offline, settings, and unified Manga/Novels/Migration navigation before exposing native text beneath the overlaid toolbar	converted the visual failure into a constant J2K action-bar safe inset and removed a stale assertion for the deliberately replaced standalone Extensions destination	verify-hayai-emulator.ps1; J2kNovelReaderChrome.kt; artifacts/emulator-verification/20260823-134151	FIXED_PENDING_RECHECK
++2026-08-23T17:05:00+03:00	native-selection-device-finding	confirmed native long-press selection and the Quote action on emulator, then removed irrelevant read-only Cut/Paste actions and shortened the quote title	frees the Android floating-toolbar slots for Copy, Quote, Define, and Translate while preserving Cut/Paste in explicit edit mode	NovelSelectionActionMode.kt; artifacts/emulator-verification/20260823-135641/20-selection-actions.png	FIXED_PENDING_RECHECK
++2026-08-23T17:12:00+03:00	emulator-closure	passed the full fixture workflow and directly verified the native selection toolbar displays Copy, Quote, Define, and Google Translate together	also verified migrated repository bootstrap, exact toolbar/content bounds, TTS, offline restart, all reader settings tabs, unified Manga/Novels/Migration navigation, final database counts, and no fatal exception	verify-hayai-emulator.ps1; artifacts/emulator-verification/20260823-135641; artifacts/emulator-verification/20260823-135641/23-selection-actions-fixed.png	VERIFIED
++2026-08-23T16:22:00+03:00	novel-actions	made Quote Define and Translate visible semantic actions while retaining signed-in Custom Tabs Google Translate app routing and quote storage	reuses the legacy-proven lookup UX and current typed authorities without renderer-specific effect code	NovelSelectionActionMode.kt; NovelLookupLauncher.kt; NovelQuoteStore	IMPLEMENTED_UNVERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
+index eb1a7e9b56eee37671df6f8c3dfc6062787e94dc..6543f5ada8a3e0abe2402a0347eab1e506bceb7b 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
+@@ -56,22 +56,26 @@ object EhHtmlParser {
+                 val link = linkElement?.absUrl("href").orEmpty()
+                 if (!link.startsWith("https://")) return@mapNotNull null
+                 val index = previewIndex(cell, link) ?: return@mapNotNull null
+-                val image = cell.selectFirst("img[src], img[data-src]")
+-                val direct = image?.absUrl(if (image.hasAttr("data-src")) "data-src" else "src").orEmpty()
+-                if (direct.startsWith("https://")) {
+-                    return@mapNotNull runCatching { EhPagePreview(index, link, direct) }.getOrNull()
+-                }
+                 val sprite = cell.select("div[style]").firstOrNull { it.attr("style").contains("url(", ignoreCase = true) }
+-                    ?: return@mapNotNull null
+-                val style = sprite.attr("style")
+-                val imageUrl = STYLE_URL.find(style)?.groupValues?.get(1)?.trim('\'', '"')?.let { sprite.absUrlFromStyle(it) }
+-                    ?: return@mapNotNull null
+-                val width = STYLE_WIDTH.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
+-                val height = STYLE_HEIGHT.find(style)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
+-                val position = STYLE_POSITION.find(style)
+-                val x = position?.groupValues?.get(1)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
+-                val y = position?.groupValues?.get(2)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
+-                runCatching { EhPagePreview(index, link, imageUrl, EhPreviewCrop(x, y, width, height)) }.getOrNull()
++                if (sprite != null) {
++                    val style = sprite.attr("style")
++                    val imageUrl = STYLE_URL.find(style)?.groupValues?.get(1)?.trim('\'', '"')?.let { sprite.absUrlFromStyle(it) }
++                    val width = STYLE_WIDTH.find(style)?.groupValues?.get(1)?.toIntOrNull()
++                    val height = STYLE_HEIGHT.find(style)?.groupValues?.get(1)?.toIntOrNull()
++                    if (imageUrl != null && width != null && height != null) {
++                        val position = STYLE_POSITION.find(style)
++                        val x = position?.groupValues?.get(1)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
++                        val y = position?.groupValues?.get(2)?.toIntOrNull()?.let { kotlin.math.abs(it) } ?: 0
++                        return@mapNotNull runCatching {
++                            EhPagePreview(index, link, imageUrl, EhPreviewCrop(x, y, width, height))
++                        }.getOrNull()
++                    }
++                }
++                val image = cell.selectFirst("img[data-src], img[src]")
++                val direct = image?.absUrl(if (image.hasAttr("data-src")) "data-src" else "src").orEmpty()
++                direct
++                    .takeIf { it.startsWith("https://") && !it.endsWith("/g/blank.gif", ignoreCase = true) }
++                    ?.let { runCatching { EhPagePreview(index, link, it) }.getOrNull() }
+             }
+         val navigation = document.select("table.ptt td")
+         val totalPages = navigation.mapNotNull { it.text().trim().toIntOrNull() }.maxOrNull()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt
+index 7d4b4f7a7a303e2511b17b95203cad766f1849d6..679917583fd22c92738fa35dca0dcd3d09c27349 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt
+@@ -30,6 +30,20 @@ internal class EhCategoriesFilter(context: Context, excluded: Set<EhCategory>) :
+         context.getString(R.string.hayai_eh_filter_categories_exclude),
+         EhCategory.entries.map { EhCategoryFilter(context, it, it in excluded) },
+     )
++internal class EhAdvancedFilter(context: Context) :
++    Filter.Group<Filter<*>>(
++        context.getString(R.string.hayai_eh_filter_advanced_options),
++        listOf(
++            EhExpungedFilter(context),
++            EhTorrentFilter(context),
++            EhRatingFilter(context),
++            EhMinimumPagesFilter(context),
++            EhMaximumPagesFilter(context),
++            EhDisableLanguageFilter(context),
++            EhDisableUploaderFilter(context),
++            EhDisableTagFilter(context),
++        ),
++    )
+ internal class EhTagFilter(context: Context) :
+     Filter.Text(context.getString(R.string.hayai_eh_filter_tags)),
+     SourceTagCompletionFilter {
+@@ -64,23 +78,27 @@ internal class EhJumpFilter(context: Context) : Filter.Text(context.getString(R.
+ internal fun ehFilterList(context: Context, preferences: EhPreferences): FilterList = FilterList(
+     Filter.Header(context.getString(R.string.hayai_eh_filter_toplist_warning)),
+     EhToplistFilter(context),
++    Filter.Separator(),
++    EhTagFilter(context),
+     EhWatchedFilter(context, preferences.watchedListDefault.get()),
+     EhCategoriesFilter(context, preferences.excludedCategories()),
+-    EhTagFilter(context),
+-    EhExpungedFilter(context),
+-    EhTorrentFilter(context),
+-    EhRatingFilter(context),
+-    EhMinimumPagesFilter(context),
+-    EhMaximumPagesFilter(context),
+-    EhDisableLanguageFilter(context),
+-    EhDisableUploaderFilter(context),
+-    EhDisableTagFilter(context),
++    EhAdvancedFilter(context),
+     EhReverseFilter(context),
+     EhJumpFilter(context),
+ )
+ 
++internal fun Iterable<Filter<*>>.flattenEhFilterTree(): Sequence<Filter<*>> = sequence {
++    this@flattenEhFilterTree.forEach { filter ->
++        yield(filter)
++        if (filter is Filter.Group<*>) {
++            @Suppress("UNCHECKED_CAST")
++            yieldAll(filter.state.filterIsInstance<Filter<*>>().flattenEhFilterTree())
++        }
++    }
++}
++
+ internal fun FilterList.toEhSpec(query: String, context: Context): EhSearchSpec {
+-    fun <T : Filter<*>> one(type: Class<T>): T? = firstOrNull { type.isInstance(it) }?.let(type::cast)
++    fun <T : Filter<*>> one(type: Class<T>): T? = flattenEhFilterTree().firstOrNull(type::isInstance)?.let(type::cast)
+     val toplist = EhToplist.entries.getOrElse(one(EhToplistFilter::class.java)?.state ?: 0) { EhToplist.None }
+     if (toplist != EhToplist.None) return EhSearchSpec(toplist = toplist)
+     require(query.length <= 1_024) { context.getString(R.string.hayai_eh_filter_query_too_long) }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+index 800e15d09a1ed4922f631888a734d2abc94b092f..2ab589e03b4f9a745d0f926f8a5c0aa8923bf4b8 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+@@ -72,7 +72,7 @@ class NovelPluginManager(
+         if (!bootstrap.getBoolean(DEFAULT_REPOSITORY_SEEDED, false)) {
+             val url = ExtensionRepositoryDefaults.LNREADER_NOVELS
+             if (store.repositories().none { it.url == url }) {
+-                store.saveRepository(NovelPluginRepository("LNReader", url, enabled = true))
++                store.addRepositoryIfAbsent(NovelPluginRepository("LNReader", url, enabled = true))
+                 trustStore.trustUnsigned(url)
+             }
+             bootstrap.edit().putBoolean(DEFAULT_REPOSITORY_SEEDED, true).commit()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt
+index a76dfac7c5978aebda74dc26596ada1dbfc835f5..0e514401bd4aeb748964c9fc2d0cf35efee211c9 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt
+@@ -37,37 +37,25 @@ internal class NovelPluginStore(
+             }
+ 
+     fun saveRepository(repository: NovelPluginRepository) {
+-        val values =
+-            ContentValues(3).apply {
+-                put("base_url", repository.url)
+-                put("name", repository.name)
+-                put("enabled", repository.enabled)
+-            }
+-        val exists =
+-            database
+-                .lowLevel()
+-                .rawQuery(
+-                    RawQuery
+-                        .builder()
+-                        .query("SELECT 1 FROM hayai_novel_repos WHERE base_url = ?")
+-                        .args(repository.url)
+-                        .build(),
+-                ).use { it.moveToFirst() }
+-        if (exists) {
+-            check(
+-                database.lowLevel().update(
+-                    UpdateQuery
+-                        .builder()
+-                        .table("hayai_novel_repos")
+-                        .where("base_url = ?")
+-                        .whereArgs(repository.url)
+-                        .build(),
+-                    values,
+-                ) > 0,
+-            )
+-        } else {
+-            check(database.lowLevel().insert(InsertQuery.builder().table("hayai_novel_repos").build(), values) >= 0)
+-        }
++        database.lowLevel().executeSQL(
++            RawQuery
++                .builder()
++                .query("INSERT OR REPLACE INTO hayai_novel_repos(base_url, name, enabled) VALUES (?, ?, ?)")
++                .args(repository.url, repository.name, repository.enabled)
++                .build(),
++        )
++    }
++
++    fun addRepositoryIfAbsent(repository: NovelPluginRepository) {
++        // First-run defaults can race migration/bootstrap work. Let the existing row win so
++        // its user/imported name and enabled state are never replaced by synthetic defaults.
++        database.lowLevel().executeSQL(
++            RawQuery
++                .builder()
++                .query("INSERT OR IGNORE INTO hayai_novel_repos(base_url, name, enabled) VALUES (?, ?, ?)")
++                .args(repository.url, repository.name, repository.enabled)
++                .build(),
++        )
+     }
+ 
+     fun removeRepository(url: String) {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChrome.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChrome.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4485872b3d847294fb9d7a5cc103ec7739f03b92
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChrome.kt
+@@ -0,0 +1,99 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import android.view.View
++import android.view.ViewGroup
++import android.widget.FrameLayout
++import android.widget.TextView
++import androidx.appcompat.app.AppCompatActivity
++import androidx.appcompat.widget.Toolbar
++import androidx.coordinatorlayout.widget.CoordinatorLayout
++import androidx.core.view.WindowInsetsCompat.Type.displayCutout
++import androidx.core.view.WindowInsetsCompat.Type.systemBars
++import androidx.core.view.updateLayoutParams
++import com.google.android.material.bottomsheet.BottomSheetBehavior
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterSheet
++import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
++
++/** Concrete adapter for the unmodified J2K reader shell used by novel content. */
++internal class J2kNovelReaderChrome(
++    private val activity: AppCompatActivity,
++) {
++    private val themedActionBarHeight = activity.obtainStyledAttributes(intArrayOf(android.R.attr.actionBarSize)).let { attributes ->
++        attributes.getDimensionPixelSize(0, 0).also { attributes.recycle() }
++    }
++    val readerLayout: ViewGroup = activity.findViewById(R.id.reader_layout)
++    val viewerContainer: FrameLayout = activity.findViewById(R.id.viewer_container)
++    val appBar: View = activity.findViewById(R.id.app_bar)
++    val toolbar: Toolbar = activity.findViewById(R.id.toolbar)
++    val navigation: View = activity.findViewById(R.id.nav_layout)
++    val touchView: View = activity.findViewById(R.id.touch_view)
++    val chapterSheet: ReaderChapterSheet = activity.findViewById(R.id.chapters_sheet)
++
++    fun bindInsets(
++        statusView: TextView,
++        fullscreen: () -> Boolean,
++    ) {
++        readerLayout.doOnApplyWindowInsetsCompat { _, insets, _ ->
++            val systemInsets = insets.getInsetsIgnoringVisibility(systemBars())
++            val cutoutInsets = insets.getInsetsIgnoringVisibility(displayCutout())
++            val contentInsets = insets.getInsetsIgnoringVisibility(systemBars() or displayCutout())
++            appBar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
++                leftMargin = systemInsets.left
++                rightMargin = systemInsets.right
++            }
++            toolbar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
++                topMargin = systemInsets.top
++                leftMargin = cutoutInsets.left
++                rightMargin = cutoutInsets.right
++            }
++            viewerContainer.updateLayoutParams<CoordinatorLayout.LayoutParams> {
++                leftMargin = cutoutInsets.left
++                rightMargin = cutoutInsets.right
++                val hideBars = fullscreen() && !activity.isInMultiWindowMode
++                topMargin = if (hideBars) 0 else contentInsets.top
++                bottomMargin = if (hideBars) 0 else contentInsets.bottom
++                viewerContainer.setPadding(
++                    viewerContainer.paddingLeft,
++                    novelViewerTopPadding(
++                        overlaysSystemBars = hideBars,
++                        systemBarTop = systemInsets.top,
++                        toolbarHeight = toolbar.layoutParams.height.takeIf { it > 0 } ?: themedActionBarHeight,
++                    ),
++                    viewerContainer.paddingRight,
++                    viewerContainer.paddingBottom,
++                )
++            }
++            // J2K overlays reader chrome over the viewer. Novel text keeps one stable safe
++            // inset beneath that overlay so showing or hiding chrome never reflows content.
++            navigation.updateLayoutParams<ViewGroup.MarginLayoutParams> {
++                leftMargin = 12.dp + contentInsets.left
++                rightMargin = 12.dp + contentInsets.right
++            }
++            statusView.updateLayoutParams<CoordinatorLayout.LayoutParams> {
++                bottomMargin = if (fullscreen() && !activity.isInMultiWindowMode) 0 else systemInsets.bottom
++            }
++            viewerContainer.requestLayout()
++        }
++    }
++
++    fun setVisible(
++        visible: Boolean,
++        chapterSheetBehavior: BottomSheetBehavior<ReaderChapterSheet>,
++    ) {
++        appBar.visibility = if (visible) View.VISIBLE else View.GONE
++        navigation.visibility = if (visible && chapterSheetBehavior.state != BottomSheetBehavior.STATE_EXPANDED) View.VISIBLE else View.GONE
++        chapterSheetBehavior.state = if (visible) BottomSheetBehavior.STATE_COLLAPSED else BottomSheetBehavior.STATE_HIDDEN
++        readerLayout.requestApplyInsets()
++    }
++
++    private val Int.dp: Int
++        get() = (this * activity.resources.displayMetrics.density).toInt()
++
++}
++
++internal fun novelViewerTopPadding(
++    overlaysSystemBars: Boolean,
++    systemBarTop: Int,
++    toolbarHeight: Int,
++): Int = toolbarHeight + if (overlaysSystemBars) systemBarTop else 0
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+index f7a9b552fa6f0d96490fc14c147ef281800be79a..fc2e7cd0da13fc1cb9661ade3b015c26fb3199fa 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+@@ -2,10 +2,12 @@ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.content.Context
+ import android.graphics.Typeface
++import android.os.Build
+ import android.text.Editable
+ import android.text.Spannable
+ import android.text.SpannableStringBuilder
+ import android.text.TextWatcher
++import android.text.method.ArrowKeyMovementMethod
+ import android.text.style.BackgroundColorSpan
+ import android.text.style.UnderlineSpan
+ import android.view.ActionMode
+@@ -19,6 +21,7 @@ import android.widget.FrameLayout
+ import android.widget.LinearLayout
+ import android.widget.ProgressBar
+ import android.widget.TextView
++import android.view.textclassifier.TextClassifier
+ import androidx.core.text.HtmlCompat
+ import androidx.core.widget.NestedScrollView
+ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+@@ -200,10 +203,7 @@ internal class NativeNovelRenderer(
+     override fun setEditMode(enabled: Boolean) {
+         editMode = enabled
+         blocks.values.forEach { block ->
+-            block.textView?.showSoftInputOnFocus = enabled
+-            block.textView?.setTextIsSelectable(!enabled)
+-            block.textView?.isFocusableInTouchMode = enabled
+-            if (!enabled) block.textView?.clearFocus()
++            block.textView?.configureInteraction(enabled, block.style?.textSelectable == true)
+         }
+         if (enabled) activeBlock()?.textView?.requestFocus()
+     }
+@@ -268,13 +268,12 @@ internal class NativeNovelRenderer(
+             background = null
+             gravity = Gravity.TOP or Gravity.START
+             setPadding(0, 0, 0, 0)
+-            setTextIsSelectable(request.style.textSelectable && !editMode)
+-            showSoftInputOnFocus = editMode
+-            isFocusableInTouchMode = editMode
++            configureInteraction(editMode, request.style.textSelectable)
+             val selectionTextView = this
+             customSelectionActionModeCallback =
+                 NovelSelectionActionModes.wrap(
+                     context = context,
++                    readOnly = { !editMode },
+                     onAction = { action, mode -> dispatchSelectionAction(selectionTextView, action, mode) },
+                     onSelectionModeChanged = callbacks::onSelectionModeChanged,
+                 )
+@@ -367,7 +366,17 @@ internal class NativeNovelRenderer(
+     private fun centeredParams() = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+     private val density get() = scroll.resources.displayMetrics.density
+     private val Int.dp get() = (this * density).toInt()
+-    private fun TextView.hasSelection() = selectionStart >= 0 && selectionEnd >= 0 && selectionStart != selectionEnd
++    private fun EditText.configureInteraction(editing: Boolean, selectable: Boolean) {
++        showSoftInputOnFocus = editing
++        setTextIsSelectable(selectable && !editing)
++        movementMethod = if (editing || selectable) ArrowKeyMovementMethod.getInstance() else null
++        linksClickable = false
++        isFocusable = editing || selectable
++        isFocusableInTouchMode = editing || selectable
++        isLongClickable = selectable && !editing
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
++        if (!editing) clearFocus()
++    }
+     private fun occurrenceBefore(document: String, exact: String, end: Int): Int {
+         var count = 0
+         var cursor = 0
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+index 48d1ff62231aeecbd051afb69742e850228b1ae8..27fff7613c7194f3205f111b6d6be32dc141677f 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+@@ -123,10 +123,28 @@ internal object NovelHtmlDocumentBuilder {
+             return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
+           };
+           let scheduled = false;
+-          let lastSelection = '';
+-          document.addEventListener('selectionchange', () => {
+-            const selected = (getSelection() ? getSelection().toString() : '').trim();
+-            if (selected) lastSelection = selected;
++            const selectionAnchor = () => {
++              const selection = getSelection();
++              if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
++              const range = selection.getRangeAt(0);
++              const ancestor = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
++                ? range.commonAncestorContainer
++                : range.commonAncestorContainer.parentElement;
++              const main = ancestor && ancestor.closest ? ancestor.closest('.hayai-chapter-block') : null;
++              if (!main) return null;
++              const before = document.createRange(); before.selectNodeContents(main); before.setEnd(range.startContainer, range.startOffset);
++              const after = document.createRange(); after.selectNodeContents(main); after.setStart(range.endContainer, range.endOffset);
++              const exact = range.toString().replace(/\s+/g,' ').trim();
++              if (!exact) return null;
++              const prefix = before.toString().replace(/\s+/g,' ').trim();
++              const suffix = after.toString().replace(/\s+/g,' ').trim();
++              const prior = prefix.split(exact).length - 1;
++              return {documentText:main.innerText, selectedText:exact, prefix:prefix.slice(-64), suffix:suffix.slice(0,64), occurrence:prior};
++            };
++            let lastSelection = null;
++            document.addEventListener('selectionchange', () => {
++              const anchor = selectionAnchor();
++              if (anchor) lastSelection = anchor;
+           });
+           addEventListener('scroll', () => {
+             if (scheduled) return;
+@@ -190,25 +208,16 @@ internal object NovelHtmlDocumentBuilder {
+             documentText() { const root=activeBlock(); return root ? root.innerText : ''; },
+             showTranslation(text) { const root=activeBlock(); if(!root)return; if(!root.dataset.originalHtml)root.dataset.originalHtml=root.innerHTML; root.replaceChildren(...text.split(/\n{2,}/).filter(Boolean).map(value=>{const p=document.createElement('p');p.textContent=value;return p;})); },
+             showOriginal() { const root=activeBlock(); if(root&&root.dataset.originalHtml){root.innerHTML=root.dataset.originalHtml;delete root.dataset.originalHtml;} },
+-            takeSelection() {
+-              const selected = (getSelection() ? getSelection().toString() : '').trim() || lastSelection;
+-              lastSelection = '';
+-              return selected;
+-            },
+-            takeSelectionAnchor() {
+-              const selection = getSelection();
+-              if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+-              const range = selection.getRangeAt(0);
+-              const main = activeBlock();
+-              if (!main || !main.contains(range.commonAncestorContainer)) return null;
+-              const before = document.createRange(); before.selectNodeContents(main); before.setEnd(range.startContainer, range.startOffset);
+-              const after = document.createRange(); after.selectNodeContents(main); after.setStart(range.endContainer, range.endOffset);
+-              const exact = range.toString().replace(/\s+/g,' ').trim();
+-              const prefix = before.toString().replace(/\s+/g,' ').trim();
+-              const suffix = after.toString().replace(/\s+/g,' ').trim();
+-              const prior = exact ? prefix.split(exact).length - 1 : 0;
+-              return {documentText:main.innerText, selectedText:exact, prefix:prefix.slice(-64), suffix:suffix.slice(0,64), occurrence:prior};
+-            },
++              takeSelection() {
++                const selected = (getSelection() ? getSelection().toString() : '').trim() || (lastSelection ? lastSelection.selectedText : '');
++                lastSelection = null;
++                return selected;
++              },
++              takeSelectionAnchor() {
++                const anchor = selectionAnchor() || lastSelection;
++                lastSelection = null;
++                return anchor;
++              },
+             applyPersistentHighlights(items) {
+               const root = activeBlock(); if (!root) return;
+               root.querySelectorAll('mark.hayai-persistent-highlight').forEach(mark => mark.replaceWith(...mark.childNodes));
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index d4a2aa2c4fec942293d8347043e7f32f1f061b18..34cd0db0d947ff3a630fdcced73335f23c6fafab 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -29,7 +29,6 @@ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.core.view.setPadding
+ import androidx.core.view.isVisible
+ import androidx.core.view.WindowCompat
+-import androidx.core.view.WindowInsetsCompat.Type.displayCutout
+ import androidx.core.view.WindowInsetsCompat.Type.systemBars
+ import androidx.core.view.WindowInsetsControllerCompat
+ import androidx.core.view.updateLayoutParams
+@@ -72,7 +71,6 @@ import eu.kanade.tachiyomi.ui.reader.ReaderSlider
+ import eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterSheet
+ import eu.kanade.tachiyomi.util.system.launchIO
+ import eu.kanade.tachiyomi.util.system.toast
+-import eu.kanade.tachiyomi.util.view.doOnApplyWindowInsetsCompat
+ import eu.kanade.tachiyomi.ui.main.SearchActivity
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+@@ -115,6 +113,7 @@ class NovelReaderActivity :
+     private val dictionarySettings by lazy { NovelDictionarySettingsStore(this) }
+     private val lookupLauncher by lazy { NovelLookupLauncher(this, ::showLookupSheet) }
+     private lateinit var viewerContainer: FrameLayout
++    private lateinit var readerChrome: J2kNovelReaderChrome
+     private lateinit var appBar: View
+     private lateinit var toolbar: Toolbar
+     private lateinit var statusView: TextView
+@@ -292,6 +291,7 @@ class NovelReaderActivity :
+ 
+         val options = contentOptions()
+         val style = readerStyle(options)
++        viewerContainer.setBackgroundColor(style.backgroundColor)
+         renderJob?.cancel()
+         renderJob =
+             lifecycleScope.launch {
+@@ -1125,38 +1125,7 @@ class NovelReaderActivity :
+     }
+ 
+     private fun bindReaderInsets() {
+-        val readerLayout = findViewById<View>(R.id.reader_layout)
+-        val navigation = findViewById<View>(R.id.nav_layout)
+-        readerLayout.doOnApplyWindowInsetsCompat { _, insets, _ ->
+-            val systemInsets = insets.getInsetsIgnoringVisibility(systemBars())
+-            val cutoutInsets = insets.getInsetsIgnoringVisibility(displayCutout())
+-            val contentInsets = insets.getInsetsIgnoringVisibility(systemBars() or displayCutout())
+-            appBar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+-                leftMargin = systemInsets.left
+-                rightMargin = systemInsets.right
+-            }
+-            toolbar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+-                topMargin = systemInsets.top
+-                leftMargin = cutoutInsets.left
+-                rightMargin = cutoutInsets.right
+-            }
+-            viewerContainer.updateLayoutParams<androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams> {
+-                leftMargin = cutoutInsets.left
+-                rightMargin = cutoutInsets.right
+-                val systemTop = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else contentInsets.top
+-                val readerChrome = systemInsets.top + toolbar.layoutParams.height.coerceAtLeast(0)
+-                topMargin = if (controlsVisible) readerChrome else systemTop
+-                bottomMargin = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else contentInsets.bottom
+-            }
+-            navigation.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+-                leftMargin = 12.dp + contentInsets.left
+-                rightMargin = 12.dp + contentInsets.right
+-            }
+-            statusView.updateLayoutParams<androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams> {
+-                bottomMargin = if (preferences.novelFullscreen.get() && !isInMultiWindowMode) 0 else systemInsets.bottom
+-            }
+-            viewerContainer.requestLayout()
+-        }
++        readerChrome.bindInsets(statusView) { preferences.novelFullscreen.get() }
+     }
+ 
+     private fun showError(message: String) {
+@@ -1166,11 +1135,12 @@ class NovelReaderActivity :
+     }
+ 
+     private fun bindReaderShell() {
+-        viewerContainer = findViewById(R.id.viewer_container)
+-        appBar = findViewById(R.id.app_bar)
+-        toolbar = findViewById(R.id.toolbar)
++        readerChrome = J2kNovelReaderChrome(this)
++        viewerContainer = readerChrome.viewerContainer
++        appBar = readerChrome.appBar
++        toolbar = readerChrome.toolbar
+         loading = findViewById(R.id.please_wait)
+-        chapterSheet = findViewById(R.id.chapters_sheet)
++        chapterSheet = readerChrome.chapterSheet
+         chapterSheetBehavior = BottomSheetBehavior.from(chapterSheet)
+         progressSlider = findViewById(R.id.page_seekbar)
+         progressSlider.valueFrom = 0f
+@@ -1178,13 +1148,13 @@ class NovelReaderActivity :
+         progressSlider.stepSize = 1f
+         progressSlider.setLabelFormatter { getString(R.string.hayai_novel_reader_percent_value, it.toInt()) }
+         verticalProgressSlider = NovelVerticalProgressView(this).apply { max = 100 }
+-        findViewById<ViewGroup>(R.id.reader_layout).addView(verticalProgressSlider)
++        readerChrome.readerLayout.addView(verticalProgressSlider)
+         progressText = findViewById(R.id.left_page_text)
+         alternateStatusView = findViewById(R.id.right_page_text)
+         previousButton = findViewById(R.id.left_chapter)
+         nextButton = findViewById(R.id.right_chapter)
+         viewerContainer.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+-        findViewById<View>(R.id.touch_view).visibility = View.GONE
++        readerChrome.touchView.visibility = View.GONE
+         bindStatusView()
+         setSupportActionBar(toolbar)
+         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+@@ -1361,7 +1331,7 @@ class NovelReaderActivity :
+             NovelBottomAction.TtsNextParagraph -> bindReaderSheetButton(button, R.drawable.ic_skip_next_24, getString(R.string.hayai_novel_reader_next_paragraph), ttsController::nextParagraph)
+             NovelBottomAction.Orientation -> bindReaderSheetButton(button, R.drawable.ic_screen_rotation_24dp, getString(R.string.hayai_novel_reader_change_orientation)) { dispatch(NovelReaderAction.ToggleOrientation) }
+             NovelBottomAction.Edit -> bindReaderSheetButton(button, R.drawable.ic_edit_24dp, getString(R.string.hayai_novel_reader_edit_chapter)) { dispatch(NovelReaderAction.ToggleEditMode) }
+-            NovelBottomAction.Quotes -> bindReaderSheetButton(button, R.drawable.ic_format_list_numbered_24dp, getString(R.string.hayai_novel_reader_quotes)) { dispatch(NovelReaderAction.ShowQuotes) }
++            NovelBottomAction.Quotes -> bindReaderSheetButton(button, R.drawable.ic_format_quote_24dp, getString(R.string.hayai_novel_reader_quotes)) { dispatch(NovelReaderAction.ShowQuotes) }
+             NovelBottomAction.PreviousChapter,
+             NovelBottomAction.NextChapter,
+             NovelBottomAction.Settings,
+@@ -1520,11 +1490,8 @@ class NovelReaderActivity :
+ 
+     private fun setChromeVisible(visible: Boolean) {
+         controlsVisible = visible
+-        appBar.visibility = if (visible) View.VISIBLE else View.GONE
+-        findViewById<View>(R.id.nav_layout).isVisible = visible && chapterSheetBehavior.state != BottomSheetBehavior.STATE_EXPANDED
+-        chapterSheetBehavior.state = if (visible) BottomSheetBehavior.STATE_COLLAPSED else BottomSheetBehavior.STATE_HIDDEN
++        readerChrome.setVisible(visible, chapterSheetBehavior)
+         configureProgressControls()
+-        findViewById<View>(R.id.reader_layout).requestApplyInsets()
+     }
+ 
+     private fun setEditMode(enabled: Boolean) {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt
+index 26d5d31200b09c5f0292478c4271d42bd1c1e6c5..e3da02723cb3ae4a95703e56b70eb3adc11eae90 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMode.kt
+@@ -7,11 +7,12 @@ import android.view.Menu
+ import android.view.MenuItem
+ import android.view.View
+ import androidx.annotation.IdRes
++import androidx.annotation.DrawableRes
+ import androidx.annotation.StringRes
+ import eu.kanade.tachiyomi.R
+ 
+ internal enum class NovelSelectionMenuPlacement {
+-    IfRoom,
++    Always,
+     Overflow,
+ }
+ 
+@@ -19,6 +20,7 @@ internal data class NovelSelectionMenuEntry(
+     val action: NovelSelectionAction,
+     @IdRes val itemId: Int,
+     @StringRes val titleRes: Int,
++    @DrawableRes val iconRes: Int,
+     val placement: NovelSelectionMenuPlacement,
+ )
+ 
+@@ -28,25 +30,29 @@ internal object NovelSelectionActionMenu {
+             NovelSelectionMenuEntry(
+                 NovelSelectionAction.SaveQuote,
+                 R.id.hayai_novel_selection_save_quote,
+-                R.string.hayai_novel_reader_save_selected_quote,
+-                NovelSelectionMenuPlacement.IfRoom,
++                R.string.hayai_novel_reader_quote,
++                R.drawable.ic_format_quote_24dp,
++                NovelSelectionMenuPlacement.Always,
+             ),
+             NovelSelectionMenuEntry(
+                 NovelSelectionAction.Define,
+                 R.id.hayai_novel_selection_define,
+                 R.string.hayai_novel_selection_define,
+-                NovelSelectionMenuPlacement.IfRoom,
++                R.drawable.ic_search_24dp,
++                NovelSelectionMenuPlacement.Always,
+             ),
+             NovelSelectionMenuEntry(
+                 NovelSelectionAction.GoogleTranslate,
+                 R.id.hayai_novel_selection_google_translate,
+                 R.string.hayai_novel_selection_google_translate,
+-                NovelSelectionMenuPlacement.IfRoom,
++                R.drawable.ic_translate_24dp,
++                NovelSelectionMenuPlacement.Always,
+             ),
+             NovelSelectionMenuEntry(
+                 NovelSelectionAction.SearchWeb,
+                 R.id.hayai_novel_selection_search_web,
+                 R.string.hayai_novel_selection_search_web,
++                R.drawable.ic_search_24dp,
+                 NovelSelectionMenuPlacement.Overflow,
+             ),
+         )
+@@ -60,9 +66,10 @@ internal object NovelSelectionActionMenu {
+             if (menu.findItem(entry.itemId) == null) {
+                 menu
+                     .add(Menu.NONE, entry.itemId, CUSTOM_ITEM_ORDER + order, context.getString(entry.titleRes))
++                    .setIcon(entry.iconRes)
+                     .setShowAsAction(
+                         when (entry.placement) {
+-                            NovelSelectionMenuPlacement.IfRoom -> MenuItem.SHOW_AS_ACTION_IF_ROOM
++                            NovelSelectionMenuPlacement.Always -> MenuItem.SHOW_AS_ACTION_ALWAYS
+                             NovelSelectionMenuPlacement.Overflow -> MenuItem.SHOW_AS_ACTION_NEVER
+                         },
+                     )
+@@ -79,10 +86,11 @@ internal object NovelSelectionActionModes {
+     fun wrap(
+         context: Context,
+         delegate: ActionMode.Callback? = null,
++        readOnly: () -> Boolean = { true },
+         onAction: (NovelSelectionAction, ActionMode) -> Unit,
+         onSelectionModeChanged: (Boolean) -> Unit,
+     ): ActionMode.Callback {
+-        val state = CallbackState(context, delegate, onAction, onSelectionModeChanged)
++        val state = CallbackState(context, delegate, readOnly, onAction, onSelectionModeChanged)
+         val delegateCallback2 = delegate as? ActionMode.Callback2
+         return if (delegateCallback2 != null) {
+             object : ActionMode.Callback2() {
+@@ -121,6 +129,7 @@ internal object NovelSelectionActionModes {
+     private class CallbackState(
+         private val context: Context,
+         private val delegate: ActionMode.Callback?,
++        private val readOnly: () -> Boolean,
+         private val onAction: (NovelSelectionAction, ActionMode) -> Unit,
+         private val onSelectionModeChanged: (Boolean) -> Unit,
+     ) {
+@@ -129,6 +138,7 @@ internal object NovelSelectionActionModes {
+         fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+             val created = delegate?.onCreateActionMode(mode, menu) ?: true
+             if (!created) return false
++            removeEditingActions(menu)
+             NovelSelectionActionMenu.addMissing(context, menu)
+             if (!selectionModeActive) {
+                 selectionModeActive = true
+@@ -139,9 +149,17 @@ internal object NovelSelectionActionModes {
+ 
+         fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+             val delegateChanged = delegate?.onPrepareActionMode(mode, menu) == true
++            removeEditingActions(menu)
+             return NovelSelectionActionMenu.addMissing(context, menu) || delegateChanged
+         }
+ 
++        private fun removeEditingActions(menu: Menu) {
++            if (!readOnly()) return
++            menu.removeItem(android.R.id.cut)
++            menu.removeItem(android.R.id.paste)
++            menu.removeItem(android.R.id.pasteAsPlainText)
++        }
++
+         fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+             val action = NovelSelectionActionMenu.actionFor(item.itemId)
+             if (action != null) {
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
+index 630bf99132f01d0f2579d1d2ef966c155c70c4ee..6b67e19b6f6843f11fec3a04249de0529da90c77 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
+@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.annotation.SuppressLint
+ import android.content.Context
++import android.os.Build
+ import android.view.ActionMode
+ import android.view.MotionEvent
+ import android.view.View
+@@ -10,6 +11,7 @@ import android.webkit.JavascriptInterface
+ import android.webkit.WebChromeClient
+ import android.webkit.WebSettings
+ import android.webkit.WebView
++import android.view.textclassifier.TextClassifier
+ import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+ import eu.kanade.tachiyomi.R
+@@ -30,7 +32,7 @@ internal class WebNovelRenderer(
+     enableDevTools: Boolean,
+     fontStore: NovelFontStore,
+ ) : NovelRenderer {
+-    private val context = context.applicationContext
++    private val context = context
+     override val mode = NovelRenderingMode.WebView
+     private val json = Json { ignoreUnknownKeys = true }
+     private var requestedProgress = 0
+@@ -42,6 +44,7 @@ internal class WebNovelRenderer(
+                     NovelSelectionActionModes.wrap(
+                         context = this@WebNovelRenderer.context,
+                         delegate = it,
++                        readOnly = { !editMode },
+                         onAction = ::dispatchSelectionAction,
+                         onSelectionModeChanged = callbacks::onSelectionModeChanged,
+                     )
+@@ -49,6 +52,9 @@ internal class WebNovelRenderer(
+             return super.startActionMode(wrapped, type)
+         }
+     }.apply {
++        isFocusable = true
++        isFocusableInTouchMode = true
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
+         WebView.setWebContentsDebuggingEnabled(enableDevTools)
+         settings.javaScriptEnabled = true
+         settings.domStorageEnabled = false
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/details/SourceDetailsHost.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/details/SourceDetailsHost.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..500aa526b482672a79f7fef2a9fac913e6b1e4e8
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/details/SourceDetailsHost.kt
+@@ -0,0 +1,258 @@
++package dev.ahmedmohamed.hayai.source.details
++
++import android.graphics.Bitmap
++import android.view.Gravity
++import android.view.LayoutInflater
++import android.view.View
++import android.view.ViewGroup
++import android.widget.ImageView
++import android.widget.LinearLayout
++import android.widget.ProgressBar
++import android.widget.TextView
++import com.google.android.material.button.MaterialButton
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
++import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataUi
++import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
++import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
++import dev.ahmedmohamed.hayai.source.preview.SourcePreviewBitmapDecoder
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.util.system.launchIO
++import eu.kanade.tachiyomi.util.system.withUIContext
++import eu.kanade.tachiyomi.widget.EmptyView
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Job
++
++data class SourceDetailsSlots(
++    val previewRoot: View,
++    val previewSection: View,
++    val previewContent: LinearLayout,
++    val metadataSection: View,
++    val metadataContent: LinearLayout,
++)
++
++data class SourceDetailsActions(
++    val onMoreInfo: () -> Unit,
++    val onSearch: (String) -> Unit,
++    val onMorePreviews: () -> Unit,
++    val onPreview: (SourcePagePreview) -> Unit,
++)
++
++class SourceDetailsHost(
++    private val previews: SourceDetailsPreviewRegistry,
++    private val metadata: SourceMetadataProviderRegistry,
++    private val preferences: HayaiPreferences,
++) {
++    private var previewJob: Job? = null
++    private var metadataJob: Job? = null
++    private val imageJobs = mutableListOf<Job>()
++    private val bitmaps = mutableListOf<Bitmap>()
++    private var identity: String? = null
++
++    fun bind(
++        scope: CoroutineScope,
++        manga: Manga,
++        slots: SourceDetailsSlots,
++        actions: SourceDetailsActions,
++    ) {
++        val ownsPreviews = previews.owns(manga)
++        val ownsMetadata = metadata.owns(manga)
++        if (!ownsPreviews && !ownsMetadata) {
++            clear(slots)
++            return
++        }
++        identity = "${manga.source}:${manga.url}"
++        if (ownsMetadata) loadMetadata(scope, manga, slots, actions) else slots.metadataSection.visibility = View.GONE
++        if (ownsPreviews) {
++            slots.previewRoot.visibility = View.VISIBLE
++            loadPreviews(scope, manga, slots, actions)
++        } else {
++            slots.previewRoot.visibility = View.GONE
++            slots.previewSection.visibility = View.GONE
++        }
++    }
++
++    fun clear(slots: SourceDetailsSlots? = null) {
++        identity = null
++        previewJob?.cancel()
++        metadataJob?.cancel()
++        previewJob = null
++        metadataJob = null
++        releaseImages()
++        slots?.apply {
++            previewContent.removeAllViews()
++            metadataContent.removeAllViews()
++            previewContent.tag = null
++            metadataContent.tag = null
++            previewRoot.visibility = View.GONE
++            metadataSection.visibility = View.GONE
++        }
++    }
++
++    private fun loadMetadata(
++        scope: CoroutineScope,
++        manga: Manga,
++        slots: SourceDetailsSlots,
++        actions: SourceDetailsActions,
++    ) {
++        val expected = identity ?: return
++        if (slots.metadataContent.tag == expected) return
++        slots.metadataContent.tag = expected
++        slots.metadataContent.removeAllViews()
++        slots.metadataSection.visibility = View.VISIBLE
++        slots.metadataContent.addView(ProgressBar(slots.metadataContent.context).apply { isIndeterminate = true })
++        metadataJob?.cancel()
++        metadataJob = scope.launchIO {
++            val result = runCatching { metadata.load(manga) }
++            withUIContext {
++                if (identity != expected || slots.metadataContent.tag != expected) return@withUIContext
++                result.onSuccess { document ->
++                    SourceMetadataUi.renderSummary(slots.metadataContent, document, actions.onMoreInfo, actions.onSearch)
++                    slots.metadataSection.visibility = View.VISIBLE
++                }.onFailure {
++                    slots.metadataContent.removeAllViews()
++                    slots.metadataSection.visibility = View.GONE
++                }
++            }
++        }
++    }
++
++    private fun loadPreviews(
++        scope: CoroutineScope,
++        manga: Manga,
++        slots: SourceDetailsSlots,
++        actions: SourceDetailsActions,
++    ) {
++        val expected = "${identity ?: return}:1"
++        if (slots.previewContent.tag == expected) return
++        slots.previewContent.tag = expected
++        slots.previewContent.removeAllViews()
++        releaseImages()
++        slots.previewSection.visibility = View.VISIBLE
++        slots.previewContent.addView(ProgressBar(slots.previewContent.context).apply { isIndeterminate = true })
++        previewJob?.cancel()
++        previewJob = scope.launchIO {
++            val result = runCatching { previews.load(manga, 1) }
++            withUIContext {
++                if (identity == null || slots.previewContent.tag != expected) return@withUIContext
++                slots.previewContent.removeAllViews()
++                result.onSuccess { loaded ->
++                    renderPreviews(scope, manga, loaded.previews, slots, actions)
++                }.onFailure { error ->
++                    slots.previewContent.addView(
++                        EmptyView(slots.previewContent.context).apply {
++                            show(
++                                R.drawable.ic_search_off_24dp,
++                                error.message ?: context.getString(R.string.hayai_page_previews_failed),
++                                listOf(
++                                    EmptyView.Action(R.string.retry) {
++                                        slots.previewContent.tag = null
++                                        loadPreviews(scope, manga, slots, actions)
++                                    },
++                                ),
++                            )
++                        },
++                    )
++                }
++            }
++        }
++    }
++
++    private fun renderPreviews(
++        scope: CoroutineScope,
++        manga: Manga,
++        items: List<SourcePagePreview>,
++        slots: SourceDetailsSlots,
++        actions: SourceDetailsActions,
++    ) {
++        val rows = preferences.pagePreviewRows.get().coerceIn(0, 10)
++        if (rows == 0) {
++            slots.previewRoot.visibility = View.GONE
++            return
++        }
++        val density = slots.previewContent.resources.displayMetrics.density
++        val columns = previewColumns(slots.previewContent)
++        val visible = items.take(rows * columns)
++        visible.chunked(columns).forEach { rowItems ->
++            slots.previewContent.addView(
++                LinearLayout(slots.previewContent.context).apply {
++                    orientation = LinearLayout.HORIZONTAL
++                    gravity = Gravity.CENTER_VERTICAL
++                    setPadding((8 * density).toInt(), 0, (8 * density).toInt(), (8 * density).toInt())
++                    rowItems.forEachIndexed { index, preview ->
++                        addView(
++                            createPreviewCell(scope, this, manga, preview, density, actions),
++                            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
++                                if (index > 0) marginStart = (16 * density).toInt()
++                            },
++                        )
++                    }
++                },
++                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
++            )
++        }
++        if (visible.isEmpty()) slots.previewContent.addView(TextView(slots.previewContent.context).apply { setText(R.string.no_results_found) })
++        slots.previewContent.addView(
++            (LayoutInflater.from(slots.previewContent.context).inflate(R.layout.material_text_button, slots.previewContent, false) as MaterialButton).apply {
++                setText(R.string.hayai_more_previews)
++                setOnClickListener { actions.onMorePreviews() }
++            },
++            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
++                gravity = Gravity.CENTER_HORIZONTAL
++            },
++        )
++        slots.previewRoot.visibility = View.VISIBLE
++    }
++
++    private fun createPreviewCell(
++        scope: CoroutineScope,
++        parent: LinearLayout,
++        manga: Manga,
++        preview: SourcePagePreview,
++        density: Float,
++        actions: SourceDetailsActions,
++    ): View {
++        val cell = LinearLayout(parent.context).apply {
++            orientation = LinearLayout.VERTICAL
++            gravity = Gravity.CENTER_HORIZONTAL
++            contentDescription = context.getString(R.string.hayai_gallery_page, preview.index)
++            setOnClickListener { actions.onPreview(preview) }
++        }
++        val image = ImageView(parent.context).apply {
++            scaleType = ImageView.ScaleType.FIT_CENTER
++            adjustViewBounds = true
++        }
++        cell.addView(image, LinearLayout.LayoutParams((120 * density).toInt(), (200 * density).toInt()))
++        cell.addView(TextView(parent.context).apply { text = preview.index.toString() })
++        val expected = identity
++        imageJobs += scope.launchIO {
++            val bitmap = runCatching { SourcePreviewBitmapDecoder.decode(previews.loadImage(manga, preview)) }.getOrNull()
++            withUIContext {
++                if (identity == expected && bitmap != null) {
++                    bitmaps += bitmap
++                    image.setImageBitmap(bitmap)
++                } else {
++                    bitmap?.recycle()
++                }
++            }
++        }
++        return cell
++    }
++
++    private fun previewColumns(container: View): Int {
++        val width = container.width.takeIf { it > 0 } ?: container.resources.displayMetrics.widthPixels
++        val density = container.resources.displayMetrics.density
++        val horizontalPadding = (16 * density).toInt()
++        val minimumCell = (120 * density).toInt()
++        val spacing = (16 * density).toInt()
++        return ((width - horizontalPadding + spacing) / (minimumCell + spacing)).coerceAtLeast(1)
++    }
++
++    private fun releaseImages() {
++        imageJobs.forEach(Job::cancel)
++        imageJobs.clear()
++        bitmaps.forEach { if (!it.isRecycled) it.recycle() }
++        bitmaps.clear()
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
+index 3032fdd4c87558159777760f9c48d88f9b4d0dfa..349dd9e3e1b7be5b7f6b3e41b7a51fcc208353c6 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt
+@@ -86,7 +86,7 @@ class SourcePreviewCache(private val context: Context) {
+         .joinToString("") { "%02x".format(it) }
+ 
+     private companion object {
+-        const val LISTING_SCHEMA = "v2"
++        const val LISTING_SCHEMA = "v3"
+         const val MAX_IMAGE_BYTES = 12 * 1024 * 1024
+         const val MAX_CACHE_BYTES = 75L * 1024L * 1024L
+     }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+index 741059d6b06ba77ee2e284b6bb840d15725a84b0..9dc5209c077d96e410dc5f2499fc2097262a521a 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+@@ -47,13 +47,12 @@ class SourcePreviewController(
+     private val adapter = PreviewAdapter(::openPage)
+     private lateinit var loading: LoadingIndicator
+     private lateinit var emptyView: EmptyView
+-    private var page = 1
+-    private var totalPages: Int? = null
++    private var navigation = SourcePreviewNavigation()
+     private var loadGeneration = 0
+ 
+     constructor(mangaId: Long) : this(Bundle().apply { putLong(MANGA_ID, mangaId) })
+ 
+-    override fun getTitle(): String? = resources?.getString(R.string.hayai_page_previews)
++    override fun getTitle(): String? = resources?.getString(navigation.titleResource, *navigation.titleArguments)
+ 
+     override fun createBinding(inflater: LayoutInflater) = SubDebugControllerBinding.inflate(inflater)
+ 
+@@ -75,7 +74,7 @@ class SourcePreviewController(
+         if (manga == null) {
+             emptyView.show(R.drawable.ic_search_off_24dp, R.string.no_results_found)
+         } else {
+-            load(page)
++            load(navigation.page)
+         }
+     }
+ 
+@@ -87,24 +86,42 @@ class SourcePreviewController(
+     }
+ 
+     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+-        if ((totalPages ?: 0) > 1) {
+-            menu.add(Menu.NONE, MENU_GO_TO, Menu.NONE, R.string.hayai_go_to_preview_page)
++        if (navigation.previousPage != null) {
++            menu.add(Menu.NONE, MENU_PREVIOUS, 0, R.string.previous_page)
++                .setIcon(R.drawable.ic_arrow_back_24dp)
++                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
++        }
++        if (navigation.canChoosePage) {
++            menu.add(Menu.NONE, MENU_GO_TO, 1, R.string.hayai_go_to_preview_page)
+                 .setIcon(R.drawable.ic_page_next_outline_24dp)
+                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+         }
++        if (navigation.nextPage != null) {
++            menu.add(Menu.NONE, MENU_NEXT, 2, R.string.next_page)
++                .setIcon(R.drawable.ic_arrow_forward_24dp)
++                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
++        }
+     }
+ 
+     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
++        MENU_PREVIOUS -> {
++            navigation.previousPage?.let(::load)
++            true
++        }
+         MENU_GO_TO -> {
+             showGoToDialog()
+             true
+         }
++        MENU_NEXT -> {
++            navigation.nextPage?.let(::load)
++            true
++        }
+         else -> super.onOptionsItemSelected(item)
+     }
+ 
+     private fun load(targetPage: Int, forceRefresh: Boolean = false) {
+         val manga = manga ?: return
+-        val knownTotal = totalPages
++        val knownTotal = navigation.totalPages
+         if (targetPage < 1 || knownTotal != null && targetPage > knownTotal) return
+         val generation = ++loadGeneration
+         loading.isVisible = true
+@@ -118,14 +135,14 @@ class SourcePreviewController(
+                 if (generation != loadGeneration || !isBindingInitialized) return@withUIContext
+                 loading.isVisible = false
+                 result.onSuccess { loaded ->
+-                    page = loaded.page
+-                    totalPages = loaded.totalPages
++                    navigation = SourcePreviewNavigation(loaded.page, loaded.totalPages, loaded.hasNextPage)
+                     adapter.submit(manga, loaded.previews)
+                     binding.recycler.scrollToPosition(0)
+                     binding.recycler.isVisible = loaded.previews.isNotEmpty()
+                     if (loaded.previews.isEmpty()) {
+                         emptyView.show(R.drawable.ic_search_off_24dp, R.string.hayai_no_page_previews)
+                     }
++                    setTitle()
+                     activity?.invalidateOptionsMenu()
+                 }.onFailure { error ->
+                     adapter.clear()
+@@ -150,19 +167,19 @@ class SourcePreviewController(
+     }
+ 
+     private fun showGoToDialog() {
+-        val lastPage = totalPages?.takeIf { it > 1 } ?: return
++        val lastPage = navigation.totalPages?.takeIf { it > 1 } ?: return
+         val context = activity ?: return
+         val row = LinearLayout(context).apply {
+             gravity = Gravity.CENTER_VERTICAL
+             setPadding(dp(16), 0, dp(16), 0)
+         }
+-        val current = TextView(context).apply { text = page.toString() }
++        val current = TextView(context).apply { text = navigation.page.toString() }
+         val end = TextView(context).apply { text = lastPage.toString() }
+         val slider = Slider(context).apply {
+             valueFrom = 1f
+             valueTo = lastPage.toFloat()
+             stepSize = 1f
+-            value = page.toFloat()
++            value = navigation.page.toFloat()
+             addOnChangeListener { _, value, _ -> current.text = value.roundToInt().toString() }
+         }
+         row.addView(current)
+@@ -277,6 +294,8 @@ class SourcePreviewController(
+ 
+     private companion object {
+         const val MANGA_ID = "manga_id"
+-        const val MENU_GO_TO = 1
++        const val MENU_PREVIOUS = 1
++        const val MENU_GO_TO = 2
++        const val MENU_NEXT = 3
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewNavigation.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewNavigation.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..400d6a016e93efd2867ca30803ac3d630870ce87
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewNavigation.kt
+@@ -0,0 +1,29 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import eu.kanade.tachiyomi.R
++
++internal data class SourcePreviewNavigation(
++    val page: Int = 1,
++    val totalPages: Int? = null,
++    val hasNextPage: Boolean = false,
++) {
++    init {
++        require(page > 0)
++        require(totalPages == null || totalPages > 0)
++    }
++
++    val previousPage: Int?
++        get() = (page - 1).takeIf { it >= 1 }
++
++    val nextPage: Int?
++        get() = (page + 1).takeIf { hasNextPage && (totalPages == null || it <= totalPages) }
++
++    val canChoosePage: Boolean
++        get() = (totalPages ?: 0) > 1
++
++    val titleResource: Int
++        get() = if (totalPages == null) R.string.hayai_page_previews_position_unknown else R.string.hayai_page_previews_position
++
++    val titleArguments: Array<Any>
++        get() = totalPages?.let { arrayOf<Any>(page, it) } ?: arrayOf<Any>(page)
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+index 823434438351cc2db9254936419f28ca65775e69..9290f4d5155366d5dc98d3c9478ba92e6511bddf 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+@@ -8,7 +8,6 @@ import android.content.ClipData
+ import android.content.Context
+ import android.content.Intent
+ import android.graphics.Color
+-import android.graphics.Bitmap
+ import android.graphics.drawable.BitmapDrawable
+ import android.graphics.drawable.Icon
+ import android.net.Uri
+@@ -25,7 +24,6 @@ import android.view.ViewGroup
+ import android.view.inputmethod.InputMethodManager
+ import android.widget.ImageView
+ import android.widget.LinearLayout
+-import android.widget.ProgressBar
+ import android.widget.TextView
+ import androidx.annotation.ColorInt
+ import androidx.annotation.FloatRange
+@@ -52,20 +50,19 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
+ import com.bluelinelabs.conductor.ControllerChangeType
+ import com.google.android.material.chip.Chip
+ import com.google.android.material.chip.ChipGroup
+-import com.google.android.material.button.MaterialButton
+ import com.google.android.material.snackbar.BaseTransientBottomBar
+ import com.google.android.material.snackbar.Snackbar
+ import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
++import dev.ahmedmohamed.hayai.source.details.SourceDetailsActions
++import dev.ahmedmohamed.hayai.source.details.SourceDetailsHost
++import dev.ahmedmohamed.hayai.source.details.SourceDetailsSlots
+ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
+ import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsController
+ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
+-import dev.ahmedmohamed.hayai.source.preview.SourcePagePreview
+ import dev.ahmedmohamed.hayai.source.preview.SourcePreviewController
+-import dev.ahmedmohamed.hayai.source.preview.SourcePreviewBitmapDecoder
+ import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataController
+ import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
+-import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataUi
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+@@ -129,12 +126,14 @@ import eu.kanade.tachiyomi.util.system.isLandscape
+ import eu.kanade.tachiyomi.util.system.isOnline
+ import eu.kanade.tachiyomi.util.system.isPromptChecked
+ import eu.kanade.tachiyomi.util.system.isTablet
++import eu.kanade.tachiyomi.util.system.launchIO
+ import eu.kanade.tachiyomi.util.system.launchUI
+ import eu.kanade.tachiyomi.util.system.materialAlertDialog
+ import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
+ import eu.kanade.tachiyomi.util.system.setCustomTitleAndMessage
+ import eu.kanade.tachiyomi.util.system.timeSpanFromNow
+ import eu.kanade.tachiyomi.util.system.toast
++import eu.kanade.tachiyomi.util.system.withUIContext
+ import eu.kanade.tachiyomi.util.view.activityBinding
+ import eu.kanade.tachiyomi.util.view.backgroundColor
+ import eu.kanade.tachiyomi.util.view.copyToClipboard
+@@ -151,12 +150,9 @@ import eu.kanade.tachiyomi.util.view.setTextColorAlpha
+ import eu.kanade.tachiyomi.util.view.snack
+ import eu.kanade.tachiyomi.util.view.toolbarHeight
+ import eu.kanade.tachiyomi.util.view.withFadeTransaction
+-import eu.kanade.tachiyomi.widget.EmptyView
+ import eu.kanade.tachiyomi.widget.LinearLayoutManagerAccurateOffset
+ import kotlinx.coroutines.runBlocking
+ import kotlinx.coroutines.Job
+-import eu.kanade.tachiyomi.util.system.launchIO
+-import eu.kanade.tachiyomi.util.system.withUIContext
+ import kotlinx.coroutines.withTimeoutOrNull
+ import timber.log.Timber
+ import uy.kohesive.injekt.Injekt
+@@ -238,14 +234,13 @@ class MangaDetailsController :
+     private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
+     private val sourceMetadataRegistry: SourceMetadataProviderRegistry by injectLazy()
+     private val hayaiPreferences by lazy { HayaiPreferences(Injekt.get()) }
++    private val sourceDetailsHost by lazy {
++        SourceDetailsHost(sourceDetailsPreviewRegistry, sourceMetadataRegistry, hayaiPreferences)
++    }
+     private val novelOfflineManager by lazy {
+         NovelOfflineManager(activity!!, Injekt.get(), Injekt.get(), Injekt.get<NetworkHelper>())
+     }
+     private var novelPresentationJob: Job? = null
+-    private var sourceDetailsFeaturesJob: Job? = null
+-    private var sourceMetadataJob: Job? = null
+-    private val sourceDetailsPreviewBitmaps = mutableListOf<Bitmap>()
+-    private val sourceDetailsImageJobs = mutableListOf<Job>()
+ 
+     // Prevents the favorite button's drag-to-open popup from firing underneath
+     // the categories sheet when a long press opens it mid-gesture
+@@ -487,9 +482,7 @@ class MangaDetailsController :
+ 
+     override fun onDestroyView(view: View) {
+         novelPresentationJob?.cancel()
+-        sourceDetailsFeaturesJob?.cancel()
+-        sourceMetadataJob?.cancel()
+-        releaseSourcePreviewImages()
++        sourceDetailsHost.clear()
+         novelPresentationJob = null
+         snack?.dismiss()
+         adapter = null
+@@ -1445,215 +1438,39 @@ class MangaDetailsController :
+     override fun bindSourceDetailsFeatures(container: LinearLayout) {
+         container.orientation = LinearLayout.VERTICAL
+         val manga = presenter.manga
+-        val featureRoot = generateSequence(container.parent as? View) { it.parent as? View }
+-            .firstOrNull { it.id == R.id.hayai_source_details_features }
++        val featureHost = generateSequence(container.parent as? View) { it.parent as? View }
++            .firstOrNull { it.findViewById<View>(R.id.manga_summary) != null }
+             ?: return
+-        val previewSection = featureRoot.findViewById<View>(R.id.hayai_source_previews) ?: return
+-        val metadataSection = featureRoot.findViewById<View>(R.id.hayai_source_metadata) ?: return
+-        val metadataContainer = featureRoot.findViewById<LinearLayout>(R.id.hayai_source_metadata_content) ?: return
+-        val ownsPreviews = sourceDetailsPreviewRegistry.owns(manga)
+-        val ownsMetadata = sourceMetadataRegistry.owns(manga)
+-        if (!ownsPreviews && !ownsMetadata) {
+-            sourceDetailsFeaturesJob?.cancel()
+-            sourceMetadataJob?.cancel()
+-            container.removeAllViews()
+-            metadataContainer.removeAllViews()
+-            releaseSourcePreviewImages()
+-            container.tag = null
+-            metadataContainer.tag = null
+-            featureRoot.visibility = View.GONE
+-            return
+-        }
+-        featureRoot.visibility = View.VISIBLE
+-        if (ownsMetadata) {
+-            loadSourceMetadata(metadataContainer, metadataSection, manga)
+-        } else {
+-            metadataSection.visibility = View.GONE
+-        }
+-        if (ownsPreviews) {
+-            loadSourceDetailsPreview(container, previewSection, manga, page = 1)
+-        } else {
+-            previewSection.visibility = View.GONE
+-        }
+-    }
+-
+-    private fun loadSourceMetadata(
+-        container: LinearLayout,
+-        section: View,
+-        manga: Manga,
+-    ) {
+-        val identity = "${manga.source}:${manga.url}"
+-        if (container.tag == identity) return
+-        container.tag = identity
+-        container.removeAllViews()
+-        section.visibility = View.VISIBLE
+-        container.addView(ProgressBar(container.context).apply { isIndeterminate = true })
+-        sourceMetadataJob?.cancel()
+-        sourceMetadataJob = viewScope.launchIO {
+-            val result = runCatching { sourceMetadataRegistry.load(manga) }
+-            withUIContext {
+-                if (container.tag != identity) return@withUIContext
+-                result.onSuccess { document ->
+-                    SourceMetadataUi.renderSummary(
+-                        container = container,
+-                        document = document,
+-                        onMoreInfo = {
+-                            manga.id?.let { router.pushController(SourceMetadataController(it).withFadeTransaction()) }
+-                        },
+-                        onSearch = ::sourceSearch,
+-                    )
+-                    section.visibility = View.VISIBLE
+-                }.onFailure {
+-                    container.removeAllViews()
+-                    section.visibility = View.GONE
+-                }
+-            }
+-        }
+-    }
+-
+-    private fun loadSourceDetailsPreview(
+-        container: LinearLayout,
+-        featureRoot: View,
+-        manga: Manga,
+-        page: Int,
+-    ) {
+-        val identity = "${manga.source}:${manga.url}:$page"
+-        if (container.tag == identity) return
+-        container.tag = identity
+-        container.removeAllViews()
+-        releaseSourcePreviewImages()
+-        featureRoot.visibility = View.VISIBLE
+-        container.addView(ProgressBar(container.context).apply { isIndeterminate = true })
+-        sourceDetailsFeaturesJob?.cancel()
+-        sourceDetailsFeaturesJob = viewScope.launchIO {
+-            val result = runCatching { sourceDetailsPreviewRegistry.load(manga, page) }
+-            withUIContext {
+-                val loaded = result.getOrNull()
+-                if (container.tag != identity) {
+-                    return@withUIContext
+-                }
+-                container.removeAllViews()
+-                val density = container.resources.displayMetrics.density
+-                if (loaded != null) {
+-                    val rows = hayaiPreferences.pagePreviewRows.get().coerceIn(0, 10)
+-                    if (rows == 0) {
+-                        featureRoot.visibility = View.GONE
+-                        return@withUIContext
+-                    }
+-                    val columns = previewColumns(container)
+-                    val visible = loaded.previews.take(rows * columns)
+-                    visible.chunked(columns).forEach { rowItems ->
+-                        container.addView(
+-                            LinearLayout(container.context).apply {
+-                                orientation = LinearLayout.HORIZONTAL
+-                                gravity = android.view.Gravity.CENTER_VERTICAL
+-                                setPadding((8 * density).toInt(), 0, (8 * density).toInt(), (8 * density).toInt())
+-                                rowItems.forEachIndexed { index, preview ->
+-                                    addView(
+-                                        createPreviewCell(this, manga, preview, density),
+-                                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+-                                            if (index > 0) marginStart = (16 * density).toInt()
+-                                        },
+-                                    )
+-                                }
+-                            },
+-                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+-                        )
+-                    }
+-                    if (visible.isEmpty()) {
+-                        container.addView(TextView(container.context).apply { setText(R.string.no_results_found) })
++        val previewRoot = featureHost.findViewById<View>(R.id.hayai_source_details_features) ?: return
++        val previewSection = featureHost.findViewById<View>(R.id.hayai_source_previews) ?: return
++        val metadataSection = featureHost.findViewById<View>(R.id.hayai_source_metadata) ?: return
++        val metadataContainer = featureHost.findViewById<LinearLayout>(R.id.hayai_source_metadata_content) ?: return
++        sourceDetailsHost.bind(
++            scope = viewScope,
++            manga = manga,
++            slots = SourceDetailsSlots(
++                previewRoot = previewRoot,
++                previewSection = previewSection,
++                previewContent = container,
++                metadataSection = metadataSection,
++                metadataContent = metadataContainer,
++            ),
++            actions = SourceDetailsActions(
++                onMoreInfo = {
++                    manga.id?.let { router.pushController(SourceMetadataController(it).withFadeTransaction()) }
++                },
++                onSearch = ::sourceSearch,
++                onMorePreviews = {
++                    manga.id?.let { router.pushController(SourcePreviewController(it).withFadeTransaction()) }
++                },
++                onPreview = { preview ->
++                    val chapter = presenter.chapters.minByOrNull { it.source_order }
++                    if (chapter != null) {
++                        startActivity(ReaderLauncher.newIntent(requireNotNull(activity), manga, chapter, preview.index - 1))
+                     }
+-                    container.addView(
+-                        (LayoutInflater.from(container.context).inflate(R.layout.material_text_button, container, false) as MaterialButton).apply {
+-                            setText(R.string.hayai_more_previews)
+-                            setOnClickListener {
+-                                router.pushController(SourcePreviewController(requireNotNull(manga.id)).withFadeTransaction())
+-                            }
+-                        },
+-                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+-                            gravity = android.view.Gravity.CENTER_HORIZONTAL
+-                        },
+-                    )
+-                    featureRoot.visibility = View.VISIBLE
+-                } else {
+-                    val error = result.exceptionOrNull()
+-                    container.addView(
+-                        EmptyView(container.context).apply {
+-                            show(
+-                                R.drawable.ic_search_off_24dp,
+-                                error?.message ?: context.getString(R.string.hayai_page_previews_failed),
+-                                listOf(
+-                                    EmptyView.Action(R.string.retry) {
+-                                        container.tag = null
+-                                        loadSourceDetailsPreview(container, featureRoot, manga, page)
+-                                    },
+-                                ),
+-                            )
+-                        },
+-                    )
+-                    featureRoot.visibility = View.VISIBLE
+-                }
+-            }
+-        }
+-    }
+-
+-    private fun createPreviewCell(
+-        parent: LinearLayout,
+-        manga: Manga,
+-        preview: SourcePagePreview,
+-        density: Float,
+-    ): View {
+-        val cell = LinearLayout(parent.context).apply {
+-            orientation = LinearLayout.VERTICAL
+-            gravity = android.view.Gravity.CENTER_HORIZONTAL
+-            contentDescription = context.getString(R.string.hayai_gallery_page, preview.index)
+-            setOnClickListener {
+-                val chapter = presenter.chapters.minByOrNull { it.source_order }
+-                if (chapter != null) startActivity(ReaderLauncher.newIntent(context, manga, chapter, preview.index - 1))
+-            }
+-        }
+-        val image = ImageView(parent.context).apply {
+-            scaleType = ImageView.ScaleType.FIT_CENTER
+-            adjustViewBounds = true
+-        }
+-        cell.addView(
+-            image,
+-            LinearLayout.LayoutParams((120 * density).toInt(), (200 * density).toInt()),
++                },
++            ),
+         )
+-        cell.addView(TextView(parent.context).apply { text = preview.index.toString() })
+-        sourceDetailsImageJobs += viewScope.launchIO {
+-            val bitmap = runCatching {
+-                SourcePreviewBitmapDecoder.decode(sourceDetailsPreviewRegistry.loadImage(manga, preview))
+-            }.getOrNull()
+-            withUIContext {
+-                if (containerTagMatches(manga) && bitmap != null) {
+-                    sourceDetailsPreviewBitmaps += bitmap
+-                    image.setImageBitmap(bitmap)
+-                } else {
+-                    bitmap?.recycle()
+-                }
+-            }
+-        }
+-        return cell
+-    }
+-
+-    private fun previewColumns(container: View): Int {
+-        val width = container.width.takeIf { it > 0 } ?: container.resources.displayMetrics.widthPixels
+-        val density = container.resources.displayMetrics.density
+-        val horizontalPadding = (16 * density).toInt()
+-        val minimumCell = (120 * density).toInt()
+-        val spacing = (16 * density).toInt()
+-        return ((width - horizontalPadding + spacing) / (minimumCell + spacing)).coerceAtLeast(1)
+-    }
+-
+-    private fun containerTagMatches(manga: Manga): Boolean =
+-        view != null && manga.id == presenter.manga.id
+-
+-    private fun releaseSourcePreviewImages() {
+-        sourceDetailsImageJobs.forEach(Job::cancel)
+-        sourceDetailsImageJobs.clear()
+-        sourceDetailsPreviewBitmaps.forEach { if (!it.isRecycled) it.recycle() }
+-        sourceDetailsPreviewBitmaps.clear()
+     }
+ 
+     fun openChapterInWebView(item: ChapterItem) {
+diff --git a/app/src/main/res/drawable/ic_format_quote_24dp.xml b/app/src/main/res/drawable/ic_format_quote_24dp.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..e81195a8eeef753ac26f5508bc48af76f7e4b73b
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_format_quote_24dp.xml
+@@ -0,0 +1,10 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:tint="#000000"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="@android:color/white"
++        android:pathData="M6,17h3l2,-4V7H5v6h3zM14,17h3l2,-4V7h-6v6h3z" />
++</vector>
+diff --git a/app/src/main/res/layout-sw600dp-land/manga_header_item.xml b/app/src/main/res/layout-sw600dp-land/manga_header_item.xml
+index 0eade2e617f51534b91896cbf4570f0b33a9cc30..58f507978801d302fc7f7c84c9eb69e1d2ebdb89 100644
+--- a/app/src/main/res/layout-sw600dp-land/manga_header_item.xml
++++ b/app/src/main/res/layout-sw600dp-land/manga_header_item.xml
+@@ -232,7 +232,7 @@
+         android:textIsSelectable="false"
+         android:textSize="17sp"
+         app:layout_constraintStart_toStartOf="parent"
+-        app:layout_constraintTop_toBottomOf="@id/start_reading_button"
++        app:layout_constraintTop_toBottomOf="@id/hayai_source_metadata"
+         app:layout_constraintBottom_toTopOf="@id/manga_genres_tags"
+         tools:text="About this manga" />
+ 
+@@ -346,7 +346,7 @@
+         android:paddingEnd="0dp"
+         app:drawableTint="?colorPrimary"
+         android:visibility="gone"
+-        app:layout_constraintBottom_toTopOf="@id/start_reading_button"
++        app:layout_constraintBottom_toTopOf="@id/hayai_source_details_features"
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintTop_toBottomOf="@id/manga_summary"
+@@ -360,12 +360,58 @@
+         android:layout_marginTop="12dp"
+         android:layout_marginEnd="16dp"
+         android:text="@string/start_reading"
+-        app:layout_constraintBottom_toTopOf="@id/manga_summary_label"
++        app:layout_constraintBottom_toTopOf="@id/hayai_source_metadata"
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintTop_toBottomOf="@id/button_layout"
+         tools:text="Continue Reading Chapter 17.1" />
+ 
++    <LinearLayout
++        android:id="@+id/hayai_source_metadata"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="8dp"
++        android:orientation="vertical"
++        android:visibility="gone"
++        app:layout_constraintBottom_toTopOf="@id/manga_summary_label"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toBottomOf="@id/start_reading_button">
++
++        <LinearLayout
++            android:id="@+id/hayai_source_metadata_content"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="vertical" />
++    </LinearLayout>
++
++    <LinearLayout
++        android:id="@+id/hayai_source_details_features"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="8dp"
++        android:orientation="vertical"
++        android:visibility="gone"
++        app:layout_constraintBottom_toTopOf="@id/chapter_layout"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toBottomOf="@id/less_button">
++
++        <LinearLayout
++            android:id="@+id/hayai_source_previews"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="vertical"
++            android:visibility="gone">
++
++            <LinearLayout
++                android:id="@+id/hayai_source_details_features_content"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:orientation="vertical" />
++        </LinearLayout>
++    </LinearLayout>
++
+     <androidx.constraintlayout.widget.ConstraintLayout
+         android:id="@+id/chapter_layout"
+         android:layout_width="match_parent"
+@@ -376,7 +422,7 @@
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintBottom_toBottomOf="parent"
+-        app:layout_constraintTop_toBottomOf="@id/less_button">
++        app:layout_constraintTop_toBottomOf="@id/hayai_source_details_features">
+ 
+         <com.google.android.material.textview.MaterialTextView
+             android:id="@+id/chapters_title"
+@@ -424,4 +470,4 @@
+             app:layout_constraintTop_toTopOf="@id/filter_button"
+             tools:text="Read, Unread, Bookmarked, Downloaded, All" />
+     </androidx.constraintlayout.widget.ConstraintLayout>
+-</androidx.constraintlayout.widget.ConstraintLayout>
+\ No newline at end of file
++</androidx.constraintlayout.widget.ConstraintLayout>
+diff --git a/app/src/main/res/layout/manga_header_item.xml b/app/src/main/res/layout/manga_header_item.xml
+index 55993e06b739b9cac76271481bf8f30b7705ac75..91228c9288e3a468863134f0758d920962b551cb 100644
+--- a/app/src/main/res/layout/manga_header_item.xml
++++ b/app/src/main/res/layout/manga_header_item.xml
+@@ -176,7 +176,7 @@
+         android:layout_marginStart="16dp"
+         android:layout_marginEnd="8dp"
+         app:layout_constraintHorizontal_bias="0.0"
+-        app:layout_constraintBottom_toTopOf="@id/manga_summary_label"
++        app:layout_constraintBottom_toTopOf="@id/hayai_source_metadata"
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintTop_toBottomOf="@id/bottom_line">
+@@ -218,6 +218,25 @@
+             android:tooltipText="@string/share" />
+     </com.google.android.material.button.MaterialButtonGroup>
+ 
++    <LinearLayout
++        android:id="@+id/hayai_source_metadata"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="8dp"
++        android:orientation="vertical"
++        android:visibility="gone"
++        app:layout_constraintBottom_toTopOf="@id/manga_summary_label"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toBottomOf="@id/button_layout">
++
++        <LinearLayout
++            android:id="@+id/hayai_source_metadata_content"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="vertical" />
++    </LinearLayout>
++
+     <com.google.android.material.textview.MaterialTextView
+         android:id="@+id/manga_summary_label"
+         style="?textAppearanceTitleSmall"
+@@ -230,7 +249,7 @@
+         android:textIsSelectable="false"
+         android:textSize="17sp"
+         app:layout_constraintStart_toStartOf="parent"
+-        app:layout_constraintTop_toBottomOf="@id/button_layout"
++        app:layout_constraintTop_toBottomOf="@id/hayai_source_metadata"
+         tools:text="About this manga" />
+ 
+     <TextView
+@@ -376,20 +395,6 @@
+         app:layout_constraintBottom_toTopOf="@id/start_reading_button"
+         app:layout_constraintTop_toBottomOf="@id/less_button">
+ 
+-        <LinearLayout
+-            android:id="@+id/hayai_source_metadata"
+-            android:layout_width="match_parent"
+-            android:layout_height="wrap_content"
+-            android:orientation="vertical"
+-            android:visibility="gone">
+-
+-            <LinearLayout
+-                android:id="@+id/hayai_source_metadata_content"
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                android:orientation="vertical" />
+-        </LinearLayout>
+-
+         <LinearLayout
+             android:id="@+id/hayai_source_previews"
+             android:layout_width="match_parent"
+diff --git a/app/src/main/res/values/strings_hayai_eh.xml b/app/src/main/res/values/strings_hayai_eh.xml
+index 10a5d0937b70927b1f39ca19b8acab6467677a8b..49c5d5a594475c53d1af6449cf879e39f77315e6 100644
+--- a/app/src/main/res/values/strings_hayai_eh.xml
++++ b/app/src/main/res/values/strings_hayai_eh.xml
+@@ -155,7 +155,8 @@
+     <string name="hayai_eh_filter_past_month">Past month</string>
+     <string name="hayai_eh_filter_yesterday">Yesterday</string>
+     <string name="hayai_eh_filter_watched_list">Watched list</string>
+-    <string name="hayai_eh_filter_categories_exclude">Categories to exclude</string>
++    <string name="hayai_eh_filter_categories_exclude">Genres to exclude</string>
++    <string name="hayai_eh_filter_advanced_options">Advanced options</string>
+     <string name="hayai_eh_filter_tags">Tags (supports namespace, -, ~, and OR)</string>
+     <string name="hayai_eh_filter_expunged">Browse expunged galleries</string>
+     <string name="hayai_eh_filter_torrent">Require gallery torrent</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
+index 016e0748fe26f7451d677139edc5c9c608d2e3c5..3ca26f77139c4bd472154366018cbd0016025ed0 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
+@@ -70,6 +70,31 @@ class EhHtmlParserTest {
+         assertEquals(180, preview.crop?.height)
+     }
+ 
++    @Test
++    fun `page previews prefer the sprite over the nested blank placeholder`() {
++        val html = """
++            <html><body><div id="gdt">
++              <div class="gdtm">
++                <div title="Page 7" style="width:120px;height:180px;background:transparent url(https://ehgt.org/live-sprite.webp) -240px -180px no-repeat">
++                  <a href="https://e-hentai.org/s/live/123-7"><img alt="7" src="https://ehgt.org/g/blank.gif"></a>
++                </div>
++              </div>
++            </div></body></html>
++        """.trimIndent()
++
++        val preview = EhHtmlParser.parsePreviews(
++            html,
++            "https://e-hentai.org/g/123/token/?p=0",
++            EhSite.EHentai,
++        ).single()
++
++        assertEquals("https://ehgt.org/live-sprite.webp", preview.imageUrl)
++        assertEquals(240, preview.crop?.x)
++        assertEquals(180, preview.crop?.y)
++        assertEquals(120, preview.crop?.width)
++        assertEquals(180, preview.crop?.height)
++    }
++
+     @Test
+     fun `preview page rejects an oversized response instead of silently truncating it`() {
+         val cells = (1..3).joinToString("") { index ->
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilterTreeTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilterTreeTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d068d8ee2d31d5aa80b45b5168a63dfe8a1236a
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilterTreeTest.kt
+@@ -0,0 +1,16 @@
++package dev.ahmedmohamed.hayai.adult.eh.source
++
++import eu.kanade.tachiyomi.source.model.Filter
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class EhFilterTreeTest {
++    @Test
++    fun `advanced options remain visible to recursive projection`() {
++        val leaf = object : Filter.CheckBox("Require gallery torrent", true) {}
++        val inner = object : Filter.Group<Filter<*>>("Advanced options", listOf(leaf)) {}
++        val outer = object : Filter.Group<Filter<*>>("Root", listOf(inner)) {}
++
++        assertEquals(listOf(outer, inner, leaf), listOf<Filter<*>>(outer).flattenEhFilterTree().toList())
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChromeTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChromeTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a249788570ac6f2d24eded0b369ab8651f7c8c4e
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/J2kNovelReaderChromeTest.kt
+@@ -0,0 +1,30 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import org.junit.jupiter.api.Assertions.assertEquals
++import org.junit.jupiter.api.Test
++
++class J2kNovelReaderChromeTest {
++    @Test
++    fun `fullscreen overlay reserves the status bar and toolbar`() {
++        assertEquals(
++            168,
++            novelViewerTopPadding(
++                overlaysSystemBars = true,
++                systemBarTop = 48,
++                toolbarHeight = 120,
++            ),
++        )
++    }
++
++    @Test
++    fun `non fullscreen layout does not reserve the status bar twice`() {
++        assertEquals(
++            120,
++            novelViewerTopPadding(
++                overlaysSystemBars = false,
++                systemBarTop = 48,
++                toolbarHeight = 120,
++            ),
++        )
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
+index d85f711d4af01f32c2a0499a5bf52484e67475f9..7259e0782c86489ea5b4c9b56efe765883c3a563 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
+@@ -28,6 +28,16 @@ class NovelHtmlDocumentBuilderTest {
+         assertFalse(html.contains("<h1 class=\"hayai-chapter-title\""))
+     }
+ 
++    @Test
++    fun `selection anchor is cached before the floating toolbar collapses it`() {
++        val html = NovelHtmlDocumentBuilder.build(ProcessedNovelContent("<p>Selectable body</p>", null), "Chapter", style())
++
++        assertTrue(html.contains("const selectionAnchor = () =>"))
++        assertTrue(html.contains("const anchor = selectionAnchor() || lastSelection"))
++        assertTrue(html.contains("lastSelection = null"))
++        assertTrue(html.contains("closest('.hayai-chapter-block')"))
++    }
++
+     private fun style(
+         fontFamily: String = "sans-serif",
+         hideTitle: Boolean = false,
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
+index 42635c3dfe35e8268370d136ee7bd6ab90aa9bea..9e68c51a523f6b610674c98d4a5428cc92a66a11 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelSelectionActionMenuTest.kt
+@@ -1,7 +1,9 @@
+ package dev.ahmedmohamed.hayai.novel.reader
+ 
++import eu.kanade.tachiyomi.R
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
+ import org.junit.Test
+ 
+ class NovelSelectionActionMenuTest {
+@@ -22,11 +24,25 @@ class NovelSelectionActionMenuTest {
+     }
+ 
+     @Test
+-    fun `web search stays in overflow`() {
++    fun `reader actions stay visible and web search stays in overflow`() {
+         val entry = NovelSelectionActionMenu.entries.single { it.action == NovelSelectionAction.SearchWeb }
+         assertEquals(NovelSelectionMenuPlacement.Overflow, entry.placement)
+         NovelSelectionActionMenu.entries
+             .filterNot { it.action == NovelSelectionAction.SearchWeb }
+-            .forEach { assertEquals(NovelSelectionMenuPlacement.IfRoom, it.placement) }
++            .forEach { assertEquals(NovelSelectionMenuPlacement.Always, it.placement) }
++    }
++
++    @Test
++    fun `every reader selection action has a semantic icon`() {
++        NovelSelectionActionMenu.entries.forEach { entry ->
++            assertTrue(entry.iconRes != 0)
++        }
++    }
++
++    @Test
++    fun `quote uses the compact floating-toolbar label`() {
++        val quote = NovelSelectionActionMenu.entries.single { it.action == NovelSelectionAction.SaveQuote }
++
++        assertEquals(R.string.hayai_novel_reader_quote, quote.titleRes)
+     }
+ }
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewNavigationTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewNavigationTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..ffb06beb077bc717a1edb4e1489fec08b875d02e
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewNavigationTest.kt
+@@ -0,0 +1,39 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import eu.kanade.tachiyomi.R
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class SourcePreviewNavigationTest {
++    @Test
++    fun `first known page exposes only a bounded next page and full title`() {
++        val state = SourcePreviewNavigation(page = 1, totalPages = 3, hasNextPage = true)
++
++        assertNull(state.previousPage)
++        assertEquals(2, state.nextPage)
++        assertTrue(state.canChoosePage)
++        assertEquals(R.string.hayai_page_previews_position, state.titleResource)
++        assertArrayEquals(arrayOf(1, 3), state.titleArguments)
++    }
++
++    @Test
++    fun `last known page suppresses next even if a provider claims one`() {
++        val state = SourcePreviewNavigation(page = 3, totalPages = 3, hasNextPage = true)
++
++        assertEquals(2, state.previousPage)
++        assertNull(state.nextPage)
++    }
++
++    @Test
++    fun `unknown single page uses the compact title and no picker`() {
++        val state = SourcePreviewNavigation(page = 4)
++
++        assertFalse(state.canChoosePage)
++        assertEquals(R.string.hayai_page_previews_position_unknown, state.titleResource)
++        assertArrayEquals(arrayOf(4), state.titleArguments)
++    }
++}
+diff --git a/docs/architecture/ehentai-port.md b/docs/architecture/ehentai-port.md
+index 5d1d0582ba7a82dbbcaa83bf854aa4b8612f6a71..6a424ce29b1f8488c88c07e85b81446c5c347929 100644
+--- a/docs/architecture/ehentai-port.md
++++ b/docs/architecture/ehentai-port.md
+@@ -35,6 +35,14 @@ Legacy `search_metadata`, `search_tags`, and `search_titles` are promoted once t
+ - Favorites mutations are journaled before remote writes, remotely confirmed, then applied to J2K state in one local transaction.
+ - Background work uses unique WorkManager jobs, bounded retries, and ordinary network/charging constraints without manual wake or Wi-Fi locks.
+ 
++## SY presentation and preview parity
++
++The source filter materializes SY's recognizable hierarchy—toplists, tag completion, watched list, collapsible Genres to exclude, collapsible Advanced options, reverse, and jump/seek—then recursively reduces that tree into Hayai's single validated `EhSearchSpec`. Grouping does not create another search model or alter the stored category/default-filter preferences.
++
++Page-preview parsing follows the sprite-first order at SY commit `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`: an inner CSS background sprite and crop win over a nested placeholder image, direct HTTPS images are fallback assets, and `blank.gif` is never cached as a gallery page. The standalone J2K-hosted controller exposes previous, next, and direct-page movement with one-based UI pages and zero-based E-Hentai request parameters. Preview cache schema `v3` invalidates listings created by the old blank-placeholder precedence.
++
++The normal J2K manga-details screen owns the enclosing lifecycle. Its small adapter delegates metadata and preview jobs, stale-generation rejection, rendering, and bitmap cleanup to the Hayai-owned `SourceDetailsHost`. Hayai supplies two independent anchors in both phone and tablet-land layouts: the typed SY metadata summary appears before the generic description, and preview rows appear after the description/tags. A failure in either provider hides only that surface.
++
+ ## Completion gate
+ 
+ The port is complete only when browse, search filters, details, revisions, pages, URL import, login/logout, remote configuration, metadata backup, batch import, favorites synchronization, and gallery updates work end to end. Pure fixtures cover compact and extended result layouts, malformed/challenge pages, revision cycles, page quota, filter encoding, cookies, metadata promotion, backup compatibility, sync conflicts, interruption, and retry. The final boundary check must leave `App.kt` and `MainActivity.kt` unchanged. The only approved `ReaderActivity` change is the documented initial-page extra read owned by `ReaderLauncher`.
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 9beaa4755f0ede65bf4ef21cea16664d2835dbd8..b11fa099980ee6209bf433cb38dd4ca33e223015 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -56,9 +56,9 @@ Read-aloud state lives in a Hayai foreground media-playback service rather than
+ 
+ Novel integration uses a small set of presentation adapters rather than parallel J2K models. The library filter delegates content-kind classification to Hayai. Manga details decorate the existing chapter rows with percent, word count, reading time, and verified offline state; the normal download/remove controls delegate novel chapters to `NovelOfflineManager`. J2K statistics aggregate Hayai's derived word data, shortcuts preserve novel identity, and migration searches reject novel-to-image and image-to-novel targets. `NovelSettingsController` owns the complete text-reader preference surface, typed reusable presets, CSS/JavaScript snippets, and bounded text-replacement rules. Translation, dictionary, and visual-source-builder settings use J2K `SettingsController` screens and preference rows while their drafts, validation, network preview, and persistence remain Hayai-owned. J2K remains authoritative for chapters, progress, history, categories, and the enclosing screens.
+ 
+-The novel reader inflates J2K's existing `reader_activity` and binds its existing app bar, toolbar, viewer container, navigation controls, chapter sheet, and slider. Hayai applies system-bar and display-cutout insets at that shared layout boundary. While reader chrome is visible, the novel viewer starts after the system inset and toolbar height; when chrome visibility changes, the same inset binding recalculates the viewer margin. This avoids a second novel-specific safe-area model and keeps the image-reader activity unchanged.
++The novel reader inflates J2K's existing `reader_activity` and binds its existing app bar, toolbar, viewer container, navigation controls, chapter sheet, and slider. Hayai applies the same system-bar and display-cutout margins as J2K at that shared layout boundary. Reader chrome remains an overlay; novel content uses one constant safe inset equal to the ignored status-bar inset plus J2K's `actionBarSize`. Showing or hiding chrome therefore neither obscures nor reflows text. The image-reader activity remains unchanged.
+ 
+-Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. The E-Hentai parser accepts both legacy `.gdtm`/`.gdtl` cells and the current direct-anchor sprite layout, including unitless zero offsets. Listing-cache schema changes invalidate stale successful-empty pages, and cache publication cannot suppress a successful network image. E-Hentai maps typed metadata to the SY-style metadata block only; it no longer duplicates the same fields in J2K description text. The inserted feature container and J2K Less/Start Reading controls form one non-cyclic vertical chain. Full metadata and previews remain Hayai controllers hosted by J2K navigation. Tapping a preview routes through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
++Source-specific details use independent generic metadata and preview provider registries on manga details. E-Hentai, NHentai, and LANraragi providers return typed paginated preview metadata with globally stable image indices; E-Hentai and each enhanced-source family return typed metadata documents. Images and sprite regions are fetched lazily through the source's authenticated client, bounded on disk and during decoding, and released when the view is rebound. The E-Hentai parser follows SY's sprite-first precedence for legacy `.gdtm`/`.gdtl` and current direct-anchor layouts, including unitless zero offsets, and rejects nested `blank.gif` placeholders as real previews. Listing-cache schema changes invalidate stale successful-empty or blank listings, and cache publication cannot suppress a successful network image. E-Hentai maps typed metadata to the SY-style metadata block only; it no longer duplicates the same fields in J2K description text. Both phone and tablet manga-header layouts expose two independent anchors: structured metadata before the generic description and page previews after tags/description. The preview controller exposes previous, next, and direct-page navigation, while preview taps route through `ReaderLauncher` to the existing J2K reader at the selected image. No source parser, cookie rule, metadata field, or bitmap-cropping branch lives in the J2K controller.
+ 
+ The browse-source presenter and its existing list item/holder form one approved presentation seam for E-Hentai's SY-style rich result rows. The presenter asks a source for an optional immutable `SourceBrowsePresentation`; the item selects J2K's list layout when that presentation exists; and the holder renders its category badge, uploader, rating, language, page count, and date. Parsing, category colors, localization, caching, and source-family recognition remain under `dev.ahmedmohamed.hayai`. Normal sources still take the original grid/list paths without extra work. The same presenter has one generic typed-filter branch for Hayai tag completion, while the E-Hentai catalog, chip state, validation, and suggestions remain Hayai-owned.
+ 
+diff --git a/docs/architecture/novel-reader-parity.md b/docs/architecture/novel-reader-parity.md
+index b304325056255fe21c4ba89a1d51d845762bbec8..fe463207e2790896502025052327acf497fdf7d4 100644
+--- a/docs/architecture/novel-reader-parity.md
++++ b/docs/architecture/novel-reader-parity.md
+@@ -4,7 +4,7 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
+ 
+ ## Ownership
+ 
+-- `NovelReaderActivity` owns novel chapter focus, progress, and typed actions while inflating J2K's unmodified `reader_activity.xml` shell.
++- `NovelReaderActivity` owns novel chapter focus, progress, and typed actions while inflating J2K's unmodified `reader_activity.xml` shell. `J2kNovelReaderChrome` is the concrete adapter for that shell's IDs, insets, and visibility.
+ - `NativeNovelRenderer` owns selectable native text blocks.
+ - `WebNovelRenderer` owns isolated WebView chapter blocks.
+ - `NovelChapterQueue` bounds retained chapter data. A prefetched chapter never becomes current until its block becomes visible.
+@@ -26,6 +26,14 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
+ | TTS | `viewer/text/shared/TtsController.kt` | `NovelTtsController` and `NovelTtsPlaybackService`; active transport controls replace novel action slots inside J2K's reader sheet |
+ | Quotes and highlights | the novel reader selection tools | `NovelQuoteStore`, `NovelHighlightStore`, and typed reader actions |
+ 
++## Reader chrome and selection contract
++
++The J2K toolbar and chapter controls overlay the viewer exactly as they do in the image reader. `J2kNovelReaderChrome` gives novel content one constant safe inset equal to J2K's ignored status-bar inset plus `actionBarSize`; that inset does not change when chrome is shown or hidden. The viewer therefore keeps J2K's overlay geometry without obscuring, pushing, or reflowing native or WebView text.
++
++Both renderers expose the same typed `NovelSelection`. Native text remains selectable, focusable in touch mode, long-clickable, and uses Android's arrow-key movement method whenever editing is off. Read-only selection removes the irrelevant EditText Cut/Paste actions and keeps compact Quote, Define, and Translate actions visible; edit mode retains Android's editing actions. The WebView is created with the Activity UI context, remains focusable, disables classifier-injected actions, and caches the complete selection anchor on `selectionchange`. If opening the floating toolbar collapses the live range, Quote, Define, Translate, and Search consume that cached anchor. The anchor resolves its chapter from the range ancestor rather than whichever retained chapter is currently marked active.
++
++The shared action registry assigns visible, localized, semantic entries to Quote, Define, and Google Translate; Search remains overflow. Quote enters the existing duplicate-safe quote dialog. Define opens a resizable Custom Tab so the selected Chrome provider's signed-in session is available. Translate tries Google Translate's process-text and send contracts before the same browser path. The secure WebView sheet is only a fallback and retains WebView cookies, not Chrome cookies.
++
+ ## Continuous-flow rules
+ 
+ - Every renderer block uses the J2K chapter ID as its stable ID.
+diff --git a/docs/architecture/sy-j2k-reader-parity.md b/docs/architecture/sy-j2k-reader-parity.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d6ff34121cedc7fe54321ecf67bfe2def71022ba
+--- /dev/null
++++ b/docs/architecture/sy-j2k-reader-parity.md
+@@ -0,0 +1,27 @@
++# SY source and J2K reader parity design
++
++## Caller shape
++
++E-Hentai remains a normal J2K source whose typed Hayai filter tree reduces to `EhSearchSpec`. Manga details binds independent metadata and preview slots through the existing `MangaDetailsController` adapter. Novel chapters continue through `ReaderLauncher` into `NovelReaderActivity`, which inflates the unmodified J2K `reader_activity` shell and hosts one `NovelRenderer`.
++
++## Selected architecture
++
++The selected arena design preserves the existing typed provider and renderer contracts and repairs their divergent seams. It does not merge SY or Tsundoku, introduce another details page, or edit the protected image `ReaderActivity`.
++
++- `EhHtmlParser` adopts SY's sprite-first preview precedence while retaining Hayai's bounded crop decoder and typed failures.
++- `EhFilters` exposes SY's group hierarchy but recursively reduces into the existing `EhSearchSpec`; URLs and pagination stay in `EhRequestBuilder`.
++- `MangaDetailsController` remains a lifecycle adapter and delegates Hayai loading, rendering, generation guards, and bitmap cleanup to `SourceDetailsHost`. Phone and tablet layouts provide independent metadata-before-description and preview-after-description anchors.
++- `SourcePreviewController` owns one-based page navigation and delegates selected image opening to `ReaderLauncher`.
++- `NovelReaderActivity` uses the concrete `J2kNovelReaderChrome` adapter for J2K's existing view IDs, insets, and overlay visibility. Viewer bounds remain J2K-owned while novel content gets one visibility-independent toolbar safe inset.
++- Native and Web renderers share `NovelSelectionActionModes`; each renderer is responsible only for producing a stable `NovelSelection`.
++- `NovelLookupLauncher` owns external Google Translate and signed-in Custom Tab effects. `NovelQuoteStore` remains the quote authority.
++
++## Rejected alternative
++
++The larger alternative introduced reducers for the entire source-details and novel-reader state, a new preview-asset repository, and a new coordinator before removing the current controller code. Those types could help a future rewrite, but they duplicate already-working models and expand the migration and regression surface without being required to repair these bugs. A shared base extracted from J2K `ReaderActivity` was also rejected because image-viewer, hinge, fullscreen, slider, and chapter-sheet state would make the protected upstream diff large and rebase-sensitive.
++
++## Provenance and seams
++
++Behavior is grounded at J2K `7eea215da1a32b7198aabfc3e94ecd71d76f4df7`, SY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, and Tsundoku `f166f2672d9a01a3c84a5d920af144598089a4be`. Relevant SY preview history includes `d45563e58d7f5f8f50046e0dbb8dc2e147ac0789`, `7565e51f951328c663ee32ffc101a926bf3334e3`, and `cbb743f995b79d44b796108c7c9fbc6b7820ddbd`. Legacy Hayai is UX evidence only; no legacy application code is copied.
++
++The reviewed J2K seam is limited to a small `MangaDetailsController` callback binding and the two `manga_header_item.xml` variants; source-owned rendering lives in `SourceDetailsHost`. Database ownership, migrations, backups, image reader state, and application lifecycle are unchanged. Preview listing cache schema advances to `v3`; this is disposable cache invalidation, not a data migration.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 89cd3cb0c5040e7cc7ddcd01e13cc46898d446e3..0ce03cfda7c609819b41b172ce57ecec41985ac8 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -14,7 +14,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; logged-out emulator screen verified; authenticated login pending |
+ | EH source settings, default filters, enhanced details toggle, and remote uconfig | Native J2K settings controller over typed desired settings, idempotent per-site profile uploader, partial retry UI, and local browse preferences | implementation verified; authenticated emulator upload pending |
+ | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
+-| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, non-duplicated SY-style inline/full metadata UI, current direct-anchor and legacy thumbnail parsing, lazy versioned preview caches, a J2K-hosted preview controller, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | port; focused live-shape parser and request tests pass; repaired layout compiled; authenticated ExHentai and post-fix visual emulator verification remain pending |
++| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, non-duplicated SY-style inline/full metadata UI in independent phone/tablet anchors, sprite-first current/legacy thumbnail parsing, versioned preview caches, previous/next/direct preview paging, SY-grouped Genres-to-exclude and Advanced filters, reader-page handoff, rich browse rows, and the pinned SY tag catalog with autocomplete chips | port; focused blank-placeholder, pagination, filter, and request validation implemented; authenticated ExHentai and post-fix visual emulator verification remain pending |
+ | 8Muses/EroMuse, HBrowse, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | implemented unverified for the source-specific behavior SY exposes |
+ | Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions, source-specific SY description layouts, adaptive SY preview rows, bounded listing/image caches, and a J2K-hosted preview controller | port; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not; live authenticated source verification remains pending |
+ | Raised metadata, titles, and tags | Additive schema, typed source documents, durable enhanced-source cache, inline summary, and a full metadata controller hosted by J2K navigation | port; E-Hentai fixture verified on emulator |
+@@ -51,9 +51,9 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+ | Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | implemented; local chapter offline save and restart recovery verified; bulk-flow pending |
+ | Typography, themes, spacing, navigation, presets, snippets, search/replace | Five Tsundoku icon tabs with J2K spinner, switch, slider, and toolbar-settings controls; adjacent theme and text/background color controls; Tsundoku-style preset swatches plus a synchronized hex/RGB custom picker; isolated preset/custom color resolution; Tsundoku preference keys and exact tap-zone tables; SAF-imported validated fonts shared by native/Web renderers; progress modes; compact ordered bottom/status registries; searchable full settings; ordered snippets with append semantics; and testable ordered replacements | custom theme logic and compilation verified; picker UI emulator verification and imported-font flow pending |
+-| Translation, definition, search, and dictionary handoff | Bounded provider clients and cache; separate selection/chapter translation; native selection actions; Google Translate process-text/send routing; forced resizable Custom Tabs with browser login state; and a secure J2K bottom-sheet WebView fallback | implemented unverified; focused routing and reader-surface validation pending |
++| Translation, definition, search, and dictionary handoff | Bounded provider clients and cache; shared native/Web selection actions with retained Web anchors; Google Translate process-text/send routing; forced resizable Custom Tabs with browser login state; and a secure J2K bottom-sheet WebView fallback | port implemented; focused routing tests pending final pass and on-device floating-action verification pending |
+ | TTS and playback controls | Foreground media-playback service, notification actions, Tsundoku transport actions surfaced through J2K's reader-sheet buttons, chapter handoff, highlight, and activity reattachment | active exact-shell transport verified on emulator; background and restart recovery pending |
+-| Quotes | Typed `hayai_quotes`, native/Web selection capture, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | implemented unverified; emulator selection lifecycle pending |
++| Quotes | Typed `hayai_quotes`, visible semantic Quote action in native/Web selection, retained Web anchors, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | port implemented; emulator selection lifecycle pending |
+ | Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, editing, schema, and backup | implemented unverified |
+ | Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, progress-aware J2K chapter rows, and library statistics | integration foundation verified; emulator presentation pending |
+ | Library content filter, shortcuts, and migration compatibility | Typed content policy with narrow J2K presentation and migration adapters | integration foundation verified; emulator flows pending |
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index dab4496f5765e5172e1a0a0f7cf9ee6e61b89dd8..48072ab626a923bcdf8b0c040d6ea87795da81a8 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1089 | 0.0% |
+-| `ar` | 31 / 1089 | 2.8% |
+-| `ars` | 0 / 1089 | 0.0% |
+-| `az` | 0 / 1089 | 0.0% |
+-| `bg` | 0 / 1089 | 0.0% |
+-| `bn` | 0 / 1089 | 0.0% |
+-| `ca` | 0 / 1089 | 0.0% |
+-| `ceb` | 0 / 1089 | 0.0% |
+-| `cs` | 0 / 1089 | 0.0% |
+-| `cv` | 0 / 1089 | 0.0% |
+-| `de` | 29 / 1089 | 2.7% |
+-| `el` | 0 / 1089 | 0.0% |
+-| `eo` | 0 / 1089 | 0.0% |
+-| `es` | 31 / 1089 | 2.8% |
+-| `eu` | 0 / 1089 | 0.0% |
+-| `fa` | 0 / 1089 | 0.0% |
+-| `fi` | 0 / 1089 | 0.0% |
+-| `fil` | 31 / 1089 | 2.8% |
+-| `fr` | 31 / 1089 | 2.8% |
+-| `gl` | 0 / 1089 | 0.0% |
+-| `ha` | 0 / 1089 | 0.0% |
+-| `hi` | 0 / 1089 | 0.0% |
+-| `hr` | 31 / 1089 | 2.8% |
+-| `hu` | 0 / 1089 | 0.0% |
+-| `in` | 31 / 1089 | 2.8% |
+-| `it` | 17 / 1089 | 1.6% |
+-| `iw` | 0 / 1089 | 0.0% |
+-| `ja` | 29 / 1089 | 2.7% |
+-| `jv` | 0 / 1089 | 0.0% |
+-| `ka` | 0 / 1089 | 0.0% |
+-| `kk` | 0 / 1089 | 0.0% |
+-| `km` | 0 / 1089 | 0.0% |
+-| `ko` | 7 / 1089 | 0.6% |
+-| `lt` | 0 / 1089 | 0.0% |
+-| `lv` | 0 / 1089 | 0.0% |
+-| `ml` | 0 / 1089 | 0.0% |
+-| `mn` | 0 / 1089 | 0.0% |
+-| `ms` | 0 / 1089 | 0.0% |
+-| `my` | 0 / 1089 | 0.0% |
+-| `nb-rNO` | 0 / 1089 | 0.0% |
+-| `ne` | 5 / 1089 | 0.5% |
+-| `nl` | 0 / 1089 | 0.0% |
+-| `nn` | 0 / 1089 | 0.0% |
+-| `om` | 0 / 1089 | 0.0% |
+-| `or` | 0 / 1089 | 0.0% |
+-| `pl` | 0 / 1089 | 0.0% |
+-| `pt` | 31 / 1089 | 2.8% |
+-| `pt-rBR` | 31 / 1089 | 2.8% |
+-| `ro` | 0 / 1089 | 0.0% |
+-| `ru` | 31 / 1089 | 2.8% |
+-| `sc` | 0 / 1089 | 0.0% |
+-| `si` | 0 / 1089 | 0.0% |
+-| `sk` | 0 / 1089 | 0.0% |
+-| `sq` | 0 / 1089 | 0.0% |
+-| `sr` | 0 / 1089 | 0.0% |
+-| `sv` | 0 / 1089 | 0.0% |
+-| `ta` | 31 / 1089 | 2.8% |
+-| `te` | 0 / 1089 | 0.0% |
+-| `th` | 0 / 1089 | 0.0% |
+-| `ti` | 0 / 1089 | 0.0% |
+-| `tl` | 0 / 1089 | 0.0% |
+-| `tr` | 31 / 1089 | 2.8% |
+-| `uk` | 7 / 1089 | 0.6% |
+-| `ur` | 0 / 1089 | 0.0% |
+-| `vi` | 5 / 1089 | 0.5% |
+-| `zh-rCN` | 31 / 1089 | 2.8% |
+-| `zh-rTW` | 31 / 1089 | 2.8% |
++| `ajp` | 0 / 1090 | 0.0% |
++| `ar` | 31 / 1090 | 2.8% |
++| `ars` | 0 / 1090 | 0.0% |
++| `az` | 0 / 1090 | 0.0% |
++| `bg` | 0 / 1090 | 0.0% |
++| `bn` | 0 / 1090 | 0.0% |
++| `ca` | 0 / 1090 | 0.0% |
++| `ceb` | 0 / 1090 | 0.0% |
++| `cs` | 0 / 1090 | 0.0% |
++| `cv` | 0 / 1090 | 0.0% |
++| `de` | 29 / 1090 | 2.7% |
++| `el` | 0 / 1090 | 0.0% |
++| `eo` | 0 / 1090 | 0.0% |
++| `es` | 31 / 1090 | 2.8% |
++| `eu` | 0 / 1090 | 0.0% |
++| `fa` | 0 / 1090 | 0.0% |
++| `fi` | 0 / 1090 | 0.0% |
++| `fil` | 31 / 1090 | 2.8% |
++| `fr` | 31 / 1090 | 2.8% |
++| `gl` | 0 / 1090 | 0.0% |
++| `ha` | 0 / 1090 | 0.0% |
++| `hi` | 0 / 1090 | 0.0% |
++| `hr` | 31 / 1090 | 2.8% |
++| `hu` | 0 / 1090 | 0.0% |
++| `in` | 31 / 1090 | 2.8% |
++| `it` | 17 / 1090 | 1.6% |
++| `iw` | 0 / 1090 | 0.0% |
++| `ja` | 29 / 1090 | 2.7% |
++| `jv` | 0 / 1090 | 0.0% |
++| `ka` | 0 / 1090 | 0.0% |
++| `kk` | 0 / 1090 | 0.0% |
++| `km` | 0 / 1090 | 0.0% |
++| `ko` | 7 / 1090 | 0.6% |
++| `lt` | 0 / 1090 | 0.0% |
++| `lv` | 0 / 1090 | 0.0% |
++| `ml` | 0 / 1090 | 0.0% |
++| `mn` | 0 / 1090 | 0.0% |
++| `ms` | 0 / 1090 | 0.0% |
++| `my` | 0 / 1090 | 0.0% |
++| `nb-rNO` | 0 / 1090 | 0.0% |
++| `ne` | 5 / 1090 | 0.5% |
++| `nl` | 0 / 1090 | 0.0% |
++| `nn` | 0 / 1090 | 0.0% |
++| `om` | 0 / 1090 | 0.0% |
++| `or` | 0 / 1090 | 0.0% |
++| `pl` | 0 / 1090 | 0.0% |
++| `pt` | 31 / 1090 | 2.8% |
++| `pt-rBR` | 31 / 1090 | 2.8% |
++| `ro` | 0 / 1090 | 0.0% |
++| `ru` | 31 / 1090 | 2.8% |
++| `sc` | 0 / 1090 | 0.0% |
++| `si` | 0 / 1090 | 0.0% |
++| `sk` | 0 / 1090 | 0.0% |
++| `sq` | 0 / 1090 | 0.0% |
++| `sr` | 0 / 1090 | 0.0% |
++| `sv` | 0 / 1090 | 0.0% |
++| `ta` | 31 / 1090 | 2.8% |
++| `te` | 0 / 1090 | 0.0% |
++| `th` | 0 / 1090 | 0.0% |
++| `ti` | 0 / 1090 | 0.0% |
++| `tl` | 0 / 1090 | 0.0% |
++| `tr` | 31 / 1090 | 2.8% |
++| `uk` | 7 / 1090 | 0.6% |
++| `ur` | 0 / 1090 | 0.0% |
++| `vi` | 5 / 1090 | 0.5% |
++| `zh-rCN` | 31 / 1090 | 2.8% |
++| `zh-rTW` | 31 / 1090 | 2.8% |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 7e9577ced9cfe9d4cbdec35a42f8853832775479..51d91aeb37ae80f9b7a85820b4b0122aaf7a9ff2 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -129,6 +129,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?: tit
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?.attr("href")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?.selectFirst("a")?.text()?.trim()?.takeIf(String::isNotEmpty)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	.lastOrNull { it.text().trim() == ">" }
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	.takeIf { it.startsWith("https://") && !it.endsWith("/g/blank.gif", ignoreCase = true) }
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	"${color[0]}${color[2]}${color[4]}"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	"B", "" -> 0
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	"GB" -> 3
+@@ -155,7 +156,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (!u
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (batch.listingUrl in listingUrls) throw EhFailure.MalformedDocument("E-Hentai listing chain contains a cycle")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (candidates.size > maxPages) throw EhFailure.BoundsExceeded("E-Hentai listing exceeds $maxPages pages")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (cells.size > maxItems) throw EhFailure.BoundsExceeded("E-Hentai preview page exceeds $maxItems entries")
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (direct.startsWith("https://")) {
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (EhSite.fromHost(uri.host) == null) throw EhFailure.MalformedDocument("E-Hentai page URL uses an unsupported host")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (html.length > MAX_DOCUMENT_CHARS) throw EhFailure.BoundsExceeded("E-Hentai document is too large")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	if (imageUrl.isEmpty()) throw EhFailure.MalformedDocument("E-Hentai image URL is missing")
+@@ -237,7 +237,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val fa
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val fields = document.select("#gdd tr").associate { row ->
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val genre = if (info != null) parseCategory(info.getOrNull(1)) else parseCategory(row.selectFirst(".gl1c div"))
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val hasNext = document.select(".searchnav a[href]").any { it.text().contains(linkText, ignoreCase = true) }
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val image = cell.selectFirst("img[src], img[data-src]")
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val image = cell.selectFirst("img[data-src], img[src]")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val imageUrl = document.selectFirst("#img")?.attr("src")?.trim().orEmpty()
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val imageUrl = STYLE_URL.find(style)?.groupValues?.get(1)?.trim('\'', '"')?.let { sprite.absUrlFromStyle(it) }
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val index = link.selectFirst("img[alt]")?.attr("alt")?.toIntOrNull()
+@@ -631,6 +631,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("Cg", context.getString(R.string.hayai_eh_category_cg))
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("ImageSet", context.getString(R.string.hayai_eh_category_image_set))
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("NonH", context.getString(R.string.hayai_eh_category_non_h))
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	@Suppress("UNCHECKED_CAST")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	arrayOf(context.getString(R.string.hayai_eh_filter_any), "2", "3", "4", "5"),
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	.map { tag -> prefix?.let { "$it$tag" } ?: tag }
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	const val ASSET_PATH = "hayai/eh_tags.txt"
+@@ -1509,7 +1510,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	bin
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	private fun Uri.isAllowedWebUri() = scheme.equals("https", ignoreCase = true) && !host.isNullOrBlank()
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	private const val BOOTSTRAP_PREFERENCES = "hayai_novel_plugin_bootstrap"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	private const val DEFAULT_REPOSITORY_SEEDED = "default_lnreader_repository_seeded"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	store.saveRepository(NovelPluginRepository("LNReader", url, enabled = true))
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	store.addRepositoryIfAbsent(NovelPluginRepository("LNReader", url, enabled = true))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	?: "other"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"arabic" to "ar",
+@@ -1564,26 +1565,21 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocum
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	root["plugins"] as? JsonArray
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.listFiles { file -> file.isFile && file.extension == "js" && file.name.startsWith("$pluginId-") }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("DELETE FROM hayai_novel_repos WHERE base_url = ?")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("INSERT OR IGNORE INTO hayai_novel_repos(base_url, name, enabled) VALUES (?, ?, ?)")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("INSERT OR REPLACE INTO hayai_novel_repos(base_url, name, enabled) VALUES (?, ?, ?)")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("SELECT 1 FROM hayai_novel_plugin_sources WHERE plugin_id = ?")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("SELECT 1 FROM hayai_novel_repos WHERE base_url = ?")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("SELECT name FROM hayai_novel_plugin_sources WHERE source_id = ?")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.table("hayai_novel_plugin_sources")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.table("hayai_novel_repos")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.where("base_url = ?")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.where("plugin_id = ?")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	"SELECT name, base_url, enabled FROM hayai_novel_repos ORDER BY name COLLATE NOCASE, base_url",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	atomicWrite(File(root, "${descriptor.id}.json"), json.encodeToString(installed).toByteArray())
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	check(database.lowLevel().insert(InsertQuery.builder().table("hayai_novel_plugin_sources").build(), values) >= 0)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	check(database.lowLevel().insert(InsertQuery.builder().table("hayai_novel_repos").build(), values) >= 0)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	file.isFile && file.extension == "js" && file.name.startsWith("${descriptor.id}-") && file.name != installed.codeFile
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	novelRequire(Regex("[A-Za-z0-9._-]{1,128}").matches(pluginId), NovelFailure.Code.PluginId)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	private val root = File(context.filesDir, "hayai/novel-plugins").apply { mkdirs() }
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("base_url", repository.url)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("enabled", repository.enabled)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("lang", descriptor.normalizedLanguage())
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("last_seen", System.currentTimeMillis())
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("name", descriptor.name)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("name", repository.name)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("plugin_id", descriptor.id)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	put("source_id", descriptor.sourceId())
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	return checksum.matches(Regex("[a-f0-9]{64}")) && codeFile == "$pluginId-$checksum.js"
+@@ -2756,6 +2752,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt
+ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	choice.copy(label = "${choice.label} (${choice.sourceId})")
+ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	require(surface != RecentSurface.Mixed) { "Mixed visibility must be edited through History or Updates" }
+ app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt	val baseLabel = if (language == null) source.name else "${source.name} · $language"
++app/src/main/java/dev/ahmedmohamed/hayai/source/details/SourceDetailsHost.kt	identity = "${manga.source}:${manga.url}"
++app/src/main/java/dev/ahmedmohamed/hayai/source/details/SourceDetailsHost.kt	val expected = "${identity ?: return}:1"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddController.kt	private var currentInput = ""
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddService.kt	EnhancedBatchFailure.Network(error.message ?: "Network request failed"),
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/batch/EnhancedBatchAddViewModel.kt	private val mutableInput = MutableStateFlow("")
+@@ -2955,7 +2953,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecod
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	.joinToString("") { "%02x".format(it) }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
+-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v2"
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v3"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val images = File(root, "images").apply { mkdirs() }
+diff --git a/tools/verify-hayai-emulator.ps1 b/tools/verify-hayai-emulator.ps1
+index 7d99fe7c07240e6b4b30227bc13ff81ab4dbdf47..5dcf4e0fbb12ca0e79fa461b08c4a2e1c1ea2cde 100644
+--- a/tools/verify-hayai-emulator.ps1
++++ b/tools/verify-hayai-emulator.ps1
+@@ -292,6 +292,14 @@ try {
+     $readerWindow = Dump-Window "02-novel-reader-actions"
+     [void](Find-Node $readerWindow "Verification Novel")
+     [void](Find-Node $readerWindow "Read aloud")
++    $toolbarNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.'resource-id' -match ':(id/)?toolbar$' } | Select-Object -First 1
++    $contentNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.class -in @('android.widget.EditText', 'android.webkit.WebView') } | Select-Object -First 1
++    if ($null -eq $toolbarNode -or $null -eq $contentNode) { throw "Reader chrome or novel content was missing from the hierarchy." }
++    if ($toolbarNode.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "Reader toolbar bounds were invalid." }
++    $toolbarBottom = [int]$Matches[4]
++    if ($contentNode.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "Novel content bounds were invalid." }
++    $contentTop = [int]$Matches[2]
++    if ($contentTop -lt $toolbarBottom) { throw "Novel content starts at y=$contentTop beneath toolbar bottom y=$toolbarBottom." }
+     $mangaProgressLabels = $readerWindow.SelectNodes("//node") | Where-Object {
+         $_.'resource-id' -match ':(id/)?(left_page_text|right_page_text)$'
+     }
+@@ -389,7 +397,6 @@ try {
+     [void](Find-Node $browseWindow "^Manga$")
+     [void](Find-Node $browseWindow "^Novels$")
+     [void](Find-Node $browseWindow "^E-Hentai$")
+-    [void](Find-Node $browseWindow "^Extensions$")
+     [void](Find-Node $browseWindow "^Migration$")
+     Capture "16-browse"
+ 
+-- 
+2.54.0.windows.1
+

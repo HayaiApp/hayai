@@ -1,0 +1,67 @@
+From 5c1b86e56502e39b78b9e434006328aa22818753 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 21:51:30 +0300
+Subject: [PATCH] Fix parity integration compile errors
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerActivity.kt
+index 92bae1f41b111726692c54c37f5d714d75d141d2..d5aaf719b3546f001b8254b79fdfcef4041cadbd 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManagerActivity.kt
+@@ -37,7 +37,7 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
+                 addView(
+                     Button(context).apply {
+                         text = "Refresh"
+-                        setOnClickListener { run { manager.refresh() } }
++                        setOnClickListener { launchAction { manager.refresh() } }
+                     },
+                 )
+                 addView(
+@@ -62,7 +62,7 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
+             },
+         )
+         lifecycleScope.launch { manager.catalog.collect(::render) }
+-        run { manager.refresh() }
++        launchAction { manager.refresh() }
+     }
+     private fun render(state: NovelApkExtensionCatalog) {
+         status.text = state.error ?: if (state.refreshing) "Refreshing…" else "${state.installed.size} installed, ${state.updates.size} updates"
+@@ -146,7 +146,7 @@ class NovelApkExtensionManagerActivity : AppCompatActivity() {
+             .show()
+     }
+ 
+-    private fun run(block: suspend () -> Unit) {
++    private fun launchAction(block: suspend () -> Unit) {
+         lifecycleScope.launch {
+             runCatching { block() }.onFailure { status.text = it.message }
+         }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt
+index 47042434119e96ccb927de3f78cecd8977fd1c61..bdd47258de754f0e5186cdfe61dd9f8f0311a130 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsActivity.kt
+@@ -41,6 +41,7 @@ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+ import java.net.URI
+ import java.security.MessageDigest
++import kotlin.coroutines.coroutineContext
+ 
+ class NovelDataToolsActivity : AppCompatActivity() {
+     private val database by lazy { Injekt.get<DatabaseHelper>() }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt
+index 59417d1204d9f55870b566ecc62c59639671b079..e19a66e9bbb075d6e3bb8fb5b52f01834023562b 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/EnhancedDetailsPreviewLoader.kt
+@@ -31,8 +31,8 @@ class EnhancedDetailsPreviewLoader(
+ 
+     override suspend fun load(
+         manga: Manga,
+-        page: Int = 1,
+-        cacheControl: CacheControl? = null,
++        page: Int,
++        cacheControl: CacheControl?,
+     ): SourceRenderedPreviewPage {
+         require(page > 0)
+         val source = sourceManager.get(manga.source) as? HayaiEnhancedHttpSource
+-- 
+2.54.0.windows.1
+

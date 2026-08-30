@@ -1,0 +1,1992 @@
+From e6d216a3b100d97a9424d138c639aad3167dcebc Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 30 Aug 2026 13:07:01 +0300
+Subject: [PATCH] Fix novel migration and storage workflows
+
+
+diff --git a/.audit/arena-novel-storage/synthesis.md b/.audit/arena-novel-storage/synthesis.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..ddc0dc77d0eb21d7ce3b9988a58a542e38165bdd
+--- /dev/null
++++ b/.audit/arena-novel-storage/synthesis.md
+@@ -0,0 +1,25 @@
++# Novel, storage, and issue repair architecture
++
++## Chosen direction
++
++Use the derived content identity design from candidate B. Hayai already retains novel source IDs in `hayai_novel_plugin_sources`, and Local Novel is stable, so identity can be recovered from durable existing evidence without adding another database table.
++
++The cross-model judge preferred candidate A because its materialized identity table could outlive an uninstalled APK source. That assumption does not match Hayai's source model: novel sources are LNReader plugins remembered in Hayai storage, not disposable APK-only registrations. A new table would create another migration and synchronization surface while duplicating evidence that is already authoritative.
++
++## Adopted additions
++
++- Use one content identity service in library, statistics, and migration.
++- Centralize source icons and authenticated cover requests so every migration surface gets the same artwork behavior.
++- Represent download and backup locations as validated storage capabilities, including persisted SAF permissions and recoverable failures.
++- Store filter snapshots with semantic keys and a schema fingerprint.
++- Version offline asset metadata while retaining backward compatibility with old manifests.
++
++## Rejected additions
++
++- No second library or content identity table.
++- No duplicate novel migration controller or reader activity.
++- No broad storage rewrite that moves existing user files without an explicit choice.
++
++## Verification contract
++
++Each slice needs focused unit coverage, compilation, the upstream boundary check, and emulator evidence for UI or Android storage behavior. Issues are only closed after the matching behavior is present in a published nightly.
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 5ffe417b8f8bb0bc3aa0a77e232b5ae88160515a..b9f5491b7479a5a15f9c87d06a27e2110c6654e6 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -145,3 +145,10 @@ ts	phase	decision	why	evidence	result
+ 2026-08-26T18:59:00+03:00	reader-migration-issue-validation	passed localization, the J2K adapter boundary, full DevDebug compilation and unit tests, APK assembly, and the Android 16 migration/reader/settings/Browse flow	validates the unified reader, active TTS row, offline restart, crash repair, legacy import counts, and Manga/Novels/Migration source surfaces without formatting the upstream tree	tools/verify-localization.ps1 -WriteCoverage; tools/verify-upstream-boundary.ps1; gradlew :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin; gradlew :app:assembleDevDebug -x :app:formatKotlin; tools/verify-hayai-emulator.ps1; artifacts/emulator-verification/20260826-154803	VERIFIED
+ 2026-08-27T18:46:25+03:00	legacy-novel-migration-classification	recovered novel identity when an imported title's obsolete source resolves as a manga stub	uses exact legacy novel genres and durable Hayai-owned plugin, quote, highlight, and statistic evidence so the existing migration UI exposes only novel targets without relabelling ordinary manga	NovelMigrationPolicy.kt; NovelMigrationPolicyTest.kt; legacy/hayai-pre-j2k Manga.seriesType evidence	UNIT_VERIFIED
+ 2026-08-27T18:50:04+03:00	legacy-novel-migration-validation	passed localization, the J2K adapter boundary, complete DevDebug compilation and unit tests, the focused red-green classification regression, SQLite compound-query execution, and diff whitespace checks	validates stale-source novel classification and target filtering without changing a J2K adapter or user-facing string	tools/verify-localization.ps1 -WriteCoverage; tools/verify-upstream-boundary.ps1; gradlew :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin; sqlite3 :memory:; git diff --check	VERIFIED
++2026-08-30T00:10:00+03:00	upstream-rebase	replayed the complete Hayai patch series onto J2K 8df100d6e6	keeps current J2K master as the architectural parent and preserves the fork as a reviewable linear stack	j2k/master 8df100d6e6; codex/j2k-2026-08-30	IMPLEMENTED_UNVERIFIED
++2026-08-30T00:10:01+03:00	novel-migration-surface-repair	centralized durable novel identity, localized migration vocabulary, source artwork, and authenticated cover requests	old novels remain novels when their obsolete source resolves as manga and quotes, highlights, statistics, and J2K chapter metadata keep the existing transactional mover	NovelContentIdentity.kt; SourceArtwork.kt; SourceCoverRequestProvider.kt; NovelMigrationDataMover.kt	UNIT_VERIFIED
++2026-08-30T00:10:02+03:00	storage-location-repair	routed downloads and automatic backups through one app-owned and SAF-aware location boundary	new defaults do not require broad storage access, selected trees retain write grants, and invalid or lost locations report their actual failure	StorageLocationAccess.kt; DownloadProvider.kt; BackupCreator.kt	UNIT_VERIFIED
++2026-08-30T00:10:03+03:00	novel-reader-issue-repair	made paginated navigation use one viewport stride and retained MIME-relevant extensions for downloaded assets	addresses the reproducible geometry and WebView asset failures from issues 38 and 41 without introducing another reader	NovelHtmlDocumentBuilder.kt; NovelDownloadStore.kt; NovelAssetWebViewClient.kt	UNIT_VERIFIED
++2026-08-30T00:10:04+03:00	nightly-changelogs	generated release notes from the previous nightly source commit with patch-equivalent rebase filtering	users can see Hayai and new J2K changes on every published nightly without duplicate replay noise	new-nightly-changelog.ps1; nightly.yml	IMPLEMENTED_UNVERIFIED
++2026-08-30T09:58:00+03:00	novel-migration-header-rebinding	rebound each migration section header instead of setting its title only in the recycled holder constructor	the device fixture showed correctly classified novel rows under a stale Manga label, and the shared fix keeps the one J2K migration surface accurate	SelectionHeader.kt; artifacts/emulator-verification/20260830-095244/migration-fixed.png	EMULATOR_VERIFIED
++2026-08-30T10:12:00+03:00	novel-storage-repair-validation	passed localization, the J2K boundary, complete DevDebug compilation and unit tests, APK assembly, startup, legacy migration, unified reader, restart, source tabs, corrected migration labels and icons, and app-owned storage summaries	validates the coherent migration, reader, storage, and nightly batch after replaying it onto current J2K	tools/verify-localization.ps1 -WriteCoverage; tools/verify-upstream-boundary.ps1; gradlew :app:compileDevDebugKotlin :app:testDevDebugUnitTest -x :app:formatKotlin; gradlew :app:assembleDevDebug -x :app:formatKotlin; tools/verify-apk-startup.ps1; tools/verify-hayai-emulator.ps1; artifacts/emulator-verification/20260830-095244	VERIFIED
+diff --git a/.audit/novel-storage-issue-repair.tsv b/.audit/novel-storage-issue-repair.tsv
+new file mode 100644
+index 0000000000000000000000000000000000000000..082d61c4ad2175a95b08fdead47852742b266213
+--- /dev/null
++++ b/.audit/novel-storage-issue-repair.tsv
+@@ -0,0 +1,13 @@
++ts	phase	decision	why	evidence	result
++2026-08-30T00:00:00+03:00	frame	repair shipped novel and storage paths before adding new behavior	migration and storage failures block existing users and can strand data	https://github.com/HayaiApp/hayai/issues/41	open
++2026-08-30T00:00:01+03:00	frame	keep one J2K library, migration flow, reader, and storage preference path	the fork contract forbids parallel models that drift	AGENTS.md	open
++2026-08-30T00:00:02+03:00	upstream	replay the recorded Hayai patch stack on J2K 8df100d6e6	this preserves a linear and reviewable fork instead of merging two unrelated histories	patches/series; codex/j2k-2026-08-30	verified
++2026-08-30T00:00:03+03:00	architecture	derive novel identity from live capabilities and existing durable Hayai evidence	remembered plugin sources, genres, quotes, highlights and chapter statistics already survive a missing source, so a second identity table would add migration risk without adding evidence	NovelMigrationPolicy.kt; NovelPluginStore.kt	accepted
++2026-08-30T00:00:04+03:00	architecture	centralize source visuals and storage location validation	migration artwork and SAF failures are shared boundary problems and should not be repaired screen by screen	MangaCoverFetcher.kt; DownloadProvider.kt; PreferencesHelper.kt	accepted
++2026-08-30T00:00:05+03:00	implementation	use one durable novel identity and one localized migration surface	old novels keep novel targets even when their source resolves as manga, and the shared UI no longer says manga for novel rows	NovelContentIdentity.kt; MigrationListController.kt; MigrationFlags.kt	implemented
++2026-08-30T00:00:06+03:00	implementation	preserve authenticated source artwork and cover requests	JavaScript novel icons and covers now use repository artwork, source cookies and referers on Browse and migration surfaces	SourceArtwork.kt; SourceCoverRequestProvider.kt; MangaCoverFetcher.kt	implemented
++2026-08-30T00:00:07+03:00	implementation	validate downloads and backups through app-owned or persisted SAF directories	avoids false invalid-location failures and reports lost grants without silently replacing an existing path	StorageLocationAccess.kt; DownloadProvider.kt; BackupCreator.kt	implemented
++2026-08-30T00:00:08+03:00	implementation	repair paged geometry and downloaded Web assets	one viewport stride removes partial skips and preserved file extensions restore WebView MIME inference	NovelHtmlDocumentBuilder.kt; NovelDownloadStore.kt; NovelAssetWebViewClient.kt	implemented
++2026-08-30T00:00:09+03:00	release	generate each nightly changelog from the previous published source commit	patch-equivalence comparison keeps rebases readable while still listing new J2K and Hayai commits	new-nightly-changelog.ps1; nightly.yml	implemented
++2026-08-30T09:58:00+03:00	emulator	bind migration section labels whenever a recycled header is attached	the Android 16 fixture proved the novel rows were correctly partitioned but a holder created for Manga retained that text when reused for Novels	SelectionHeader.kt; artifacts/emulator-verification/20260830-095244	fixed
++2026-08-30T10:12:00+03:00	validation	verify the complete repair batch on Android 16 and through project gates	migration shows separate Manga and Novels headers with icons, novel options say Custom novel info, and download and backup summaries resolve to writable app-owned locations	artifacts/emulator-verification/20260830-095244; localization; boundary; compile; unit tests; APK assembly	verified
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index 2e906e33e899fadd615d8bbc89b29085b097ece4..7d132b578ac4b22498ae114f3623dedf14ec4fed 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -47,7 +47,8 @@ jobs:
+         shell: bash
+         run: |
+           set -euo pipefail
+-          latest_tag=$(gh api repos/HayaiApp/hayai-nightly/releases/latest --jq '.tag_name')
++          latest_release=$(gh api repos/HayaiApp/hayai-nightly/releases/latest)
++          latest_tag=$(jq -r '.tag_name' <<< "$latest_release")
+           if [[ ! "$latest_tag" =~ ^r([0-9]+)$ ]]; then
+             echo "Unexpected latest nightly tag: $latest_tag" >&2
+             exit 1
+@@ -62,6 +63,18 @@ jobs:
+           echo "NIGHTLY_BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
+           echo "VERSION_TAG=r$build_number" >> "$GITHUB_ENV"
+           echo "COMMIT_SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
++          latest_body=$(jq -r '.body // ""' <<< "$latest_release")
++          if [[ "$latest_body" =~ HayaiApp/hayai/commit/([0-9a-fA-F]{40}) ]]; then
++            echo "PREVIOUS_NIGHTLY_SHA=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
++          fi
++
++      - name: Generate nightly changelog
++        shell: pwsh
++        run: >-
++          ./tools/new-nightly-changelog.ps1
++          -PreviousSha '${{ env.PREVIOUS_NIGHTLY_SHA }}'
++          -CurrentSha '${{ github.sha }}'
++          -OutputPath nightly-release-notes.md
+ 
+       - name: Build and test
+         # This project only creates a unit-test component for DevDebug. Exercise
+@@ -118,10 +131,7 @@ jobs:
+           repository: HayaiApp/hayai-nightly
+           tag_name: ${{ env.VERSION_TAG }}
+           name: Hayai Nightly ${{ env.VERSION_TAG }}
+-          body: |
+-            This test build comes from [`${{ env.COMMIT_SHORT_SHA }}`](https://github.com/HayaiApp/hayai/commit/${{ github.sha }}).
+-
+-            Back up your library before installing a nightly build.
++          body_path: nightly-release-notes.md
+           files: |
+             hayai-${{ env.VERSION_TAG }}.apk
+             hayai-arm64-v8a-${{ env.VERSION_TAG }}.apk
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/HayaiLibraryPolicy.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/HayaiLibraryPolicy.kt
+index f4bfeda1a832d6123b4f72927f380c81c4e7cd9d..a9dce8df780bb19e1a82ab6cba1c5099ffdd7036 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/HayaiLibraryPolicy.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/HayaiLibraryPolicy.kt
+@@ -3,22 +3,22 @@ package dev.ahmedmohamed.hayai.adult
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import dev.ahmedmohamed.hayai.preferences.LewdLibraryFilter
+ import dev.ahmedmohamed.hayai.preferences.NovelLibraryFilter
++import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.source.SourceManager
+-import eu.kanade.tachiyomi.source.isNovelSource
+ 
+ class HayaiLibraryPolicy(
+     private val preferences: HayaiPreferences,
+     private val sourceManager: SourceManager,
++    private val novelIdentity: NovelContentIdentity,
+ ) {
+     fun includes(manga: Manga): Boolean {
+         val isLewd = LewdClassifier.isLewd(manga, sourceManager.getOrStub(manga.source))
+         val lewdIncluded = LewdLibraryFilter
+             .fromPersistedValue(preferences.lewdLibraryFilter.get())
+             .includes(isLewd)
+-        val novelIncluded = NovelLibraryFilter
+-            .fromPersistedValue(preferences.novelLibraryFilter.get())
+-            .includes(sourceManager.getOrStub(manga.source).isNovelSource())
++        val novelFilter = NovelLibraryFilter.fromPersistedValue(preferences.novelLibraryFilter.get())
++        val novelIncluded = novelFilter == NovelLibraryFilter.Disabled || novelFilter.includes(novelIdentity.isNovel(manga))
+         return lewdIncluded && novelIncluded
+     }
+ 
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt
+index 83fb49593e96ecc5da703fca505686c9b2980b94..801e7a51a3e36c11dbee61a242f98d4b02401718 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt
+@@ -78,7 +78,7 @@ class NovelDownloadStore(
+         novelRequire(chapterUrl.isNotBlank(), NovelFailure.Code.OfflineChapterUrl)
+         ensureRoot()
+         val references = NovelAssetReferences.extract(document)
+-        val offlinePaths = references.associateWith { reference -> "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}" }
++        val offlinePaths = references.associateWith(::offlineAssetPath)
+         val offlineDocument = NovelAssetReferences.rewrite(document, offlinePaths)
+         val documentBytes = offlineDocument.content.toByteArray(Charsets.UTF_8)
+         novelRequire(documentBytes.size <= MAX_DOCUMENT_BYTES, NovelFailure.Code.OfflineTextTooLarge)
+@@ -228,6 +228,12 @@ class NovelDownloadStore(
+ 
+     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
+ 
++    private fun offlineAssetPath(reference: String): String {
++        val cleanPath = reference.substringBefore('#').substringBefore('?')
++        val extension = cleanPath.substringAfterLast('.', "").lowercase().takeIf { it.matches(SAFE_EXTENSION) }
++        return "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}${extension?.let { ".$it" }.orEmpty()}"
++    }
++
+     private fun normalizeAssetPath(path: String): String? =
+         path.replace('\\', '/').trimStart('/').takeIf { normalized ->
+             normalized.isNotBlank() && normalized.length <= MAX_ASSET_PATH_LENGTH && normalized.split('/').none { it == ".." }
+@@ -263,6 +269,7 @@ class NovelDownloadStore(
+         const val MAX_TOTAL_ASSET_BYTES = 256L * 1024 * 1024
+         const val MAX_ASSET_PATH_LENGTH = 2048
+         val SAFE_ASSET_FILE = Regex("[0-9a-f]{64}")
++        val SAFE_EXTENSION = Regex("[a-z0-9]{1,10}")
+     }
+ }
+ 
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7df91f90da82f807a3c1bc8b71f456968f320b99
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt
+@@ -0,0 +1,57 @@
++package dev.ahmedmohamed.hayai.novel.integration
++
++import com.pushtorefresh.storio.sqlite.queries.RawQuery
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.source.isNovelSource
++import java.util.Locale
++
++/** Resolves manga and novel identity from live capabilities plus durable Hayai evidence. */
++class NovelContentIdentity internal constructor(
++    private val sourceIsNovel: (Long) -> Boolean,
++    private val hasDurableNovelEvidence: (Manga) -> Boolean,
++) {
++    constructor(
++        database: DatabaseHelper,
++        sourceManager: SourceManager,
++    ) : this(
++        sourceIsNovel = { sourceId -> sourceManager.getOrStub(sourceId).isNovelSource() },
++        hasDurableNovelEvidence = DatabaseNovelIdentity(database)::matches,
++    )
++
++    fun isNovel(manga: Manga): Boolean = sourceIsNovel(manga.source) || hasDurableNovelEvidence(manga)
++
++    fun contentKind(manga: Manga): ContentKind = if (isNovel(manga)) ContentKind.Novel else ContentKind.Manga
++}
++
++private class DatabaseNovelIdentity(
++    private val database: DatabaseHelper,
++) {
++    fun matches(manga: Manga): Boolean {
++        if (manga.hasNovelGenreIdentity()) return true
++        val mangaId = manga.id ?: Long.MIN_VALUE
++        return database
++            .lowLevel()
++            .rawQuery(
++                RawQuery
++                    .builder()
++                    .query(
++                        "SELECT 1 FROM hayai_novel_plugin_sources WHERE source_id = ? " +
++                            "UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
++                            "UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
++                            "UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
++                            "JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? LIMIT 1",
++                    ).args(manga.source, mangaId, mangaId, mangaId)
++                    .build(),
++            ).use { cursor -> cursor.moveToFirst() }
++    }
++}
++
++internal fun Manga.hasNovelGenreIdentity(): Boolean =
++    genre
++        ?.split(',')
++        ?.any { tag -> tag.trim().lowercase(Locale.US) in NOVEL_GENRES }
++        ?: false
++
++private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt
+index 1a6c5e86ab1084d68d8deeaff225747ffe90b175..2b91d9e0257ac0f4c04fdfdc07db7eea66328718 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt
+@@ -6,8 +6,6 @@ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+ import eu.kanade.tachiyomi.data.database.models.LibraryManga
+ import eu.kanade.tachiyomi.data.database.models.Manga
+-import eu.kanade.tachiyomi.source.SourceManager
+-import eu.kanade.tachiyomi.source.isNovelSource
+ import kotlin.math.ceil
+ 
+ /**
+@@ -16,12 +14,12 @@ import kotlin.math.ceil
+  */
+ class NovelJ2kIntegration(
+     database: DatabaseHelper,
+-    private val sources: SourceManager,
++    private val contentIdentity: NovelContentIdentity,
+ ) {
+     private val stats = NovelChapterStatStore(database)
+     private val database = database
+ 
+-    fun isNovel(manga: Manga): Boolean = sources.getOrStub(manga.source).isNovelSource()
++    fun isNovel(manga: Manga): Boolean = contentIdentity.isNovel(manga)
+ 
+     fun chapterPresentations(
+         manga: Manga,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt
+index 1cd522c03d7633ff4f51f6c76b51b54c87fee6eb..a94225333e80ecb6a1a1c1cafb86d28c05ab0b5e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt
+@@ -1,30 +1,25 @@
+ package dev.ahmedmohamed.hayai.novel.integration
+ 
+-import com.pushtorefresh.storio.sqlite.queries.RawQuery
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.source.CatalogueSource
+ import eu.kanade.tachiyomi.source.SourceManager
+ import eu.kanade.tachiyomi.source.isNovelSource
+-import java.util.Locale
+ 
+ class NovelMigrationPolicy internal constructor(
+     private val mangaLookup: (Long) -> Manga?,
+-    private val sourceIsNovel: (Long) -> Boolean,
+-    private val hasNovelIdentity: (Manga) -> Boolean,
++    private val contentIdentity: NovelContentIdentity,
+ ) {
+     constructor(
+         database: DatabaseHelper,
+-        sourceManager: SourceManager,
++        contentIdentity: NovelContentIdentity,
+     ) : this(
+         mangaLookup = { mangaId -> database.getManga(mangaId).executeAsBlocking() },
+-        sourceIsNovel = { sourceId -> sourceManager.getOrStub(sourceId).isNovelSource() },
+-        hasNovelIdentity = DatabaseNovelMigrationIdentity(database)::matches,
++        contentIdentity = contentIdentity,
+     )
+ 
+-    fun contentKind(manga: Manga): ContentKind =
+-        if (sourceIsNovel(manga.source) || hasNovelIdentity(manga)) ContentKind.Novel else ContentKind.Manga
++    fun contentKind(manga: Manga): ContentKind = contentIdentity.contentKind(manga)
+ 
+     fun contentKind(mangaIds: Collection<Long>): ContentKind? {
+         if (mangaIds.isEmpty()) return null
+@@ -54,37 +49,6 @@ class NovelMigrationPolicy internal constructor(
+     }
+ }
+ 
+-private class DatabaseNovelMigrationIdentity(
+-    private val database: DatabaseHelper,
+-) {
+-    fun matches(manga: Manga): Boolean {
+-        if (manga.hasNovelGenreIdentity()) return true
+-        val mangaId = manga.id ?: Long.MIN_VALUE
+-        return database
+-            .lowLevel()
+-            .rawQuery(
+-                RawQuery
+-                    .builder()
+-                    .query(
+-                        "SELECT 1 FROM hayai_novel_plugin_sources WHERE source_id = ? " +
+-                            "UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
+-                            "UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
+-                            "UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
+-                            "JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? LIMIT 1",
+-                    ).args(manga.source, mangaId, mangaId, mangaId)
+-                    .build(),
+-            ).use { cursor -> cursor.moveToFirst() }
+-    }
+-}
+-
+-internal fun Manga.hasNovelGenreIdentity(): Boolean =
+-    genre
+-        ?.split(',')
+-        ?.any { tag -> tag.trim().lowercase(Locale.US) in NOVEL_GENRES }
+-        ?: false
+-
+-private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
+-
+ enum class ContentKind {
+     Manga,
+     Novel,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
+index 184f8cb3df087fe0c23369957d080875b7fd5ef3..ddb8384f93a02c3549083d1ccde29a1e2ae3390f 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
+@@ -14,6 +14,7 @@ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+ import dev.ahmedmohamed.hayai.novel.source.NovelContentType
+ import dev.ahmedmohamed.hayai.novel.source.NovelDocument
+ import dev.ahmedmohamed.hayai.novel.source.NovelSource
++import dev.ahmedmohamed.hayai.source.presentation.SourceCoverRequestProvider
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.kanade.tachiyomi.source.ConfigurableSource
+ import eu.kanade.tachiyomi.source.model.Filter
+@@ -59,6 +60,7 @@ class NovelPluginSource(
+     private val siteOverride: String? = null,
+ ) : NovelSource,
+     NovelAssetProvider,
++    SourceCoverRequestProvider,
+     ConfigurableSource,
+     AutoCloseable {
+     private val plugin: NovelPluginDescriptor = installedPlugin.descriptor
+@@ -214,17 +216,27 @@ class NovelPluginSource(
+         ) { "Unable to cache plugin UI schemas" }
+     }
+ 
+-    fun getCoverRequestHeaders(coverUrl: String?): Headers =
++    override val coverCallFactory
++        get() = networkHelper.client
++
++    override fun coverRequestHeaders(
++        coverUrl: String,
++        fallbackHeaders: Headers,
++    ): Headers =
+         try {
+-            // Return default referer header for cover images.
+-            // Plugins can override via imageRequestInit or headers properties if needed.
+-            Headers
+-                .Builder()
++            fallbackHeaders
++                .newBuilder()
+                 .set("Referer", "$baseUrl/")
++                .apply {
++                    runCatching { CookieManager.getInstance().getCookie(coverUrl) }
++                        .getOrNull()
++                        ?.takeIf(String::isNotBlank)
++                        ?.let { set("Cookie", it) }
++                }
+                 .build()
+         } catch (_: Exception) {
+-            Headers
+-                .Builder()
++            fallbackHeaders
++                .newBuilder()
+                 .set("Referer", "$baseUrl/")
+                 .build()
+         }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt
+index 038a3af65854bc05b5bb8cfc01e29d288e7cca6b..2f9d58706700bdea8ada94e8fd19bd2251c85d5e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt
+@@ -51,7 +51,8 @@ internal class NovelAssetWebViewClient(
+             }
+         }
+         if (blockMedia() && isMedia(uri)) return emptyResponse()
+-        if (offline() && uri.scheme in REMOTE_SCHEMES) return notFoundResponse()
++        // Downloaded chapter assets use Hayai's offline scheme. Remote URLs injected by reader
++        // customization remain network-capable unless the user explicitly blocks media.
+         if (uri.scheme !in ASSET_SCHEMES) return null
+         val path = decodeAssetPath(uri) ?: return notFoundResponse()
+         val blockId = uri.getQueryParameter(CHAPTER_ID_QUERY)?.toLongOrNull()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+index 8256ebeeed04a06dc1cd92bf8f3e0007931ae607..3929d463ccd7f8b97d364361f6050a3637e5b110 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+@@ -56,7 +56,7 @@ internal object NovelHtmlDocumentBuilder {
+             }
+             html.hayai-paged, html.hayai-paged body { height:100%; overflow-y:hidden; }
+             html.hayai-paged body { overflow-x:auto; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
+-            html.hayai-paged #hayai-reader { height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:32px; column-fill:auto; }
++            html.hayai-paged #hayai-reader { height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px; column-fill:auto; }
+             html.hayai-paged .hayai-chapter-block { scroll-snap-align:start; }
+             html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; }
+             html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
+@@ -114,27 +114,29 @@ internal object NovelHtmlDocumentBuilder {
+     private const val BRIDGE_SCRIPT = """
+         (() => {
+           const paged = () => document.documentElement.classList.contains('hayai-paged');
++          const pageStride = () => Math.max(1, innerWidth);
+           const reversePages = () => document.documentElement.dataset.writingDirection === 'vertical-rl';
+           const blocks = () => [...document.querySelectorAll('.hayai-chapter-block')];
+           const visibleBlock = () => {
+-            const target = paged() ? innerWidth / 3 : innerHeight / 3;
++            const target = paged() ? pageStride() / 3 : innerHeight / 3;
+             return blocks().sort((a,b) => Math.abs((paged()?a.getBoundingClientRect().left:a.getBoundingClientRect().top)-target)-Math.abs((paged()?b.getBoundingClientRect().left:b.getBoundingClientRect().top)-target))[0] || null;
+           };
+           const activeBlock = () => document.querySelector('.hayai-chapter-block[data-active="true"]') || visibleBlock();
+           const activate = block => { blocks().forEach(it=>delete it.dataset.active); if(block)block.dataset.active='true'; return block; };
+           const progress = () => {
+             const block = activeBlock(); if(!block)return 0;
+-            const max = paged() ? Math.max(1,block.scrollWidth-innerWidth) : Math.max(1,block.offsetHeight-innerHeight);
++            const max = paged() ? Math.max(1,block.scrollWidth-pageStride()) : Math.max(1,block.offsetHeight-innerHeight);
+             const position = reversePages() ? Math.abs(scrollX) : scrollX;
+             const origin = reversePages() ? Math.abs(block.offsetLeft) : block.offsetLeft;
+             const current = paged() ? Math.max(0,position-origin) : Math.max(0,scrollY-block.offsetTop);
+             return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
+           };
+           const pageLocation = () => {
+-            const extent = Math.max(innerWidth, document.scrollingElement ? document.scrollingElement.scrollWidth : document.documentElement.scrollWidth);
+-            const count = Math.max(1, Math.ceil(extent / Math.max(1, innerWidth)));
++            const stride = pageStride();
++            const extent = Math.max(stride, document.scrollingElement ? document.scrollingElement.scrollWidth : document.documentElement.scrollWidth);
++            const count = Math.max(1, Math.ceil(extent / stride));
+             const position = Math.abs(scrollX);
+-            const number = Math.max(1, Math.min(count, Math.round(position / Math.max(1, innerWidth)) + 1));
++            const number = Math.max(1, Math.min(count, Math.round(position / stride) + 1));
+             return {number, count};
+           };
+           let scheduled = false;
+@@ -195,7 +197,7 @@ internal object NovelHtmlDocumentBuilder {
+               const block=activeBlock();if(!block)return;
+               const ratio = Math.max(0, Math.min(100, value)) / 100;
+               if (paged()) {
+-                const max = Math.max(0, block.scrollWidth - innerWidth);
++                const max = Math.max(0, block.scrollWidth - pageStride());
+                 scrollTo({left:(reversePages()?-1:1)*(block.offsetLeft+max * ratio), top:0, behavior:'auto'});
+               } else {
+                 const max = Math.max(0, block.offsetHeight - innerHeight);
+@@ -203,7 +205,7 @@ internal object NovelHtmlDocumentBuilder {
+               }
+             },
+             step(direction, fraction = .85) {
+-              if (paged()) scrollBy({left:(reversePages()?-1:1)*innerWidth * fraction * direction, behavior:'smooth'});
++              if (paged()) scrollBy({left:(reversePages()?-1:1)*pageStride() * direction, behavior:'smooth'});
+               else scrollBy({top:innerHeight * fraction * direction, behavior:'smooth'});
+             },
+             stepPixels(pixels) {
+@@ -218,7 +220,7 @@ internal object NovelHtmlDocumentBuilder {
+             viewportParagraph() {
+               const root=activeBlock();const nodes=root?[...root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]:[];
+               if(!nodes.length)return 0;
+-              const target=paged()?innerWidth*.2:innerHeight*.2;
++              const target=paged()?pageStride()*.2:innerHeight*.2;
+               let best=0,distance=Number.MAX_VALUE;
+               nodes.forEach((node,index)=>{const rect=node.getBoundingClientRect();const point=paged()?rect.left:rect.top;const next=Math.abs(point-target);if(next<distance){distance=next;best=index;}});
+               return best;
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtwork.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtwork.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..1397d37dd8e25c33dc859d322e938456461382eb
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtwork.kt
+@@ -0,0 +1,28 @@
++package dev.ahmedmohamed.hayai.source.presentation
++
++import android.widget.ImageView
++import coil.dispose
++import coil.load
++import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
++import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
++import eu.kanade.tachiyomi.source.LocalSource
++import eu.kanade.tachiyomi.source.Source
++import eu.kanade.tachiyomi.source.icon
++
++/** Binds the same source artwork on Browse, migration, and source selection surfaces. */
++fun ImageView.bindSourceArtwork(source: Source) {
++    dispose()
++    setImageDrawable(null)
++    when {
++        source is NovelPluginSource && source.iconUrl.isNotBlank() -> {
++            load(source.iconUrl) {
++                target(CoverViewTarget(this@bindSourceArtwork))
++            }
++        }
++        source.id == LocalSource.ID -> setImageResource(R.mipmap.ic_local_source)
++        source.id == LocalNovelSource.ID -> setImageResource(R.drawable.ic_local_novel_source)
++        else -> source.icon()?.let(::setImageDrawable)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceCoverRequestProvider.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceCoverRequestProvider.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..bd33a6d363b26ef87a84a412e251661a216ab316
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceCoverRequestProvider.kt
+@@ -0,0 +1,14 @@
++package dev.ahmedmohamed.hayai.source.presentation
++
++import okhttp3.Call
++import okhttp3.Headers
++
++/** Lets non-HttpSource implementations contribute their authenticated cover request. */
++interface SourceCoverRequestProvider {
++    val coverCallFactory: Call.Factory
++
++    fun coverRequestHeaders(
++        coverUrl: String,
++        fallbackHeaders: Headers,
++    ): Headers
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt b/app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..3b4821fd0189a0272d7622a9c6f63dbaef6ada0e
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt
+@@ -0,0 +1,112 @@
++package dev.ahmedmohamed.hayai.storage
++
++import android.content.Context
++import android.content.Intent
++import android.net.Uri
++import android.os.Build
++import android.os.Environment
++import com.hippo.unifile.UniFile
++import eu.kanade.tachiyomi.R
++import java.io.File
++
++/** Android storage boundary shared by downloads and automatic backups. */
++object StorageLocationAccess {
++    fun defaultDirectory(
++        context: Context,
++        child: String,
++    ): Uri {
++        val root = context.getExternalFilesDir(null) ?: context.filesDir
++        return Uri.fromFile(File(root, child))
++    }
++
++    fun persistTreePermission(
++        context: Context,
++        uri: Uri,
++        resultFlags: Int,
++    ): Result<Unit> =
++        runCatching {
++            val accessFlags = resultFlags and READ_WRITE_FLAGS
++            require(accessFlags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0) {
++                context.getString(R.string.hayai_storage_write_permission_missing)
++            }
++            context.contentResolver.takePersistableUriPermission(uri, accessFlags)
++        }
++
++    fun openDirectory(
++        context: Context,
++        rawUri: String,
++    ): Result<UniFile> =
++        runCatching {
++            val uri = Uri.parse(rawUri)
++            when (uri.scheme) {
++                "content" -> requirePersistedWritePermission(context, uri)
++                "file" -> prepareFileDirectory(context, uri)
++                else -> error(context.getString(R.string.hayai_storage_location_unsupported))
++            }
++            val directory = UniFile.fromUri(context, uri)
++                ?: error(context.getString(R.string.hayai_storage_location_unavailable))
++            require(directory.exists() && directory.isDirectory && directory.canWrite()) {
++                context.getString(R.string.hayai_storage_location_unavailable)
++            }
++            directory
++        }
++
++    fun displayName(
++        context: Context,
++        rawUri: String,
++    ): String {
++        val uri = Uri.parse(rawUri)
++        val file = UniFile.fromUri(context, uri)
++        return file?.filePath ?: file?.name ?: uri.lastPathSegment ?: rawUri
++    }
++
++    fun needsAllFilesAccess(
++        context: Context,
++        rawUri: String,
++    ): Boolean {
++        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
++        val uri = Uri.parse(rawUri)
++        if (uri.scheme != "file") return false
++        val path = uri.path?.let(::File) ?: return false
++        return !isInside(path, context.filesDir) &&
++            !isInside(path, context.getExternalFilesDir(null)) &&
++            !Environment.isExternalStorageManager()
++    }
++
++    private fun requirePersistedWritePermission(
++        context: Context,
++        uri: Uri,
++    ) {
++        val permission = context.contentResolver.persistedUriPermissions.firstOrNull { it.uri == uri }
++        require(permission?.isWritePermission == true) {
++            context.getString(R.string.hayai_storage_permission_lost)
++        }
++    }
++
++    private fun prepareFileDirectory(
++        context: Context,
++        uri: Uri,
++    ) {
++        val directory = uri.path?.let(::File)
++            ?: error(context.getString(R.string.hayai_storage_location_unavailable))
++        if (needsAllFilesAccess(context, uri.toString())) {
++            error(context.getString(R.string.hayai_storage_all_files_required))
++        }
++        require(directory.exists() || directory.mkdirs()) {
++            context.getString(R.string.hayai_storage_location_unavailable)
++        }
++    }
++
++    internal fun isInside(
++        child: File,
++        parent: File?,
++    ): Boolean {
++        if (parent == null) return false
++        val childPath = child.canonicalFile.path
++        val parentPath = parent.canonicalFile.path
++        return childPath == parentPath || childPath.startsWith(parentPath.trimEnd(File.separatorChar) + File.separator)
++    }
++
++    private const val READ_WRITE_FLAGS =
++        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+index b8a698a82074c5f937f6b58b3a169898601cea9d..31c209c87d9a24f7f5171f89ef7429aa1271d065 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/AppModule.kt
+@@ -33,6 +33,7 @@ import dev.ahmedmohamed.hayai.source.metadata.EnhancedSourceMetadataProvider
+ import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
+ import dev.ahmedmohamed.hayai.novel.integration.NovelJ2kIntegration
+ import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
++import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
+ import eu.kanade.tachiyomi.data.cache.ChapterCache
+ import eu.kanade.tachiyomi.data.cache.CoverCache
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+@@ -121,8 +122,9 @@ class AppModule(
+                 ),
+             )
+         }
+-        addSingletonFactory { NovelJ2kIntegration(get(), get()) }
+-        addSingletonFactory { NovelMigrationPolicy(get(), get()) }
++        addSingletonFactory { NovelContentIdentity(get<DatabaseHelper>(), get<SourceManager>()) }
++        addSingletonFactory { NovelJ2kIntegration(get<DatabaseHelper>(), get<NovelContentIdentity>()) }
++        addSingletonFactory { NovelMigrationPolicy(get<DatabaseHelper>(), get<NovelContentIdentity>()) }
+ 
+         addSingletonFactory { DownloadManager(app) }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
+index 7a001e49fef06a28088b6a0f20e6d769c9a72ff7..437b0915790e23f4559b6608e5b96833bbadac2b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
+@@ -4,6 +4,7 @@ import android.content.Context
+ import android.net.Uri
+ import com.hippo.unifile.UniFile
+ import dev.ahmedmohamed.hayai.backup.HayaiBackupService
++import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS
+ import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS_MASK
+@@ -106,8 +107,9 @@ class BackupCreator(
+             file = (
+                 if (isAutoBackup) {
+                     // Get dir of file and create
+-                    var dir = UniFile.fromUri(context, uri)
+-                    dir = dir.createDirectory("automatic")
++                    val root = StorageLocationAccess.openDirectory(context, uri.toString()).getOrThrow()
++                    val dir = root.createDirectory("automatic")
++                        ?: error(context.getString(R.string.hayai_storage_location_unavailable))
+ 
+                     // Delete older backups
+                     val numberOfBackups = preferences.numberOfBackups().get()
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreatorJob.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreatorJob.kt
+index 2c01f99f3c023b5aa81174d5df57ddae816bfb19..9e0bb63bc7eb808c6411e860125ed239fc3c5524 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreatorJob.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreatorJob.kt
+@@ -42,7 +42,7 @@ class BackupCreatorJob(
+             Result.success()
+         } catch (e: Exception) {
+             Timber.e(e)
+-            if (!isAutoBackup) notifier.showBackupError(e.message)
++            notifier.showBackupError(e.message)
+             Result.failure()
+         } finally {
+             context.notificationManager.cancel(Notifications.ID_BACKUP_PROGRESS)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadProvider.kt b/app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadProvider.kt
+index ca13d3d80c597a9b7c05cf8cb41cc02ad5a8d0c8..5b60d990ca87d6f78d006b4f71d5ed0fffcd437f 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadProvider.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadProvider.kt
+@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.download
+ import android.content.Context
+ import androidx.core.net.toUri
+ import com.hippo.unifile.UniFile
++import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+@@ -38,20 +39,17 @@ class DownloadProvider(
+     /**
+      * The root directory for downloads.
+      */
+-    private var downloadsDir =
+-        preferences.downloadsDirectory().get().let {
+-            val dir = UniFile.fromUri(context, it.toUri())
+-            DiskUtil.createNoMediaFile(dir, context)
+-            dir
+-        }
++    private var downloadsDir: UniFile? = null
++    private var locationError: String? = null
+ 
+     init {
++        updateDownloadsDirectory(preferences.downloadsDirectory().get())
+         preferences
+             .downloadsDirectory()
+             .asFlow()
+             .drop(1)
+             .onEach {
+-                downloadsDir = UniFile.fromUri(context, it.toUri())
++                updateDownloadsDirectory(it)
+             }.launchIn(scope)
+     }
+ 
+@@ -65,13 +63,11 @@ class DownloadProvider(
+         manga: Manga,
+         source: Source,
+     ): UniFile {
+-        try {
+-            return downloadsDir
+-                .createDirectory(getSourceDirName(source))
+-                .createDirectory(getMangaDirName(manga))
+-        } catch (e: NullPointerException) {
+-            throw Exception(context.getString(R.string.invalid_download_location))
+-        }
++        val root = downloadsDir ?: throw Exception(locationError ?: context.getString(R.string.invalid_download_location))
++        val sourceDir = root.createDirectory(getSourceDirName(source))
++            ?: throw Exception(context.getString(R.string.invalid_download_location))
++        return sourceDir.createDirectory(getMangaDirName(manga))
++            ?: throw Exception(context.getString(R.string.invalid_download_location))
+     }
+ 
+     /**
+@@ -79,7 +75,22 @@ class DownloadProvider(
+      *
+      * @param source the source to query.
+      */
+-    fun findSourceDir(source: Source): UniFile? = downloadsDir.findFile(getSourceDirName(source), true)
++    fun findSourceDir(source: Source): UniFile? = downloadsDir?.findFile(getSourceDirName(source), true)
++
++    fun requiresAllFilesAccess(): Boolean =
++        StorageLocationAccess.needsAllFilesAccess(context, preferences.downloadsDirectory().get())
++
++    private fun updateDownloadsDirectory(rawUri: String) {
++        StorageLocationAccess.openDirectory(context, rawUri)
++            .onSuccess { directory ->
++                downloadsDir = directory
++                locationError = null
++                DiskUtil.createNoMediaFile(directory, context)
++            }.onFailure { error ->
++                downloadsDir = null
++                locationError = error.message
++            }
++    }
+ 
+     /**
+      * Returns the download directory for a manga if it exists.
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt b/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
+index 028a04bff07ff5e2e5bacd3e4f03892ba5fa41a3..30de77c08f412cc62c89749bfecc5408cce72da2 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
+@@ -415,9 +415,7 @@ class Downloader(
+             notifier.onError(context.getString(R.string.couldnt_download_low_space), chapName)
+             return
+         }
+-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+-            !Environment.isExternalStorageManager()
+-        ) {
++        if (provider.requiresAllFilesAccess()) {
+             val intent =
+                 Intent(
+                     Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/image/coil/MangaCoverFetcher.kt b/app/src/main/java/eu/kanade/tachiyomi/data/image/coil/MangaCoverFetcher.kt
+index e7a1bc6bd8082a90eba7dca188693ef38f9aec68..b2ebbee9d6606ad8511f5b5c59fa0384dc59e59b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/image/coil/MangaCoverFetcher.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/image/coil/MangaCoverFetcher.kt
+@@ -11,9 +11,11 @@ import coil.fetch.SourceResult
+ import coil.network.HttpException
+ import coil.request.Options
+ import coil.request.Parameters
++import dev.ahmedmohamed.hayai.source.presentation.SourceCoverRequestProvider
+ import eu.kanade.tachiyomi.data.cache.CoverCache
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.network.await
++import eu.kanade.tachiyomi.source.Source as TachiyomiSource
+ import eu.kanade.tachiyomi.source.SourceManager
+ import eu.kanade.tachiyomi.source.online.HttpSource
+ import eu.kanade.tachiyomi.util.manga.MangaCoverMetadata
+@@ -36,7 +38,7 @@ import java.util.Date
+ 
+ class MangaCoverFetcher(
+     private val manga: Manga,
+-    private val sourceLazy: Lazy<HttpSource?>,
++    private val sourceLazy: Lazy<TachiyomiSource?>,
+     private val options: Options,
+     private val coverCache: CoverCache,
+     private val callFactoryLazy: Lazy<Call.Factory>,
+@@ -139,7 +141,12 @@ class MangaCoverFetcher(
+     }
+ 
+     private suspend fun executeNetworkRequest(): Response {
+-        val client = sourceLazy.value?.client ?: callFactoryLazy.value
++        val client =
++            when (val source = sourceLazy.value) {
++                is HttpSource -> source.client
++                is SourceCoverRequestProvider -> source.coverCallFactory
++                else -> callFactoryLazy.value
++            }
+         val response = client.newCall(newRequest()).await()
+         if (!response.isSuccessful && response.code != HttpURLConnection.HTTP_NOT_MODIFIED) {
+             response.body?.closeQuietly()
+@@ -149,11 +156,18 @@ class MangaCoverFetcher(
+     }
+ 
+     private fun newRequest(): Request {
++        val source = sourceLazy.value
++        val headers =
++            when (source) {
++                is HttpSource -> source.headers
++                is SourceCoverRequestProvider -> source.coverRequestHeaders(url, options.headers)
++                else -> options.headers
++            }
+         val request =
+             Request
+                 .Builder()
+                 .url(url)
+-                .headers(sourceLazy.value?.headers ?: options.headers)
++                .headers(headers)
+                 // Support attaching custom data to the network request.
+                 .tag(Parameters::class.java, options.parameters)
+ 
+@@ -315,7 +329,7 @@ class MangaCoverFetcher(
+             options: Options,
+             imageLoader: ImageLoader,
+         ): Fetcher {
+-            val source = lazy { sourceManager.get(data.source) as? HttpSource }
++            val source = lazy { sourceManager.get(data.source) }
+             return MangaCoverFetcher(data, source, options, coverCache, callFactoryLazy, diskCacheLazy)
+         }
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
+index b032afdd916cdd00efc41c0a0ecb25481a9fa752..3636bf3ec6ed069c9d695bde52a5584100d80ca6 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
+@@ -1,14 +1,13 @@
+ package eu.kanade.tachiyomi.data.preference
+ 
+ import android.content.Context
+-import android.net.Uri
+-import android.os.Environment
+ import androidx.appcompat.app.AppCompatDelegate
+ import androidx.preference.PreferenceManager
+ import com.fredporciuncula.flow.preferences.FlowSharedPreferences
+ import com.fredporciuncula.flow.preferences.Preference
+ import com.fredporciuncula.flow.preferences.Serializer
+ import com.google.android.material.color.DynamicColors
++import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
+ import dev.ahmedmohamed.hayai.preferences.getCompatibleEnum
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.R
+@@ -36,7 +35,6 @@ import kotlinx.coroutines.flow.onEach
+ import kotlinx.serialization.decodeFromString
+ import kotlinx.serialization.encodeToString
+ import kotlinx.serialization.json.Json
+-import java.io.File
+ import java.text.DateFormat
+ import java.text.SimpleDateFormat
+ import java.util.Locale
+@@ -83,23 +81,9 @@ class PreferencesHelper(
+     private val prefs = TypeSafeSharedPreferences(PreferenceManager.getDefaultSharedPreferences(context))
+     private val flowPrefs = FlowSharedPreferences(prefs)
+ 
+-    private val defaultDownloadsDir =
+-        Uri.fromFile(
+-            File(
+-                Environment.getExternalStorageDirectory().absolutePath + File.separator +
+-                    context.getString(R.string.app_name),
+-                "downloads",
+-            ),
+-        )
++    private val defaultDownloadsDir = StorageLocationAccess.defaultDirectory(context, "downloads")
+ 
+-    private val defaultBackupDir =
+-        Uri.fromFile(
+-            File(
+-                Environment.getExternalStorageDirectory().absolutePath + File.separator +
+-                    context.getString(R.string.app_name),
+-                "backup",
+-            ),
+-        )
++    private val defaultBackupDir = StorageLocationAccess.defaultDirectory(context, "backup")
+ 
+     fun getInt(
+         key: String,
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
+index ff9646ea3e41aee56a4deecae6f2a1a265cf32bd..0f606b12f4be7d0e83963a80ad899fea3e692d89 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
+@@ -88,7 +88,7 @@ class LibraryPresenter(
+     private val customMangaManager: CustomMangaManager = Injekt.get(),
+ ) : BaseCoroutinePresenter<LibraryController>() {
+     private val context = preferences.context
+-    private val hayaiLibraryPolicy = HayaiLibraryPolicy(HayaiPreferences(Injekt.get()), sourceManager)
++    private val hayaiLibraryPolicy = HayaiLibraryPolicy(HayaiPreferences(Injekt.get()), sourceManager, Injekt.get())
+     private val viewContext
+         get() = view?.view?.context
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/MigrationFlags.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/MigrationFlags.kt
+index d9981e066539a9f72dd5e9541ed2854f42ebb539..8b3005f6faa8e02413cd7b4f51a80642b240ccc6 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/MigrationFlags.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/MigrationFlags.kt
+@@ -1,6 +1,7 @@
+ package eu.kanade.tachiyomi.ui.migration
+ 
+ import android.content.Context
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.cache.CoverCache
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+@@ -20,7 +21,13 @@ object MigrationFlags {
+     private val db: DatabaseHelper by injectLazy()
+     private val customMangaManager: CustomMangaManager by injectLazy()
+ 
+-    val titles get() = arrayOf(R.string.chapters, R.string.categories, R.string.tracking, R.string.custom_manga_info)
++    fun titles(contentKind: ContentKind = ContentKind.Manga) =
++        arrayOf(
++            R.string.chapters,
++            R.string.categories,
++            R.string.tracking,
++            if (contentKind == ContentKind.Novel) R.string.hayai_custom_novel_info else R.string.custom_manga_info,
++        )
+     val flags get() = arrayOf(CHAPTERS, CATEGORIES, TRACK, CUSTOM_MANGA_INFO)
+ 
+     fun hasChapters(value: Int): Boolean = value and CHAPTERS != 0
+@@ -62,17 +69,22 @@ object MigrationFlags {
+         return flags.toTypedArray()
+     }
+ 
+-    private fun titleForFlag(flag: Int): Int =
++    private fun titleForFlag(
++        flag: Int,
++        contentKind: ContentKind,
++    ): Int =
+         when (flag) {
+             CHAPTERS -> R.string.chapters
+             CATEGORIES -> R.string.categories
+             TRACK -> R.string.tracking
+-            CUSTOM_MANGA_INFO -> R.string.custom_manga_info
++            CUSTOM_MANGA_INFO ->
++                if (contentKind == ContentKind.Novel) R.string.hayai_custom_novel_info else R.string.custom_manga_info
+             else -> 0
+         }
+ 
+     fun titles(
+         context: Context,
+         manga: Manga?,
+-    ): Array<String> = flags(manga).map { context.getString(titleForFlag(it)) }.toTypedArray()
++        contentKind: ContentKind = ContentKind.Manga,
++    ): Array<String> = flags(manga).map { context.getString(titleForFlag(it, contentKind)) }.toTypedArray()
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SelectionHeader.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SelectionHeader.kt
+index b54b941862d895bd9c7bdf1b3098275ac8ac5adb..e345eb8eb393d5f51a63e9de203a307c93c6b182 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SelectionHeader.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SelectionHeader.kt
+@@ -27,7 +27,7 @@ class SelectionHeader(
+     override fun createViewHolder(
+         view: View,
+         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
+-    ): Holder = Holder(view, adapter, titleRes)
++    ): Holder = Holder(view, adapter)
+ 
+     /**
+      * Binds this item to the given view holder.
+@@ -38,16 +38,16 @@ class SelectionHeader(
+         position: Int,
+         payloads: MutableList<Any?>?,
+     ) {
+-        // Intentionally empty
++        holder.bind(titleRes)
+     }
+ 
+     class Holder(
+         view: View,
+         adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
+-        @StringRes titleRes: Int,
+     ) : BaseFlexibleViewHolder(view, adapter) {
+-        init {
+-            val binding = SourceHeaderItemBinding.bind(view)
++        private val binding = SourceHeaderItemBinding.bind(view)
++
++        fun bind(@StringRes titleRes: Int) {
+             binding.title.setText(titleRes)
+         }
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt
+index 26243f5711a982f5195c8d541f2d59da2964e0a9..2bc364d316fdeaf87b3ef639689cf63405039fc4 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt
+@@ -4,14 +4,14 @@ import android.view.View
+ import androidx.core.view.isVisible
+ import androidx.core.text.buildSpannedString
+ import androidx.core.text.color
++import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
++import dev.ahmedmohamed.hayai.source.presentation.bindSourceArtwork
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.databinding.MigrationCardItemBinding
+-import eu.kanade.tachiyomi.source.icon
+ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
+ import eu.kanade.tachiyomi.util.lang.withColor
+ import eu.kanade.tachiyomi.util.system.LocaleHelper
+ import eu.kanade.tachiyomi.util.system.getResourceColor
+-import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
+ import java.util.Locale
+ 
+ class SourceHolder(
+@@ -53,7 +53,7 @@ class SourceHolder(
+ 
+         // Set circle letter image.
+         itemView.post {
+-            binding.sourceImage.setImageDrawable(source.icon())
++            binding.sourceImage.bindSourceArtwork(source)
+         }
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationBottomSheetDialog.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationBottomSheetDialog.kt
+index 0368fc9a1c7a7db4cf81cde63a2b518233b151c5..a9dde0b74402699accdf6cc30077ff40543d8510 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationBottomSheetDialog.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationBottomSheetDialog.kt
+@@ -19,6 +19,7 @@ import androidx.core.view.isVisible
+ import androidx.core.view.updateLayoutParams
+ import com.bluelinelabs.conductor.Controller
+ import com.fredporciuncula.flow.preferences.Preference
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.databinding.MigrationBottomSheetBinding
+@@ -33,6 +34,7 @@ import uy.kohesive.injekt.injectLazy
+ class MigrationBottomSheetDialog(
+     activity: Activity,
+     private val listener: StartMigrationListener,
++    private val contentKind: ContentKind,
+ ) : E2EBottomSheetDialog<MigrationBottomSheetBinding>(activity) {
+     /**
+      * Preferences helper.
+@@ -107,7 +109,7 @@ class MigrationBottomSheetDialog(
+         val flags = preferences.migrateFlags().get()
+ 
+         val enabledFlags = MigrationFlags.getEnabledFlags(flags)
+-        MigrationFlags.titles.forEachIndexed { index, title ->
++        MigrationFlags.titles(contentKind).forEachIndexed { index, title ->
+             val checkbox = CheckBox(context)
+             checkbox.id = title.hashCode()
+             checkbox.text = context.getString(title)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt
+index 59100394d6cff62e9efbabec7a12b0b43fa5efea..2a0043a0cd5487fb23c1026ba8564efbbca3a1e9 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt
+@@ -4,9 +4,9 @@ import android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+ import android.view.View
+ import androidx.core.view.isVisible
+ import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
++import dev.ahmedmohamed.hayai.source.presentation.bindSourceArtwork
+ import eu.kanade.tachiyomi.databinding.MigrationSourceItemBinding
+ import eu.kanade.tachiyomi.source.CatalogueSource
+-import eu.kanade.tachiyomi.source.icon
+ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
+ 
+ class MigrationSourceHolder(
+@@ -28,8 +28,7 @@ class MigrationSourceHolder(
+         binding.sourceBadge.isVisible = binding.sourceBadge.text != null
+         // Update circle letter image.
+         itemView.post {
+-            val icon = source.icon()
+-            if (icon != null) binding.sourceImage.setImageDrawable(icon)
++            binding.sourceImage.bindSourceArtwork(source)
+         }
+ 
+         if (sourceEnabled) {
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt
+index bd3c72bb930d69107196e8b4fcd364e34a642f01..939b53405cd4e9561311bec412c0edeb2e500af0 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt
+@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
+ import com.bluelinelabs.conductor.Router
+ import com.google.android.material.bottomsheet.BottomSheetBehavior
+ import com.google.android.material.bottomsheet.BottomSheetDialog
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.kanade.tachiyomi.R
+@@ -89,7 +90,12 @@ class PreMigrationController(
+ 
+         binding.fab.setOnClickListener {
+             if (dialog?.isShowing != true) {
+-                dialog = MigrationBottomSheetDialog(activity!!, this)
++                dialog =
++                    MigrationBottomSheetDialog(
++                        activity!!,
++                        this,
++                        novelMigrationPolicy.contentKind(config.toList()) ?: ContentKind.Manga,
++                    )
+                 dialog?.show()
+                 val bottomSheet =
+                     dialog?.findViewById<FrameLayout>(
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt
+index 34eda00aa6574a221e272bee77fe963f5fc08684..c2df1bce48026fad4a3eec0bb16d020759725e83 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt
+@@ -18,6 +18,7 @@ import androidx.core.view.isVisible
+ import androidx.recyclerview.widget.LinearLayoutManager
+ import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
+ import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Manga
+@@ -86,6 +87,10 @@ class MigrationListController(
+ 
+     private val smartSearchEngine = SmartSearchEngine(coroutineContext, config?.extraSearchParams)
+ 
++    private val contentKind: ContentKind by lazy {
++        novelMigrationPolicy.contentKind(config?.mangaIds.orEmpty()) ?: ContentKind.Manga
++    }
++
+     var migrationsJob: Job? = null
+         private set
+     private var migratingManga: MutableList<MigratingManga>? = null
+@@ -346,7 +351,7 @@ class MigrationListController(
+             if (res != null) {
+                 activity?.toast(
+                     res.getQuantityString(
+-                        R.plurals.manga_migrated,
++                        if (contentKind == ContentKind.Novel) R.plurals.hayai_novels_migrated else R.plurals.manga_migrated,
+                         manaulMigrations,
+                         manaulMigrations,
+                     ),
+@@ -576,7 +581,13 @@ class MigrationListController(
+         mangaSkipped: Int,
+     ) {
+         val activity = activity ?: return
+-        val confirmRes = if (copy) R.plurals.copy_manga else R.plurals.migrate_manga
++        val confirmRes =
++            when {
++                contentKind == ContentKind.Novel && copy -> R.plurals.hayai_copy_novels
++                contentKind == ContentKind.Novel -> R.plurals.hayai_migrate_novels
++                copy -> R.plurals.copy_manga
++                else -> R.plurals.migrate_manga
++            }
+         val skipping by lazy { activity.getString(R.string.skipping_, mangaSkipped) }
+         val additionalString = if (mangaSkipped > 0) " $skipping" else ""
+         val confirmString =
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt
+index 3d0f998a3dc247e63bf1fcd810629f49fbf83f98..69a9b448cd6637c3c3dcc515b606d8122bd29f38 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt
+@@ -4,16 +4,13 @@ import android.app.Activity
+ import android.content.ActivityNotFoundException
+ import android.content.Intent
+ import android.net.Uri
+-import android.os.Bundle
+ import android.view.Menu
+ import android.view.MenuInflater
+ import android.view.MenuItem
+-import android.view.View
+ import android.widget.Toast
+ import androidx.appcompat.app.AlertDialog
+-import androidx.core.net.toUri
+ import androidx.preference.PreferenceScreen
+-import com.hippo.unifile.UniFile
++import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.backup.BackupConst
+ import eu.kanade.tachiyomi.data.backup.BackupCreatorJob
+@@ -26,7 +23,6 @@ import eu.kanade.tachiyomi.util.system.disableItems
+ import eu.kanade.tachiyomi.util.system.materialAlertDialog
+ import eu.kanade.tachiyomi.util.system.openInBrowser
+ import eu.kanade.tachiyomi.util.system.toast
+-import eu.kanade.tachiyomi.util.view.requestFilePermissionsSafe
+ import kotlinx.coroutines.flow.launchIn
+ import kotlinx.coroutines.flow.onEach
+ 
+@@ -36,14 +32,6 @@ class SettingsBackupController : SettingsController() {
+      */
+     private var backupFlags = 0
+ 
+-    override fun onViewCreated(
+-        view: View,
+-        savedInstanceState: Bundle?,
+-    ) {
+-        super.onViewCreated(view, savedInstanceState)
+-        requestFilePermissionsSafe(500, preferences)
+-    }
+-
+     override fun setupPreferenceScreen(screen: PreferenceScreen) =
+         screen.apply {
+             titleRes = R.string.backup_and_restore
+@@ -118,7 +106,13 @@ class SettingsBackupController : SettingsController() {
+ 
+                     onClick {
+                         try {
+-                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
++                            val intent =
++                                Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
++                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
++                                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
++                                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
++                                        Intent.FLAG_GRANT_PREFIX_URI_PERMISSION,
++                                )
+                             startActivityForResult(intent, CODE_BACKUP_DIR)
+                         } catch (e: ActivityNotFoundException) {
+                             activity?.toast(R.string.file_picker_error)
+@@ -131,8 +125,7 @@ class SettingsBackupController : SettingsController() {
+                         .backupsDirectory()
+                         .asFlow()
+                         .onEach { path ->
+-                            val dir = UniFile.fromUri(context, path.toUri())
+-                            summary = dir.filePath + "/automatic"
++                            summary = StorageLocationAccess.displayName(context, path) + "/automatic"
+                         }.launchIn(viewScope)
+                 }
+                 intListPreference(activity) {
+@@ -178,21 +171,17 @@ class SettingsBackupController : SettingsController() {
+ 
+             when (requestCode) {
+                 CODE_BACKUP_DIR -> {
+-                    // Get UriPermission so it's possible to write files
+-                    val flags =
+-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+-
+-                    activity.contentResolver.takePersistableUriPermission(uri, flags)
+-                    preferences.backupsDirectory().set(uri.toString())
++                    StorageLocationAccess.persistTreePermission(activity, uri, data.flags)
++                        .onFailure { activity.toast(it.message ?: activity.getString(R.string.backup_restore_invalid_uri)) }
++                        .onSuccess {
++                            StorageLocationAccess.openDirectory(activity, uri.toString())
++                                .onFailure {
++                                    activity.toast(it.message ?: activity.getString(R.string.backup_restore_invalid_uri))
++                                }.onSuccess { preferences.backupsDirectory().set(uri.toString()) }
++                        }
+                 }
+ 
+                 CODE_BACKUP_CREATE -> {
+-                    val flags =
+-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+-
+-                    activity.contentResolver.takePersistableUriPermission(uri, flags)
+                     activity.toast(R.string.creating_backup)
+                     BackupCreatorJob.startNow(activity, uri, backupFlags)
+                 }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsDownloadController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsDownloadController.kt
+index 24a47ef6d0988aef1a3dc434690abcd319c17954..ed6ea9a244cde59f86a44e2403fe4f29a16b490d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsDownloadController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsDownloadController.kt
+@@ -3,19 +3,18 @@ package eu.kanade.tachiyomi.ui.setting
+ import android.app.Activity
+ import android.content.Intent
+ import android.net.Uri
+-import android.os.Environment
+ import androidx.core.content.ContextCompat
+-import androidx.core.net.toUri
+ import androidx.preference.PreferenceScreen
+ import com.google.android.material.dialog.MaterialAlertDialogBuilder
+-import com.hippo.unifile.UniFile
+ import dev.ahmedmohamed.hayai.novel.download.NovelDownloadSettingsController
++import dev.ahmedmohamed.hayai.storage.StorageLocationAccess
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Category
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.data.preference.asImmediateFlowIn
+ import eu.kanade.tachiyomi.util.system.withOriginalWidth
++import eu.kanade.tachiyomi.util.system.toast
+ import eu.kanade.tachiyomi.util.view.withFadeTransaction
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+@@ -38,8 +37,7 @@ class SettingsDownloadController : SettingsController() {
+                 }
+ 
+                 preferences.downloadsDirectory().asImmediateFlowIn(viewScope) { path ->
+-                    val dir = UniFile.fromUri(context, path.toUri())
+-                    summary = dir.filePath ?: path
++                    summary = StorageLocationAccess.displayName(context, path)
+                 }
+             }
+             switchPreference {
+@@ -183,29 +181,35 @@ class SettingsDownloadController : SettingsController() {
+             DOWNLOAD_DIR ->
+                 if (data != null && resultCode == Activity.RESULT_OK) {
+                     val context = applicationContext ?: return
+-                    val uri = data.data
+-                    val flags =
+-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+-
+-                    if (uri != null) {
+-                        @Suppress("NewApi")
+-                        context.contentResolver.takePersistableUriPermission(uri, flags)
+-                    }
+-
+-                    val file = UniFile.fromUri(context, uri)
+-                    preferences.downloadsDirectory().set(file.uri.toString())
++                    val uri = data.data ?: return
++                    StorageLocationAccess.persistTreePermission(context, uri, data.flags)
++                        .onFailure { context.toast(it.message ?: context.getString(R.string.invalid_download_location)) }
++                        .onSuccess {
++                            StorageLocationAccess.openDirectory(context, uri.toString())
++                                .onFailure { context.toast(it.message ?: context.getString(R.string.invalid_download_location)) }
++                                .onSuccess { preferences.downloadsDirectory().set(uri.toString()) }
++                        }
+                 }
+         }
+     }
+ 
+     fun predefinedDirectorySelected(selectedDir: String) {
+         val path = Uri.fromFile(File(selectedDir))
+-        preferences.downloadsDirectory().set(path.toString())
++        val context = applicationContext ?: return
++        StorageLocationAccess.openDirectory(context, path.toString())
++            .onFailure { context.toast(it.message ?: context.getString(R.string.invalid_download_location)) }
++            .onSuccess { preferences.downloadsDirectory().set(path.toString()) }
+     }
+ 
+     fun customDirectorySelected() {
+-        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), DOWNLOAD_DIR)
++        val intent =
++            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
++                Intent.FLAG_GRANT_READ_URI_PERMISSION or
++                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
++                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
++                    Intent.FLAG_GRANT_PREFIX_URI_PERMISSION,
++            )
++        startActivityForResult(intent, DOWNLOAD_DIR)
+     }
+ 
+     class DownloadDirectoriesDialog(
+@@ -235,13 +239,7 @@ class SettingsDownloadController : SettingsController() {
+         }
+ 
+         private fun getExternalDirs(): List<File> {
+-            val defaultDir =
+-                Environment.getExternalStorageDirectory().absolutePath +
+-                    File.separator + activity.resources?.getString(R.string.app_name) +
+-                    File.separator + "downloads"
+-
+-            return mutableListOf(File(defaultDir)) +
+-                ContextCompat.getExternalFilesDirs(activity, "").filterNotNull()
++            return ContextCompat.getExternalFilesDirs(activity, "downloads").filterNotNull()
+         }
+     }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+index b688c97f615517fdaee1cd5e530ef082a605f2c2..76befb0beee9ba26fce9b9a520b7b103a76f8021 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+@@ -3,16 +3,10 @@ package eu.kanade.tachiyomi.ui.source
+ import android.content.res.ColorStateList
+ import android.view.View
+ import androidx.core.view.isVisible
+-import coil.dispose
+-import coil.load
+-import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
+-import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
++import dev.ahmedmohamed.hayai.source.presentation.bindSourceArtwork
+ import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
+ import eu.kanade.tachiyomi.databinding.SourceItemBinding
+-import eu.kanade.tachiyomi.source.LocalSource
+-import eu.kanade.tachiyomi.source.icon
+ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
+ import eu.kanade.tachiyomi.util.system.getResourceColor
+ import eu.kanade.tachiyomi.util.view.makeContainerShape
+@@ -70,19 +64,7 @@ class SourceHolder(
+ 
+         // Set circle letter image.
+         itemView.post {
+-            binding.sourceImage.dispose()
+-            binding.sourceImage.setImageDrawable(null)
+-            val icon = source.icon()
+-            when {
+-                source is NovelPluginSource && source.iconUrl.isNotBlank() -> {
+-                    binding.sourceImage.load(source.iconUrl) {
+-                        target(CoverViewTarget(binding.sourceImage))
+-                    }
+-                }
+-                icon != null -> binding.sourceImage.setImageDrawable(icon)
+-                item.source.id == LocalSource.ID -> binding.sourceImage.setImageResource(R.mipmap.ic_local_source)
+-                item.source.id == LocalNovelSource.ID -> binding.sourceImage.setImageResource(R.drawable.ic_local_novel_source)
+-            }
++            binding.sourceImage.bindSourceArtwork(source)
+         }
+ 
+         binding.sourceLatest.isVisible = source.supportsLatest
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/util/MangaExtensions.kt b/app/src/main/java/eu/kanade/tachiyomi/util/MangaExtensions.kt
+index d24152e52c5ee331ed42d301c2b685a07115c8c7..b3236f460cceff39c1e6ad9395931b96df02e32c 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/util/MangaExtensions.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/util/MangaExtensions.kt
+@@ -10,6 +10,7 @@ import com.bluelinelabs.conductor.Controller
+ import com.google.android.material.snackbar.BaseTransientBottomBar
+ import com.google.android.material.snackbar.Snackbar
+ import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationException
++import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Category
+@@ -334,7 +335,9 @@ private fun showAddDuplicateDialog(
+ ) {
+     val source = sourceManager.getOrStub(libraryManga.source)
+ 
+-    val titles by lazy { MigrationFlags.titles(activity, libraryManga) }
++    val titles by lazy {
++        MigrationFlags.titles(activity, libraryManga, Injekt.get<NovelContentIdentity>().contentKind(libraryManga))
++    }
+ 
+     fun migrateManga(
+         mDialog: DialogInterface,
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index c85d6ee9f20554fda8f333dff4b4f5721a1096f5..9318b394b875bf64a94416b81591a48781b63788 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -16,6 +16,25 @@
+     <string name="hayai_retry_legacy_migration">Retry legacy data migration</string>
+     <string name="hayai_retry_legacy_migration_summary">Schedule one explicit retry on the next app start. Existing J2K data is never overwritten.</string>
+     <string name="hayai_retry_legacy_migration_scheduled">Migration retry scheduled for the next app start</string>
++    <string name="hayai_storage_write_permission_missing">The selected folder did not grant write access</string>
++    <string name="hayai_storage_permission_lost">Access to this folder expired. Select it again</string>
++    <string name="hayai_storage_location_unavailable">This folder is unavailable or read only</string>
++    <string name="hayai_storage_location_unsupported">This storage location is not supported</string>
++    <string name="hayai_storage_all_files_required">This old shared folder needs all files access. Select a folder through the system picker instead</string>
++    <string name="untrusted">Untrusted</string>
++    <string name="hayai_custom_novel_info">Custom novel info</string>
++    <plurals name="hayai_migrate_novels">
++        <item quantity="one">Migrate %1$d%2$s novel?</item>
++        <item quantity="other">Migrate %1$d%2$s novels?</item>
++    </plurals>
++    <plurals name="hayai_copy_novels">
++        <item quantity="one">Copy %1$d%2$s novel?</item>
++        <item quantity="other">Copy %1$d%2$s novels?</item>
++    </plurals>
++    <plurals name="hayai_novels_migrated">
++        <item quantity="one">%d novel migrated</item>
++        <item quantity="other">%d novels migrated</item>
++    </plurals>
+ 
+     <!--Models-->
+ 
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStoreTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStoreTest.kt
+index 1c20af352b6f7646f9c5607a8bbeb14766f12af4..bf6a4728472c880857586caa875f3c9a8f27df33 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStoreTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStoreTest.kt
+@@ -32,6 +32,7 @@ class NovelDownloadStoreTest {
+ 
+             val loaded = store.loadDocument(7L, "/chapter/1")!!
+             val offlinePath = NovelAssetReferences.providerPath(NovelAssetReferences.extract(loaded).single())!!
++            assertTrue(offlinePath.endsWith(".png"))
+             assertEquals(NovelContentType.Html, loaded.contentType)
+             assertNull(loaded.baseUrl)
+             assertEquals("image-bytes", store.openAsset(7L, "/chapter/1", offlinePath)!!.bufferedReader().readText())
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicyTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicyTest.kt
+index 65139005b51b738c89d4022f4302fc726dd5016f..32691a041e495dc36561636b6da46e73df939a93 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicyTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicyTest.kt
+@@ -15,8 +15,7 @@ class NovelMigrationPolicyTest {
+         val policy =
+             NovelMigrationPolicy(
+                 mangaLookup = { legacyNovel },
+-                sourceIsNovel = { false },
+-                hasNovelIdentity = { true },
++                contentIdentity = NovelContentIdentity(sourceIsNovel = { false }, hasDurableNovelEvidence = { true }),
+             )
+ 
+         val contentKind = policy.contentKind(legacyNovel)
+@@ -39,8 +38,11 @@ class NovelMigrationPolicyTest {
+         val policy =
+             NovelMigrationPolicy(
+                 mangaLookup = { legacyNovel },
+-                sourceIsNovel = { false },
+-                hasNovelIdentity = Manga::hasNovelGenreIdentity,
++                contentIdentity =
++                    NovelContentIdentity(
++                        sourceIsNovel = { false },
++                        hasDurableNovelEvidence = Manga::hasNovelGenreIdentity,
++                    ),
+             )
+ 
+         assertEquals(ContentKind.Novel, policy.contentKind(legacyNovel))
+@@ -55,8 +57,11 @@ class NovelMigrationPolicyTest {
+         val policy =
+             NovelMigrationPolicy(
+                 mangaLookup = { manga },
+-                sourceIsNovel = { false },
+-                hasNovelIdentity = Manga::hasNovelGenreIdentity,
++                contentIdentity =
++                    NovelContentIdentity(
++                        sourceIsNovel = { false },
++                        hasDurableNovelEvidence = Manga::hasNovelGenreIdentity,
++                    ),
+             )
+ 
+         assertEquals(ContentKind.Manga, policy.contentKind(manga))
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
+index e0fe6f5989b26d0c6283ff95434855809331ca3b..7de601aa70b33685b5effac0add0e2262a3fa6b2 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
+@@ -53,6 +53,10 @@ class NovelHtmlDocumentBuilderTest {
+         assertTrue(html.contains("text-orientation:mixed"))
+         assertTrue(html.contains("const position = reversePages() ? Math.abs(scrollX) : scrollX"))
+         assertTrue(html.contains("const origin = reversePages() ? Math.abs(block.offsetLeft) : block.offsetLeft"))
++        assertTrue(html.contains("const pageStride = () => Math.max(1, innerWidth)"))
++        assertTrue(html.contains("pageStride() * direction"))
++        assertFalse(html.contains("innerWidth * fraction * direction"))
++        assertTrue(html.contains("column-gap:32px"))
+         assertTrue(html.contains("HayaiReader.onPageLocation"))
+         assertTrue(html.contains("ResizeObserver"))
+     }
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccessTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccessTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..022b227a22b73be6542bd29c8c344e17082a90fc
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccessTest.kt
+@@ -0,0 +1,18 @@
++package dev.ahmedmohamed.hayai.storage
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.io.File
++
++class StorageLocationAccessTest {
++    @Test
++    fun `accepts the root and descendants but rejects sibling prefixes`() {
++        val root = File("build/test-storage/app")
++
++        assertTrue(StorageLocationAccess.isInside(root, root))
++        assertTrue(StorageLocationAccess.isInside(File(root, "downloads/novels"), root))
++        assertFalse(StorageLocationAccess.isInside(File("build/test-storage/application"), root))
++        assertFalse(StorageLocationAccess.isInside(root, null))
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 9b2b6bacc8b651ad946b618a50eccff292f418e4..44a9d2d726c82e05598e7db7c25f5edfb044b3a9 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -1,6 +1,6 @@
+ # Hayai on TachiyomiJ2K
+ 
+-Hayai is rooted directly at TachiyomiJ2K commit `7eea215da1a32b7198aabfc3e94ecd71d76f4df7`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the current baseline.
++Hayai is rooted directly at TachiyomiJ2K commit `8df100d6e616851e329b274964c726dcef0556b6`. The previous mixed Hayai/Rokku tree is preserved at `legacy/hayai-pre-j2k`; none of its Kotlin code is part of the current baseline.
+ 
+ ## Boundaries
+ 
+@@ -40,6 +40,12 @@ On first database open, an idempotent importer validates the legacy schema and r
+ 
+ J2K's existing source-migration screens remain the only migration surface. Their source rows are partitioned by the shared Manga/Novel policy, and the target chooser accepts every discoverable `CatalogueSource`, including local and JavaScript novel sources. The policy does not demote an imported novel when its old source is unavailable: a live novel capability, an exact legacy novel genre, a remembered novel-plugin source ID, or retained quotes, highlights, or chapter statistics is sufficient proof. One adapter call invokes Hayai's `NovelMigrationDataMover` inside J2K's existing transaction after target chapters exist; the mover does not open a nested transaction. Before writing, it builds a one-to-one chapter-number map for every chapter carrying selected J2K chapter state or Hayai statistics/highlights and refuses missing or ambiguous mappings. The existing Chapters flag continues to govern J2K read, bookmark, history, `last_page_read`, and `pages_left` state. Hayai quotes, word counts, and highlights always transfer with the novel. Replace preserves row IDs, rebinds quote/highlight ownership, and either rebinds a statistic to the target chapter or removes its source row when the target already has the same count. Copy retains every source row, inserts quotes/highlights under deterministic destination IDs, and inserts a target statistic only when one is absent. An exact pre-existing deterministic copy is an idempotent no-op; a different row at that ID advances through a bounded deterministic identity sequence and aborts if no identity is available. Any different target statistic aborts the caller's transaction, and migration never uses conflict-ignore. Target-owned rows remain intact. Source metadata, repositories, plugin identity, the legacy archive, and offline payloads remain under their original ownership and are not relabelled during migration.
+ 
++The migration presentation uses `NovelContentIdentity` as the same classifier already consumed by library, details, statistics, and target filtering. Migration rows and flags choose localized manga or novel vocabulary from that identity. `SourceArtwork` supplies one shared icon binding for Browse and migration, while `SourceCoverRequestProvider` lets a JavaScript novel source provide J2K's cover fetcher with the same authenticated client, cookie, and referer it uses for chapter traffic.
++
++Download and backup preferences keep J2K's existing settings and workers, but all location access crosses Hayai's `StorageLocationAccess`. New installations default to app-owned external directories and fall back to internal app storage. User-selected directories retain Android Storage Access Framework write permission, and each use validates that permission and writability before work starts. Raw shared-storage paths remain readable only when Android's all-files permission actually applies. Automatic backup failures use J2K's existing backup notification instead of failing silently. No existing user path is silently moved or rewritten.
++
++Paginated Web layout uses one viewport-wide stride for geometry, seeking, visible-page reporting, and navigation. Offline asset names retain a bounded original extension so WebView can infer CSS, script, font, and image types, while the hash remains the identity. Packaged chapter assets always resolve locally, and unrelated remote custom-style assets remain available when network media is allowed.
++
+ ## Reader and source architecture
+ 
+ Extensions remain standard J2K `Source`/`SourceFactory` extensions. `SourceCapabilityRegistry` adds behavior by stable source ID or recognized family name instead of scattering source checks through presenters.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 58b71c7de945101063fe4b44fa5bb2e998c8b8ed..edc8e574a3dfe88da4915f0d239bfa02709c2ff2 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -1,6 +1,6 @@
+ # TachiyomiSY and Tsundoku feature audit
+ 
+-Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `f166f2672d9a01a3c84a5d920af144598089a4be`, and J2K `7eea215da1a32b7198aabfc3e94ecd71d76f4df7`.
++Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `f166f2672d9a01a3c84a5d920af144598089a4be`, and J2K `8df100d6e616851e329b274964c726dcef0556b6`.
+ 
+ **Foundation** means a boundary or partial implementation exists. **Port** means the end-to-end production behavior is implemented and verified. **Audit** means upstream behavior is mapped but production work remains. This distinction prevents the clean baseline from being mistaken for the full multi-upstream port.
+ 
+@@ -49,14 +49,14 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+-| Text downloads/offline reading | J2K `DownloadQueue`, `DownloadJob`, status flow, notification, details and reader actions, and Downloads sheet with a Hayai storage delegate for novel documents; explicit auto-start resumes stopped non-empty queues; a cancellable per-source pacer delays only queued metered novel saves with global and stable-source overrides | queue/offline flow previously verified on emulator; pacing policy and cancellation behavior have focused tests, while paced multi-chapter device verification remains pending |
+-| Typography, themes, spacing, navigation, presets, snippets, search/replace | Five Tsundoku icon tabs hosted from J2K's reader settings action; adjacent theme and text/background color controls; Tsundoku-style preset swatches plus synchronized hex/RGB picker; stable backend preference plus independent continuous/paginated layout and horizontal/vertical-rl writing direction; exact tap-zone tables; SAF-imported fonts; searchable full settings; ordered snippets and replacements | render-plan, paginated HTML, and vertical-writing CSS have focused tests; the full Android 16 settings page is crash-free for persisted integer margins; unified-reader picker, imported-font, paginated gesture, and vertical Japanese device flows remain pending |
++| Text downloads/offline reading | J2K `DownloadQueue`, `DownloadJob`, status flow, notification, details and reader actions, and Downloads sheet with a Hayai storage delegate for novel documents; explicit auto-start resumes stopped non-empty queues; offline assets retain MIME-relevant extensions; a cancellable per-source pacer delays only queued metered novel saves with global and stable-source overrides | queue/offline flow previously verified on emulator; asset rewrite and pacing behavior have focused tests, while downloaded custom-style and translation device verification remains pending |
++| Typography, themes, spacing, navigation, presets, snippets, search/replace | Five Tsundoku icon tabs hosted from J2K's reader settings action; adjacent theme and text/background color controls; Tsundoku-style preset swatches plus synchronized hex/RGB picker; stable backend preference plus independent continuous/paginated layout and horizontal/vertical-rl writing direction; exact tap-zone tables; SAF-imported fonts; searchable full settings; ordered snippets and replacements | render-plan, single-stride paginated HTML, and vertical-writing CSS have focused tests; the full Android 16 settings page is crash-free for persisted integer margins; unified-reader picker, imported-font, paginated gesture, and vertical Japanese device flows remain pending |
+ | Translation, definition, search, and dictionary handoff | Bounded provider clients and cache; shared native/Web selection actions with retained Web anchors; Google Translate process-text/send routing; forced resizable Custom Tabs with browser login state; and a secure J2K bottom-sheet WebView fallback | real NovelFull native selection verified Quote, Define, and Google Translate as the first actions; Web selection and floating translation-result verification remain pending |
+ | TTS and playback controls | Foreground media-playback service, notification actions, Tsundoku transport actions surfaced through J2K's reader-sheet buttons, chapter handoff, highlight, and activity reattachment | active exact-shell transport verified on emulator; background and restart recovery pending |
+ | Quotes | Typed `hayai_quotes`, versioned non-destructive replay of archived `series_quotes` and legacy `quotes/novel_<id>.json` files, multi-file SAF recovery for scoped-storage devices, visible semantic Quote action in native/Web selection, retained Web anchors, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | exact archived/legacy JSON shapes, idempotent merge, unresolved-identity retry, and identity-collision remap are covered by focused tests; emulator displayed archived database and safely remapped JSON quotes together; Web selection lifecycle remains pending |
+ | Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, editing, schema, and backup | implemented unverified |
+ | Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, progress-aware J2K chapter rows, and library statistics | integration foundation verified; emulator presentation pending |
+-| Library content selector, shortcuts, and migration compatibility | Typed content policy with an always-visible All/Manga/Novels selector in the J2K Library toolbar; shared Manga/Novel migration sections; source-unavailable legacy identity recovery; catalogue-wide novel targets; atomic progress, quote, word-count, and highlight transfer | selector persistence, stale-source classification, and migration mapping/copy/conflict behavior covered by focused tests; end-to-end library and migration emulator flows pending |
++| Library content selector, shortcuts, and migration compatibility | One durable-evidence content policy with an always-visible All/Manga/Novels selector in the J2K Library toolbar; shared localized Manga/Novel migration sections; source-unavailable legacy identity recovery; catalogue-wide novel targets and shared source artwork; atomic progress, quote, word-count, and highlight transfer | selector persistence, stale-source classification, and migration mapping/copy/conflict behavior covered by focused tests; end-to-end library and migration emulator flows pending |
+ | Novel trackers | Concrete NovelUpdates, NovelList, and RanobeDB services through J2K tracking | implemented unverified |
+ | Hayai backup | Versioned side payload after stable core ID remapping, including plugins, highlights, visual sources, and tagged APK repositories | implemented unverified for the new v4 data |
+ | LNReader/Tsundoku imports | Bounded dry-run parsers and transactional J2K import target with stable conflicts and resumable partial runs | implemented unverified |
+@@ -69,7 +69,8 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ |---|---|---|
+ | Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
+ | Group History by source | Restored `BySource` enum mode with J2K Recents rows, source headers, source icons, per-section hide action, and legacy preference compatibility | port |
+-| Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, isolated nightly publishing, and master-triggered workflow | nightly port verified by hosted r6661 build, tests, signed/minified startup, and publication; no reset stable release published |
++| Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, isolated nightly publishing, master-triggered workflow, and generated release notes since the preceding nightly even after a patch-stack rebase | prior nightly publication verified; generated per-nightly changelog awaiting the next hosted run; no reset stable release published |
++| Download and automatic-backup locations | Shared Hayai SAF validation under the existing J2K preferences, download provider, and backup worker; app-owned defaults avoid broad storage permission while selected trees retain durable write grants | implemented with focused path tests; Android picker, download, and scheduled-backup device verification pending |
+ | Localized Hayai interface | `hayai_` Android resources, typed presentation failures, a reviewed nonlocalizable-literal inventory, per-locale coverage, and deterministic SY translation imports | implemented; static gate verified; translation coverage remains incomplete and is reported per locale |
+ | Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
+ | Manga and novel extension management | J2K Extensions sheet with Manga, Novels, and Migration tabs; novel APK and JavaScript entries reuse the J2K row and action pipeline; both repository types reuse J2K's one-field inline repository UI; supplied Keiyoushi, Cursed Manga, and LNReader indexes seed once on first run and remain user-removable | port verified on emulator; Comikey 1.6.9 and Komga 1.0.2 installed and detected without false update or load-failed states |
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index cb5b330fac4dea676a2930a3cee7db59e8772242..8b53e92a7c29cb22d94256ddf874fad44cb72926 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1122 | 0.0% |
+-| `ar` | 31 / 1122 | 2.8% |
+-| `ars` | 0 / 1122 | 0.0% |
+-| `az` | 0 / 1122 | 0.0% |
+-| `bg` | 0 / 1122 | 0.0% |
+-| `bn` | 0 / 1122 | 0.0% |
+-| `ca` | 0 / 1122 | 0.0% |
+-| `ceb` | 0 / 1122 | 0.0% |
+-| `cs` | 0 / 1122 | 0.0% |
+-| `cv` | 0 / 1122 | 0.0% |
+-| `de` | 29 / 1122 | 2.6% |
+-| `el` | 0 / 1122 | 0.0% |
+-| `eo` | 0 / 1122 | 0.0% |
+-| `es` | 31 / 1122 | 2.8% |
+-| `eu` | 0 / 1122 | 0.0% |
+-| `fa` | 0 / 1122 | 0.0% |
+-| `fi` | 0 / 1122 | 0.0% |
+-| `fil` | 31 / 1122 | 2.8% |
+-| `fr` | 31 / 1122 | 2.8% |
+-| `gl` | 0 / 1122 | 0.0% |
+-| `ha` | 0 / 1122 | 0.0% |
+-| `hi` | 0 / 1122 | 0.0% |
+-| `hr` | 31 / 1122 | 2.8% |
+-| `hu` | 0 / 1122 | 0.0% |
+-| `in` | 31 / 1122 | 2.8% |
+-| `it` | 17 / 1122 | 1.5% |
+-| `iw` | 0 / 1122 | 0.0% |
+-| `ja` | 29 / 1122 | 2.6% |
+-| `jv` | 0 / 1122 | 0.0% |
+-| `ka` | 0 / 1122 | 0.0% |
+-| `kk` | 0 / 1122 | 0.0% |
+-| `km` | 0 / 1122 | 0.0% |
+-| `ko` | 7 / 1122 | 0.6% |
+-| `lt` | 0 / 1122 | 0.0% |
+-| `lv` | 0 / 1122 | 0.0% |
+-| `ml` | 0 / 1122 | 0.0% |
+-| `mn` | 0 / 1122 | 0.0% |
+-| `ms` | 0 / 1122 | 0.0% |
+-| `my` | 0 / 1122 | 0.0% |
+-| `nb-rNO` | 0 / 1122 | 0.0% |
+-| `ne` | 5 / 1122 | 0.4% |
+-| `nl` | 0 / 1122 | 0.0% |
+-| `nn` | 0 / 1122 | 0.0% |
+-| `om` | 0 / 1122 | 0.0% |
+-| `or` | 0 / 1122 | 0.0% |
+-| `pl` | 0 / 1122 | 0.0% |
+-| `pt` | 31 / 1122 | 2.8% |
+-| `pt-rBR` | 31 / 1122 | 2.8% |
+-| `ro` | 0 / 1122 | 0.0% |
+-| `ru` | 31 / 1122 | 2.8% |
+-| `sc` | 0 / 1122 | 0.0% |
+-| `si` | 0 / 1122 | 0.0% |
+-| `sk` | 0 / 1122 | 0.0% |
+-| `sq` | 0 / 1122 | 0.0% |
+-| `sr` | 0 / 1122 | 0.0% |
+-| `sv` | 0 / 1122 | 0.0% |
+-| `ta` | 31 / 1122 | 2.8% |
+-| `te` | 0 / 1122 | 0.0% |
+-| `th` | 0 / 1122 | 0.0% |
+-| `ti` | 0 / 1122 | 0.0% |
+-| `tl` | 0 / 1122 | 0.0% |
+-| `tr` | 31 / 1122 | 2.8% |
+-| `uk` | 7 / 1122 | 0.6% |
+-| `ur` | 0 / 1122 | 0.0% |
+-| `vi` | 5 / 1122 | 0.4% |
+-| `zh-rCN` | 31 / 1122 | 2.8% |
+-| `zh-rTW` | 31 / 1122 | 2.8% |
++| `ajp` | 0 / 1131 | 0.0% |
++| `ar` | 31 / 1131 | 2.7% |
++| `ars` | 0 / 1131 | 0.0% |
++| `az` | 0 / 1131 | 0.0% |
++| `bg` | 0 / 1131 | 0.0% |
++| `bn` | 0 / 1131 | 0.0% |
++| `ca` | 0 / 1131 | 0.0% |
++| `ceb` | 0 / 1131 | 0.0% |
++| `cs` | 0 / 1131 | 0.0% |
++| `cv` | 0 / 1131 | 0.0% |
++| `de` | 29 / 1131 | 2.6% |
++| `el` | 0 / 1131 | 0.0% |
++| `eo` | 0 / 1131 | 0.0% |
++| `es` | 31 / 1131 | 2.7% |
++| `eu` | 0 / 1131 | 0.0% |
++| `fa` | 0 / 1131 | 0.0% |
++| `fi` | 0 / 1131 | 0.0% |
++| `fil` | 31 / 1131 | 2.7% |
++| `fr` | 31 / 1131 | 2.7% |
++| `gl` | 0 / 1131 | 0.0% |
++| `ha` | 0 / 1131 | 0.0% |
++| `hi` | 0 / 1131 | 0.0% |
++| `hr` | 31 / 1131 | 2.7% |
++| `hu` | 0 / 1131 | 0.0% |
++| `in` | 31 / 1131 | 2.7% |
++| `it` | 17 / 1131 | 1.5% |
++| `iw` | 0 / 1131 | 0.0% |
++| `ja` | 29 / 1131 | 2.6% |
++| `jv` | 0 / 1131 | 0.0% |
++| `ka` | 0 / 1131 | 0.0% |
++| `kk` | 0 / 1131 | 0.0% |
++| `km` | 0 / 1131 | 0.0% |
++| `ko` | 7 / 1131 | 0.6% |
++| `lt` | 0 / 1131 | 0.0% |
++| `lv` | 0 / 1131 | 0.0% |
++| `ml` | 0 / 1131 | 0.0% |
++| `mn` | 0 / 1131 | 0.0% |
++| `ms` | 0 / 1131 | 0.0% |
++| `my` | 0 / 1131 | 0.0% |
++| `nb-rNO` | 0 / 1131 | 0.0% |
++| `ne` | 5 / 1131 | 0.4% |
++| `nl` | 0 / 1131 | 0.0% |
++| `nn` | 0 / 1131 | 0.0% |
++| `om` | 0 / 1131 | 0.0% |
++| `or` | 0 / 1131 | 0.0% |
++| `pl` | 0 / 1131 | 0.0% |
++| `pt` | 31 / 1131 | 2.7% |
++| `pt-rBR` | 31 / 1131 | 2.7% |
++| `ro` | 0 / 1131 | 0.0% |
++| `ru` | 31 / 1131 | 2.7% |
++| `sc` | 0 / 1131 | 0.0% |
++| `si` | 0 / 1131 | 0.0% |
++| `sk` | 0 / 1131 | 0.0% |
++| `sq` | 0 / 1131 | 0.0% |
++| `sr` | 0 / 1131 | 0.0% |
++| `sv` | 0 / 1131 | 0.0% |
++| `ta` | 31 / 1131 | 2.7% |
++| `te` | 0 / 1131 | 0.0% |
++| `th` | 0 / 1131 | 0.0% |
++| `ti` | 0 / 1131 | 0.0% |
++| `tl` | 0 / 1131 | 0.0% |
++| `tr` | 31 / 1131 | 2.7% |
++| `uk` | 7 / 1131 | 0.6% |
++| `ur` | 0 / 1131 | 0.0% |
++| `vi` | 5 / 1131 | 0.4% |
++| `zh-rCN` | 31 / 1131 | 2.7% |
++| `zh-rTW` | 31 / 1131 | 2.7% |
+diff --git a/docs/development/releases.md b/docs/development/releases.md
+index f8d8dec0b9e1218578a33115798f83b7d04aee25..73b13ad2faeecbfa57971fbaa482ee16f9e8cb3a 100644
+--- a/docs/development/releases.md
++++ b/docs/development/releases.md
+@@ -4,6 +4,8 @@
+ 
+ Every push to `master` runs `.github/workflows/nightly.yml`. The workflow reads the latest release from `HayaiApp/hayai-nightly` and chooses the larger of the Git commit count or the latest `rN` value plus one. A canceled or retried run therefore cannot lower the published version.
+ 
++Each release includes a generated `What changed` section covering user-facing commits since the source commit linked by the previous nightly. If that commit is no longer available, the generator falls back to the latest 20 commits so a nightly never ships with an empty changelog.
++
+ The workflow builds and tests `StandardNightly` and signs every ABI with the `build` environment. Before publication, it installs the exact signed/minified x86_64 APK on an Android 12 emulator and observes a cold launch for 20 seconds. `tools/verify-apk-startup.ps1` rejects fatal exceptions, the Hayai crash activity, a missing main activity, or a dead main process. Only a passing artifact is published to `HayaiApp/hayai-nightly`. Nightly builds use `dev.ahmedmohamed.hayai.nightly`, so they can remain installed beside stable Hayai. The updater checks only the nightly repository.
+ 
+ The `build` environment must define `SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, and `KEY_PASSWORD`. The repository must define `NIGHTLY_PAT` with release access to `HayaiApp/hayai-nightly`.
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index fc4665dfc3d8ab3fa53407d2a20306b7baa61138..d71efafa9d2c73e4dbf7cf85caea9ed495ae9e8d 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -1381,7 +1381,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	pr
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val backup = File(root, ".$key.bak-${UUID.randomUUID()}")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val digest = MessageDigest.getInstance("SHA-256")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val offlinePaths = references.associateWith { reference -> "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}" }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	return "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}${extension?.let { ".$it" }.orEmpty()}"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val extension = cleanPath.substringAfterLast('.', "").lowercase().takeIf { it.matches(SAFE_EXTENSION) }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val SAFE_ASSET_FILE = Regex("[0-9a-f]{64}")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val SAFE_EXTENSION = Regex("[a-z0-9]{1,10}")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val staging = File(root, ".$key.tmp-${UUID.randomUUID()}")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelOfflineManager.kt	private val store = NovelDownloadStore(File(context.filesDir, "hayai/novel-downloads"))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	?: "bin"
+@@ -1535,6 +1538,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsControl
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val cover = coverUrl?.takeIf { mediaType(it).startsWith("image/") }?.let { url ->
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val digest = MessageDigest.getInstance("SHA-256")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val language = source.lang.takeUnless { it.isBlank() || it == "all" } ?: "en"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? LIMIT 1",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"SELECT 1 FROM hayai_novel_plugin_sources WHERE source_id = ? " +
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"COALESCE(SUM(CASE WHEN c.read = 1 THEN s.word_count " +
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"ELSE (s.word_count * MIN(MAX(c.last_page_read, 0), 100) / 100) END), 0) " +
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"FROM hayai_novel_chapter_stats s JOIN chapters c ON c._id = s.chapter_id " +
+@@ -1921,6 +1930,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	?.get("exclude")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	?.get("include")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	?.let { header("Cookie", it) }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	?.let { set("Cookie", it) }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	.header("Referer", absoluteChapterUrl(chapterUrl) ?: "$baseUrl/")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	.ifBlank { "https://example.com" }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	.putString("$bridgeCacheKey:filters", filters)
+@@ -3142,6 +3152,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/theme/HayaiThemePreferences.kt	const va
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	?: error("The release has no Hayai APK for $primaryAbi.")
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"arm64-v8a" -> "-arm64-v8a"
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"armeabi-v7a" -> "-armeabi-v7a"
++app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	"content" -> requirePersistedWritePermission(context, uri)
++app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	"file" -> prepareFileDirectory(context, uri)
++app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	if (uri.scheme != "file") return false
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"x86_64" -> "-x86_64"
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"x86" -> "-x86"
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	else -> ""
+diff --git a/tools/new-nightly-changelog.ps1 b/tools/new-nightly-changelog.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..f159fd7c5d5a3b04eacf5d605f1af0f2a36b9a16
+--- /dev/null
++++ b/tools/new-nightly-changelog.ps1
+@@ -0,0 +1,73 @@
++param(
++    [string] $PreviousSha,
++    [Parameter(Mandatory = $true)]
++    [string] $CurrentSha,
++    [Parameter(Mandatory = $true)]
++    [string] $OutputPath,
++    [string] $RepositoryUrl = "https://github.com/HayaiApp/hayai"
++)
++
++$ErrorActionPreference = "Stop"
++
++git cat-file -e "$CurrentSha^{commit}"
++if ($LASTEXITCODE -ne 0) {
++    throw "Current nightly commit does not exist: $CurrentSha"
++}
++$currentCommit = (git rev-parse $CurrentSha).Trim()
++
++$range = $null
++$compareRewrittenHistory = $false
++if ($PreviousSha) {
++    git cat-file -e "$PreviousSha^{commit}" 2>$null
++    if ($LASTEXITCODE -eq 0) {
++        git merge-base --is-ancestor $PreviousSha $currentCommit
++        if ($LASTEXITCODE -eq 0 -and $PreviousSha -ne $CurrentSha) {
++            $range = "$PreviousSha..$currentCommit"
++        } elseif ($PreviousSha -ne $currentCommit) {
++            $range = "$PreviousSha...$currentCommit"
++            $compareRewrittenHistory = $true
++        }
++    }
++}
++
++if (-not $range) {
++    $oldest = git rev-list --max-count=20 $currentCommit | Select-Object -Last 1
++    $range = if ($oldest -and $oldest -ne $currentCommit) { "$oldest^..$currentCommit" } else { $currentCommit }
++}
++
++$logArguments = @("log", "--no-merges", "--format=%H`t%s")
++if ($compareRewrittenHistory) {
++    $logArguments += @("--cherry-pick", "--right-only")
++}
++$logArguments += $range
++
++$changes =
++    & git @logArguments |
++        ForEach-Object {
++            $parts = $_ -split "`t", 2
++            if ($parts.Count -ne 2) { return }
++            $sha = $parts[0]
++            $subject = $parts[1] -replace '^(fix|feat|docs|chore|test|refactor|build|ci)(\([^)]*\))?:\s*', ''
++            if ($subject -match '^(Refresh J2K patch stack|Record .*validation|Prepare .*nightl)') { return }
++            if ($subject -notmatch '[\p{L}\p{N}]') { return }
++            $subject = $subject.Substring(0, 1).ToUpperInvariant() + $subject.Substring(1)
++            "- $subject ([commit]($RepositoryUrl/commit/$sha))"
++        } |
++        Select-Object -Unique -First 30
++
++if (-not $changes) {
++    $changes = @("- Maintenance and dependency updates")
++}
++
++$shortSha = (git rev-parse --short $currentCommit).Trim()
++$body = (@(
++    "## What changed",
++    ""
++) + @($changes) + @(
++    "",
++    "This test build comes from [$shortSha]($RepositoryUrl/commit/$currentCommit).",
++    "",
++    "Back up your library before installing a nightly build."
++)) -join "`n"
++
++Set-Content -LiteralPath $OutputPath -Value $body -Encoding utf8NoBOM
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 77d9069aa35f2d19e939c16b8274be41cf27f2cf..1e99936c16024367a12016e74c7861803eb9f435 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -8,12 +8,16 @@ try {
+     $allowedUpstreamKotlin = @(
+         "app/src/main/java/eu/kanade/tachiyomi/AppModule.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt"
++        # Approved in docs/architecture/j2k-reset.md. Reports automatic-backup storage failures through J2K's existing notification path.
++        "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreatorJob.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
+         # Approved in docs/architecture/j2k-reset.md. Routes novel storage through J2K's authoritative download queue.
+         "app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt"
++        # Approved in docs/architecture/j2k-reset.md. Validates the configured root through Hayai's shared SAF boundary.
++        "app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadProvider.kt"
+         # Approved in docs/architecture/j2k-reset.md. Restores novel queue items through the same queue-only source adapter.
+         "app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadStore.kt"
+         # Approved in docs/architecture/j2k-reset.md. Routes enum preferences through Hayai's legacy-safe decoder.
+@@ -36,6 +40,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/data/track/TrackManager.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/updater/GithubRelease.kt"
++        # Approved in docs/architecture/j2k-reset.md. Lets Hayai novel sources supply authenticated cover requests to J2K's fetcher.
++        "app/src/main/java/eu/kanade/tachiyomi/data/image/coil/MangaCoverFetcher.kt"
+         # Approved in docs/architecture/j2k-reset.md. Applies one Hayai-owned content seed before activity view inflation.
+         "app/src/main/java/eu/kanade/tachiyomi/ui/base/activity/BaseActivity.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/base/activity/BaseThemedActivity.kt"
+@@ -58,11 +64,14 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt"
++        # Approved in docs/architecture/j2k-reset.md. Selects localized manga or novel migration vocabulary.
++        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/MigrationFlags.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SourceHolder.kt"
+         # Approved in docs/architecture/j2k-reset.md. Reuses J2K migration sections and delegates novel side-data transfer to Hayai.
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/BaseMigrationPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/SelectionHeader.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceHolder.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationBottomSheetDialog.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/MigrationSourceItem.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/process/MigrationListController.kt"
+@@ -88,6 +97,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/reader/loader/ChapterLoader.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt"
++        # Approved in docs/architecture/j2k-reset.md. Persists and validates the user's SAF backup destination.
++        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt"
+         # Approved in docs/architecture/j2k-reset.md. Projects the conditional Hayai E-Hentai settings destination.
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt"
+-- 
+2.54.0.windows.1
+

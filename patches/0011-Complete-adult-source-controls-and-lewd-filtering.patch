@@ -1,0 +1,733 @@
+From 2db8fd3ff423722b4dbdc63f726e7c3c3592f167 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 19:55:31 +0300
+Subject: [PATCH] Complete adult source controls and lewd filtering
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 29435685c8d810106bb29f48076df688bd06e9d1..51a46071197e3bf37eefd108248cd5cbdb2896b1 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -42,3 +42,6 @@ ts	phase	decision	why	evidence	result
+ 2026-08-20T21:53:00Z	validation	compiled the plugin integration and ran focused plugin and backup tests	verified source registration, runtime contracts, protobuf compatibility, plugin code and settings round trips, and restore limits	gradlew :app:compileDevDebugKotlin; gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.plugin.* --tests dev.ahmedmohamed.hayai.backup.*	VERIFIED
+ 2026-08-20T22:16:00Z	review	closed the second independent JavaScript plugin audit	routed restore through runtime preflight and kept previous code, metadata, settings, and live runtimes intact until replacement publication	NovelPluginManager.kt; NovelPluginStore.kt; HayaiBackupService.kt	VERIFIED
+ 2026-08-20T22:19:00Z	validation	reran focused plugin and backup tests after transactional restore fixes	verified the final suspend restore integration, plugin contracts, backup protobuf limits, and chapter asset URL cases	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.plugin.* --tests dev.ahmedmohamed.hayai.backup.*	VERIFIED
++2026-08-20T16:55:00Z	adult-controls	completed SY-compatible adult discovery and library filtering	added full adult aliases and legacy IDs, scoped Non-H handling, independent typed tri-state filtering, and discovery-only source gating without breaking downloads or existing library entries	app/src/main/java/dev/ahmedmohamed/hayai/adult; app/src/main/java/dev/ahmedmohamed/hayai/source	IMPLEMENTED
++2026-08-20T16:55:00Z	validation	compiled the integrated app, ran focused adult/source tests, and checked the J2K boundary	verified tri-state values, malformed persistence, source visibility, classifier exceptions, discovery adapters, and protected lifecycle/image-reader files	gradlew :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.adult.* --tests dev.ahmedmohamed.hayai.source.*; tools/verify-upstream-boundary.ps1	VERIFIED
++2026-08-20T16:55:00Z	review	closed the independent adult-control audit	moved Settings > Sources onto discovery-only APIs while preserving the complete source list for downloads, statistics, tracking, and direct source resolution	SourceManager.kt; SettingsSourcesController.kt	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/HayaiLibraryPolicy.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/HayaiLibraryPolicy.kt
+index 48fbff4b7b98f634b193adabfd524899261c0db8..cef8e27712e221cddf701dc94625c958f4fb5270 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/HayaiLibraryPolicy.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/HayaiLibraryPolicy.kt
+@@ -10,18 +10,12 @@ class HayaiLibraryPolicy(
+     private val sourceManager: SourceManager,
+ ) {
+     fun includes(manga: Manga): Boolean {
+-        if (!preferences.hentaiFeaturesEnabled.get()) {
+-            return !LewdClassifier.isLewd(manga, sourceManager.getOrStub(manga.source))
+-        }
+         val isLewd = LewdClassifier.isLewd(manga, sourceManager.getOrStub(manga.source))
+-        return when (LewdLibraryFilter.fromPersistedValue(preferences.lewdLibraryFilter.get())) {
+-            LewdLibraryFilter.Show -> true
+-            LewdLibraryFilter.Hide -> !isLewd
+-            LewdLibraryFilter.Only -> isLewd
+-        }
++        return LewdLibraryFilter
++            .fromPersistedValue(preferences.lewdLibraryFilter.get())
++            .includes(isLewd)
+     }
+ 
+     fun isFiltering(): Boolean =
+-        !preferences.hentaiFeaturesEnabled.get() ||
+-            LewdLibraryFilter.fromPersistedValue(preferences.lewdLibraryFilter.get()) != LewdLibraryFilter.Show
++        LewdLibraryFilter.fromPersistedValue(preferences.lewdLibraryFilter.get()) != LewdLibraryFilter.Disabled
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/LewdClassifier.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/LewdClassifier.kt
+index 7829852b3a16712b8f9eb73bc54e569877b32884..a0f86652e9b8e0e44da418a90e75d24e7f68643b 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/LewdClassifier.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/LewdClassifier.kt
+@@ -25,7 +25,7 @@ object LewdClassifier {
+     ): Boolean {
+         val genres = manga.getGenres().orEmpty()
+         val descriptor = SourceCapabilityRegistry.descriptor(source)
+-        if (descriptor.capabilities.contains(SourceCapability.Adult) && genres.any(::isNonHentai)) {
++        if (descriptor.capabilities.contains(SourceCapability.NonHentaiGenreOverride) && genres.any(::isNonHentai)) {
+             return false
+         }
+         return descriptor.capabilities.contains(SourceCapability.Adult) ||
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt b/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
+index b661a192f5f3399ed20bdcf5cd77d15cb30ac84e..27fce3d3acad80f6e623aa2e676df21b17bafc85 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
+@@ -10,7 +10,7 @@ class HayaiPreferences(
+         store.getBoolean(KEY_HENTAI_FEATURES, true)
+ 
+     val lewdLibraryFilter: Preference<Int> =
+-        store.getInt(KEY_LEWD_LIBRARY_FILTER, LewdLibraryFilter.Show.persistedValue)
++        store.getInt(KEY_LEWD_LIBRARY_FILTER, LewdLibraryFilter.Disabled.persistedValue)
+ 
+     val novelFontSize = store.getInt("pref_novel_font_size", 16)
+     val novelFontFamily = store.getString("pref_novel_font_family", "sans-serif")
+@@ -91,12 +91,20 @@ class HayaiPreferences(
+ enum class LewdLibraryFilter(
+     val persistedValue: Int,
+ ) {
+-    Show(0),
+-    Hide(1),
+-    Only(2),
++    Disabled(0),
++    Include(1),
++    Exclude(2),
+     ;
+ 
++    fun includes(isLewd: Boolean): Boolean =
++        when (this) {
++            Disabled -> true
++            Include -> isLewd
++            Exclude -> !isLewd
++        }
++
+     companion object {
+-        fun fromPersistedValue(value: Int): LewdLibraryFilter = entries.firstOrNull { it.persistedValue == value } ?: Show
++        fun fromPersistedValue(value: Int): LewdLibraryFilter =
++            entries.firstOrNull { it.persistedValue == value } ?: Disabled
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/AdultSourceVisibility.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/AdultSourceVisibility.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..cae403e399f31e94703b189cf7a596de92838b58
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/AdultSourceVisibility.kt
+@@ -0,0 +1,12 @@
++package dev.ahmedmohamed.hayai.source
++
++import eu.kanade.tachiyomi.source.Source
++
++object AdultSourceVisibility {
++    fun includes(
++        source: Source,
++        adultFeaturesEnabled: Boolean,
++    ): Boolean =
++        adultFeaturesEnabled ||
++            SourceCapability.Adult !in SourceCapabilityRegistry.descriptor(source).capabilities
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt
+index 28ddb4bb94262d45a99db1790a6fb98b5cb4f051..7fd93e9bfa55a7aa73cdcced0b123d40f9637550 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt
+@@ -14,6 +14,7 @@ enum class SourceCapability {
+     EhFavorites,
+     InAppOpen,
+     Metadata,
++    NonHentaiGenreOverride,
+     NovelText,
+     Recommendations,
+     RelatedEntries,
+@@ -56,9 +57,17 @@ object SourceCapabilityRegistry {
+     private val fixed =
+         mapOf(
+             EH_SOURCE_ID to
+-                SourceDescriptor(HayaiSourceId(EH_SOURCE_ID), SourceFamily.EHentai, adultMetadata + SourceCapability.EhFavorites),
++                SourceDescriptor(
++                    HayaiSourceId(EH_SOURCE_ID),
++                    SourceFamily.EHentai,
++                    adultMetadata + SourceCapability.EhFavorites + SourceCapability.NonHentaiGenreOverride,
++                ),
+             EXH_SOURCE_ID to
+-                SourceDescriptor(HayaiSourceId(EXH_SOURCE_ID), SourceFamily.ExHentai, adultMetadata + SourceCapability.EhFavorites),
++                SourceDescriptor(
++                    HayaiSourceId(EXH_SOURCE_ID),
++                    SourceFamily.ExHentai,
++                    adultMetadata + SourceCapability.EhFavorites + SourceCapability.NonHentaiGenreOverride,
++                ),
+             PURURIN_SOURCE_ID to SourceDescriptor(HayaiSourceId(PURURIN_SOURCE_ID), SourceFamily.Pururin, adultMetadata),
+             EIGHT_MUSES_SOURCE_ID to
+                 SourceDescriptor(HayaiSourceId(EIGHT_MUSES_SOURCE_ID), SourceFamily.EightMuses, adultMetadata + SourceCapability.BatchAdd),
+@@ -77,7 +86,8 @@ object SourceCapabilityRegistry {
+                         SourceCapability.Recommendations,
+                         SourceCapability.RelatedEntries,
+                     )
+-                SourceFamily.NHentai -> adultMetadata + SourceCapability.BatchAdd
++                SourceFamily.NHentai ->
++                    adultMetadata + SourceCapability.BatchAdd + SourceCapability.NonHentaiGenreOverride
+                 SourceFamily.Lanraragi ->
+                     setOf(
+                         SourceCapability.BatchAdd,
+@@ -88,12 +98,19 @@ object SourceCapabilityRegistry {
+                 SourceFamily.Novel -> setOf(SourceCapability.NovelText)
+                 SourceFamily.EightMuses -> adultMetadata + SourceCapability.BatchAdd
+                 SourceFamily.HBrowse, SourceFamily.Pururin -> adultMetadata
+-                SourceFamily.EHentai, SourceFamily.ExHentai -> adultMetadata + SourceCapability.EhFavorites
+-                SourceFamily.Other -> emptySet()
++                SourceFamily.EHentai, SourceFamily.ExHentai ->
++                    adultMetadata + SourceCapability.EhFavorites + SourceCapability.NonHentaiGenreOverride
++                SourceFamily.Other ->
++                    if (source.id in LEGACY_ADULT_SOURCE_IDS || isAdultSourceName(source.name)) adultMetadata else emptySet()
+             }
+         return SourceDescriptor(HayaiSourceId(source.id), family, capabilities)
+     }
+ 
++    private fun isAdultSourceName(name: String): Boolean {
++        val normalized = name.lowercase()
++        return ADULT_SOURCE_NAMES.any(normalized::contains)
++    }
++
+     private fun familyFromName(name: String): SourceFamily {
+         val normalized = name.lowercase()
+         return when {
+@@ -109,4 +126,32 @@ object SourceCapabilityRegistry {
+             else -> SourceFamily.Other
+         }
+     }
++
++    private val LEGACY_ADULT_SOURCE_IDS = 6905L..6913L
++    private val ADULT_SOURCE_NAMES =
++        setOf(
++            "allporncomic",
++            "hentai cafe",
++            "hentai2read",
++            "hentaifox",
++            "hentainexus",
++            "manhwahentai.me",
++            "milftoon",
++            "myhentaicomics",
++            "myhentaigallery",
++            "ninehentai",
++            "pururin",
++            "simply hentai",
++            "tsumino",
++            "8muses",
++            "hbrowse",
++            "nhentai",
++            "erofus",
++            "luscious",
++            "doujins",
++            "multporn",
++            "vcp",
++            "vmp",
++            "hentai",
++        )
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt b/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
+index 2cf812d8a51e7350218b124ea93721a8eb4295e4..cc84d4f8c2380d3a96875ce0922f50e39f77563c 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt
+@@ -3,6 +3,8 @@ package eu.kanade.tachiyomi.source
+ import android.content.Context
+ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+ import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.source.AdultSourceVisibility
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.source.model.Page
+@@ -22,6 +24,8 @@ import kotlinx.coroutines.flow.map
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.runBlocking
+ import timber.log.Timber
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
+ import java.util.concurrent.ConcurrentHashMap
+ 
+ class SourceManager(
+@@ -32,11 +36,17 @@ class SourceManager(
+     private val scope = CoroutineScope(Job() + Dispatchers.IO)
+ 
+     private val sourcesMapFlow = MutableStateFlow(ConcurrentHashMap<Long, Source>())
++    private val hayaiPreferences = HayaiPreferences(Injekt.get())
+ 
+     private val stubSourcesMap = ConcurrentHashMap<Long, StubSource>()
+ 
+-    val catalogueSources: Flow<List<CatalogueSource>> = sourcesMapFlow.map { it.values.filterIsInstance<CatalogueSource>() }
++    val catalogueSources: Flow<List<CatalogueSource>> =
++        sourcesMapFlow.map { it.values.filterIsInstance<CatalogueSource>() }
+     val onlineSources: Flow<List<HttpSource>> = catalogueSources.map { it.filterIsInstance<HttpSource>() }
++    val discoverableCatalogueSources: Flow<List<CatalogueSource>> =
++        combine(sourcesMapFlow, hayaiPreferences.hentaiFeaturesEnabled.changes()) { sources, adultEnabled ->
++            sources.values.filterIsInstance<CatalogueSource>().filter { AdultSourceVisibility.includes(it, adultEnabled) }
++        }
+ 
+     private val delegatedSources =
+         listOf(
+@@ -105,6 +115,13 @@ class SourceManager(
+ 
+     fun getCatalogueSources() = sourcesMapFlow.value.values.filterIsInstance<CatalogueSource>()
+ 
++    fun getDiscoverableOnlineSources() = getDiscoverableCatalogueSources().filterIsInstance<HttpSource>()
++
++    fun getDiscoverableCatalogueSources() =
++        sourcesMapFlow.value.values.filterIsInstance<CatalogueSource>().filter {
++            AdultSourceVisibility.includes(it, hayaiPreferences.hentaiFeaturesEnabled.get())
++        }
++
+     @Suppress("OverridingDeprecatedMember")
+     inner class StubSource(
+         override val id: Long,
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
+index bdf9fd830cf75f3142f6082f84062edf5356f084..ff9646ea3e41aee56a4deecae6f2a1a265cf32bd 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
+@@ -176,7 +176,15 @@ class LibraryPresenter(
+ 
+             val filterMangaType = preferences.filterMangaType().get()
+ 
+-            !(filterDownloaded == 0 && filterUnread == 0 && filterCompleted == 0 && filterTracked == 0 && filterMangaType == 0)
++            val filterBookmarked = preferences.filterBookmarked().get()
++
++            hayaiLibraryPolicy.isFiltering() ||
++                !(filterDownloaded == 0 &&
++                    filterUnread == 0 &&
++                    filterCompleted == 0 &&
++                    filterTracked == 0 &&
++                    filterMangaType == 0 &&
++                    filterBookmarked == 0)
+         }
+ 
+     /** Save the current list to speed up loading later */
+@@ -391,7 +399,12 @@ class LibraryPresenter(
+         val filtersOff =
+             view?.isSubClass != true &&
+                 !hayaiLibraryPolicy.isFiltering() &&
+-                (filterDownloaded == 0 && filterUnread == 0 && filterCompleted == 0 && filterTracked == 0 && filterMangaType == 0)
++                (filterDownloaded == 0 &&
++                    filterUnread == 0 &&
++                    filterCompleted == 0 &&
++                    filterTracked == 0 &&
++                    filterMangaType == 0 &&
++                    filterBookmarked == 0)
+         hasActiveFilters = !filtersOff
+         val missingCategorySet = categories.mapNotNull { it.id }.toMutableSet()
+         val filteredItems =
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt
+index feb1d64d15a2189f7a5ae67bc82679c444c961c5..c251d3dfe6d4757066d53c16c458a1c060f09853 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt
+@@ -13,6 +13,8 @@ import androidx.core.view.isVisible
+ import androidx.core.view.updatePaddingRelative
+ import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
+ import com.google.android.material.bottomsheet.BottomSheetBehavior
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.preferences.LewdLibraryFilter
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+@@ -59,6 +61,7 @@ class FilterBottomSheet
+          * Preferences helper.
+          */
+         private val preferences: PreferencesHelper by injectLazy()
++        private val hayaiPreferences = HayaiPreferences(Injekt.get())
+ 
+         private lateinit var binding: FilterBottomSheetBinding
+ 
+@@ -77,6 +80,8 @@ class FilterBottomSheet
+ 
+         private lateinit var bookmarked: FilterTagGroup
+ 
++        private lateinit var lewd: FilterTagGroup
++
+         private var tracked: FilterTagGroup? = null
+ 
+         private var trackers: FilterTagGroup? = null
+@@ -99,6 +104,7 @@ class FilterBottomSheet
+             list.add(downloaded)
+             list.add(completed)
+             list.add(bookmarked)
++            list.add(lewd)
+             if (hasTracking) {
+                 tracked?.let { list.add(it) }
+             }
+@@ -344,6 +350,7 @@ class FilterBottomSheet
+                 preferences.filterTracked().get() > 0 ||
+                 preferences.filterMangaType().get() > 0 ||
+                 preferences.filterBookmarked().get() > 0 ||
++                currentLewdFilter() != LewdLibraryFilter.Disabled ||
+                 FILTER_TRACKER.isNotEmpty()
+ 
+         private fun createTags() {
+@@ -362,6 +369,9 @@ class FilterBottomSheet
+             bookmarked = inflate(R.layout.filter_tag_group) as FilterTagGroup
+             bookmarked.setup(this, R.string.bookmarked, R.string.not_bookmarked)
+ 
++            lewd = inflate(R.layout.filter_tag_group) as FilterTagGroup
++            lewd.setup(this, R.string.hayai_lewd_only_filter, R.string.hayai_lewd_hide_filter)
++
+             if (hasTracking) {
+                 tracked = inflate(R.layout.filter_tag_group) as FilterTagGroup
+                 tracked?.setup(this, R.string.tracked, R.string.not_tracked)
+@@ -457,6 +467,7 @@ class FilterBottomSheet
+                     unreadProgress.state = unreadP - 3
+                 }
+                 tracked?.setState(preferences.filterTracked())
++                lewd.state = currentLewdFilter().persistedValue - 1
+                 reorderFilters()
+                 reSortViews()
+             }
+@@ -470,7 +481,7 @@ class FilterBottomSheet
+                     filterItems.add(it)
+                 }
+             }
+-            listOfNotNull(unreadProgress, unread, downloaded, completed, mangaType, bookmarked, tracked)
++            listOfNotNull(unreadProgress, unread, downloaded, completed, mangaType, bookmarked, lewd, tracked)
+                 .forEach {
+                     if (!filterItems.contains(it)) {
+                         filterItems.add(it)
+@@ -488,6 +499,7 @@ class FilterBottomSheet
+                 Filters.Completed -> completed
+                 Filters.SeriesType -> mangaType
+                 Filters.Bookmarked -> bookmarked
++                Filters.Lewd -> lewd
+                 Filters.Tracked -> if (hasTracking) tracked else null
+                 else -> null
+             }
+@@ -544,6 +556,10 @@ class FilterBottomSheet
+                 downloaded -> preferences.filterDownloaded()
+                 completed -> preferences.filterCompleted()
+                 bookmarked -> preferences.filterBookmarked()
++                lewd -> {
++                    hayaiPreferences.lewdLibraryFilter.set(index + 1)
++                    null
++                }
+                 tracked -> preferences.filterTracked()
+                 mangaType -> {
+                     val newIndex =
+@@ -561,6 +577,9 @@ class FilterBottomSheet
+             }?.set(index + 1)
+         }
+ 
++        private fun currentLewdFilter(): LewdLibraryFilter =
++            LewdLibraryFilter.fromPersistedValue(hayaiPreferences.lewdLibraryFilter.get())
++
+         private fun massUpdateFilters(views: List<FilterTagGroup>) {
+             if (controller?.isSubClass != true) {
+                 var setUnread = false
+@@ -596,6 +615,7 @@ class FilterBottomSheet
+             preferences.filterBookmarked().set(0)
+             preferences.filterTracked().set(0)
+             preferences.filterMangaType().set(0)
++            hayaiPreferences.lewdLibraryFilter.set(0)
+             FILTER_TRACKER = ""
+ 
+             val transition = androidx.transition.AutoTransition()
+@@ -652,6 +672,7 @@ class FilterBottomSheet
+             Completed('c', R.string.status),
+             SeriesType('m', R.string.series_type),
+             Bookmarked('b', R.string.bookmarked),
++            Lewd('l', R.string.hayai_lewd_library_filter),
+             Tracked('t', R.string.tracking),
+             ;
+ 
+@@ -664,6 +685,7 @@ class FilterBottomSheet
+                         Completed,
+                         SeriesType,
+                         Bookmarked,
++                        Lewd,
+                         Tracked,
+                     ).joinToString("") { it.value.toString() }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt
+index 21919bb050d7f0c60722b1429899d669392c40de..18720f2ec383e12b9a05aa8b01925b62d1e81650 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt
+@@ -155,7 +155,7 @@ class PreMigrationController(
+         val sourcesSaved = prefs.migrationSources().get().split("/")
+         var sources =
+             sourceManager
+-                .getCatalogueSources()
++                .getDiscoverableCatalogueSources()
+                 .filterIsInstance<HttpSource>()
+                 .filter { it.lang in languages }
+                 .sortedBy { "(${it.lang}) ${it.name}" }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+index 713d70b7a02f6c06ceb1ed74c5157860c02ecd56..1becc381a1350892045cdaeec6f4d4ba037c78a1 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt
+@@ -103,20 +103,6 @@ class SettingsAdvancedController : SettingsController() {
+                     defaultValue = hayaiPreferences.hentaiFeaturesEnabled.defaultValue()
+                 }
+ 
+-                intListPreference(activity) {
+-                    titleRes = R.string.hayai_lewd_library_filter
+-                    summaryRes = R.string.hayai_lewd_library_filter_summary
+-                    entriesRes =
+-                        arrayOf(
+-                            R.string.hayai_lewd_show,
+-                            R.string.hayai_lewd_hide,
+-                            R.string.hayai_lewd_only,
+-                        )
+-                    entryValues = listOf(0, 1, 2)
+-                    key = hayaiPreferences.lewdLibraryFilter.key()
+-                    defaultValue = hayaiPreferences.lewdLibraryFilter.defaultValue()
+-                }
+-
+                 preference {
+                     titleRes = R.string.hayai_novel_plugins
+                     summaryRes = R.string.hayai_novel_plugins_summary
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+index b3911988133273e3ea41258eb7c1c0cd1d618c73..bcd738d89d1be22d29b907736f82ca50bec7e80a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
+@@ -177,7 +177,7 @@ class SettingsBrowseController : SettingsController() {
+                         val hiddenCatalogues = preferences.hiddenSources().get()
+                         val enabledSources =
+                             sourceManager
+-                                .getCatalogueSources()
++                                .getDiscoverableCatalogueSources()
+                                 .filter { it.lang in languages }
+                                 .filterNot { it.id.toString() in hiddenCatalogues }
+                                 .sortedBy { "(${it.lang}) ${it.name}" }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt
+index b2bf1828ccf8ec77e565e0b5fe62ba003d7fcc3c..ddf623ad0db72a2c35a36563b6a28e3d1eab4561 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt
+@@ -31,7 +31,7 @@ class SettingsSourcesController :
+         setHasOptionsMenu(true)
+     }
+ 
+-    private val onlineSources by lazy { Injekt.get<SourceManager>().getOnlineSources() }
++    private val onlineSources by lazy { Injekt.get<SourceManager>().getDiscoverableOnlineSources() }
+ 
+     private var query = ""
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt
+index cbcbdd8f56c8c86d8a9e697494485e44bf20290a..9530de7996c7bca7b6c7dcc20b50a1bcc4abf704 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt
+@@ -141,7 +141,7 @@ class SourcePresenter(
+         val hiddenCatalogues = preferences.hiddenSources().get()
+ 
+         return sourceManager
+-            .getCatalogueSources()
++            .getDiscoverableCatalogueSources()
+             .filter { it.lang in languages || it.id == LocalSource.ID }
+             .filterNot { it.id.toString() in hiddenCatalogues }
+             .sortedBy { "(${it.lang}) ${it.name}" }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
+index f9e0f82775c80fdc6c319a569c8c3366e90997cb..734a6f437e2f7d9a690c9b546e9f8990b578f2f4 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
+@@ -96,7 +96,7 @@ open class GlobalSearchPresenter(
+ 
+         val list =
+             sourceManager
+-                .getCatalogueSources()
++                .getDiscoverableCatalogueSources()
+                 .filter { it.lang in languages }
+                 .filterNot { it.id.toString() in hiddenCatalogues }
+                 .sortedBy { "(${it.lang}) ${it.name}" }
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 61386f0a621fbfdcd659ebed1e33ed0fbd127596..3b9dbe6c1a871aa6ae0dd044caec5d22c3198d90 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -11,10 +11,8 @@
+     <string name="hayai_hentai_features">Hentai features</string>
+     <string name="hayai_hentai_features_summary">Enable adult sources and source-specific enhancements</string>
+     <string name="hayai_lewd_library_filter">Lewd library entries</string>
+-    <string name="hayai_lewd_library_filter_summary">Choose whether lewd entries appear in the library</string>
+-    <string name="hayai_lewd_show">Show</string>
+-    <string name="hayai_lewd_hide">Hide</string>
+-    <string name="hayai_lewd_only">Show only</string>
++    <string name="hayai_lewd_only_filter">Lewd only</string>
++    <string name="hayai_lewd_hide_filter">Hide lewd</string>
+     <string name="hayai_retry_legacy_migration">Retry legacy data migration</string>
+     <string name="hayai_retry_legacy_migration_summary">Schedule one explicit retry on the next app start. Existing J2K data is never overwritten.</string>
+     <string name="hayai_retry_legacy_migration_scheduled">Migration retry scheduled for the next app start</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/LewdClassifierTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/LewdClassifierTest.kt
+index 953150fce59dc3bfca5ff64f0f0f63109ef54013..2767cf2cdf14d94d8071ac01de2ffbb8870b3458 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/LewdClassifierTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/LewdClassifierTest.kt
+@@ -16,6 +16,12 @@ class LewdClassifierTest {
+     @Test
+     fun `non-h tag exempts an adult source`() {
+         assertFalse(LewdClassifier.isLewd(manga("Non-H"), source(SourceCapabilityRegistry.EH_SOURCE_ID, "E-Hentai")))
++        assertFalse(LewdClassifier.isLewd(manga("Non-H"), source(43, "nHentai")))
++    }
++
++    @Test
++    fun `non-h tag does not exempt other adult sources`() {
++        assertTrue(LewdClassifier.isLewd(manga("Non-H"), source(44, "Hentai2Read")))
+     }
+ 
+     @Test
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/LewdLibraryFilterTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/LewdLibraryFilterTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ee894b7017660431631e65573261e47b391c102
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/LewdLibraryFilterTest.kt
+@@ -0,0 +1,44 @@
++package dev.ahmedmohamed.hayai.adult
++
++import dev.ahmedmohamed.hayai.preferences.LewdLibraryFilter
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class LewdLibraryFilterTest {
++    @Test
++    fun `persisted values follow the SY tri-state contract`() {
++        assertEquals(0, LewdLibraryFilter.Disabled.persistedValue)
++        assertEquals(1, LewdLibraryFilter.Include.persistedValue)
++        assertEquals(2, LewdLibraryFilter.Exclude.persistedValue)
++        assertEquals(LewdLibraryFilter.Disabled, LewdLibraryFilter.fromPersistedValue(0))
++        assertEquals(LewdLibraryFilter.Include, LewdLibraryFilter.fromPersistedValue(1))
++        assertEquals(LewdLibraryFilter.Exclude, LewdLibraryFilter.fromPersistedValue(2))
++    }
++
++    @Test
++    fun `malformed persisted values disable filtering`() {
++        listOf(Int.MIN_VALUE, -1, 3, Int.MAX_VALUE).forEach { value ->
++            assertEquals(LewdLibraryFilter.Disabled, LewdLibraryFilter.fromPersistedValue(value))
++        }
++    }
++
++    @Test
++    fun `disabled filter includes lewd and non-lewd manga`() {
++        assertTrue(LewdLibraryFilter.Disabled.includes(isLewd = true))
++        assertTrue(LewdLibraryFilter.Disabled.includes(isLewd = false))
++    }
++
++    @Test
++    fun `include filter includes only lewd manga`() {
++        assertTrue(LewdLibraryFilter.Include.includes(isLewd = true))
++        assertFalse(LewdLibraryFilter.Include.includes(isLewd = false))
++    }
++
++    @Test
++    fun `exclude filter includes only non-lewd manga`() {
++        assertFalse(LewdLibraryFilter.Exclude.includes(isLewd = true))
++        assertTrue(LewdLibraryFilter.Exclude.includes(isLewd = false))
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/AdultSourceVisibilityTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/AdultSourceVisibilityTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c52aa92abb7bd3a1f01fcd62f43f3406733f8d7
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/AdultSourceVisibilityTest.kt
+@@ -0,0 +1,27 @@
++package dev.ahmedmohamed.hayai.source
++
++import eu.kanade.tachiyomi.source.Source
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class AdultSourceVisibilityTest {
++    @Test
++    fun `enabled adult features include ordinary and adult sources`() {
++        assertTrue(AdultSourceVisibility.includes(source("MangaDex"), adultFeaturesEnabled = true))
++        assertTrue(AdultSourceVisibility.includes(source("nHentai"), adultFeaturesEnabled = true))
++    }
++
++    @Test
++    fun `disabled adult features exclude only adult sources from discovery`() {
++        assertTrue(AdultSourceVisibility.includes(source("MangaDex"), adultFeaturesEnabled = false))
++        assertFalse(AdultSourceVisibility.includes(source("nHentai"), adultFeaturesEnabled = false))
++        assertFalse(AdultSourceVisibility.includes(source("Hentai2Read"), adultFeaturesEnabled = false))
++    }
++
++    private fun source(name: String) =
++        object : Source {
++            override val id = name.hashCode().toLong()
++            override val name = name
++        }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistryTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistryTest.kt
+index 093f2386d06a547d04008132b28a630c9898607a..cf2c1b54f47e9aaf93b323de3bea72707be772b0 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistryTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistryTest.kt
+@@ -18,10 +18,39 @@ class SourceCapabilityRegistryTest {
+         assertTrue(descriptor("English Novel Source").capabilities.contains(SourceCapability.NovelText))
+     }
+ 
+-    private fun descriptor(name: String) =
++    @Test
++    fun `SY adult source aliases are gated by the master switch capability`() {
++        listOf("Hentai2Read", "MyHentaiGallery", "Tsumino", "Luscious", "MultPorn").forEach { name ->
++            assertTrue("$name should be adult", descriptor(name).capabilities.contains(SourceCapability.Adult))
++        }
++        assertTrue(descriptor("Unknown legacy source", 6905L).capabilities.contains(SourceCapability.Adult))
++        assertTrue(descriptor("Unknown legacy source", 6913L).capabilities.contains(SourceCapability.Adult))
++    }
++
++    @Test
++    fun `ordinary sources are not gated as adult`() {
++        assertTrue(SourceCapability.Adult !in descriptor("MangaDex").capabilities)
++        assertTrue(SourceCapability.Adult !in descriptor("Unknown source", 6914L).capabilities)
++    }
++
++    @Test
++    fun `only EH and nHentai families honor the non-h genre override`() {
++        listOf("E-Hentai", "ExHentai", "nHentai").forEach { name ->
++            assertTrue(
++                "$name should honor non-h",
++                descriptor(name).capabilities.contains(SourceCapability.NonHentaiGenreOverride),
++            )
++        }
++        assertTrue(SourceCapability.NonHentaiGenreOverride !in descriptor("Hentai2Read").capabilities)
++    }
++
++    private fun descriptor(
++        name: String,
++        id: Long = name.hashCode().toLong(),
++    ) =
+         SourceCapabilityRegistry.descriptor(
+             object : Source {
+-                override val id = name.hashCode().toLong()
++                override val id = id
+                 override val name = name
+             },
+         )
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 6a99c6e3e19e184243f428716cf1fe0dcef6f88b..966f7b21e5c8d52395b0bfc6fc2b107eaa6dd5c4 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -31,6 +31,8 @@ On first database open, an idempotent importer validates the legacy schema and r
+ 
+ Extensions remain standard J2K `Source`/`SourceFactory` extensions. `SourceCapabilityRegistry` adds behavior by stable source ID or recognized family name instead of scattering source checks through presenters.
+ 
++The Advanced setting `eh_is_hentai_enabled` controls adult source discovery. Disabling it reactively removes recognized adult sources from browse, global search, and migration pickers without unregistering them, deleting data, or making existing library entries unreadable. The independent library filter uses SY's `pref_filter_library_lewd_v2` contract: disabled shows all entries, include shows only lewd entries, and exclude hides lewd entries. Classification includes SY's legacy ID range, complete source-name rules, adult genre tags, and the `Non-H` exception only for E-Hentai, ExHentai, and nHentai families.
++
+ `NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources, downloaded source chapters, installed Tsundoku novel APKs, and explicitly trusted LNReader JavaScript repositories are production implementations.
+ 
+ The text reader owns its lifecycle. It loads text off the main thread, renders bounded selectable documents, updates J2K history, supports typography/navigation/search, speaks chapters through TTS, captures and manages quotes, persists Unicode-aware chapter word counts and reading-time estimates, and saves authenticated source assets into a self-contained integrity-checked offline store. Derived-stat persistence failure never prevents reading. Translation/dictionary adapters and the visual custom-source builder remain future Hayai-owned slices rather than changes to the image reader.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 0726f50ea74e66b5b1b4111cfb0c9baab396fb7c..637067c8017486209215737f07c2c217bec5424e 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -8,9 +8,9 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `54
+ 
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+-| Global hentai enable (`eh_is_hentai_enabled`) | Stable SY-compatible key and central policy | foundation |
+-| Library lewd filter show/hide/only (`pref_filter_library_lewd_v2`) | `LewdClassifier` and `HayaiLibraryPolicy` | foundation |
+-| Fixed adult IDs, adult-source rules, tags, and `Non-H` exemption | Typed source registry and classifier | foundation |
++| Global hentai enable (`eh_is_hentai_enabled`) | Reactive discovery-source visibility; installed/library sources remain addressable | port |
++| Library lewd filter show/only/hide (`pref_filter_library_lewd_v2`) | J2K library filter sheet plus typed `HayaiLibraryPolicy` | port |
++| Fixed adult IDs, full SY adult-source aliases, tags, and scoped `Non-H` exemption | Typed source registry and classifier | port |
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | audit |
+ | EH favorites, categories, notes, watched tags, gallery updates | Typed EH tables and Hayai workers/UI | migration foundation; runtime audit |
+ | EH metadata, gallery versions, archives/H@H, thumbnails, tag filtering | Metadata gateway and EH delegate | audit |
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 5954aee233fb5132ae1c15a75d1f42bf0022d9f7..9ef026db3d1da56c90f7f253094f95ed62d64091 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -21,10 +21,16 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/source/model/Page.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/main/SearchActivity.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/migration/manga/design/PreMigrationController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourcePresenter.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt"
+     )
+     $violations = $changed | Where-Object {
+         $_ -like "app/src/main/java/*.kt" -and
+-- 
+2.54.0.windows.1
+

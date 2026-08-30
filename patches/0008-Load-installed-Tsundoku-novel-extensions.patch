@@ -1,0 +1,486 @@
+From 6e808b3bc9a827b675eb12cca86e699e7df69c77 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Thu, 20 Aug 2026 18:44:26 +0300
+Subject: [PATCH] Load installed Tsundoku novel extensions
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index d8bb480a0fc1c5a93958ca6bdf3946ccc419b9a1..9515259983df864eb71a280d7ba880a139fb85d0 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -27,3 +27,6 @@ ts	phase	decision	why	evidence	result
+ 2026-08-20T18:20:00Z	backup	added a versioned optional Hayai payload to J2K backup and restore	preserved quotes, novel repositories, chapter statistics, and E-Hentai favorites across database ID changes without duplicating J2K-owned data	app/src/main/java/dev/ahmedmohamed/hayai/backup; Backup.kt	VERIFIED
+ 2026-08-20T18:24:00Z	validation	ran focused serialization tests and compiled the integrated app	verified old-backup compatibility, typed payload round trips, unsafe-value rejection, and deterministic quote collision identities	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.backup.*	VERIFIED
+ 2026-08-20T18:28:00Z	review	closed the independent Hayai backup audit	verified stable core-ID remapping, full-payload quote identity, collision preservation, idempotence, and bounded validation	app/src/main/java/dev/ahmedmohamed/hayai/backup	VERIFIED
++2026-08-20T18:50:00Z	extensions	discovered installed Tsundoku novel APKs through J2K's trusted loader	kept signature trust, private-extension precedence, NSFW policy, class loading, and the single J2K extension manager authoritative	NovelExtensionManifest.kt; ExtensionLoader.kt	VERIFIED
++2026-08-20T18:54:00Z	validation	compiled the loader integration and ran focused manifest contract tests	verified both feature namespaces, mixed manifests, relative and migrated class names, labels, and unsupported packages	gradlew :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.extension.*	VERIFIED
++2026-08-20T19:12:00Z	review	closed the independent installed-novel-extension audit	added the legacy marker ABI and cross-classloader detection after review identified a real pre-property Tsundoku compatibility gap	NovelSource.kt; NovelSourceCompatibilityTest.kt	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a4925c6de6f7f53bc4d6fffef854245117085e61
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt
+@@ -0,0 +1,82 @@
++package dev.ahmedmohamed.hayai.novel.extension
++
++/**
++ * Manifest compatibility for Tsundoku novel APKs.
++ *
++ * Rebuilt from the behavior audited at Tsundoku 547ddea3; the Android loader remains
++ * J2K-owned and consumes only this small, pure contract.
++ */
++internal object NovelExtensionManifest {
++    const val STANDARD_FEATURE = "tachiyomi.extension"
++    const val NOVEL_FEATURE = "tachiyomi.novelextension"
++    const val DISPLAY_NAME_KEY = "tachiyomix.name"
++    const val EXTENSION_LIB_KEY = "tachiyomix.extensionLib"
++    const val CONTENT_WARNING_KEY = "tachiyomix.contentWarning"
++
++    private val supportedFeatures = setOf(STANDARD_FEATURE, NOVEL_FEATURE)
++
++    fun isSupported(requiredFeatures: Iterable<String?>): Boolean = requiredFeatures.any { it in supportedFeatures }
++
++    fun resolve(
++        requiredFeatures: Set<String>,
++        metadataKeys: Set<String>,
++    ): ExtensionManifestNamespace? {
++        val hasNovel = NOVEL_FEATURE in requiredFeatures
++        val hasStandard = STANDARD_FEATURE in requiredFeatures
++        if (!hasNovel && !hasStandard) return null
++
++        return when {
++            hasNovel && "$NOVEL_FEATURE.class" in metadataKeys -> ExtensionManifestNamespace(NOVEL_FEATURE, isNovel = true)
++            hasStandard && "$STANDARD_FEATURE.class" in metadataKeys -> ExtensionManifestNamespace(STANDARD_FEATURE, isNovel = false)
++            hasNovel -> ExtensionManifestNamespace(NOVEL_FEATURE, isNovel = true)
++            else -> ExtensionManifestNamespace(STANDARD_FEATURE, isNovel = false)
++        }
++    }
++
++    fun displayName(
++        applicationLabel: String,
++        metadataName: String? = null,
++    ): String =
++        metadataName
++            ?.trim()
++            ?.takeIf(String::isNotEmpty)
++            ?: applicationLabel
++            .removePrefix("Tachiyomi: ")
++            .removePrefix("Tsundoku: ")
++            .trim()
++
++    fun libraryVersion(
++        versionName: String,
++        metadataVersion: Any?,
++    ): Double? =
++        when (metadataVersion) {
++            is Number -> metadataVersion.toDouble().takeUnless { it == 0.0 }
++            is String -> metadataVersion.trim().toDoubleOrNull()?.takeUnless { it == 0.0 }
++            else -> null
++        } ?: versionName.substringBeforeLast('.').toDoubleOrNull()
++
++    fun classCandidates(
++        declaredName: String,
++        packageName: String,
++    ): List<String> {
++        val absolute = if (declaredName.startsWith('.')) packageName + declaredName else declaredName
++        return buildList {
++            add(absolute)
++            if (absolute.startsWith(TSUNDOKU_EXTENSION_PREFIX)) {
++                add(absolute.replaceFirst(TSUNDOKU_EXTENSION_PREFIX, TACHIYOMI_EXTENSION_PREFIX))
++            }
++        }.distinct()
++    }
++
++    private const val TSUNDOKU_EXTENSION_PREFIX = "app.tsundoku.extension."
++    private const val TACHIYOMI_EXTENSION_PREFIX = "eu.kanade.tachiyomi.extension."
++}
++
++internal data class ExtensionManifestNamespace(
++    val prefix: String,
++    val isNovel: Boolean,
++) {
++    val classKey: String = "$prefix.class"
++    val factoryKey: String = "$prefix.factory"
++    val nsfwKey: String = "$prefix.nsfw"
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
+index 6b319bb7f80a093d9bee4cebf31fa4ba8f3a98ac..e4fc4764c9b96fb6be9d631800b2a121b48b1327 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
+@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo
+ import android.content.pm.PackageManager
+ import android.os.Build
+ import androidx.core.content.pm.PackageInfoCompat
++import dev.ahmedmohamed.hayai.novel.extension.NovelExtensionManifest
+ import eu.kanade.tachiyomi.BuildConfig
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.model.Extension
+@@ -14,6 +15,7 @@ import eu.kanade.tachiyomi.extension.model.LoadResult
+ import eu.kanade.tachiyomi.source.CatalogueSource
+ import eu.kanade.tachiyomi.source.Source
+ import eu.kanade.tachiyomi.source.SourceFactory
++import eu.kanade.tachiyomi.source.isNovelSource
+ import eu.kanade.tachiyomi.util.lang.Hash
+ import eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader
+ import eu.kanade.tachiyomi.util.system.withIOContext
+@@ -37,10 +39,6 @@ internal object ExtensionLoader {
+         preferences.showNsfwSources().get()
+     }
+ 
+-    private const val EXTENSION_FEATURE = "tachiyomi.extension"
+-    private const val METADATA_SOURCE_CLASS = "tachiyomi.extension.class"
+-    private const val METADATA_SOURCE_FACTORY = "tachiyomi.extension.factory"
+-    private const val METADATA_NSFW = "tachiyomi.extension.nsfw"
+     const val LIB_VERSION_MIN = 1.3
+     const val LIB_VERSION_MAX = 1.6
+ 
+@@ -321,8 +319,14 @@ internal object ExtensionLoader {
+         val pkgInfo = extensionInfo.packageInfo
+         val appInfo = pkgInfo.applicationInfo!!
+         val pkgName = pkgInfo.packageName
+-
+-        val extName = pkgManager.getApplicationLabel(appInfo).toString().substringAfter("Tachiyomi: ")
++        val metadata = appInfo.metaData
++
++        val extName =
++            NovelExtensionManifest
++                .displayName(
++                    applicationLabel = pkgManager.getApplicationLabel(appInfo).toString(),
++                    metadataName = metadata?.getString(NovelExtensionManifest.DISPLAY_NAME_KEY),
++                ).ifBlank { pkgName }
+         val versionName = pkgInfo.versionName
+         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
+ 
+@@ -332,7 +336,11 @@ internal object ExtensionLoader {
+         }
+ 
+         // Validate lib version
+-        val libVersion = versionName.substringBeforeLast('.').toDoubleOrNull()
++        val manifestLibVersion =
++            metadata
++                ?.takeIf { it.containsKey(NovelExtensionManifest.EXTENSION_LIB_KEY) }
++                ?.getFloat(NovelExtensionManifest.EXTENSION_LIB_KEY)
++        val libVersion = NovelExtensionManifest.libraryVersion(versionName, manifestLibVersion)
+         if (libVersion == null || libVersion < LIB_VERSION_MIN || libVersion > LIB_VERSION_MAX) {
+             Timber.w(
+                 "Lib version is $libVersion, while only versions $LIB_VERSION_MIN to $LIB_VERSION_MAX are allowed",
+@@ -340,6 +348,13 @@ internal object ExtensionLoader {
+             return LoadResult.Error
+         }
+ 
++        val requiredFeatures = pkgInfo.reqFeatures.orEmpty().mapNotNull { it.name }.toSet()
++        val manifest = NovelExtensionManifest.resolve(requiredFeatures, metadata?.keySet().orEmpty())
++        if (manifest == null) {
++            Timber.w("Missing supported extension feature for $extName ($pkgName)")
++            return LoadResult.Error
++        }
++
+         val signatures = getSignatures(pkgInfo)
+         if (signatures.isNullOrEmpty()) {
+             Timber.w("Package $pkgName isn't signed")
+@@ -362,38 +377,64 @@ internal object ExtensionLoader {
+             return LoadResult.Untrusted(extension)
+         }
+ 
+-        val isNsfw = appInfo.metaData.getInt(METADATA_NSFW) == 1
++        val isNsfw =
++            (metadata?.getInt(NovelExtensionManifest.CONTENT_WARNING_KEY) ?: 0) > 0 ||
++                (metadata?.getInt(manifest.nsfwKey) ?: 0) == 1
+         if (!loadNsfwSource && isNsfw) {
+             Timber.w("NSFW extension $pkgName not allowed")
+             return LoadResult.Error
+         }
+ 
+-        val classLoader = ChildFirstPathClassLoader(appInfo.sourceDir, null, context.classLoader)
++        val classLoader =
++            try {
++                ChildFirstPathClassLoader(appInfo.sourceDir, null, context.classLoader)
++            } catch (error: Exception) {
++                Timber.e(error, "Extension class loader error: $extName ($pkgName)")
++                return LoadResult.Error
++            }
++
++        val declaredClasses = metadata?.getString(manifest.classKey)
++        if (declaredClasses.isNullOrBlank()) {
++            Timber.w("Missing ${manifest.classKey} for extension $extName ($pkgName)")
++            return LoadResult.Error
++        }
+ 
+         val sources =
+-            appInfo.metaData
+-                .getString(METADATA_SOURCE_CLASS)!!
++            declaredClasses
+                 .split(";")
+-                .map {
+-                    val sourceClass = it.trim()
+-                    if (sourceClass.startsWith(".")) {
+-                        pkgInfo.packageName + sourceClass
+-                    } else {
+-                        sourceClass
+-                    }
+-                }.flatMap {
+-                    try {
+-                        when (val obj = Class.forName(it, false, classLoader).getDeclaredConstructor().newInstance()) {
+-                            is Source -> listOf(obj)
+-                            is SourceFactory -> obj.createSources()
+-                            else -> throw Exception("Unknown source class type! ${obj.javaClass}")
++                .map(String::trim)
++                .filter(String::isNotEmpty)
++                .flatMap { declaredClass ->
++                    var lastClassError: ClassNotFoundException? = null
++                    for (className in NovelExtensionManifest.classCandidates(declaredClass, pkgInfo.packageName)) {
++                        try {
++                            val obj = Class.forName(className, false, classLoader).getDeclaredConstructor().newInstance()
++                            return@flatMap when (obj) {
++                                is Source -> listOf(obj)
++                                is SourceFactory -> obj.createSources()
++                                else -> throw Exception("Unknown source class type! ${obj.javaClass}")
++                            }
++                        } catch (error: ClassNotFoundException) {
++                            lastClassError = error
++                        } catch (error: Throwable) {
++                            Timber.e(error, "Extension load error: $extName ($className)")
++                            return LoadResult.Error
+                         }
+-                    } catch (e: Throwable) {
+-                        Timber.e(e, "Extension load error: $extName.")
+-                        return LoadResult.Error
+                     }
++
++                    Timber.e(lastClassError, "Extension class not found: $extName ($declaredClass)")
++                    return LoadResult.Error
+                 }
+ 
++        if (sources.isEmpty()) {
++            Timber.w("Extension $extName ($pkgName) did not declare any source classes")
++            return LoadResult.Error
++        }
++        if (manifest.isNovel && sources.none { it.isNovelSource() }) {
++            Timber.w("Novel extension $extName ($pkgName) did not expose a novel source")
++            return LoadResult.Error
++        }
++
+         val langs =
+             sources
+                 .filterIsInstance<CatalogueSource>()
+@@ -416,7 +457,7 @@ internal object ExtensionLoader {
+                 lang = lang,
+                 isNsfw = isNsfw,
+                 sources = sources,
+-                pkgFactory = appInfo.metaData.getString(METADATA_SOURCE_FACTORY),
++                pkgFactory = metadata.getString(manifest.factoryKey),
+                 icon = appInfo.loadIcon(pkgManager),
+                 isShared = extensionInfo.isShared,
+             )
+@@ -458,7 +499,8 @@ internal object ExtensionLoader {
+      *
+      * @param pkgInfo The package info of the application.
+      */
+-    private fun isPackageAnExtension(pkgInfo: PackageInfo): Boolean = pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }
++    private fun isPackageAnExtension(pkgInfo: PackageInfo): Boolean =
++        NovelExtensionManifest.isSupported(pkgInfo.reqFeatures.orEmpty().map { it.name })
+ 
+     /**
+      * Returns the signatures of the package or null if it's not signed.
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/source/NovelSource.kt b/app/src/main/java/eu/kanade/tachiyomi/source/NovelSource.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..c8161957707b258dfce099e9da994bc4e6c9977d
+--- /dev/null
++++ b/app/src/main/java/eu/kanade/tachiyomi/source/NovelSource.kt
+@@ -0,0 +1,29 @@
++package eu.kanade.tachiyomi.source
++
++/**
++ * Binary/source compatibility marker retained for existing Tsundoku novel extensions.
++ * New extensions should override [Source.isNovelSource] and [Source.fetchPageText].
++ */
++@Deprecated("Detection is via Source.isNovelSource; fetchPageText is on Source")
++interface NovelSource : Source
++
++/**
++ * Recognizes both the current virtual property and legacy marker implementations.
++ * The name fallback covers extensions whose compile-only API was loaded in another class loader.
++ */
++@Suppress("DEPRECATION")
++fun Source.isNovelSource(): Boolean =
++    isNovelSource ||
++        this is NovelSource ||
++        javaClass.hasInterfaceNamed(LEGACY_NOVEL_SOURCE_NAME)
++
++private fun Class<*>.hasInterfaceNamed(expectedName: String): Boolean {
++    val visited = mutableSetOf<Class<*>>()
++    fun visit(type: Class<*>?): Boolean {
++        if (type == null || !visited.add(type)) return false
++        return type.interfaces.any { it.name == expectedName || visit(it) } || visit(type.superclass)
++    }
++    return visit(this)
++}
++
++private const val LEGACY_NOVEL_SOURCE_NAME = "eu.kanade.tachiyomi.source.NovelSource"
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifestTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifestTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..9b26aa9f256db6d05b5689f182807f8f3bc8a29a
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifestTest.kt
+@@ -0,0 +1,76 @@
++package dev.ahmedmohamed.hayai.novel.extension
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelExtensionManifestTest {
++    @Test
++    fun `recognizes standard and novel required features`() {
++        assertTrue(NovelExtensionManifest.isSupported(listOf(NovelExtensionManifest.STANDARD_FEATURE)))
++        assertTrue(NovelExtensionManifest.isSupported(listOf(NovelExtensionManifest.NOVEL_FEATURE)))
++        assertFalse(NovelExtensionManifest.isSupported(listOf("unrelated.feature", null)))
++    }
++
++    @Test
++    fun `resolves the novel metadata namespace`() {
++        val namespace =
++            NovelExtensionManifest.resolve(
++                requiredFeatures = setOf(NovelExtensionManifest.NOVEL_FEATURE),
++                metadataKeys = setOf("${NovelExtensionManifest.NOVEL_FEATURE}.class"),
++            )
++
++        assertEquals(NovelExtensionManifest.NOVEL_FEATURE, namespace?.prefix)
++        assertEquals("tachiyomi.novelextension.class", namespace?.classKey)
++        assertEquals("tachiyomi.novelextension.factory", namespace?.factoryKey)
++        assertEquals("tachiyomi.novelextension.nsfw", namespace?.nsfwKey)
++        assertTrue(namespace?.isNovel == true)
++    }
++
++    @Test
++    fun `mixed package chooses the namespace that actually declares source classes`() {
++        val features = setOf(NovelExtensionManifest.STANDARD_FEATURE, NovelExtensionManifest.NOVEL_FEATURE)
++
++        val standard = NovelExtensionManifest.resolve(features, setOf("tachiyomi.extension.class"))
++        val novel = NovelExtensionManifest.resolve(features, setOf("tachiyomi.novelextension.class"))
++
++        assertEquals(NovelExtensionManifest.STANDARD_FEATURE, standard?.prefix)
++        assertEquals(NovelExtensionManifest.NOVEL_FEATURE, novel?.prefix)
++        assertNull(NovelExtensionManifest.resolve(emptySet(), emptySet()))
++    }
++
++    @Test
++    fun `normalizes extension labels without damaging ordinary names`() {
++        assertEquals("Example", NovelExtensionManifest.displayName("Tachiyomi: Example"))
++        assertEquals("Example", NovelExtensionManifest.displayName("Tsundoku: Example"))
++        assertEquals("Example", NovelExtensionManifest.displayName(" Example "))
++        assertEquals("Metadata name", NovelExtensionManifest.displayName("Tsundoku: Example", " Metadata name "))
++        assertEquals("Example", NovelExtensionManifest.displayName("Tsundoku: Example", " "))
++    }
++
++    @Test
++    fun `library version prefers typed manifest metadata and retains legacy fallback`() {
++        assertEquals(1.6, NovelExtensionManifest.libraryVersion("9.9.9", 1.6f)!!, 0.000_001)
++        assertEquals(1.5, NovelExtensionManifest.libraryVersion("9.9.9", "1.5")!!, 0.0)
++        assertEquals(1.4, NovelExtensionManifest.libraryVersion("1.4.12", null)!!, 0.0)
++        assertEquals(1.4, NovelExtensionManifest.libraryVersion("1.4.12", 0f)!!, 0.0)
++        assertNull(NovelExtensionManifest.libraryVersion("invalid", null))
++    }
++
++    @Test
++    fun `class candidates support relative and migrated Tsundoku namespaces`() {
++        assertEquals(
++            listOf("org.example.extension.Source"),
++            NovelExtensionManifest.classCandidates(".Source", "org.example.extension"),
++        )
++        assertEquals(
++            listOf(
++                "app.tsundoku.extension.en.example.Example",
++                "eu.kanade.tachiyomi.extension.en.example.Example",
++            ),
++            NovelExtensionManifest.classCandidates("app.tsundoku.extension.en.example.Example", "ignored"),
++        )
++    }
++}
+diff --git a/app/src/test/java/eu/kanade/tachiyomi/source/NovelSourceCompatibilityTest.kt b/app/src/test/java/eu/kanade/tachiyomi/source/NovelSourceCompatibilityTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..ffcfe4daad139f9666c81579fcb40c71fd2ce5da
+--- /dev/null
++++ b/app/src/test/java/eu/kanade/tachiyomi/source/NovelSourceCompatibilityTest.kt
+@@ -0,0 +1,24 @@
++package eu.kanade.tachiyomi.source
++
++import eu.kanade.tachiyomi.source.model.Page
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelSourceCompatibilityTest {
++    @Test
++    fun `legacy marker source links and is recognized without overriding the new property`() {
++        val source: Source = LegacyCompiledShapeSource()
++
++        assertFalse(source.isNovelSource)
++        assertTrue(source.isNovelSource())
++    }
++
++    @Suppress("DEPRECATION")
++    private class LegacyCompiledShapeSource : NovelSource {
++        override val id: Long = 7
++        override val name: String = "Legacy novel extension"
++
++        override suspend fun fetchPageText(page: Page): String = "legacy text"
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 2d44919d1eaccd20564690284d7dbafc63459a0c..b5bbf0ce5b94c055dbabd1ae098e7e72120fbf5e 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -17,6 +17,8 @@ J2K owns manga, chapters, history, categories, tracking, downloads, image readin
+ 
+ The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one optional high-numbered Hayai field, `BackupCreator` fills it, and `BackupRestorer` applies it only after J2K has restored manga and chapters. All payload validation, serialization models, stable identity mapping, and database behavior remain Hayai-owned. This preserves old-backup compatibility and avoids teaching J2K models about Hayai tables.
+ 
++`ExtensionLoader` is also an intentional adapter seam. Package discovery delegates manifest interpretation to Hayai's pure `NovelExtensionManifest` contract, then uses J2K's existing signature trust, NSFW policy, private-extension, and class-loading paths. A small `eu.kanade.tachiyomi.source.NovelSource` compatibility shim retains the exact legacy binary name and recognizes both the current virtual property and older marker implementations. This adds Tsundoku's `tachiyomi.novelextension` namespace without creating a second extension manager or bypassing J2K's security checks.
++
+ ## Database reset and migration
+ 
+ Legacy Hayai and current J2K both called their database `tachiyomi.db`, but their schema histories are unrelated (legacy SQLDelight v36+ versus J2K StorIO v20). Hayai therefore uses `hayai-j2k.db` as the active J2K database and treats an existing `tachiyomi.db` as a read-only source.
+@@ -27,7 +29,7 @@ On first database open, an idempotent importer validates the legacy schema and r
+ 
+ Extensions remain standard J2K `Source`/`SourceFactory` extensions. `SourceCapabilityRegistry` adds behavior by stable source ID or recognized family name instead of scattering source checks through presenters.
+ 
+-`NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources and downloaded source chapters are production implementations; remote extension discovery and Tsundoku compatibility remain explicit ports in the feature audit.
++`NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources, downloaded source chapters, and installed Tsundoku novel APK discovery are production implementations; remote repository catalogs and JavaScript plugins remain explicit ports in the feature audit.
+ 
+ The text reader owns its lifecycle. It loads text off the main thread, renders bounded selectable documents, updates J2K history, supports typography/navigation/search, speaks chapters through TTS, captures and manages quotes, and saves authenticated source assets into a self-contained integrity-checked offline store. Translation/dictionary adapters and JS/custom repository runtimes remain future Hayai-owned slices rather than changes to the image reader.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 444133f067ef148ee9f1fb1a840cdf8a3bed8091..3186ed634e3d9fba6a7467d0f10c643e0136da0c 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -28,7 +28,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+ | Dedicated reader, central routing, and J2K history | `NovelReaderActivity` and `ReaderLauncher` | port |
+-| Novel extension discovery | J2K loader plus Hayai ABI | contract foundation; compatibility port |
++| Installed novel extension discovery | J2K loader plus Hayai ABI | port |
++| Remote novel extension catalogs and installation | J2K extension API plus repository adapters | audit |
+ | JavaScript repository sources and custom-source builder | Sandboxed novel runtime and signed repositories | audit |
+ | Local novels and EPUB import/export | Document storage and local novel source | import port; export audit |
+ | Text downloads/offline reading | Document downloader, separate from image pages | port |
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index b82ef01a8c61d1b7beb8de3ce74a219814604931..9276b4121a9708a01e83612816b6404c6e5ab92e 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -11,9 +11,11 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/notification/NotificationReceiver.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/Source.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/source/NovelSource.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/SourceManager.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/source/model/Page.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
+-- 
+2.54.0.windows.1
+

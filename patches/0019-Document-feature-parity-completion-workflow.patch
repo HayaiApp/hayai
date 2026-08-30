@@ -1,0 +1,19 @@
+From 0842f7e348b97a82b2f8feac14dbb479bf70f6ee Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 20:59:00 +0300
+Subject: [PATCH] Document feature parity completion workflow
+
+
+diff --git a/.audit/parity-completion.tsv b/.audit/parity-completion.tsv
+new file mode 100644
+index 0000000000000000000000000000000000000000..644887d8ecaee55cc67e65536ce19adc985c8a14
+--- /dev/null
++++ b/.audit/parity-completion.tsv
+@@ -0,0 +1,4 @@
++ts	phase	decision	why	evidence	result
++2026-08-21T20:00:00Z	frame	excluded MangaDex-specific parity but retained its existing delegated wrapper	the user explicitly removed MangaDex from this port	docs/architecture/upstream-feature-audit.md	open
++2026-08-21T20:01:00Z	workflow	write every requested production and test artifact before starting validation	the user requested code-first execution and the machine must not be hit by repeated builds	AGENTS.md; current task plan	open
++2026-08-21T20:02:00Z	architecture	keep enhanced sources, novel features, and the E-Hentai updater in disjoint Hayai-owned modules	the workstreams have separate data ownership and can be reviewed without changing protected J2K lifecycle files	app/src/main/java/dev/ahmedmohamed/hayai	open
+-- 
+2.54.0.windows.1
+

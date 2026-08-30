@@ -1,0 +1,34 @@
+From 11b0d646164b86b81b63debc09c9f601d4131622 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 14:45:47 +0300
+Subject: [PATCH] Record reader and source emulator verification
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 68e72a0fbedcb0385ce48cd347ef9013fcda0ef3..59ce9f747caedea77352bcd557dfe1608a18c943 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -94,5 +94,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T14:02:00+03:00	j2k-novel-data-navigation	replaced the standalone novel data-tools activity with a J2K SettingsController and controller-owned document results	preserved Tsundoku and LNReader dry-run import, warnings, atomic apply, EPUB export with bounded assets, destination cleanup, cancellation, and progress while deleting the duplicate activity shell	NovelDataToolsController.kt; NovelSettingsController.kt; MangaDetailsController.kt	COMPILED
+ 2026-08-22T14:25:00+03:00	j2k-eh-settings-navigation	replaced the standalone E-Hentai settings activity with a native J2K SettingsController	preserved login results, session verification, the remote settings matrix and retry, watched tags, favorites planning and sync, category mapping, updater policy, statistics, immediate run, and cancellation while deleting the duplicate toolbar and activity shell	EhSettingsController.kt; BrowseSourceController.kt; SettingsAdvancedController.kt; SourcePreviewController.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T15:10:00+03:00	sy-source-details-ui	replaced the custom horizontal preview strip and generic enhanced-source summaries with their SY presentation contracts	used adaptive full-width preview rows, fit-width 120 by 200 dp cells, J2K text actions and empty state, plus source-specific E-Hentai, ExHentai, 8Muses, HBrowse, NHentai, Pururin, and LANraragi description layouts reconstructed from pinned SY while retaining typed Hayai data and loaders	SourceMetadataUi.kt; SourcePreviewController.kt; MangaDetailsController.kt; hayai_sy_description_*.xml; manga_header_item.xml	IMPLEMENTED_UNVERIFIED
+-2026-08-22T15:42:00+03:00	j2k-novel-reader-controls	replaced the remaining bespoke novel option controls and arrow-order editor with native J2K layouts and interaction patterns	preserved the full preference surface and immediate reader updates while using J2K filter and text buttons, subtitle labels, material dialogs, and draggable download-header cards; subtitle values prevent 100 percent from colliding with or wrapping through the title	NovelReaderSettingsSheet.kt; novel-reader-parity.md	COMPILED
+-2026-08-22T16:40:00+03:00	sy-eh-metadata-responsiveness	fixed the emulator-discovered empty gallery badge and clipped metadata action at large display and font scales	kept the SY information hierarchy while using J2K's Material 3 text-button style, wrap-content height, two-line fallback, and an explicit localized unknown type for absent upstream category data	hayai_sy_description_eh.xml; SourceMetadataUi.kt	IMPLEMENTED_UNVERIFIED
++2026-08-22T15:42:00+03:00	j2k-novel-reader-controls	replaced the remaining bespoke novel option controls and arrow-order editor with native J2K layouts and interaction patterns	preserved the full preference surface and immediate reader updates while using J2K filter and text buttons, subtitle labels, material dialogs, and draggable download-header cards; emulator evidence confirms subtitle values do not collide with titles and the ordering surface uses drag handles	NovelReaderSettingsSheet.kt; novel-reader-parity.md; artifacts/emulator-verification/reader-settings-refactor-options.png; artifacts/emulator-verification/reader-settings-refactor-more.png	VERIFIED
++2026-08-22T16:40:00+03:00	sy-eh-metadata-responsiveness	fixed the emulator-discovered empty gallery badge and clipped metadata action at large display and font scales	kept the SY information hierarchy while using J2K's Material 3 text-button style, wrap-content height, two-line fallback, and an explicit localized unknown type for absent upstream category data; verified after reinstall with restored migration fixture	hayai_sy_description_eh.xml; SourceMetadataUi.kt; artifacts/emulator-verification/reader-settings-refactor-eh-detail-fixed.png	VERIFIED
+diff --git a/docs/architecture/novel-reader-parity.md b/docs/architecture/novel-reader-parity.md
+index 5e782fa46ac8966a0caae53c38f9dea4a98f5d54..b304325056255fe21c4ba89a1d51d845762bbec8 100644
+--- a/docs/architecture/novel-reader-parity.md
++++ b/docs/architecture/novel-reader-parity.md
+@@ -50,6 +50,8 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
+ 
+ The reader settings sheet deliberately contains no second UI vocabulary. Progress mode uses J2K's filter button layout, actions use J2K's text button layout, numeric values use J2K subtitle styling so values such as 100 percent cannot collide with or split the title, and configurable action/status order uses J2K's draggable download-header card with `ItemTouchHelper`. Hayai owns only the preference mapping and callbacks.
+ 
++The installed-APK run captured in `artifacts/emulator-verification/reader-settings-refactor-reader-chrome.xml`, `reader-settings-refactor-options.png`, and `reader-settings-refactor-more.png` verifies the reader toolbar safe area, separate title and metadata rows, intact percentage subtitles, all five option tabs, and native drag-handle ordering rows against the restored migration fixture.
++
+ The coherent reader batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` run in `artifacts/emulator-verification/20260822-043650` verified legacy migration, the exact J2K reader shell, the absence of manga page-number labels, active TTS transport controls, all five reader settings tabs, offline save, process restart recovery, the logged-out E-Hentai settings state, and Browse.
+ 
+ The discarded custom-shell workflow remains in `artifacts/emulator-verification/20260822-032809` only as regression evidence. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote and highlight selection, and orientation changes still need dedicated device flows.
+-- 
+2.54.0.windows.1
+

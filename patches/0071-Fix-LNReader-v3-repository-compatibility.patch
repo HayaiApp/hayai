@@ -1,0 +1,365 @@
+From e0cb4a325475203c24e7b41e68d5f9457072af8f Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 09:08:49 +0300
+Subject: [PATCH] Fix LNReader v3 repository compatibility
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+index 32c39a85c54dfca09b8fe2970ca8b32d8cf04aae..387defc565c0c709728faf0c915f5e7462647993 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+@@ -23,9 +23,6 @@ import kotlinx.coroutines.sync.Mutex
+ import kotlinx.coroutines.sync.withLock
+ import kotlinx.coroutines.withContext
+ import kotlinx.serialization.json.Json
+-import kotlinx.serialization.json.JsonArray
+-import kotlinx.serialization.json.JsonObject
+-import kotlinx.serialization.json.decodeFromJsonElement
+ import okhttp3.OkHttpClient
+ import java.io.ByteArrayOutputStream
+ 
+@@ -261,15 +258,9 @@ class NovelPluginManager(
+ 
+     private suspend fun fetchRepository(repository: NovelPluginRepository): List<NovelPluginDescriptor> {
+         val bytes = download(repository.url, MAX_REPOSITORY_BYTES)
+-        val root = json.parseToJsonElement(bytes.toString(Charsets.UTF_8))
+-        val array =
+-            when (root) {
+-                is JsonArray -> root
+-                is JsonObject -> root["plugins"] as? JsonArray ?: root["sources"] as? JsonArray ?: novelFailure(NovelFailure.Code.PluginRepositoryArray)
+-                else -> novelFailure(NovelFailure.Code.PluginRepositoryDocument)
+-            }
+-        novelRequire(array.size <= MAX_REPOSITORY_PLUGINS, NovelFailure.Code.PluginRepositoryTooMany)
+-        val descriptors = array.map { json.decodeFromJsonElement<NovelPluginDescriptor>(it).validate(repository.url) }
++        val document = NovelPluginRepositoryDocument.decode(json, bytes.toString(Charsets.UTF_8))
++        novelRequire(document.plugins.size <= MAX_REPOSITORY_PLUGINS, NovelFailure.Code.PluginRepositoryTooMany)
++        val descriptors = document.plugins.map { it.validate(repository.url) }
+         val signingKeys = descriptors.mapNotNull(NovelPluginDescriptor::signingKey).distinct()
+         novelRequire(signingKeys.size <= 1, NovelFailure.Code.PluginRepositoryMixedKeys)
+         signingKeys.singleOrNull()?.let { trustStore.observeSigningKey(repository.url, it) }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt
+index cfdeaa994114f6abd8fb72d408fe99660e498016..5aaf2e93a8017104f7344e5d3721911ae46a6a1c 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt
+@@ -44,10 +44,12 @@ data class NovelPluginDescriptor(
+         return (0..7).fold(0L) { value, index -> (value shl 8) or (digest[index].toLong() and 0xff) } and Long.MAX_VALUE
+     }
+ 
+-    fun normalizedLanguage(): String =
+-        LANGUAGE_ALIASES[lang.trim().lowercase()]
+-            ?: lang.trim().lowercase().takeIf { ISO_LANGUAGE.matches(it) }
++    fun normalizedLanguage(): String {
++        val normalized = lang.normalizedLanguageValue()
++        return LANGUAGE_ALIASES[normalized]
++            ?: normalized.takeIf { ISO_LANGUAGE.matches(it) }
+             ?: "other"
++    }
+ 
+     fun resolvedCodeUrl(repositoryUrl: String): String = resolvePluginUrl(repositoryUrl, url)
+ 
+@@ -114,7 +116,7 @@ internal fun requireSafeUrl(
+     allowLocalHttp: Boolean,
+ ) {
+     novelRequire(value.length in 1..8_192, NovelFailure.Code.PluginUrlLength)
+-    val uri = runCatching { URI(value) }.getOrNull()
++    val uri = runCatching { URI(value.encodeNonAuthorityBrackets()) }.getOrNull()
+     novelRequire(uri?.isAbsolute == true && uri.host != null && uri.userInfo == null, NovelFailure.Code.PluginAbsoluteUrl)
+     val scheme = uri.scheme.lowercase()
+     val local = uri.host.equals("localhost", true) || uri.host == "127.0.0.1" || uri.host == "::1"
+@@ -134,8 +136,8 @@ internal fun resolvePluginUrl(
+ ): String {
+     requireSafeUrl(repositoryUrl, allowLocalHttp = true)
+     novelRequire(value.length in 1..8_192, NovelFailure.Code.PluginUrlLength)
+-    val base = URI(repositoryUrl)
+-    val resolved = base.resolve(value)
++    val base = URI(repositoryUrl.encodeNonAuthorityBrackets())
++    val resolved = base.resolve(value.encodeNonAuthorityBrackets())
+     val result = resolved.toASCIIString()
+     requireSafeUrl(result, allowLocalHttp = true)
+     return result
+@@ -143,6 +145,35 @@ internal fun resolvePluginUrl(
+ 
+ internal fun sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+ 
++private fun String.normalizedLanguageValue(): String =
++    filterNot { Character.getType(it) == Character.FORMAT.toInt() }
++        .trim()
++        .lowercase()
++
++/** Encode repository path brackets while preserving the brackets around an IPv6 authority. */
++private fun String.encodeNonAuthorityBrackets(): String {
++    val schemeEnd = indexOf("://")
++    val authority =
++        if (schemeEnd >= 0) {
++            val start = schemeEnd + 3
++            val end = indexOfAny(charArrayOf('/', '?', '#'), start).takeIf { it >= 0 } ?: length
++            start until end
++        } else {
++            IntRange.EMPTY
++        }
++    if (indexOf('[') < 0 && indexOf(']') < 0) return this
++    return buildString(length) {
++        this@encodeNonAuthorityBrackets.forEachIndexed { index, character ->
++            when {
++                index in authority -> append(character)
++                character == '[' -> append("%5B")
++                character == ']' -> append("%5D")
++                else -> append(character)
++            }
++        }
++    }
++}
++
+ internal object NovelPluginVersions {
+     fun compare(
+         left: String,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..fe0ac90d1b9932b23206e672b0c4a466f6dd7cb1
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt
+@@ -0,0 +1,55 @@
++package dev.ahmedmohamed.hayai.novel.plugin
++
++import dev.ahmedmohamed.hayai.novel.error.NovelFailure
++import dev.ahmedmohamed.hayai.novel.error.novelFailure
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.decodeFromJsonElement
++import java.net.URI
++
++/**
++ * Version-tolerant representation of an external LNReader repository document.
++ *
++ * LNReader currently publishes the descriptor list as the root array. Older and third-party
++ * repositories use either a `plugins` or `sources` envelope, so all supported wire shapes are
++ * normalized at this boundary before the manager sees them.
++ */
++internal data class NovelPluginRepositoryDocument(
++    val plugins: List<NovelPluginDescriptor>,
++) {
++    companion object {
++        fun decode(
++            json: Json,
++            value: String,
++        ): NovelPluginRepositoryDocument {
++            val root = json.parseToJsonElement(value)
++            val entries =
++                when (root) {
++                    is JsonArray -> root
++                    is JsonObject ->
++                        root["plugins"] as? JsonArray
++                            ?: root["sources"] as? JsonArray
++                            ?: novelFailure(NovelFailure.Code.PluginRepositoryArray)
++                    else -> novelFailure(NovelFailure.Code.PluginRepositoryDocument)
++                }
++            val plugins =
++                json.decodeFromJsonElement<List<NovelPluginDescriptor>>(entries)
++                    .map(NovelPluginDescriptor::withCompatibleRepositorySite)
++            return NovelPluginRepositoryDocument(plugins)
++        }
++    }
++}
++
++/** Optional catalogue metadata must not make every otherwise valid plugin unavailable. */
++private fun NovelPluginDescriptor.withCompatibleRepositorySite(): NovelPluginDescriptor {
++    if (site.isBlank()) return this
++    val uri = runCatching { URI(site) }.getOrNull()
++    val valid =
++        site.length <= 8_192 &&
++            uri?.isAbsolute == true &&
++            uri.host != null &&
++            uri.userInfo == null &&
++            (uri.scheme.equals("https", true) || uri.scheme.equals("http", true))
++    return if (valid) this else copy(site = "")
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocumentTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocumentTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..498c258f6b2be97ebd2af89ee50e8f6e7863198d
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocumentTest.kt
+@@ -0,0 +1,81 @@
++package dev.ahmedmohamed.hayai.novel.plugin
++
++import dev.ahmedmohamed.hayai.novel.error.NovelFailure
++import kotlinx.serialization.json.Json
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertThrows
++import org.junit.Test
++
++class NovelPluginRepositoryDocumentTest {
++    private val json =
++        Json {
++            ignoreUnknownKeys = true
++            isLenient = true
++            explicitNulls = false
++        }
++
++    @Test
++    fun `LNReader v3 root array decodes and validates`() {
++        val document = decodeFixture("lnreader-v3-root-array.json")
++
++        assertEquals(2, document.plugins.size)
++        val plugin = document.plugins.first().validate(REPOSITORY_URL)
++        assertEquals("arnovel", plugin.id)
++        assertEquals("ar", plugin.normalizedLanguage())
++        assertEquals(
++            "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/arabic/ArNovel%5Bmadara%5D.js",
++            plugin.resolvedCodeUrl(REPOSITORY_URL),
++        )
++        assertEquals("", document.plugins.last().validate(REPOSITORY_URL).site)
++    }
++
++    @Test
++    fun `legacy sources envelope remains supported`() {
++        val document = decodeFixture("lnreader-legacy-sources-envelope.json")
++
++        assertEquals(listOf("legacy-example"), document.plugins.map(NovelPluginDescriptor::id))
++        assertEquals(
++            "https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins/LegacyExample.js",
++            document.plugins.single().resolvedCodeUrl(REPOSITORY_URL),
++        )
++    }
++
++    @Test
++    fun `plugins envelope remains supported`() {
++        val document =
++            NovelPluginRepositoryDocument.decode(
++                json,
++                """{"plugins":[{"id":"wrapped","name":"Wrapped","lang":"en","version":"1","url":"wrapped.js"}]}""",
++            )
++
++        assertEquals("wrapped", document.plugins.single().id)
++    }
++
++    @Test
++    fun `object without a supported descriptor array reports repository array failure`() {
++        val error =
++            assertThrows(NovelFailure::class.java) {
++                NovelPluginRepositoryDocument.decode(json, """{"extensions":[]}""")
++            }
++
++        assertEquals(NovelFailure.Code.PluginRepositoryArray, error.code)
++    }
++
++    @Test
++    fun `scalar root reports repository document failure`() {
++        val error = assertThrows(NovelFailure::class.java) { NovelPluginRepositoryDocument.decode(json, "true") }
++
++        assertEquals(NovelFailure.Code.PluginRepositoryDocument, error.code)
++    }
++
++    private fun decodeFixture(name: String): NovelPluginRepositoryDocument {
++        val path = "/dev/ahmedmohamed/hayai/novel/plugin/$name"
++        val value = checkNotNull(javaClass.getResource(path)) { "Missing fixture $path" }.readText()
++        return NovelPluginRepositoryDocument.decode(json, value)
++    }
++
++    companion object {
++        private const val REPOSITORY_URL =
++            "https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json"
++    }
++}
+diff --git a/app/src/test/resources/dev/ahmedmohamed/hayai/novel/plugin/lnreader-legacy-sources-envelope.json b/app/src/test/resources/dev/ahmedmohamed/hayai/novel/plugin/lnreader-legacy-sources-envelope.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..6cdc6e71397777e74a1355057b0ac4daf6ba5d45
+--- /dev/null
++++ b/app/src/test/resources/dev/ahmedmohamed/hayai/novel/plugin/lnreader-legacy-sources-envelope.json
+@@ -0,0 +1,15 @@
++{
++  "name": "Legacy community catalogue",
++  "schemaVersion": 1,
++  "sources": [
++    {
++      "id": "legacy-example",
++      "name": "Legacy Example",
++      "site": "https://novels.example/",
++      "lang": "English",
++      "version": "1.0.0",
++      "url": "plugins/LegacyExample.js",
++      "iconUrl": "icons/legacy-example.png"
++    }
++  ]
++}
+diff --git a/app/src/test/resources/dev/ahmedmohamed/hayai/novel/plugin/lnreader-v3-root-array.json b/app/src/test/resources/dev/ahmedmohamed/hayai/novel/plugin/lnreader-v3-root-array.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..398f29c2c5450232ba60bbbbfdc5a712221b8476
+--- /dev/null
++++ b/app/src/test/resources/dev/ahmedmohamed/hayai/novel/plugin/lnreader-v3-root-array.json
+@@ -0,0 +1,21 @@
++[
++  {
++    "id": "arnovel",
++    "name": "ArNovel",
++    "site": "https://ar-no.com/",
++    "lang": "‎العربية",
++    "version": "2.2.0",
++    "url": "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/arabic/ArNovel[madara].js",
++    "iconUrl": "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/public/static/multisrc/madara/arnovel/icon.png",
++    "futureMetadata": { "ignored": true }
++  },
++  {
++    "id": "komga",
++    "name": "Komga",
++    "site": "url",
++    "lang": "Multi",
++    "version": "1.0.2",
++    "url": "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/multi/komga.js",
++    "iconUrl": "https://raw.githubusercontent.com/lnreader/lnreader-plugins/plugins/v3.0.0/public/static/src/multi/komga/icon.png"
++  }
++]
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 7a406205a7945410b3549600ef666fc328954d66..e25bbd1c6486564c0302881901bd5be4c9ebdc70 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -1491,7 +1491,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"SELECT COUNT(*), COALESCE(SUM(s.word_count), 0), " +
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"WHERE c.manga_id IN ($placeholders)",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	val placeholders = ids.joinToString(",") { "?" }
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	is JsonObject -> root["plugins"] as? JsonArray ?: root["sources"] as? JsonArray ?: novelFailure(NovelFailure.Code.PluginRepositoryArray)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	?: "other"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"arabic" to "ar",
+@@ -1524,6 +1523,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"ไ
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"한국어" to "ko",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"中文" to "zh",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"日本語" to "ja",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	character == '[' -> append("%5B")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	character == ']' -> append("%5D")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	internal fun sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	novelRequire(scheme == "https" || (allowLocalHttp && scheme == "http" && local), NovelFailure.Code.PluginHttpsOnly)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	novelRequire(uri.scheme.equals("https", true) || uri.scheme.equals("http", true), NovelFailure.Code.PluginWebsiteScheme)
+@@ -1536,7 +1537,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val c
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val digest = MessageDigest.getInstance("SHA-256").digest("hayai-novel-plugin:$id".toByteArray())
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val iconUrl: String = "",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val local = uri.host.equals("localhost", true) || uri.host == "127.0.0.1" || uri.host == "::1"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val schemeEnd = indexOf("://")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	val site: String = "",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	?: root["sources"] as? JsonArray
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	(uri.scheme.equals("https", true) || uri.scheme.equals("http", true))
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	return if (valid) this else copy(site = "")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginRepositoryDocument.kt	root["plugins"] as? JsonArray
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.listFiles { file -> file.isFile && file.extension == "js" && file.name.startsWith("$pluginId-") }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("DELETE FROM hayai_novel_repos WHERE base_url = ?")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginStore.kt	.query("SELECT 1 FROM hayai_novel_plugin_sources WHERE plugin_id = ?")
+@@ -2118,7 +2124,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsNe
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsPreviousParagraph("tts_prev_paragraph"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	TtsViewport("tts_viewport"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	WebView("webview"),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	fun update(value: Float) { valueText.text = context.getString(R.string.hayai_novel_reader_multiplier_value, "%.1f".format(value)) }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.hayai_novel_reader_app to "app", R.string.hayai_novel_reader_light to "light", R.string.dark to "dark", R.string.hayai_novel_reader_sepia to "sepia", R.string.black to "black", R.string.hayai_novel_reader_grey to "grey", R.string.hayai_novel_reader_custom to "custom"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	listOf(R.string.none to "NONE", R.string.hayai_novel_reader_horizontal to "HORIZONTAL", R.string.vertical_viewer to "VERTICAL", R.string.hayai_novel_reader_both to "BOTH"),
+@@ -2131,8 +2136,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelTheme.set("custom")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val marker = "hayai-bottom-actions"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val marker = "hayai-status-actions"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	val values = listOf("") + voices.map { it.name }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt	val appendJavaScript: String = "",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelThemeColors.kt	"black" -> 0xFF000000.toInt() to 0xFFECECEC.toInt()
+-- 
+2.54.0.windows.1
+

@@ -1,0 +1,1388 @@
+From 924c9ec85883db7d3c04353dde1bdb857eb5fc48 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 12:58:49 +0300
+Subject: [PATCH] Move novel tools into J2K settings
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index c59798c69c0b18f8409068b7c1ef0ed33304418c..5fde200839371d1f522c6b42c8373f115dbdd4fa 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -87,3 +87,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T12:34:00+03:00	j2k-source-navigation	replaced standalone metadata and page-preview activities with Hayai feature controllers hosted by J2K MainActivity navigation	removed duplicate app shells while preserving source-owned state, loading, empty-state, metadata, preview, and selected-page behavior	SourceMetadataController.kt; SourcePreviewController.kt; MangaDetailsController.kt; AndroidManifest.xml	VERIFIED
+ 2026-08-22T12:34:00+03:00	novel-reader-insets	made the existing J2K reader layout authoritative for system-cutout and visible-reader-chrome insets	the toolbar ends at y=351 and the novel viewer begins at y=351 on the authorized Pixel_10_Pro_XL fixture, with no fatal exception	NovelReaderActivity.kt; artifacts/emulator-verification/novel-reader-overlap-fixed.xml; artifacts/emulator-verification/novel-reader-overlap-fixed.png	VERIFIED
+ 2026-08-22T12:34:00+03:00	migration-fixture-evidence	verified the restored emulator fixture retains the promoted quote and source-metadata rows plus the lossless archived legacy rows	preserved quote attribution, original and translated fields, language, timestamp, metadata, durable migration completion, and foreign-key integrity	artifacts/emulator-verification/hayai-state-before-controller.tgz; LegacyImportPlanTest.kt	VERIFIED
++2026-08-22T13:05:00+03:00	j2k-novel-settings-navigation	replaced the standalone translation, dictionary, and visual-source-builder activities with J2K SettingsController screens	preserved atomic language-tool validation and every custom-source field, JSON round trip, validation, live preview, and install action while deleting two duplicate activity shells	NovelLanguageToolsSettingsController.kt; NovelCustomSourceBuilderController.kt; NovelSettingsController.kt	COMPILED
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 19a183e4ec08180752f65e54f8c62786d95e5c96..2441b8b158975a654359ed06585b2cb4f330dfd9 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -163,14 +163,6 @@
+             android:name="dev.ahmedmohamed.hayai.source.enhanced.batch.EnhancedBatchAddActivity"
+             android:exported="false"
+             android:theme="@style/Theme.Tachiyomi" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderActivity"
+-            android:exported="false"
+-            android:theme="@style/Theme.Tachiyomi" />
+-        <activity
+-            android:name="dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsActivity"
+-            android:exported="false"
+-            android:theme="@style/Theme.Tachiyomi" />
+         <activity
+             android:name="dev.ahmedmohamed.hayai.novel.extension.NovelApkExtensionManagerActivity"
+             android:exported="false"
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+index b55b64909392c60bb86e819a5a4c783f1a9456d5..f5da53b6961c3ccf0ab118f9c90993e162c90f56 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+@@ -19,8 +19,8 @@ import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsActivity
+ import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
+ import dev.ahmedmohamed.hayai.novel.reader.NovelColorPickerDialog
+ import dev.ahmedmohamed.hayai.novel.reader.NovelThemeColors
+-import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderActivity
+-import dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsActivity
++import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderController
++import dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsController
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.preference.Preference
+ import eu.kanade.tachiyomi.ui.setting.SettingsController
+@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.ui.setting.switchPreference
+ import eu.kanade.tachiyomi.ui.setting.titleRes
+ import eu.kanade.tachiyomi.util.system.materialAlertDialog
+ import eu.kanade.tachiyomi.util.system.toast
++import eu.kanade.tachiyomi.util.view.withFadeTransaction
+ import eu.kanade.tachiyomi.widget.preference.IntListMatPreference
+ import eu.kanade.tachiyomi.widget.preference.ListMatPreference
+ import uy.kohesive.injekt.Injekt
+@@ -263,12 +264,12 @@ class NovelSettingsController : SettingsController() {
+             preference {
+                 title = context.getString(R.string.hayai_novel_reader_translation_dictionary)
+                 summary = context.getString(R.string.hayai_novel_reader_translation_dictionary_summary)
+-                onClick { startActivity(Intent(context, NovelLanguageToolsSettingsActivity::class.java)) }
++                onClick { router.pushController(NovelLanguageToolsSettingsController().withFadeTransaction()) }
+             }
+             preference {
+                 title = context.getString(R.string.hayai_novel_reader_source_builder)
+                 summary = context.getString(R.string.hayai_novel_reader_source_builder_summary)
+-                onClick { startActivity(Intent(context, NovelCustomSourceBuilderActivity::class.java)) }
++                onClick { router.pushController(NovelCustomSourceBuilderController().withFadeTransaction()) }
+             }
+             preference {
+                 title = context.getString(R.string.hayai_novel_reader_remote_extensions)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt
+deleted file mode 100644
+index 74b0b6e654cb37e136c18b69f6352afff1934e07..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt
++++ /dev/null
+@@ -1,279 +0,0 @@
+-package dev.ahmedmohamed.hayai.novel.source.builder
+-
+-import android.os.Bundle
+-import android.text.InputType
+-import android.widget.Button
+-import android.widget.EditText
+-import android.widget.LinearLayout
+-import android.widget.TextView
+-import androidx.appcompat.app.AlertDialog
+-import androidx.appcompat.app.AppCompatActivity
+-import androidx.lifecycle.lifecycleScope
+-import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+-import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.network.NetworkHelper
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.launch
+-import kotlinx.coroutines.withContext
+-import okhttp3.Request
+-import okhttp3.Headers
+-import uy.kohesive.injekt.Injekt
+-import uy.kohesive.injekt.api.get
+-
+-class NovelCustomSourceBuilderActivity : AppCompatActivity() {
+-    private val store by lazy { NovelCustomSourceStore(this, Injekt.get<NovelPluginManager>()) }
+-    private val network by lazy { Injekt.get<NetworkHelper>() }
+-    private lateinit var editor: EditText
+-    private lateinit var status: TextView
+-    private val fields = linkedMapOf<String, EditText>()
+-
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        title = getString(R.string.hayai_custom_novel_source)
+-        setContentView(android.widget.ScrollView(this).apply {
+-            addView(LinearLayout(this@NovelCustomSourceBuilderActivity).apply {
+-                orientation = LinearLayout.VERTICAL
+-                setPadding(24, 24, 24, 24)
+-                addView(TextView(context).apply {
+-                    text = getString(R.string.hayai_custom_source_instructions)
+-                })
+-                FIELD_KEYS.forEach { key ->
+-                    val field = EditText(context).apply { hint = fieldHint(key) }
+-                    fields[key] = field
+-                    addView(field)
+-                }
+-                editor = EditText(context).apply {
+-                    hint = getString(R.string.hayai_custom_source_advanced_hint)
+-                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+-                    minLines = 4
+-                    setText(intent.getStringExtra(EXTRA_DEFINITION).orEmpty())
+-                }
+-                addView(editor)
+-                addView(Button(context).apply {
+-                    text = getString(R.string.hayai_custom_source_load_json)
+-                    setOnClickListener {
+-                        runCatching { store.parse(editor.text.toString()) }
+-                            .onSuccess(::populate)
+-                            .onFailure { status.text = novelFailureMessage(it, R.string.hayai_custom_source_operation_failed) }
+-                    }
+-                })
+-                addView(Button(context).apply {
+-                    text = getString(R.string.hayai_custom_source_update_json)
+-                    setOnClickListener {
+-                        runCatching { definitionFromForm() }
+-                            .onSuccess { definition ->
+-                                editor.setText(
+-                                    kotlinx.serialization.json.Json.encodeToString(
+-                                        NovelCustomSourceDefinition.serializer(),
+-                                        definition,
+-                                    ),
+-                                )
+-                            }
+-                            .onFailure { status.text = novelFailureMessage(it, R.string.hayai_custom_source_operation_failed) }
+-                    }
+-                })
+-                status = TextView(context)
+-                addView(status)
+-                addView(Button(context).apply { setText(R.string.hayai_validate); setOnClickListener { validateDefinition() } })
+-                addView(Button(context).apply { setText(R.string.hayai_preview_popular_page); setOnClickListener { preview() } })
+-                addView(Button(context).apply { setText(R.string.hayai_install_source); setOnClickListener { install() } })
+-            })
+-        })
+-        intent.getStringExtra(EXTRA_DEFINITION)?.takeIf(String::isNotBlank)?.let { serialized ->
+-            runCatching { store.parse(serialized) }.onSuccess(::populate)
+-        }
+-    }
+-
+-    private fun validateDefinition(): NovelCustomSourceDefinition? = runCatching {
+-        definitionFromForm()
+-    }.fold(
+-        onSuccess = {
+-            val issues = it.validate()
+-            if (issues.isEmpty()) {
+-                status.text = getString(R.string.hayai_valid_source_definition, it.name)
+-                it
+-            } else {
+-                status.text = issues.joinToString("\n", transform = ::validationIssueText)
+-                null
+-            }
+-        },
+-        onFailure = {
+-            status.text = novelFailureMessage(it, R.string.hayai_custom_source_operation_failed)
+-            null
+-        },
+-    )
+-
+-    private fun definitionFromForm(): NovelCustomSourceDefinition {
+-        fun value(key: String) = fields.getValue(key).text.toString().trim()
+-        val advanced = editor.text.toString().takeIf(String::isNotBlank)?.let { serialized ->
+-            store.parse(serialized)
+-        }
+-        return NovelCustomSourceDefinition(
+-            id = value("id"),
+-            name = value("name"),
+-            language = value("language"),
+-            baseUrl = value("baseUrl"),
+-            popularPath = value("popularPath"),
+-            searchPath = value("searchPath"),
+-            list = NovelListSelectors(value("list.item"), value("list.title"), value("list.link"), advanced?.list?.cover, advanced?.list?.next),
+-            details = NovelDetailsSelectors(value("details.title"), advanced?.details?.author, advanced?.details?.description, advanced?.details?.cover, advanced?.details?.genres, advanced?.details?.status),
+-            chapters = NovelChapterSelectors(value("chapters.item"), value("chapters.title"), value("chapters.link"), advanced?.chapters?.date),
+-            content = NovelContentSelectors(value("content.body"), advanced?.content?.remove.orEmpty()),
+-            headers = advanced?.headers.orEmpty(),
+-        )
+-    }
+-
+-    private fun populate(value: NovelCustomSourceDefinition) {
+-        val values = mapOf(
+-            "id" to value.id,
+-            "name" to value.name,
+-            "language" to value.language,
+-            "baseUrl" to value.baseUrl,
+-            "popularPath" to value.popularPath,
+-            "searchPath" to value.searchPath,
+-            "list.item" to value.list.item,
+-            "list.title" to value.list.title,
+-            "list.link" to value.list.link,
+-            "details.title" to value.details.title,
+-            "chapters.item" to value.chapters.item,
+-            "chapters.title" to value.chapters.title,
+-            "chapters.link" to value.chapters.link,
+-            "content.body" to value.content.body,
+-        )
+-        values.forEach { (key, text) -> fields[key]?.setText(text) }
+-    }
+-    private fun preview() {
+-        val definition = validateDefinition() ?: return
+-        lifecycleScope.launch {
+-            status.text = getString(R.string.hayai_loading_preview)
+-            val result = withContext(Dispatchers.IO) {
+-                runCatching {
+-                    val headerValues = definition.headers.flatMap { (name, value) -> listOf(name, value) }.toTypedArray()
+-                    val request = Request.Builder()
+-                        .url(definition.baseUrl.trimEnd('/') + definition.popularPath.replace("{page}", "1"))
+-                        .headers(Headers.headersOf(*headerValues))
+-                        .build()
+-                    network.client.newCall(request).execute().use { response ->
+-                        check(response.isSuccessful) { getString(R.string.hayai_http_status_error, response.code) }
+-                        val bytes = response.body.byteStream().readBounded(MAX_PREVIEW_BYTES)
+-                        NovelCustomSourcePreviewer.list(
+-                            bytes.toString(Charsets.UTF_8),
+-                            response.request.url.toString(),
+-                            definition,
+-                        )
+-                    }
+-                }
+-            }
+-            result.fold(
+-                onSuccess = { preview ->
+-                    status.text =
+-                        preview.issues
+-                            .joinToString("\n", transform = ::validationIssueText)
+-                            .ifBlank { getString(R.string.hayai_custom_source_found_preview, preview.title, preview.url) }
+-                },
+-                onFailure = { status.text = novelFailureMessage(it, R.string.hayai_custom_source_preview_failed) },
+-            )
+-        }
+-    }
+-
+-    private fun java.io.InputStream.readBounded(max: Int): ByteArray {
+-        val output = java.io.ByteArrayOutputStream()
+-        val buffer = ByteArray(8192)
+-        var total = 0
+-        while (true) {
+-            val count = read(buffer)
+-            if (count < 0) break
+-            total += count
+-            require(total <= max) { getString(R.string.hayai_preview_response_too_large) }
+-            output.write(buffer, 0, count)
+-        }
+-        return output.toByteArray()
+-    }
+-
+-    private fun install() {
+-        val definition = validateDefinition() ?: return
+-        AlertDialog.Builder(this)
+-            .setTitle(getString(R.string.hayai_install_named_item, definition.name))
+-            .setMessage(R.string.hayai_custom_source_install_warning)
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.install) { _, _ ->
+-                lifecycleScope.launch {
+-                    status.text = getString(R.string.hayai_installing)
+-                    runCatching { store.save(definition) }.fold(
+-                        onSuccess = { status.text = getString(R.string.installed_, definition.name) },
+-                        onFailure = { status.text = novelFailureMessage(it, R.string.hayai_custom_source_install_failed) },
+-                    )
+-                }
+-            }
+-            .show()
+-    }
+-
+-    private fun fieldHint(key: String): String =
+-        getString(
+-            when (key) {
+-                "id" -> R.string.hayai_custom_source_field_id
+-                "name" -> R.string.hayai_custom_source_field_name
+-                "language" -> R.string.hayai_custom_source_field_language
+-                "baseUrl" -> R.string.hayai_custom_source_field_base_url
+-                "popularPath" -> R.string.hayai_custom_source_field_popular_path
+-                "searchPath" -> R.string.hayai_custom_source_field_search_path
+-                "list.item" -> R.string.hayai_custom_source_field_list_item
+-                "list.title" -> R.string.hayai_custom_source_field_list_title
+-                "list.link" -> R.string.hayai_custom_source_field_list_link
+-                "details.title" -> R.string.hayai_custom_source_field_details_title
+-                "chapters.item" -> R.string.hayai_custom_source_field_chapter_item
+-                "chapters.title" -> R.string.hayai_custom_source_field_chapter_title
+-                "chapters.link" -> R.string.hayai_custom_source_field_chapter_link
+-                "content.body" -> R.string.hayai_custom_source_field_content_body
+-                else -> error("Unknown custom source field: $key")
+-            },
+-        )
+-
+-    private fun validationIssueText(issue: NovelSourceValidationIssue): String =
+-        getString(
+-            R.string.hayai_field_issue,
+-            when (issue.field) {
+-                "content.remove" -> getString(R.string.hayai_custom_source_field_content_remove)
+-                "headers" -> getString(R.string.hayai_custom_source_field_headers)
+-                else -> fieldHint(issue.field)
+-            },
+-            getString(
+-                when (issue.code) {
+-                    NovelSourceValidationCode.InvalidId -> R.string.hayai_custom_source_invalid_id
+-                    NovelSourceValidationCode.InvalidName -> R.string.hayai_custom_source_invalid_name
+-                    NovelSourceValidationCode.InvalidLanguage -> R.string.hayai_custom_source_invalid_language
+-                    NovelSourceValidationCode.InvalidBaseUrl -> R.string.hayai_custom_source_invalid_base_url
+-                    NovelSourceValidationCode.InvalidPath -> R.string.hayai_custom_source_invalid_path
+-                    NovelSourceValidationCode.MissingQueryPlaceholder -> R.string.hayai_custom_source_query_required
+-                    NovelSourceValidationCode.InvalidSelector -> R.string.hayai_custom_source_invalid_selector
+-                    NovelSourceValidationCode.InvalidRemovalSelectors -> R.string.hayai_custom_source_invalid_remove_selectors
+-                    NovelSourceValidationCode.InvalidHeaders -> R.string.hayai_custom_source_invalid_headers
+-                    NovelSourceValidationCode.PreviewItemMissing -> R.string.hayai_custom_source_no_preview_item
+-                    NovelSourceValidationCode.PreviewTitleMissing -> R.string.hayai_custom_source_preview_title_missing
+-                    NovelSourceValidationCode.PreviewLinkMissing -> R.string.hayai_custom_source_preview_link_missing
+-                },
+-            ),
+-        )
+-
+-    companion object {
+-        const val EXTRA_DEFINITION = "hayai.custom_source_definition"
+-        private const val MAX_PREVIEW_BYTES = 4_000_000
+-        private val FIELD_KEYS = listOf(
+-            "id",
+-            "name",
+-            "language",
+-            "baseUrl",
+-            "popularPath",
+-            "searchPath",
+-            "list.item",
+-            "list.title",
+-            "list.link",
+-            "details.title",
+-            "chapters.item",
+-            "chapters.title",
+-            "chapters.link",
+-            "content.body",
+-        )
+-    }
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..016586f62e3292c17392f21dae545ea0bd2292a7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt
+@@ -0,0 +1,341 @@
++package dev.ahmedmohamed.hayai.novel.source.builder
++
++import android.text.InputType
++import android.widget.EditText
++import androidx.preference.Preference
++import androidx.preference.PreferenceScreen
++import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.network.NetworkHelper
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import eu.kanade.tachiyomi.ui.setting.onClick
++import eu.kanade.tachiyomi.ui.setting.preference
++import eu.kanade.tachiyomi.ui.setting.preferenceCategory
++import eu.kanade.tachiyomi.ui.setting.titleRes
++import eu.kanade.tachiyomi.util.system.materialAlertDialog
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import kotlinx.serialization.json.Json
++import okhttp3.Headers
++import okhttp3.Request
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++import java.io.ByteArrayOutputStream
++import java.io.InputStream
++
++class NovelCustomSourceBuilderController() : SettingsController() {
++    private val network: NetworkHelper = Injekt.get()
++    private val json = Json { prettyPrint = true }
++    private val values = FIELD_KEYS.associateWithTo(linkedMapOf()) { "" }
++    private val fieldPreferences = linkedMapOf<String, Preference>()
++    private lateinit var store: NovelCustomSourceStore
++    private lateinit var advancedPreference: Preference
++    private lateinit var statusPreference: Preference
++    private var advancedDefinition = ""
++
++    constructor(definition: String) : this() {
++        args.putString(DEFINITION, definition)
++    }
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
++        titleRes = R.string.hayai_custom_novel_source
++        store = NovelCustomSourceStore(context, Injekt.get<NovelPluginManager>())
++
++        preferenceCategory {
++            title = context.getString(R.string.hayai_custom_source_instructions)
++            FIELD_KEYS.forEach { key ->
++                fieldPreferences[key] = preference {
++                    title = fieldHint(key)
++                    onClick { editField(key) }
++                }
++            }
++        }
++        preferenceCategory {
++            title = context.getString(R.string.hayai_custom_source_advanced_hint)
++            advancedPreference = preference {
++                title = context.getString(R.string.hayai_custom_source_advanced_hint)
++                onClick { editAdvancedDefinition() }
++            }
++            preference {
++                title = context.getString(R.string.hayai_custom_source_load_json)
++                onClick { loadJson() }
++            }
++            preference {
++                title = context.getString(R.string.hayai_custom_source_update_json)
++                onClick { updateJson() }
++            }
++        }
++        preferenceCategory {
++            statusPreference = preference { isSelectable = false }
++            preference {
++                title = context.getString(R.string.hayai_validate)
++                onClick { validateDefinition() }
++            }
++            preference {
++                title = context.getString(R.string.hayai_preview_popular_page)
++                onClick { preview() }
++            }
++            preference {
++                title = context.getString(R.string.hayai_install_source)
++                onClick { install() }
++            }
++        }
++
++        args.getString(DEFINITION)?.takeIf(String::isNotBlank)?.let { serialized ->
++            advancedDefinition = serialized
++            runCatching { store.parse(serialized) }.onSuccess(::populate)
++        }
++        refreshSummaries()
++    }
++
++    private fun editField(key: String) {
++        val context = activity ?: return
++        val input = EditText(context).apply {
++            setText(values.getValue(key))
++            setSelection(text.length)
++        }
++        context.materialAlertDialog()
++            .setTitle(fieldHint(key))
++            .setView(input)
++            .setPositiveButton(android.R.string.ok) { _, _ ->
++                values[key] = input.text.toString().trim()
++                refreshSummaries()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun editAdvancedDefinition() {
++        val context = activity ?: return
++        val input = EditText(context).apply {
++            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
++            minLines = 8
++            setText(advancedDefinition)
++            setSelection(text.length)
++        }
++        context.materialAlertDialog()
++            .setTitle(R.string.hayai_custom_source_advanced_hint)
++            .setView(input)
++            .setPositiveButton(android.R.string.ok) { _, _ ->
++                advancedDefinition = input.text.toString()
++                refreshSummaries()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun loadJson() {
++        runCatching { store.parse(advancedDefinition) }
++            .onSuccess {
++                populate(it)
++                statusPreference.summary = resources?.getString(R.string.hayai_valid_source_definition, it.name)
++            }
++            .onFailure { statusPreference.summary = failure(it, R.string.hayai_custom_source_operation_failed) }
++    }
++
++    private fun updateJson() {
++        runCatching { definitionFromForm() }
++            .onSuccess {
++                advancedDefinition = json.encodeToString(NovelCustomSourceDefinition.serializer(), it)
++                refreshSummaries()
++            }
++            .onFailure { statusPreference.summary = failure(it, R.string.hayai_custom_source_operation_failed) }
++    }
++
++    private fun validateDefinition(): NovelCustomSourceDefinition? = runCatching { definitionFromForm() }.fold(
++        onSuccess = { definition ->
++            val issues = definition.validate()
++            if (issues.isEmpty()) {
++                statusPreference.summary = resources?.getString(R.string.hayai_valid_source_definition, definition.name)
++                definition
++            } else {
++                statusPreference.summary = issues.joinToString("\n", transform = ::validationIssueText)
++                null
++            }
++        },
++        onFailure = {
++            statusPreference.summary = failure(it, R.string.hayai_custom_source_operation_failed)
++            null
++        },
++    )
++
++    private fun definitionFromForm(): NovelCustomSourceDefinition {
++        fun value(key: String) = values.getValue(key).trim()
++        val advanced = advancedDefinition.takeIf(String::isNotBlank)?.let(store::parse)
++        return NovelCustomSourceDefinition(
++            id = value("id"),
++            name = value("name"),
++            language = value("language"),
++            baseUrl = value("baseUrl"),
++            popularPath = value("popularPath"),
++            searchPath = value("searchPath"),
++            list = NovelListSelectors(value("list.item"), value("list.title"), value("list.link"), advanced?.list?.cover, advanced?.list?.next),
++            details = NovelDetailsSelectors(value("details.title"), advanced?.details?.author, advanced?.details?.description, advanced?.details?.cover, advanced?.details?.genres, advanced?.details?.status),
++            chapters = NovelChapterSelectors(value("chapters.item"), value("chapters.title"), value("chapters.link"), advanced?.chapters?.date),
++            content = NovelContentSelectors(value("content.body"), advanced?.content?.remove.orEmpty()),
++            headers = advanced?.headers.orEmpty(),
++        )
++    }
++
++    private fun populate(definition: NovelCustomSourceDefinition) {
++        mapOf(
++            "id" to definition.id,
++            "name" to definition.name,
++            "language" to definition.language,
++            "baseUrl" to definition.baseUrl,
++            "popularPath" to definition.popularPath,
++            "searchPath" to definition.searchPath,
++            "list.item" to definition.list.item,
++            "list.title" to definition.list.title,
++            "list.link" to definition.list.link,
++            "details.title" to definition.details.title,
++            "chapters.item" to definition.chapters.item,
++            "chapters.title" to definition.chapters.title,
++            "chapters.link" to definition.chapters.link,
++            "content.body" to definition.content.body,
++        ).forEach { (key, value) -> values[key] = value }
++        refreshSummaries()
++    }
++
++    private fun preview() {
++        val definition = validateDefinition() ?: return
++        val context = activity ?: return
++        viewScope.launch {
++            statusPreference.summary = context.getString(R.string.hayai_loading_preview)
++            val result = withContext(Dispatchers.IO) {
++                runCatching {
++                    val headers = definition.headers.flatMap { (name, value) -> listOf(name, value) }.toTypedArray()
++                    val request = Request.Builder()
++                        .url(definition.baseUrl.trimEnd('/') + definition.popularPath.replace("{page}", "1"))
++                        .headers(Headers.headersOf(*headers))
++                        .build()
++                    network.client.newCall(request).execute().use { response ->
++                        check(response.isSuccessful) { context.getString(R.string.hayai_http_status_error, response.code) }
++                        val bytes = response.body.byteStream().readBounded(MAX_PREVIEW_BYTES)
++                        NovelCustomSourcePreviewer.list(bytes.toString(Charsets.UTF_8), response.request.url.toString(), definition)
++                    }
++                }
++            }
++            result.fold(
++                onSuccess = { result ->
++                    statusPreference.summary = result.issues.joinToString("\n", transform = ::validationIssueText)
++                        .ifBlank { context.getString(R.string.hayai_custom_source_found_preview, result.title, result.url) }
++                },
++                onFailure = { statusPreference.summary = failure(it, R.string.hayai_custom_source_preview_failed) },
++            )
++        }
++    }
++
++    private fun install() {
++        val definition = validateDefinition() ?: return
++        val context = activity ?: return
++        context.materialAlertDialog()
++            .setTitle(context.getString(R.string.hayai_install_named_item, definition.name))
++            .setMessage(R.string.hayai_custom_source_install_warning)
++            .setNegativeButton(android.R.string.cancel, null)
++            .setPositiveButton(R.string.install) { _, _ ->
++                viewScope.launch {
++                    statusPreference.summary = context.getString(R.string.hayai_installing)
++                    runCatching { store.save(definition) }.fold(
++                        onSuccess = { statusPreference.summary = context.getString(R.string.installed_, definition.name) },
++                        onFailure = { statusPreference.summary = failure(it, R.string.hayai_custom_source_install_failed) },
++                    )
++                }
++            }
++            .show()
++    }
++
++    private fun refreshSummaries() {
++        fieldPreferences.forEach { (key, preference) ->
++            preference.summary = values.getValue(key).ifBlank { resources?.getString(R.string.none) }
++        }
++        if (::advancedPreference.isInitialized) {
++            advancedPreference.summary = resources?.getString(if (advancedDefinition.isBlank()) R.string.none else R.string.hayai_value_configured)
++        }
++    }
++
++    private fun InputStream.readBounded(max: Int): ByteArray {
++        val output = ByteArrayOutputStream()
++        val buffer = ByteArray(8192)
++        var total = 0
++        while (true) {
++            val count = read(buffer)
++            if (count < 0) break
++            total += count
++            require(total <= max) { resources?.getString(R.string.hayai_preview_response_too_large).orEmpty() }
++            output.write(buffer, 0, count)
++        }
++        return output.toByteArray()
++    }
++
++    private fun fieldHint(key: String): String = requireNotNull(resources).getString(
++        when (key) {
++            "id" -> R.string.hayai_custom_source_field_id
++            "name" -> R.string.hayai_custom_source_field_name
++            "language" -> R.string.hayai_custom_source_field_language
++            "baseUrl" -> R.string.hayai_custom_source_field_base_url
++            "popularPath" -> R.string.hayai_custom_source_field_popular_path
++            "searchPath" -> R.string.hayai_custom_source_field_search_path
++            "list.item" -> R.string.hayai_custom_source_field_list_item
++            "list.title" -> R.string.hayai_custom_source_field_list_title
++            "list.link" -> R.string.hayai_custom_source_field_list_link
++            "details.title" -> R.string.hayai_custom_source_field_details_title
++            "chapters.item" -> R.string.hayai_custom_source_field_chapter_item
++            "chapters.title" -> R.string.hayai_custom_source_field_chapter_title
++            "chapters.link" -> R.string.hayai_custom_source_field_chapter_link
++            "content.body" -> R.string.hayai_custom_source_field_content_body
++            else -> error("Unknown custom source field: $key")
++        },
++    )
++
++    private fun validationIssueText(issue: NovelSourceValidationIssue): String = requireNotNull(resources).getString(
++        R.string.hayai_field_issue,
++        when (issue.field) {
++            "content.remove" -> requireNotNull(resources).getString(R.string.hayai_custom_source_field_content_remove)
++            "headers" -> requireNotNull(resources).getString(R.string.hayai_custom_source_field_headers)
++            else -> fieldHint(issue.field)
++        },
++        requireNotNull(resources).getString(
++            when (issue.code) {
++                NovelSourceValidationCode.InvalidId -> R.string.hayai_custom_source_invalid_id
++                NovelSourceValidationCode.InvalidName -> R.string.hayai_custom_source_invalid_name
++                NovelSourceValidationCode.InvalidLanguage -> R.string.hayai_custom_source_invalid_language
++                NovelSourceValidationCode.InvalidBaseUrl -> R.string.hayai_custom_source_invalid_base_url
++                NovelSourceValidationCode.InvalidPath -> R.string.hayai_custom_source_invalid_path
++                NovelSourceValidationCode.MissingQueryPlaceholder -> R.string.hayai_custom_source_query_required
++                NovelSourceValidationCode.InvalidSelector -> R.string.hayai_custom_source_invalid_selector
++                NovelSourceValidationCode.InvalidRemovalSelectors -> R.string.hayai_custom_source_invalid_remove_selectors
++                NovelSourceValidationCode.InvalidHeaders -> R.string.hayai_custom_source_invalid_headers
++                NovelSourceValidationCode.PreviewItemMissing -> R.string.hayai_custom_source_no_preview_item
++                NovelSourceValidationCode.PreviewTitleMissing -> R.string.hayai_custom_source_preview_title_missing
++                NovelSourceValidationCode.PreviewLinkMissing -> R.string.hayai_custom_source_preview_link_missing
++            },
++        ),
++    )
++
++    private fun failure(error: Throwable, fallback: Int): String =
++        requireNotNull(activity).novelFailureMessage(error, fallback)
++
++    private companion object {
++        const val DEFINITION = "hayai.custom_source_definition"
++        const val MAX_PREVIEW_BYTES = 4_000_000
++        val FIELD_KEYS = listOf(
++            "id",
++            "name",
++            "language",
++            "baseUrl",
++            "popularPath",
++            "searchPath",
++            "list.item",
++            "list.title",
++            "list.link",
++            "details.title",
++            "chapters.item",
++            "chapters.title",
++            "chapters.link",
++            "content.body",
++        )
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsActivity.kt
+deleted file mode 100644
+index a17a2199ec87f17a7f8165997ea96b85811f7c75..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsActivity.kt
++++ /dev/null
+@@ -1,126 +0,0 @@
+-package dev.ahmedmohamed.hayai.novel.translation
+-
+-import android.os.Bundle
+-import android.text.InputType
+-import android.widget.ArrayAdapter
+-import android.widget.Button
+-import android.widget.EditText
+-import android.widget.LinearLayout
+-import android.widget.Spinner
+-import android.widget.TextView
+-import androidx.appcompat.app.AppCompatActivity
+-import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionaryProvider
+-import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettings
+-import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettingsStore
+-import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+-import eu.kanade.tachiyomi.R
+-
+-class NovelLanguageToolsSettingsActivity : AppCompatActivity() {
+-    override fun onCreate(savedInstanceState: Bundle?) {
+-        super.onCreate(savedInstanceState)
+-        title = getString(R.string.hayai_novel_language_tools)
+-        val store = NovelTranslationSettingsStore(this)
+-        val current = store.get()
+-        val dictionaryStore = NovelDictionarySettingsStore(this)
+-        val dictionaryCurrent = dictionaryStore.get()
+-        val engine = Spinner(this).apply {
+-            adapter = ArrayAdapter(
+-                this@NovelLanguageToolsSettingsActivity,
+-                android.R.layout.simple_spinner_dropdown_item,
+-                NovelTranslationEngineId.entries.map(::translationEngineText),
+-            )
+-            setSelection(current.engine.ordinal)
+-        }
+-        val source = field(getString(R.string.hayai_source_language), current.sourceLanguage)
+-        val target = field(getString(R.string.hayai_target_language), current.targetLanguage)
+-        val endpoint = field(getString(R.string.hayai_provider_endpoint), current.endpoint, InputType.TYPE_TEXT_VARIATION_URI)
+-        val key = field(getString(R.string.hayai_api_key), current.apiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD)
+-        val model = field(getString(R.string.hayai_model), current.model)
+-        val message = TextView(this)
+-        val dictionary = Spinner(this).apply {
+-            adapter = ArrayAdapter(
+-                this@NovelLanguageToolsSettingsActivity,
+-                android.R.layout.simple_spinner_dropdown_item,
+-                NovelDictionaryProvider.entries.map(::dictionaryProviderText),
+-            )
+-            setSelection(dictionaryCurrent.provider.ordinal)
+-        }
+-        val fallbackOptions = NovelDictionaryProvider.entries.filter { it.name.startsWith("WEB_") }
+-        val fallback = Spinner(this).apply {
+-            adapter = ArrayAdapter(
+-                this@NovelLanguageToolsSettingsActivity,
+-                android.R.layout.simple_spinner_dropdown_item,
+-                fallbackOptions.map(::dictionaryProviderText),
+-            )
+-            setSelection(fallbackOptions.indexOf(dictionaryCurrent.webFallback).coerceAtLeast(0))
+-        }
+-        setContentView(LinearLayout(this).apply {
+-            orientation = LinearLayout.VERTICAL
+-            setPadding(24, 24, 24, 24)
+-            addView(engine)
+-            listOf(source, target, endpoint, key, model).forEach(::addView)
+-            addView(TextView(context).apply { text = getString(R.string.hayai_dictionary_provider) })
+-            addView(dictionary)
+-            addView(TextView(context).apply { text = getString(R.string.hayai_web_fallback) })
+-            addView(fallback)
+-            addView(message)
+-            addView(Button(context).apply {
+-                setText(R.string.save)
+-                setOnClickListener {
+-                    runCatching {
+-                        store.set(
+-                            NovelTranslationSettings(
+-                                engine = NovelTranslationEngineId.entries[engine.selectedItemPosition],
+-                                sourceLanguage = source.text.toString().trim(),
+-                                targetLanguage = target.text.toString().trim(),
+-                                endpoint = endpoint.text.toString().trim(),
+-                                apiKey = key.text.toString(),
+-                                model = model.text.toString().trim(),
+-                            ),
+-                        )
+-                        dictionaryStore.set(
+-                            NovelDictionarySettings(
+-                                provider = NovelDictionaryProvider.entries[dictionary.selectedItemPosition],
+-                                webFallback = fallbackOptions[fallback.selectedItemPosition],
+-                            ),
+-                        )
+-                    }.fold(
+-                        onSuccess = { message.text = getString(R.string.hayai_settings_saved) },
+-                        onFailure = { message.text = languageSettingsError(it) },
+-                    )
+-                }
+-            })
+-        })
+-    }
+-
+-    private fun field(hint: String, value: String, variation: Int = 0) = EditText(this).apply {
+-        this.hint = hint
+-        setText(value)
+-        inputType = InputType.TYPE_CLASS_TEXT or variation
+-    }
+-
+-    private fun translationEngineText(engine: NovelTranslationEngineId): String =
+-        getString(
+-            when (engine) {
+-                NovelTranslationEngineId.GOOGLE_WEB -> R.string.hayai_translation_google_web
+-                NovelTranslationEngineId.LIBRE_TRANSLATE -> R.string.hayai_translation_libretranslate
+-                NovelTranslationEngineId.OPENAI_COMPATIBLE -> R.string.hayai_translation_openai_compatible
+-                NovelTranslationEngineId.DEEPL -> R.string.hayai_translation_deepl
+-            },
+-        )
+-
+-    private fun dictionaryProviderText(provider: NovelDictionaryProvider): String =
+-        getString(
+-            when (provider) {
+-                NovelDictionaryProvider.SYSTEM -> R.string.hayai_dictionary_system
+-                NovelDictionaryProvider.AARD2 -> R.string.hayai_dictionary_aard2
+-                NovelDictionaryProvider.COLOR_DICT -> R.string.hayai_dictionary_colordict
+-                NovelDictionaryProvider.LIVIO -> R.string.hayai_dictionary_livio
+-                NovelDictionaryProvider.WEB_GOOGLE -> R.string.hayai_dictionary_google_web
+-                NovelDictionaryProvider.WEB_WIKTIONARY -> R.string.hayai_dictionary_wiktionary
+-            },
+-        )
+-
+-    private fun languageSettingsError(error: Throwable): String =
+-        novelFailureMessage(error, R.string.hayai_language_settings_invalid)
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsController.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..27dab733a59f520bdd378691017d32f600a733d9
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsController.kt
+@@ -0,0 +1,225 @@
++package dev.ahmedmohamed.hayai.novel.translation
++
++import android.text.InputType
++import android.widget.EditText
++import androidx.preference.Preference
++import androidx.preference.PreferenceScreen
++import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionaryProvider
++import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettings
++import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettingsStore
++import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.setting.SettingsController
++import eu.kanade.tachiyomi.ui.setting.iconRes
++import eu.kanade.tachiyomi.ui.setting.onClick
++import eu.kanade.tachiyomi.ui.setting.preference
++import eu.kanade.tachiyomi.ui.setting.preferenceCategory
++import eu.kanade.tachiyomi.ui.setting.titleRes
++import eu.kanade.tachiyomi.util.system.materialAlertDialog
++import eu.kanade.tachiyomi.util.system.toast
++
++class NovelLanguageToolsSettingsController : SettingsController() {
++    private lateinit var translationStore: NovelTranslationSettingsStore
++    private lateinit var dictionaryStore: NovelDictionarySettingsStore
++    private lateinit var draftTranslation: NovelTranslationSettings
++    private lateinit var draftDictionary: NovelDictionarySettings
++    private lateinit var enginePreference: Preference
++    private lateinit var sourceLanguagePreference: Preference
++    private lateinit var targetLanguagePreference: Preference
++    private lateinit var endpointPreference: Preference
++    private lateinit var apiKeyPreference: Preference
++    private lateinit var modelPreference: Preference
++    private lateinit var dictionaryPreference: Preference
++    private lateinit var fallbackPreference: Preference
++
++    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
++        titleRes = R.string.hayai_novel_language_tools
++        translationStore = NovelTranslationSettingsStore(context)
++        dictionaryStore = NovelDictionarySettingsStore(context)
++        draftTranslation = translationStore.get()
++        draftDictionary = dictionaryStore.get()
++
++        preferenceCategory {
++            title = context.getString(R.string.hayai_novel_reader_translation_dictionary)
++            enginePreference = preference {
++                title = context.getString(R.string.hayai_translation_engine)
++                onClick { chooseEngine() }
++            }
++            sourceLanguagePreference = preference {
++                title = context.getString(R.string.hayai_source_language)
++                onClick {
++                    editText(R.string.hayai_source_language, draftTranslation.sourceLanguage) {
++                        draftTranslation = draftTranslation.copy(sourceLanguage = it.trim())
++                        refreshSummaries()
++                    }
++                }
++            }
++            targetLanguagePreference = preference {
++                title = context.getString(R.string.hayai_target_language)
++                onClick {
++                    editText(R.string.hayai_target_language, draftTranslation.targetLanguage) {
++                        draftTranslation = draftTranslation.copy(targetLanguage = it.trim())
++                        refreshSummaries()
++                    }
++                }
++            }
++            endpointPreference = preference {
++                title = context.getString(R.string.hayai_provider_endpoint)
++                onClick {
++                    editText(
++                        R.string.hayai_provider_endpoint,
++                        draftTranslation.endpoint,
++                        InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI,
++                    ) {
++                        draftTranslation = draftTranslation.copy(endpoint = it.trim())
++                        refreshSummaries()
++                    }
++                }
++            }
++            apiKeyPreference = preference {
++                title = context.getString(R.string.hayai_api_key)
++                onClick {
++                    editText(
++                        R.string.hayai_api_key,
++                        draftTranslation.apiKey,
++                        InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
++                    ) {
++                        draftTranslation = draftTranslation.copy(apiKey = it)
++                        refreshSummaries()
++                    }
++                }
++            }
++            modelPreference = preference {
++                title = context.getString(R.string.hayai_model)
++                onClick {
++                    editText(R.string.hayai_model, draftTranslation.model) {
++                        draftTranslation = draftTranslation.copy(model = it.trim())
++                        refreshSummaries()
++                    }
++                }
++            }
++        }
++
++        preferenceCategory {
++            title = context.getString(R.string.hayai_dictionary_provider)
++            dictionaryPreference = preference {
++                title = context.getString(R.string.hayai_dictionary_provider)
++                onClick { chooseDictionaryProvider() }
++            }
++            fallbackPreference = preference {
++                title = context.getString(R.string.hayai_web_fallback)
++                onClick { chooseFallback() }
++            }
++        }
++
++        preference {
++            title = context.getString(R.string.save)
++            iconRes = R.drawable.ic_check_24dp
++            onClick { save() }
++        }
++        refreshSummaries()
++    }
++
++    private fun chooseEngine() {
++        val context = activity ?: return
++        val values = NovelTranslationEngineId.entries
++        context.materialAlertDialog()
++            .setTitle(R.string.hayai_translation_engine)
++            .setSingleChoiceItems(values.map(::translationEngineText).toTypedArray(), values.indexOf(draftTranslation.engine)) { dialog, index ->
++                draftTranslation = draftTranslation.copy(engine = values[index])
++                refreshSummaries()
++                dialog.dismiss()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun chooseDictionaryProvider() {
++        val context = activity ?: return
++        val values = NovelDictionaryProvider.entries
++        context.materialAlertDialog()
++            .setTitle(R.string.hayai_dictionary_provider)
++            .setSingleChoiceItems(values.map(::dictionaryProviderText).toTypedArray(), values.indexOf(draftDictionary.provider)) { dialog, index ->
++                draftDictionary = draftDictionary.copy(provider = values[index])
++                refreshSummaries()
++                dialog.dismiss()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun chooseFallback() {
++        val context = activity ?: return
++        val values = NovelDictionaryProvider.entries.filter { it.name.startsWith("WEB_") }
++        context.materialAlertDialog()
++            .setTitle(R.string.hayai_web_fallback)
++            .setSingleChoiceItems(values.map(::dictionaryProviderText).toTypedArray(), values.indexOf(draftDictionary.webFallback)) { dialog, index ->
++                draftDictionary = draftDictionary.copy(webFallback = values[index])
++                refreshSummaries()
++                dialog.dismiss()
++            }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun editText(title: Int, value: String, inputType: Int = InputType.TYPE_CLASS_TEXT, onApply: (String) -> Unit) {
++        val context = activity ?: return
++        val input = EditText(context).apply {
++            setText(value)
++            this.inputType = inputType
++            setSelection(text.length)
++        }
++        context.materialAlertDialog()
++            .setTitle(title)
++            .setView(input)
++            .setPositiveButton(android.R.string.ok) { _, _ -> onApply(input.text.toString()) }
++            .setNegativeButton(android.R.string.cancel, null)
++            .show()
++    }
++
++    private fun save() {
++        val context = activity ?: return
++        runCatching {
++            translationStore.set(draftTranslation)
++            dictionaryStore.set(draftDictionary)
++        }.fold(
++            onSuccess = { context.toast(R.string.hayai_settings_saved) },
++            onFailure = { context.toast(context.novelFailureMessage(it, R.string.hayai_language_settings_invalid)) },
++        )
++    }
++
++    private fun refreshSummaries() {
++        if (!::enginePreference.isInitialized) return
++        val context = activity ?: return
++        enginePreference.summary = translationEngineText(draftTranslation.engine)
++        sourceLanguagePreference.summary = draftTranslation.sourceLanguage
++        targetLanguagePreference.summary = draftTranslation.targetLanguage
++        endpointPreference.summary = draftTranslation.endpoint.ifBlank { context.getString(R.string.none) }
++        apiKeyPreference.summary = context.getString(if (draftTranslation.apiKey.isBlank()) R.string.none else R.string.hayai_value_configured)
++        modelPreference.summary = draftTranslation.model
++        dictionaryPreference.summary = dictionaryProviderText(draftDictionary.provider)
++        fallbackPreference.summary = dictionaryProviderText(draftDictionary.webFallback)
++    }
++
++    private fun translationEngineText(engine: NovelTranslationEngineId): String =
++        resources!!.getString(
++            when (engine) {
++                NovelTranslationEngineId.GOOGLE_WEB -> R.string.hayai_translation_google_web
++                NovelTranslationEngineId.LIBRE_TRANSLATE -> R.string.hayai_translation_libretranslate
++                NovelTranslationEngineId.OPENAI_COMPATIBLE -> R.string.hayai_translation_openai_compatible
++                NovelTranslationEngineId.DEEPL -> R.string.hayai_translation_deepl
++            },
++        )
++
++    private fun dictionaryProviderText(provider: NovelDictionaryProvider): String =
++        resources!!.getString(
++            when (provider) {
++                NovelDictionaryProvider.SYSTEM -> R.string.hayai_dictionary_system
++                NovelDictionaryProvider.AARD2 -> R.string.hayai_dictionary_aard2
++                NovelDictionaryProvider.COLOR_DICT -> R.string.hayai_dictionary_colordict
++                NovelDictionaryProvider.LIVIO -> R.string.hayai_dictionary_livio
++                NovelDictionaryProvider.WEB_GOOGLE -> R.string.hayai_dictionary_google_web
++                NovelDictionaryProvider.WEB_WIKTIONARY -> R.string.hayai_dictionary_wiktionary
++            },
++        )
++}
+diff --git a/app/src/main/res/values/strings_hayai_misc.xml b/app/src/main/res/values/strings_hayai_misc.xml
+index 40ef5ee4e7c6158f92cee6c1504bf755746a4822..f49bfd31c5f77a4516affe858e1c43f449d02511 100644
+--- a/app/src/main/res/values/strings_hayai_misc.xml
++++ b/app/src/main/res/values/strings_hayai_misc.xml
+@@ -385,4 +385,6 @@
+     <string name="hayai_failure_replacement_backreference">Backreferences are not supported because they can stall large chapters.</string>
+     <string name="hayai_failure_replacement_nested_repetition">Nested repetition is not supported because it can stall large chapters.</string>
+     <string name="hayai_failure_replacement_invalid_regex">The regular expression is invalid.</string>
++    <string name="hayai_value_configured">Configured</string>
++    <string name="hayai_translation_engine">Translation engine</string>
+ </resources>
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index c24e0cd055db121c98f10120243f4291607f4a99..e344aa329883b354c9d1384d50392d887f39fd13 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -50,7 +50,7 @@ The text reader owns its lifecycle behind a Hayai renderer contract. Its XML she
+ 
+ Read-aloud state lives in a Hayai foreground media-playback service rather than the activity. The notification exposes play, pause, stop, and paragraph navigation, and a recreated reader can attach to the active service. Quotes support duplicate-safe creation, editing, attributed copying, ordering, and deletion. Translation providers, dictionary handoff, highlight recovery, visual custom-source compilation, statistics, offline chapters, presets, snippets, and EPUB export remain typed Hayai actions and do not change the image reader. Both renderers present bounded chapter blocks with stable IDs, append and prepend without changing focus, preserve the visible offset, and move J2K progress when a new block becomes visible. Emulator verification remains required before this implementation becomes a verified port.
+ 
+-Novel integration uses a small set of presentation adapters rather than parallel J2K models. The library filter delegates content-kind classification to Hayai. Manga details decorate the existing chapter rows with percent, word count, reading time, and verified offline state; the normal download/remove controls delegate novel chapters to `NovelOfflineManager`. J2K statistics aggregate Hayai's derived word data, shortcuts preserve novel identity, and migration searches reject novel-to-image and image-to-novel targets. `NovelSettingsController` owns the complete text-reader preference surface, typed reusable presets, CSS/JavaScript snippets, and bounded text-replacement rules. J2K remains authoritative for chapters, progress, history, categories, and the enclosing screens.
++Novel integration uses a small set of presentation adapters rather than parallel J2K models. The library filter delegates content-kind classification to Hayai. Manga details decorate the existing chapter rows with percent, word count, reading time, and verified offline state; the normal download/remove controls delegate novel chapters to `NovelOfflineManager`. J2K statistics aggregate Hayai's derived word data, shortcuts preserve novel identity, and migration searches reject novel-to-image and image-to-novel targets. `NovelSettingsController` owns the complete text-reader preference surface, typed reusable presets, CSS/JavaScript snippets, and bounded text-replacement rules. Translation, dictionary, and visual-source-builder settings use J2K `SettingsController` screens and preference rows while their drafts, validation, network preview, and persistence remain Hayai-owned. J2K remains authoritative for chapters, progress, history, categories, and the enclosing screens.
+ 
+ The novel reader inflates J2K's existing `reader_activity` and binds its existing app bar, toolbar, viewer container, navigation controls, chapter sheet, and slider. Hayai applies system-bar and display-cutout insets at that shared layout boundary. While reader chrome is visible, the novel viewer starts after the system inset and toolbar height; when chrome visibility changes, the same inset binding recalculates the viewer margin. This avoids a second novel-specific safe-area model and keeps the image-reader activity unchanged.
+ 
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index 4a6cc975a9c7803391ab77e536367c4bd7a205b3..f97f205e3b18ec919933b4825240c0807b299a84 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1067 | 0.0% |
+-| `ar` | 31 / 1067 | 2.9% |
+-| `ars` | 0 / 1067 | 0.0% |
+-| `az` | 0 / 1067 | 0.0% |
+-| `bg` | 0 / 1067 | 0.0% |
+-| `bn` | 0 / 1067 | 0.0% |
+-| `ca` | 0 / 1067 | 0.0% |
+-| `ceb` | 0 / 1067 | 0.0% |
+-| `cs` | 0 / 1067 | 0.0% |
+-| `cv` | 0 / 1067 | 0.0% |
+-| `de` | 29 / 1067 | 2.7% |
+-| `el` | 0 / 1067 | 0.0% |
+-| `eo` | 0 / 1067 | 0.0% |
+-| `es` | 31 / 1067 | 2.9% |
+-| `eu` | 0 / 1067 | 0.0% |
+-| `fa` | 0 / 1067 | 0.0% |
+-| `fi` | 0 / 1067 | 0.0% |
+-| `fil` | 31 / 1067 | 2.9% |
+-| `fr` | 31 / 1067 | 2.9% |
+-| `gl` | 0 / 1067 | 0.0% |
+-| `ha` | 0 / 1067 | 0.0% |
+-| `hi` | 0 / 1067 | 0.0% |
+-| `hr` | 31 / 1067 | 2.9% |
+-| `hu` | 0 / 1067 | 0.0% |
+-| `in` | 31 / 1067 | 2.9% |
+-| `it` | 17 / 1067 | 1.6% |
+-| `iw` | 0 / 1067 | 0.0% |
+-| `ja` | 29 / 1067 | 2.7% |
+-| `jv` | 0 / 1067 | 0.0% |
+-| `ka` | 0 / 1067 | 0.0% |
+-| `kk` | 0 / 1067 | 0.0% |
+-| `km` | 0 / 1067 | 0.0% |
+-| `ko` | 7 / 1067 | 0.7% |
+-| `lt` | 0 / 1067 | 0.0% |
+-| `lv` | 0 / 1067 | 0.0% |
+-| `ml` | 0 / 1067 | 0.0% |
+-| `mn` | 0 / 1067 | 0.0% |
+-| `ms` | 0 / 1067 | 0.0% |
+-| `my` | 0 / 1067 | 0.0% |
+-| `nb-rNO` | 0 / 1067 | 0.0% |
+-| `ne` | 5 / 1067 | 0.5% |
+-| `nl` | 0 / 1067 | 0.0% |
+-| `nn` | 0 / 1067 | 0.0% |
+-| `om` | 0 / 1067 | 0.0% |
+-| `or` | 0 / 1067 | 0.0% |
+-| `pl` | 0 / 1067 | 0.0% |
+-| `pt` | 31 / 1067 | 2.9% |
+-| `pt-rBR` | 31 / 1067 | 2.9% |
+-| `ro` | 0 / 1067 | 0.0% |
+-| `ru` | 31 / 1067 | 2.9% |
+-| `sc` | 0 / 1067 | 0.0% |
+-| `si` | 0 / 1067 | 0.0% |
+-| `sk` | 0 / 1067 | 0.0% |
+-| `sq` | 0 / 1067 | 0.0% |
+-| `sr` | 0 / 1067 | 0.0% |
+-| `sv` | 0 / 1067 | 0.0% |
+-| `ta` | 31 / 1067 | 2.9% |
+-| `te` | 0 / 1067 | 0.0% |
+-| `th` | 0 / 1067 | 0.0% |
+-| `ti` | 0 / 1067 | 0.0% |
+-| `tl` | 0 / 1067 | 0.0% |
+-| `tr` | 31 / 1067 | 2.9% |
+-| `uk` | 7 / 1067 | 0.7% |
+-| `ur` | 0 / 1067 | 0.0% |
+-| `vi` | 5 / 1067 | 0.5% |
+-| `zh-rCN` | 31 / 1067 | 2.9% |
+-| `zh-rTW` | 31 / 1067 | 2.9% |
++| `ajp` | 0 / 1069 | 0.0% |
++| `ar` | 31 / 1069 | 2.9% |
++| `ars` | 0 / 1069 | 0.0% |
++| `az` | 0 / 1069 | 0.0% |
++| `bg` | 0 / 1069 | 0.0% |
++| `bn` | 0 / 1069 | 0.0% |
++| `ca` | 0 / 1069 | 0.0% |
++| `ceb` | 0 / 1069 | 0.0% |
++| `cs` | 0 / 1069 | 0.0% |
++| `cv` | 0 / 1069 | 0.0% |
++| `de` | 29 / 1069 | 2.7% |
++| `el` | 0 / 1069 | 0.0% |
++| `eo` | 0 / 1069 | 0.0% |
++| `es` | 31 / 1069 | 2.9% |
++| `eu` | 0 / 1069 | 0.0% |
++| `fa` | 0 / 1069 | 0.0% |
++| `fi` | 0 / 1069 | 0.0% |
++| `fil` | 31 / 1069 | 2.9% |
++| `fr` | 31 / 1069 | 2.9% |
++| `gl` | 0 / 1069 | 0.0% |
++| `ha` | 0 / 1069 | 0.0% |
++| `hi` | 0 / 1069 | 0.0% |
++| `hr` | 31 / 1069 | 2.9% |
++| `hu` | 0 / 1069 | 0.0% |
++| `in` | 31 / 1069 | 2.9% |
++| `it` | 17 / 1069 | 1.6% |
++| `iw` | 0 / 1069 | 0.0% |
++| `ja` | 29 / 1069 | 2.7% |
++| `jv` | 0 / 1069 | 0.0% |
++| `ka` | 0 / 1069 | 0.0% |
++| `kk` | 0 / 1069 | 0.0% |
++| `km` | 0 / 1069 | 0.0% |
++| `ko` | 7 / 1069 | 0.7% |
++| `lt` | 0 / 1069 | 0.0% |
++| `lv` | 0 / 1069 | 0.0% |
++| `ml` | 0 / 1069 | 0.0% |
++| `mn` | 0 / 1069 | 0.0% |
++| `ms` | 0 / 1069 | 0.0% |
++| `my` | 0 / 1069 | 0.0% |
++| `nb-rNO` | 0 / 1069 | 0.0% |
++| `ne` | 5 / 1069 | 0.5% |
++| `nl` | 0 / 1069 | 0.0% |
++| `nn` | 0 / 1069 | 0.0% |
++| `om` | 0 / 1069 | 0.0% |
++| `or` | 0 / 1069 | 0.0% |
++| `pl` | 0 / 1069 | 0.0% |
++| `pt` | 31 / 1069 | 2.9% |
++| `pt-rBR` | 31 / 1069 | 2.9% |
++| `ro` | 0 / 1069 | 0.0% |
++| `ru` | 31 / 1069 | 2.9% |
++| `sc` | 0 / 1069 | 0.0% |
++| `si` | 0 / 1069 | 0.0% |
++| `sk` | 0 / 1069 | 0.0% |
++| `sq` | 0 / 1069 | 0.0% |
++| `sr` | 0 / 1069 | 0.0% |
++| `sv` | 0 / 1069 | 0.0% |
++| `ta` | 31 / 1069 | 2.9% |
++| `te` | 0 / 1069 | 0.0% |
++| `th` | 0 / 1069 | 0.0% |
++| `ti` | 0 / 1069 | 0.0% |
++| `tl` | 0 / 1069 | 0.0% |
++| `tr` | 31 / 1069 | 2.9% |
++| `uk` | 7 / 1069 | 0.7% |
++| `ur` | 0 / 1069 | 0.0% |
++| `vi` | 5 / 1069 | 0.5% |
++| `zh-rCN` | 31 / 1069 | 2.9% |
++| `zh-rTW` | 31 / 1069 | 2.9% |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index f30d62f7e19f73808c612a4d18a9bba3286c2a7c..a86f7227548f463698f35b09bb2e05b97764da9d 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -2251,65 +2251,67 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSource.
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSource.kt	val foundIssues = buildList { if (title.isNullOrBlank()) add(NovelSourceValidationIssue("list.title", NovelSourceValidationCode.PreviewTitleMissing)); if (link == null) add(NovelSourceValidationIssue("list.link", NovelSourceValidationCode.PreviewLinkMissing)) }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSource.kt	val link = item.selectFirst(definition.list.link)?.absUrl("href")?.ifBlank { null }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSource.kt	val selectors = mapOf("list.item" to list.item, "list.title" to list.title, "list.link" to list.link, "details.title" to details.title, "chapters.item" to chapters.item, "chapters.title" to chapters.title, "chapters.link" to chapters.link, "content.body" to content.body)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	.joinToString("\n", transform = ::validationIssueText)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	.url(definition.baseUrl.trimEnd('/') + definition.popularPath.replace("{page}", "1"))
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"baseUrl" -> R.string.hayai_custom_source_field_base_url
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"baseUrl" to value.baseUrl,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"baseUrl",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.item" -> R.string.hayai_custom_source_field_chapter_item
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.item" to value.chapters.item,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.item",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.link" -> R.string.hayai_custom_source_field_chapter_link
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.link" to value.chapters.link,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.link",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.title" -> R.string.hayai_custom_source_field_chapter_title
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.title" to value.chapters.title,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"chapters.title",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"content.body" -> R.string.hayai_custom_source_field_content_body
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"content.body" to value.content.body,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"content.body",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"content.remove" -> getString(R.string.hayai_custom_source_field_content_remove)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"details.title" -> R.string.hayai_custom_source_field_details_title
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"details.title" to value.details.title,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"details.title",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"headers" -> getString(R.string.hayai_custom_source_field_headers)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"id" -> R.string.hayai_custom_source_field_id
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"id" to value.id,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"id",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"language" -> R.string.hayai_custom_source_field_language
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"language" to value.language,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"language",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.item" -> R.string.hayai_custom_source_field_list_item
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.item" to value.list.item,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.item",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.link" -> R.string.hayai_custom_source_field_list_link
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.link" to value.list.link,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.link",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.title" -> R.string.hayai_custom_source_field_list_title
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.title" to value.list.title,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"list.title",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"name" -> R.string.hayai_custom_source_field_name
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"name" to value.name,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"name",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"popularPath" -> R.string.hayai_custom_source_field_popular_path
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"popularPath" to value.popularPath,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"popularPath",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"searchPath" -> R.string.hayai_custom_source_field_search_path
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"searchPath" to value.searchPath,
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	"searchPath",
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	baseUrl = value("baseUrl"),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	chapters = NovelChapterSelectors(value("chapters.item"), value("chapters.title"), value("chapters.link"), advanced?.chapters?.date),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	const val EXTRA_DEFINITION = "hayai.custom_source_definition"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	content = NovelContentSelectors(value("content.body"), advanced?.content?.remove.orEmpty()),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	details = NovelDetailsSelectors(value("details.title"), advanced?.details?.author, advanced?.details?.description, advanced?.details?.cover, advanced?.details?.genres, advanced?.details?.status),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	else -> error("Unknown custom source field: $key")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	id = value("id"),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	language = value("language"),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	list = NovelListSelectors(value("list.item"), value("list.title"), value("list.link"), advanced?.list?.cover, advanced?.list?.next),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	name = value("name"),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	popularPath = value("popularPath"),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	searchPath = value("searchPath"),
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderActivity.kt	status.text = issues.joinToString("\n", transform = ::validationIssueText)
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	.url(definition.baseUrl.trimEnd('/') + definition.popularPath.replace("{page}", "1"))
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"baseUrl" -> R.string.hayai_custom_source_field_base_url
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"baseUrl" to definition.baseUrl,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"baseUrl",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.item" -> R.string.hayai_custom_source_field_chapter_item
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.item" to definition.chapters.item,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.item",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.link" -> R.string.hayai_custom_source_field_chapter_link
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.link" to definition.chapters.link,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.link",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.title" -> R.string.hayai_custom_source_field_chapter_title
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.title" to definition.chapters.title,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"chapters.title",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"content.body" -> R.string.hayai_custom_source_field_content_body
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"content.body" to definition.content.body,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"content.body",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"content.remove" -> requireNotNull(resources).getString(R.string.hayai_custom_source_field_content_remove)
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"details.title" -> R.string.hayai_custom_source_field_details_title
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"details.title" to definition.details.title,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"details.title",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"headers" -> requireNotNull(resources).getString(R.string.hayai_custom_source_field_headers)
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"id" -> R.string.hayai_custom_source_field_id
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"id" to definition.id,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"id",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"language" -> R.string.hayai_custom_source_field_language
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"language" to definition.language,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"language",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.item" -> R.string.hayai_custom_source_field_list_item
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.item" to definition.list.item,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.item",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.link" -> R.string.hayai_custom_source_field_list_link
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.link" to definition.list.link,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.link",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.title" -> R.string.hayai_custom_source_field_list_title
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.title" to definition.list.title,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"list.title",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"name" -> R.string.hayai_custom_source_field_name
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"name" to definition.name,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"name",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"popularPath" -> R.string.hayai_custom_source_field_popular_path
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"popularPath" to definition.popularPath,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"popularPath",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"searchPath" -> R.string.hayai_custom_source_field_search_path
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"searchPath" to definition.searchPath,
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	"searchPath",
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	baseUrl = value("baseUrl"),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	chapters = NovelChapterSelectors(value("chapters.item"), value("chapters.title"), value("chapters.link"), advanced?.chapters?.date),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	const val DEFINITION = "hayai.custom_source_definition"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	content = NovelContentSelectors(value("content.body"), advanced?.content?.remove.orEmpty()),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	details = NovelDetailsSelectors(value("details.title"), advanced?.details?.author, advanced?.details?.description, advanced?.details?.cover, advanced?.details?.genres, advanced?.details?.status),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	else -> error("Unknown custom source field: $key")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	id = value("id"),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	language = value("language"),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	list = NovelListSelectors(value("list.item"), value("list.title"), value("list.link"), advanced?.list?.cover, advanced?.list?.next),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	name = value("name"),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	popularPath = value("popularPath"),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	private val values = FIELD_KEYS.associateWithTo(linkedMapOf()) { "" }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	private var advancedDefinition = ""
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	searchPath = value("searchPath"),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	statusPreference.summary = issues.joinToString("\n", transform = ::validationIssueText)
++app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceBuilderController.kt	statusPreference.summary = result.issues.joinToString("\n", transform = ::validationIssueText)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceStore.kt	manager.restorePlugin(compiled.descriptor, definition.baseUrl.trimEnd('/') + "/", compiled.code, emptyMap())
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceStore.kt	private val preferences = context.getSharedPreferences("hayai_novel_custom_sources", Context.MODE_PRIVATE)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/source/builder/NovelCustomSourceStore.kt	require(id.matches(Regex("[A-Za-z0-9._-]{1,128}")))
+@@ -2608,7 +2610,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt	val title = item.string("title") ?: item.string("romaji") ?: item.string("title_orig") ?: return@mapNotNull null
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt	val totalBooks = (series?.get("books") as? JsonArray)?.size
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt	val url = "$baseUrl/api/v0/books".toHttpUrl().newBuilder().addQueryParameter("q", query).build()
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsActivity.kt	val fallbackOptions = NovelDictionaryProvider.entries.filter { it.name.startsWith("WEB_") }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsController.kt	val values = NovelDictionaryProvider.entries.filter { it.name.startsWith("WEB_") }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	.addQueryParameter("client", "gtx").addQueryParameter("sl", settings.sourceLanguage).addQueryParameter("tl", settings.targetLanguage)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	.addQueryParameter("dt", "t").addQueryParameter("q", text).build()
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	companion object { private val LANGUAGE = Regex("auto|[a-z]{2,3}(?:-[A-Z]{2})?") }
+@@ -2889,10 +2891,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	require(output.length + read <= limit) { "Enhanced source details exceeded the size limit" }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	return joinToString("\n") { row ->
+ app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt	holder.input.setText("", false)
++app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt	const val MANGA_ID = "manga_id"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	EnhancedDescriptionLabel.Tags -> error("Tags are represented by SourceMetadataDocument.tags")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	get() = namespace?.let { "$it:$name" } ?: name
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FAMILY = "hayaiFamily"
+-app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt	const val MANGA_ID = "manga_id"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	private const val STORED_FIELDS = "fields"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Category to extra.string("category"),
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	SourceMetadataKey.Favorites to extra.string("favoriteCount"),
+-- 
+2.54.0.windows.1
+

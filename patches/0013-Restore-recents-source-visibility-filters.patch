@@ -1,0 +1,633 @@
+From c90a2dcbbbdbf3ddec1dfd6d5fa04439b4c31bc7 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Fri, 21 Aug 2026 00:47:48 +0300
+Subject: [PATCH] Restore recents source visibility filters
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index faca31641b9b58f5021d5f580aa143a2c760e751..e60f83c6aa87882082c44a90a46a9803228cd4c3 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -48,3 +48,5 @@ ts	phase	decision	why	evidence	result
+ 2026-08-21T12:00:00Z	novel-integration	integrated novel behavior into existing J2K library, details, statistics, shortcuts, settings, downloads, and migration surfaces	kept J2K authoritative while making novel behavior visible and actionable in the normal application flows	NovelJ2kIntegration.kt; NovelOfflineManager.kt; NovelSettingsController.kt; NovelMigrationPolicy.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T12:05:00Z	adult-details	added an authenticated source-details preview seam and E-Hentai direct/sprite preview implementation	matched SY's details experience without placing source parsing or image-reader changes in J2K	EhDetailsPreviewLoader.kt; EhHtmlParser.kt; MangaHeaderHolder.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-21T12:30:00Z	validation	compiled the integrated app and ran affected novel reader/settings and E-Hentai tests with one Gradle worker	verified resource binding, Kotlin integration, typed preview fixtures, document rendering, and customization safety without parallel CPU load	gradlew --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.novel.reader.* --tests dev.ahmedmohamed.hayai.novel.settings.* --tests dev.ahmedmohamed.hayai.adult.eh.*	VERIFIED
++2026-08-21T13:00:00Z	recents-visibility	rebuilt per-source hiding for History, Updates, Grouped, and All behind one Hayai policy	retained legacy preference keys, kept J2K data authoritative, covered unavailable sources, and avoided source-filter drift between layouts	RecentSourceVisibility.kt; RecentSourceVisibilityEditor.kt; RecentsPresenter.kt	IMPLEMENTED_UNVERIFIED
++2026-08-21T13:08:00Z	validation	compiled the integrated app and ran the focused recents visibility tests with one Gradle worker	verified signed and malformed IDs, independent lists, mixed-view union, exact replacement, resources, bindings, and J2K presenter integration	gradlew --no-parallel --max-workers=1 :app:compileDevDebugKotlin :app:testDevDebugUnitTest --tests dev.ahmedmohamed.hayai.recents.* -x :app:formatKotlin	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt b/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
+index 1937981b82c467bbbcff0fb970f284990684a266..58dd5be9b9dd1bc09837da8fb5bf7774edab26d9 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
+@@ -85,10 +85,16 @@ class HayaiPreferences(
+     val novelStatusBarSize = store.getString("pref_novel_status_bar_size", "small")
+     val novelStatusBarShowCharging = store.getBoolean("pref_novel_status_bar_show_charging", true)
+ 
++    // Keep the legacy Hayai keys so restored and in-place preferences migrate without a copy step.
++    val hiddenSourcesInHistory = store.getStringSet(KEY_HIDDEN_SOURCES_IN_HISTORY, emptySet())
++    val hiddenSourcesInUpdates = store.getStringSet(KEY_HIDDEN_SOURCES_IN_UPDATES, emptySet())
++
+     companion object {
+         const val KEY_HENTAI_FEATURES = "eh_is_hentai_enabled"
+         const val KEY_LEWD_LIBRARY_FILTER = "pref_filter_library_lewd_v2"
+         const val KEY_NOVEL_LIBRARY_FILTER = "pref_filter_library_novel_v1"
++        const val KEY_HIDDEN_SOURCES_IN_HISTORY = "hidden_sources_in_history"
++        const val KEY_HIDDEN_SOURCES_IN_UPDATES = "hidden_sources_in_updates"
+     }
+ }
+ 
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibility.kt b/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibility.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ad84c10dcd0abb7bdab507170cfdbd54320e559
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibility.kt
+@@ -0,0 +1,60 @@
++package dev.ahmedmohamed.hayai.recents
++
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import eu.kanade.tachiyomi.data.preference.Preference
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.combine
++
++enum class RecentSurface {
++    History,
++    Updates,
++    Mixed,
++}
++
++/**
++ * Owns source-visibility semantics for every recents presentation.
++ *
++ * Hiding is presentation-only. It never changes library membership, chapters, history, or update
++ * data. Mixed views use the union of the explicit lists so changing layouts cannot expose entries
++ * hidden in either tab.
++ */
++class RecentSourceVisibility(
++    private val hiddenInHistory: Preference<Set<String>>,
++    private val hiddenInUpdates: Preference<Set<String>>,
++) {
++    constructor(preferences: HayaiPreferences) : this(
++        preferences.hiddenSourcesInHistory,
++        preferences.hiddenSourcesInUpdates,
++    )
++
++    fun includes(
++        sourceId: Long,
++        surface: RecentSurface,
++    ): Boolean = sourceId !in hiddenSourceIds(surface)
++
++    fun hiddenSourceIds(surface: RecentSurface): Set<Long> =
++        when (surface) {
++            RecentSurface.History -> hiddenInHistory.get().validSourceIds()
++            RecentSurface.Updates -> hiddenInUpdates.get().validSourceIds()
++            RecentSurface.Mixed -> hiddenInHistory.get().validSourceIds() + hiddenInUpdates.get().validSourceIds()
++        }
++
++    fun hiddenCount(surface: RecentSurface): Int = hiddenSourceIds(surface).size
++
++    fun replaceHiddenSources(
++        surface: RecentSurface,
++        sourceIds: Set<Long>,
++    ) {
++        val values = sourceIds.mapTo(sortedSetOf()) { it.toString() }
++        when (surface) {
++            RecentSurface.History -> hiddenInHistory.set(values)
++            RecentSurface.Updates -> hiddenInUpdates.set(values)
++            RecentSurface.Mixed -> error("Mixed visibility is derived from History and Updates")
++        }
++    }
++
++    fun changes(): Flow<Unit> =
++        combine(hiddenInHistory.changes(), hiddenInUpdates.changes()) { _, _ -> Unit }
++
++    private fun Set<String>.validSourceIds(): Set<Long> = mapNotNullTo(linkedSetOf(), String::toLongOrNull)
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt b/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..120b9dfcdb02f21e0b0c40a7b98be8ce39f77cb7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityEditor.kt
+@@ -0,0 +1,112 @@
++package dev.ahmedmohamed.hayai.recents
++
++import android.content.Context
++import com.google.android.material.dialog.MaterialAlertDialogBuilder
++import com.pushtorefresh.storio.sqlite.queries.RawQuery
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.data.preference.PreferenceStore
++import eu.kanade.tachiyomi.source.SourceManager
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++
++class RecentSourceVisibilityEditor(
++    private val visibility: RecentSourceVisibility =
++        RecentSourceVisibility(HayaiPreferences(Injekt.get<PreferenceStore>())),
++    private val sourceManager: SourceManager = Injekt.get(),
++    private val database: DatabaseHelper = Injekt.get(),
++) {
++    fun label(
++        context: Context,
++        surface: RecentSurface,
++    ): String {
++        val count = visibility.hiddenCount(surface)
++        return if (count == 0) {
++            context.getString(R.string.recents_hidden_sources)
++        } else {
++            context.getString(R.string.recents_hidden_sources_count, count)
++        }
++    }
++
++    fun show(
++        context: Context,
++        scope: CoroutineScope,
++        surface: RecentSurface,
++        onChanged: () -> Unit,
++    ) {
++        require(surface != RecentSurface.Mixed) { "Mixed visibility must be edited through History or Updates" }
++        scope.launch {
++            val choices = loadChoices(surface)
++            if (choices.isEmpty()) {
++                MaterialAlertDialogBuilder(context)
++                    .setTitle(R.string.recents_hidden_sources)
++                    .setMessage(R.string.recents_no_sources_available)
++                    .setPositiveButton(android.R.string.ok, null)
++                    .show()
++                return@launch
++            }
++
++            val selected = visibility.hiddenSourceIds(surface).toMutableSet()
++            val checked = BooleanArray(choices.size) { choices[it].sourceId in selected }
++            MaterialAlertDialogBuilder(context)
++                .setTitle(R.string.recents_hidden_sources)
++                .setMultiChoiceItems(choices.map { it.label }.toTypedArray(), checked) { _, index, isChecked ->
++                    val sourceId = choices[index].sourceId
++                    if (isChecked) selected += sourceId else selected -= sourceId
++                }
++                .setPositiveButton(android.R.string.ok) { _, _ ->
++                    visibility.replaceHiddenSources(surface, selected)
++                    onChanged()
++                }
++                .setNeutralButton(R.string.clear) { _, _ ->
++                    visibility.replaceHiddenSources(surface, emptySet())
++                    onChanged()
++                }
++                .setNegativeButton(android.R.string.cancel, null)
++                .show()
++        }
++    }
++
++    private suspend fun loadChoices(surface: RecentSurface): List<SourceChoice> =
++        withContext(Dispatchers.IO) {
++            val installedIds = sourceManager.getCatalogueSources().mapTo(mutableSetOf()) { it.id }
++            val storedIds = visibility.hiddenSourceIds(surface)
++            val databaseIds = runCatching { sourceIdsInDatabase() }.getOrDefault(emptySet())
++            val choices =
++                (installedIds + storedIds + databaseIds).map { sourceId ->
++                    val source = sourceManager.getOrStub(sourceId)
++                    val language = source.lang.takeIf { it.isNotBlank() }
++                    val baseLabel = if (language == null) source.name else "${source.name} · $language"
++                    SourceChoice(sourceId, baseLabel)
++                }
++            val duplicateLabels = choices.groupingBy { it.label.lowercase() }.eachCount()
++            choices
++                .map { choice ->
++                    if (duplicateLabels.getValue(choice.label.lowercase()) > 1) {
++                        choice.copy(label = "${choice.label} (${choice.sourceId})")
++                    } else {
++                        choice
++                    }
++                }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER, SourceChoice::label).thenBy(SourceChoice::sourceId))
++        }
++
++    private fun sourceIdsInDatabase(): Set<Long> =
++        database
++            .lowLevel()
++            .rawQuery(RawQuery.builder().query("SELECT DISTINCT source FROM mangas").build())
++            .use { cursor ->
++                buildSet {
++                    while (cursor.moveToNext()) add(cursor.getLong(0))
++                }
++            }
++
++    private data class SourceChoice(
++        val sourceId: Long,
++        val label: String,
++    )
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt
+index d66f861a02304447ef86053f6cb251f7d58a4867..590484bfe400073001deb404009fb0f6ee8d2a97 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt
+@@ -1,5 +1,8 @@
+ package eu.kanade.tachiyomi.ui.recents
+ 
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.recents.RecentSourceVisibility
++import dev.ahmedmohamed.hayai.recents.RecentSurface
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+@@ -47,6 +50,8 @@ class RecentsPresenter(
+     val downloadManager: DownloadManager = Injekt.get(),
+     val db: DatabaseHelper = Injekt.get(),
+     private val chapterFilter: ChapterFilter = Injekt.get(),
++    private val sourceVisibility: RecentSourceVisibility =
++        RecentSourceVisibility(HayaiPreferences(Injekt.get())),
+ ) : BaseCoroutinePresenter<RecentsController>(),
+     DownloadQueue.DownloadListener {
+     private var recentsJob: Job? = null
+@@ -117,6 +122,13 @@ class RecentsPresenter(
+                     getRecents()
+                 }.launchIn(presenterScope)
+         }
++        sourceVisibility
++            .changes()
++            .drop(1)
++            .onEach {
++                resetOffsets()
++                getRecents()
++            }.launchIn(presenterScope)
+     }
+ 
+     fun getRecents(updatePageCount: Boolean = false) {
+@@ -153,6 +165,13 @@ class RecentsPresenter(
+             return
+         }
+         val viewType = viewType
++        val surface =
++            when (viewType) {
++                RecentsViewType.History -> RecentSurface.History
++                RecentsViewType.Updates -> RecentSurface.Updates
++                RecentsViewType.GroupedAll, RecentsViewType.UngroupedAll -> RecentSurface.Mixed
++            }
++        val hiddenSourceIds = sourceVisibility.hiddenSourceIds(surface)
+ 
+         val showRead = ((preferences.showReadInAllRecents().get() || query.isNotEmpty()) && limit != 0) || includeReadAnyway
+         val isUngrouped = viewType != RecentsViewType.GroupedAll || query.isNotEmpty()
+@@ -161,7 +180,41 @@ class RecentsPresenter(
+         var extraCount = 0
+         val cReading: List<MangaChapterHistory> =
+             when (viewType) {
+-                RecentsViewType.GroupedAll, RecentsViewType.UngroupedAll -> {
++                RecentsViewType.GroupedAll -> {
++                    if (hiddenSourceIds.isEmpty()) {
++                        db
++                            .getAllRecentsTypes(
++                                query,
++                                showRead,
++                                false,
++                                pageOffset,
++                                !updatePageCount && !isOnFirstPage,
++                                limit,
++                            ).executeOnIO()
++                    } else {
++                        val collected = mutableListOf<MangaChapterHistory>()
++                        for (attempt in 0 until MAX_FILTERED_PAGE_FETCHES) {
++                            val batch =
++                                db
++                                    .getAllRecentsTypes(
++                                        query,
++                                        showRead,
++                                        true,
++                                        pageOffset + collected.size,
++                                        false,
++                                        limit,
++                                    ).executeOnIO()
++                            collected += batch
++                            if (batch.size < ENDLESS_LIMIT ||
++                                collected.count { it.manga.source !in hiddenSourceIds } >= SHORT_LIMIT
++                            ) {
++                                break
++                            }
++                        }
++                        collected
++                    }
++                }
++                RecentsViewType.UngroupedAll -> {
+                     db
+                         .getAllRecentsTypes(
+                             query,
+@@ -301,8 +354,10 @@ class RecentsPresenter(
+         }
+ 
+         if (query != oldQuery) return
++        val sourceRowsRemoved = cReading.count { it.manga.source in hiddenSourceIds }
+         val mangaList =
+             cReading
++                .filter { it.manga.source !in hiddenSourceIds }
+                 .distinctBy {
+                     if (query.isEmpty() && viewType.isAll) it.manga.id else it.chapter.id
+                 }.filter { mch ->
+@@ -438,11 +493,16 @@ class RecentsPresenter(
+             } else {
+                 recentItems + newItems
+             }
+-        val newCount = itemCount + newItems.size + newItems.sumOf { it.mch.extraChapters.size } + extraCount
++        val newCount =
++            itemCount +
++                newItems.count { it.mch.manga.id != null } +
++                newItems.sumOf { it.mch.extraChapters.size }
+         val hasNewItems = newItems.isNotEmpty()
+-        if (updatePageCount &&
++        val needsFilteredPageBackfill =
++            sourceRowsRemoved > 0 && !finished && viewType != RecentsViewType.GroupedAll
++        if ((updatePageCount || needsFilteredPageBackfill) &&
+             (newCount < if (limit > 0) limit else 25) &&
+-            (viewType != RecentsViewType.GroupedAll || query.isNotEmpty()) &&
++            (viewType != RecentsViewType.GroupedAll || query.isNotEmpty() || needsFilteredPageBackfill) &&
+             limit != 0
+         ) {
+             runRecents(oldQuery, true, retryCount + 1, newCount, limit)
+@@ -789,6 +849,7 @@ class RecentsPresenter(
+ 
+         const val ENDLESS_LIMIT = 50
+         const val SHORT_LIMIT = 25
++        private const val MAX_FILTERED_PAGE_FETCHES = 5
+ 
+         suspend fun getRecentManga(
+             includeRead: Boolean = false,
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt
+index a3e32ada1d2d8a7a074d7e8d984cbf91f8e2f9ed..ef26b79d321ff527f5405f8a32658dce0a34855b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt
+@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.recents.options
+ 
+ import android.content.Context
+ import android.util.AttributeSet
++import dev.ahmedmohamed.hayai.recents.RecentSourceVisibilityEditor
++import dev.ahmedmohamed.hayai.recents.RecentSurface
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.databinding.RecentsHistoryViewBinding
+ import eu.kanade.tachiyomi.util.bindToPreference
+@@ -14,6 +16,8 @@ class RecentsHistoryView
+         context: Context,
+         attrs: AttributeSet? = null,
+     ) : BaseRecentsDisplayView<RecentsHistoryViewBinding>(context, attrs) {
++        private val sourceVisibilityEditor by lazy(::RecentSourceVisibilityEditor)
++
+         override fun inflateBinding() = RecentsHistoryViewBinding.bind(this)
+ 
+         override fun initGeneralPreferences() {
+@@ -21,6 +25,13 @@ class RecentsHistoryView
+             binding.collapseGroupedChapters.bindToPreference(preferences.collapseGroupedHistory()) {
+                 controller?.presenter?.expandedSectionsMap?.clear()
+             }
++            updateHiddenSourcesLabel()
++            binding.hiddenSources.setOnClickListener {
++                val recentsController = controller ?: return@setOnClickListener
++                sourceVisibilityEditor.show(context, recentsController.viewScope, RecentSurface.History) {
++                    updateHiddenSourcesLabel()
++                }
++            }
+             binding.clearHistory.setOnClickListener {
+                 val activity = controller?.activity ?: return@setOnClickListener
+                 activity
+@@ -32,4 +43,8 @@ class RecentsHistoryView
+                     .show()
+             }
+         }
++
++        private fun updateHiddenSourcesLabel() {
++            binding.hiddenSources.text = sourceVisibilityEditor.label(context, RecentSurface.History)
++        }
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt
+index bb43039866e17de622ba8055ade00c3a1b67bf4a..6b8cc05cf510fb923ecabd08c40a7e11d32ee5f9 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt
+@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.recents.options
+ 
+ import android.content.Context
+ import android.util.AttributeSet
++import dev.ahmedmohamed.hayai.recents.RecentSourceVisibilityEditor
++import dev.ahmedmohamed.hayai.recents.RecentSurface
+ import eu.kanade.tachiyomi.databinding.RecentsUpdatesViewBinding
+ import eu.kanade.tachiyomi.util.bindToPreference
+ import eu.kanade.tachiyomi.widget.BaseRecentsDisplayView
+@@ -12,6 +14,8 @@ class RecentsUpdatesView
+         context: Context,
+         attrs: AttributeSet? = null,
+     ) : BaseRecentsDisplayView<RecentsUpdatesViewBinding>(context, attrs) {
++        private val sourceVisibilityEditor by lazy(::RecentSourceVisibilityEditor)
++
+         override fun inflateBinding() = RecentsUpdatesViewBinding.bind(this)
+ 
+         override fun initGeneralPreferences() {
+@@ -20,5 +24,16 @@ class RecentsUpdatesView
+             binding.groupChapters.bindToPreference(preferences.collapseGroupedUpdates()) {
+                 controller?.presenter?.expandedSectionsMap?.clear()
+             }
++            updateHiddenSourcesLabel()
++            binding.hiddenSources.setOnClickListener {
++                val recentsController = controller ?: return@setOnClickListener
++                sourceVisibilityEditor.show(context, recentsController.viewScope, RecentSurface.Updates) {
++                    updateHiddenSourcesLabel()
++                }
++            }
++        }
++
++        private fun updateHiddenSourcesLabel() {
++            binding.hiddenSources.text = sourceVisibilityEditor.label(context, RecentSurface.Updates)
+         }
+     }
+diff --git a/app/src/main/res/layout/recents_history_view.xml b/app/src/main/res/layout/recents_history_view.xml
+index 9248d6e9162683685e2677ad205a33298c3899ca..4cf6d45dfc2c8f92732018ed9edc4cbe045b1141 100644
+--- a/app/src/main/res/layout/recents_history_view.xml
++++ b/app/src/main/res/layout/recents_history_view.xml
+@@ -29,6 +29,13 @@
+             android:text="@string/collapse_grouped_chapters"
+             android:textColor="?attr/colorOnBackground" />
+ 
++        <com.google.android.material.button.MaterialButton
++            android:id="@+id/hidden_sources"
++            style="@style/Widget.Material3Expressive.Button.TextButton"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/recents_hidden_sources" />
++
+         <com.google.android.material.button.MaterialButton
+             android:id="@+id/clear_history"
+             style="@style/Widget.Material3Expressive.Button.TextButton"
+@@ -36,4 +43,4 @@
+             android:layout_height="wrap_content"
+             android:text="@string/clear_history" />
+     </LinearLayout>
+-</eu.kanade.tachiyomi.ui.recents.options.RecentsHistoryView>
+\ No newline at end of file
++</eu.kanade.tachiyomi.ui.recents.options.RecentsHistoryView>
+diff --git a/app/src/main/res/layout/recents_updates_view.xml b/app/src/main/res/layout/recents_updates_view.xml
+index fbad31e3ac3dd12232db47fdde5986a3c68ed9af..6c2c645ab41e8aea7e1e6cb582f1d3bb2ddd569a 100644
+--- a/app/src/main/res/layout/recents_updates_view.xml
++++ b/app/src/main/res/layout/recents_updates_view.xml
+@@ -40,5 +40,12 @@
+             android:layout_marginTop="16dp"
+             android:text="@string/collapse_grouped_chapters"
+             android:textColor="?attr/colorOnBackground" />
++
++        <com.google.android.material.button.MaterialButton
++            android:id="@+id/hidden_sources"
++            style="@style/Widget.Material3Expressive.Button.TextButton"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/recents_hidden_sources" />
+     </LinearLayout>
+-</eu.kanade.tachiyomi.ui.recents.options.RecentsUpdatesView>
+\ No newline at end of file
++</eu.kanade.tachiyomi.ui.recents.options.RecentsUpdatesView>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 699a8a5feb9d996708f8bfe8c0f49d27a0ce978b..c72ead3a76db2b4d8348ff4052a66d09e9311375 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -318,6 +318,9 @@
+     <string name="only_downloaded">Only downloaded</string>
+     <string name="unread_or_downloaded">Unread or downloaded</string>
+     <string name="clear_history">Clear history</string>
++    <string name="recents_hidden_sources">Hidden sources</string>
++    <string name="recents_hidden_sources_count">Hidden sources (%1$d)</string>
++    <string name="recents_no_sources_available">No sources are available.</string>
+ 
+     <!-- Browse -->
+     <string name="search_filters">Search filters</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f1dfdfca85185b9ff99f01748a9de6972bc8bb0d
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/recents/RecentSourceVisibilityTest.kt
+@@ -0,0 +1,71 @@
++package dev.ahmedmohamed.hayai.recents
++
++import eu.kanade.tachiyomi.data.preference.Preference
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class RecentSourceVisibilityTest {
++    private val history = FakePreference(setOf("1", "-2", "invalid"))
++    private val updates = FakePreference(setOf("3", "1"))
++    private val visibility = RecentSourceVisibility(history, updates)
++
++    @Test
++    fun `each dedicated surface uses only its own hidden sources`() {
++        assertFalse(visibility.includes(1, RecentSurface.History))
++        assertFalse(visibility.includes(-2, RecentSurface.History))
++        assertTrue(visibility.includes(3, RecentSurface.History))
++
++        assertFalse(visibility.includes(3, RecentSurface.Updates))
++        assertTrue(visibility.includes(-2, RecentSurface.Updates))
++    }
++
++    @Test
++    fun `mixed views use the union and ignore malformed legacy values`() {
++        assertEquals(setOf(1L, -2L, 3L), visibility.hiddenSourceIds(RecentSurface.Mixed))
++        assertFalse(visibility.includes(1, RecentSurface.Mixed))
++        assertFalse(visibility.includes(-2, RecentSurface.Mixed))
++        assertFalse(visibility.includes(3, RecentSurface.Mixed))
++        assertTrue(visibility.includes(4, RecentSurface.Mixed))
++    }
++
++    @Test
++    fun `replacing a dedicated surface is exact and preserves signed source ids`() {
++        visibility.replaceHiddenSources(RecentSurface.History, setOf(Long.MIN_VALUE, 42))
++
++        assertEquals(setOf(Long.MIN_VALUE.toString(), "42"), history.get())
++        assertEquals(setOf("3", "1"), updates.get())
++    }
++
++    @Test(expected = IllegalStateException::class)
++    fun `mixed view cannot be edited independently`() {
++        visibility.replaceHiddenSources(RecentSurface.Mixed, setOf(1))
++    }
++}
++
++private class FakePreference<T>(initial: T) : Preference<T> {
++    private val state = MutableStateFlow(initial)
++
++    override fun key(): String = "fake"
++
++    override fun get(): T = state.value
++
++    override fun set(value: T) {
++        state.value = value
++    }
++
++    override fun isSet(): Boolean = true
++
++    override fun delete() = Unit
++
++    override fun defaultValue(): T = state.value
++
++    override fun changes(): Flow<T> = state
++
++    override fun stateIn(scope: CoroutineScope): StateFlow<T> = state
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index d58ecf1142a604192e3d1c07d72b1a2eeae60897..c62c9fb285fe105316503dc913df0f6153672b3d 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -12,6 +12,7 @@ J2K owns manga, chapters, history, categories, tracking, downloads, image readin
+ - `migration`: read-only legacy import and typed Hayai side tables.
+ - `backup`: versioned serialization and stable-ID remapping for Hayai-owned side data.
+ - `preferences`: stable Hayai and TachiyomiSY-compatible preference keys.
++- `recents`: presentation-only source visibility shared by History, Updates, and mixed views.
+ 
+ `tools/verify-upstream-boundary.ps1` rejects unreviewed Kotlin edits outside this namespace. `App.kt`, `MainActivity.kt`, and the J2K image `ReaderActivity.kt` are protected explicitly.
+ 
+@@ -43,6 +44,14 @@ Source-specific details use one generic adapter method on the manga header. E-He
+ 
+ Built-in source settings are another deliberate adapter seam. `BrowseSourceController` delegates settings navigation for Hayai-owned sources because J2K's extension-only package lookup cannot route a built-in source. The destination activity, session logic, remote controls, and failures remain under the Hayai namespace.
+ 
++Recents source visibility uses one Hayai-owned policy seam. History and Updates retain independent
++sets under the legacy Hayai preference keys; Grouped and All derive the union. The presenter takes
++one immutable source-ID snapshot per loaded page before it groups or decorates rows. The options
++sheet delegates source discovery and editing to Hayai, including installed sources, sources still
++referenced by J2K manga rows, and unavailable sources that were hidden previously. This is strictly
++a presentation filter: J2K remains authoritative for every manga, chapter, history, and update row,
++and pagination advances over hidden rows so a page containing only hidden sources cannot loop.
++
+ ## Backup ownership
+ 
+ J2K continues to own backup of library, chapter, category, history, tracking, and selected preferences. Hayai appends a versioned optional protobuf payload for quotes, novel repositories, installed novel plugin code and settings, chapter word counts, and E-Hentai favorites. References to J2K rows use `(sourceId, mangaUrl, chapterUrl)` rather than transient database IDs and are resolved only after core restore. Quote ID collisions are deterministically remapped from the complete quote payload, so repeated restores are idempotent without collapsing distinct quotes. Plugin code and string settings have independent size and count limits. Restore revalidates code through the same atomic installer, replaces each plugin setting namespace, and reloads installed sources in the current process. Invalid or unsupported side payloads do not invalidate the core J2K restore.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index e8160f254bedc1fae5d1e2c69cc6159f39ee0942..62556f5f0106c780e2a1fe289ff63fbab21960e0 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -47,6 +47,12 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ 
+ Tsundoku areas audited include its novel source/text-fetch contract, extension and repository handling, dedicated reader, downloads, TTS, reader tools, local/EPUB flows, tracking, statistics, and backup/import paths.
+ 
++## Application workflows
++
++| Capability | Hayai boundary | Status |
++|---|---|---|
++| Hide sources independently in History and Updates, including Grouped/All union | Hayai recents visibility policy plus narrow presenter/options adapters; legacy preference keys retained | port |
++
+ ## Completion rules
+ 
+ - Never copy code from `legacy/hayai-pre-j2k`; that branch is schema/data evidence only.
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 27364dbcae3e6c2cd2ef2824bcbd28ecfcaabb50..bdc61a561194827001dc0be4e6bc574fcbb8a3e3 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -33,6 +33,9 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/more/stats/StatsPresenter.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsPresenter.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsHistoryView.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/ui/recents/options/RecentsUpdatesView.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAdvancedController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt"
+-- 
+2.54.0.windows.1
+

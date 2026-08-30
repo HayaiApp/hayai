@@ -1,0 +1,1543 @@
+From ff7f5c762e5f183ef0d293a3b5e2a780014c2791 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 15:43:17 +0300
+Subject: [PATCH] fix: restore J2K extension workflows
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 4e4bafb112fffac8efa3dc72fbf89428faef9ce9..9ef528c3e40afccca9f0216b2df5d045f6cd5190 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -107,3 +107,4 @@ ts	phase	decision	why	evidence	result
+ 2026-08-23T12:15:00+03:00	ehentai-details-repair	accepted current E-Hentai direct-anchor sprite previews, invalidated stale empty listings, removed duplicated flattened metadata, and repaired the details vertical chain	kept parsing, typed metadata, authenticated networking, and cache policy Hayai-owned behind the existing J2K details adapter	EhHtmlParser.kt; EhRequestBuilder.kt; EhentaiSource.kt; SourcePreviewCache.kt; manga_header_item.xml	VERIFIED
+ 2026-08-23T12:15:00+03:00	hayai-public-identity	rewrote the README and issue forms, restored Hayai 1.15.0 code 114 metadata, replaced product J2K links, and documented credits and no-stable-release policy	retained upstream J2K, SY, Tsundoku, LNReader, Mihon, and legacy provenance links only as explicit credits or technical references	README.md; .github/ISSUE_TEMPLATE; AboutLinksPreference.kt; Dependencies.kt; releases.md	IMPLEMENTED_UNVERIFIED
+ 2026-08-23T13:45:00+03:00	independent-review-closure	restored all-APK repository management, retained asynchronous JavaScript warm-up failures, and overlaid APK update failures on installed rows	closed the concrete extension-management gaps found by the final independent review before master promotion	RepoPresenter.kt; NovelApkExtensionManager.kt; NovelPluginManager.kt; ManagedExtensionProjectorTest.kt	VERIFIED
++2026-08-23T15:04:01+03:00	j2k-extension-sheet-restoration	restored the Manga, Novels, and Migration tabs and returned standard APK loading to J2K's exact version-name compatibility path	novel APKs and JavaScript plugins share the J2K extension cards and actions in the Novels tab; both repository types reuse J2K's inline repository UI; the supplied Keiyoushi, Cursed Manga, and LNReader catalogs seed once and remain removable; plugin icons resolve against their repository and load in Browse; checksum-verified Comikey 1.6.9 and production LNReader Komga 1.0.2 passed install, registration, settings, QuickJS execution, and icon checks on emulator	ExtensionLoader.kt; NovelExtensionManifest.kt; ExtensionRepositoryDefaults.kt; ExtensionBottomPresenter.kt; ExtensionBottomSheet.kt; ExtensionHolder.kt; RepoController.kt; RepoPresenter.kt; SourceHolder.kt; BrowseController.kt	VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..020aedcbda23b0c5fc068604e8b1fca113abcdeb
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt
+@@ -0,0 +1,11 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++/** Catalogs shipped for first-run extension discovery. Users can remove them normally. */
++object ExtensionRepositoryDefaults {
++    const val KEIYOUSHI_MANGA = "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb"
++    const val CURSED_MANGA = "https://raw.githubusercontent.com/mojuru/cursed-manga-repo/repo/index.pb"
++    const val LNREADER_NOVELS =
++        "https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json"
++
++    val manga: Set<String> = setOf(KEIYOUSHI_MANGA, CURSED_MANGA)
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryKind.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryKind.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..edf441c66e654f52d2832492b2c821a5bfe7ea26
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryKind.kt
+@@ -0,0 +1,11 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++enum class ExtensionRepositoryKind {
++    Apk,
++    JavaScript,
++    ;
++
++    companion object {
++        fun from(value: String?): ExtensionRepositoryKind = entries.firstOrNull { it.name == value } ?: Apk
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt
+deleted file mode 100644
+index bcd01bfe29ce47fd0d885101dfb922996402651a..0000000000000000000000000000000000000000
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt
++++ /dev/null
+@@ -1,138 +0,0 @@
+-package dev.ahmedmohamed.hayai.extension.managed.ui
+-
+-import android.text.InputType
+-import android.widget.EditText
+-import android.widget.LinearLayout
+-import androidx.appcompat.app.AlertDialog
+-import androidx.preference.PreferenceCategory
+-import androidx.preference.PreferenceScreen
+-import androidx.preference.SwitchPreferenceCompat
+-import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+-import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginRepository
+-import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.ui.setting.SettingsController
+-import eu.kanade.tachiyomi.ui.setting.onChange
+-import eu.kanade.tachiyomi.ui.setting.onClick
+-import eu.kanade.tachiyomi.ui.setting.preference
+-import eu.kanade.tachiyomi.ui.setting.preferenceCategory
+-import eu.kanade.tachiyomi.ui.setting.switchPreference
+-import eu.kanade.tachiyomi.ui.setting.titleRes
+-import eu.kanade.tachiyomi.util.system.materialAlertDialog
+-import eu.kanade.tachiyomi.util.system.toast
+-import kotlinx.coroutines.Job
+-import kotlinx.coroutines.flow.collectLatest
+-import kotlinx.coroutines.launch
+-import uy.kohesive.injekt.Injekt
+-import uy.kohesive.injekt.api.get
+-
+-class NovelPluginRepositoryController : SettingsController() {
+-    private val manager: NovelPluginManager = Injekt.get()
+-    private lateinit var repositories: PreferenceCategory
+-    private var collectionJob: Job? = null
+-    private var busy = false
+-
+-    override fun setupPreferenceScreen(screen: PreferenceScreen) = screen.apply {
+-        titleRes = R.string.hayai_novel_plugins
+-        preferenceCategory {
+-            preference {
+-                title = context.getString(R.string.refresh)
+-                summary = context.getString(R.string.hayai_novel_plugins_security_summary)
+-                onClick { runAction { manager.refresh() } }
+-            }
+-            preference {
+-                title = context.getString(R.string.add)
+-                summary = context.getString(R.string.hayai_add_novel_repository)
+-                onClick { showAddRepository() }
+-            }
+-        }
+-        repositories = preferenceCategory { title = context.getString(R.string.hayai_novel_repositories) }
+-        collectionJob = viewScope.launch {
+-            manager.catalog.collectLatest { catalog ->
+-                repositories.removeAll()
+-                if (catalog.repositories.isEmpty()) {
+-                    repositories.preference {
+-                        summary = context.getString(R.string.hayai_no_novel_repositories)
+-                        isSelectable = false
+-                    }
+-                }
+-                catalog.repositories.forEach(::addRepository)
+-                catalog.repositoryErrors.values.firstOrNull()?.let { context.toast(context.novelFailureMessage(it, R.string.unknown_error)) }
+-            }
+-        }
+-        runAction { manager.refresh() }
+-    }
+-
+-    override fun onDestroy() {
+-        collectionJob?.cancel()
+-        super.onDestroy()
+-    }
+-
+-    private fun addRepository(repository: NovelPluginRepository) {
+-        repositories.switchPreference {
+-            key = "hayai.plugin.repository.${repository.url.hashCode()}"
+-            title = repository.name
+-            summary = repository.url
+-            isChecked = repository.enabled
+-            isPersistent = false
+-            isEnabled = !busy
+-            onChange { enabled ->
+-                runAction {
+-                    manager.setRepositoryEnabled(repository.url, enabled as Boolean)
+-                    manager.refresh()
+-                }
+-                false
+-            }
+-        }
+-        repositories.preference {
+-            title = requireNotNull(activity).getString(R.string.hayai_remove_named_item, repository.name)
+-            summary = requireNotNull(activity).getString(R.string.remove)
+-            onClick {
+-                activity?.materialAlertDialog()
+-                    ?.setTitle(R.string.remove)
+-                    ?.setMessage(activity?.getString(R.string.hayai_remove_repository_confirmation, repository.name))
+-                    ?.setNegativeButton(android.R.string.cancel, null)
+-                    ?.setPositiveButton(R.string.remove) { _, _ -> runAction { manager.removeRepository(repository.url); manager.refresh() } }
+-                    ?.show()
+-            }
+-        }
+-    }
+-
+-    private fun showAddRepository() {
+-        val context = activity ?: return
+-        val form = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+-        val name = EditText(context).apply { setHint(R.string.name) }
+-        val url = EditText(context).apply {
+-            setHint(R.string.hayai_novel_plugin_repository_url_hint)
+-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+-        }
+-        form.addView(name)
+-        form.addView(url)
+-        val dialog = context.materialAlertDialog()
+-            .setTitle(R.string.hayai_add_novel_repository)
+-            .setMessage(R.string.hayai_novel_repository_trust_warning)
+-            .setView(form)
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .setPositiveButton(R.string.add, null)
+-            .create()
+-        dialog.setOnShowListener {
+-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+-                viewScope.launch {
+-                    runCatching { manager.addRepository(name.text.toString(), url.text.toString()); manager.refresh() }
+-                        .onSuccess { dialog.dismiss() }
+-                        .onFailure { url.error = context.novelFailureMessage(it, R.string.unknown_error) }
+-                }
+-            }
+-        }
+-        dialog.show()
+-    }
+-
+-    private fun runAction(action: suspend () -> Any?) {
+-        if (busy) return
+-        busy = true
+-        viewScope.launch {
+-            runCatching { action() }.onFailure { activity?.toast(activity?.novelFailureMessage(it, R.string.unknown_error).orEmpty()) }
+-            busy = false
+-        }
+-    }
+-}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt
+index a4925c6de6f7f53bc4d6fffef854245117085e61..8a9ed4462e3a2073c9df47270442e7cb43d353ad 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt
+@@ -50,7 +50,10 @@ internal object NovelExtensionManifest {
+         metadataVersion: Any?,
+     ): Double? =
+         when (metadataVersion) {
+-            is Number -> metadataVersion.toDouble().takeUnless { it == 0.0 }
++            // Android manifest decimal values are exposed as Float. Convert through their
++            // canonical decimal form so 1.6 does not become 1.600000023841858 and fail the
++            // loader's upper-bound check.
++            is Number -> metadataVersion.toString().toDoubleOrNull()?.takeUnless { it == 0.0 }
+             is String -> metadataVersion.trim().toDoubleOrNull()?.takeUnless { it == 0.0 }
+             else -> null
+         } ?: versionName.substringBeforeLast('.').toDoubleOrNull()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+index 8848fcf16d2708658ff776105a0525bcbc6eb8b3..800e15d09a1ed4922f631888a734d2abc94b092f 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.plugin
+ 
+ import android.content.Context
+ import android.content.SharedPreferences
++import dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryDefaults
+ import dev.ahmedmohamed.hayai.novel.error.NovelFailure
+ import dev.ahmedmohamed.hayai.novel.error.novelFailure
+ import dev.ahmedmohamed.hayai.novel.error.novelRequire
+@@ -59,13 +60,26 @@ class NovelPluginManager(
+             .build()
+     private val mutex = Mutex()
+     private val sourceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+-    private val _catalog = MutableStateFlow(NovelPluginCatalog(repositories = store.repositories(), installed = store.installed()))
++    private val _catalog = MutableStateFlow(NovelPluginCatalog(repositories = repositoriesWithFirstRunDefault(), installed = store.installed()))
+     val catalog: StateFlow<NovelPluginCatalog> = _catalog.asStateFlow()
+ 
+     init {
+         rebuildAndPublish(_catalog.value)
+     }
+ 
++    private fun repositoriesWithFirstRunDefault(): List<NovelPluginRepository> {
++        val bootstrap = appContext.getSharedPreferences(BOOTSTRAP_PREFERENCES, Context.MODE_PRIVATE)
++        if (!bootstrap.getBoolean(DEFAULT_REPOSITORY_SEEDED, false)) {
++            val url = ExtensionRepositoryDefaults.LNREADER_NOVELS
++            if (store.repositories().none { it.url == url }) {
++                store.saveRepository(NovelPluginRepository("LNReader", url, enabled = true))
++                trustStore.trustUnsigned(url)
++            }
++            bootstrap.edit().putBoolean(DEFAULT_REPOSITORY_SEEDED, true).commit()
++        }
++        return store.repositories()
++    }
++
+     suspend fun refresh(): NovelPluginCatalog =
+         mutex.withLock {
+             _catalog.value = _catalog.value.copy(repositories = store.repositories(), refreshing = true, repositoryErrors = emptyMap())
+@@ -340,5 +354,7 @@ class NovelPluginManager(
+     companion object {
+         private const val MAX_REPOSITORY_BYTES = 4L * 1024 * 1024
+         private const val MAX_REPOSITORY_PLUGINS = 10_000
++        private const val BOOTSTRAP_PREFERENCES = "hayai_novel_plugin_bootstrap"
++        private const val DEFAULT_REPOSITORY_SEEDED = "default_lnreader_repository_seeded"
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
+index 6fd2934225e936d1ad73cd28b180fa67b54f3f23..184f8cb3df087fe0c23369957d080875b7fd5ef3 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt
+@@ -196,7 +196,7 @@ class NovelPluginSource(
+             .orEmpty()
+             .ifBlank { plugin.site }
+             .ifBlank { "https://example.com" }
+-    val iconUrl: String = plugin.iconUrl
++    val iconUrl: String = plugin.resolvedIconUrl(installedPlugin.repositoryUrl).orEmpty()
+     val version: String = plugin.version
+ 
+     /** Initializes the runtime and snapshots synchronous UI schemas on a worker thread. */
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
+index bec4471b80da00d5aa79e09267197f4cc2eecfa8..71a214dce4bf11ff614a1ee23541e7f5111f9a08 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/repository/NovelRepositoryHubController.kt
+@@ -3,7 +3,7 @@ package dev.ahmedmohamed.hayai.novel.repository
+ import androidx.annotation.StringRes
+ import androidx.preference.PreferenceScreen
+ import com.bluelinelabs.conductor.Controller
+-import dev.ahmedmohamed.hayai.extension.managed.ui.NovelPluginRepositoryController
++import dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryKind
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.ui.setting.SettingsController
+ import eu.kanade.tachiyomi.ui.setting.onClick
+@@ -29,7 +29,7 @@ internal enum class NovelRepositoryKind(
+ 
+     fun destination(): Controller = when (this) {
+         ApkExtensions -> RepoController()
+-        LnReaderPlugins -> NovelPluginRepositoryController()
++        LnReaderPlugins -> RepoController(ExtensionRepositoryKind.JavaScript)
+     }
+ }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
+index a8a3b3cd168e1496de13e3ac0dd1cb9fb6153005..b032afdd916cdd00efc41c0a0ecb25481a9fa752 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
+@@ -338,7 +338,11 @@ class PreferencesHelper(
+ 
+     fun automaticExtUpdates() = flowPrefs.getBoolean(Keys.automaticExtUpdates, true)
+ 
+-    fun extensionRepos() = flowPrefs.getStringSet("extension_repos", emptySet())
++    fun extensionRepos() =
++        flowPrefs.getStringSet(
++            "extension_repos",
++            dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryDefaults.manga,
++        )
+ 
+     /**
+      * Cached display metadata (proper name, website, discord) for extension repos, keyed by
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
+index fc32a6bd259556782927bcfd00b39e5e5dcd8ad5..af4c8b08fbdaf8c78e53beaeb5cfe1d93cf2e3a5 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt
+@@ -42,6 +42,9 @@ internal object ExtensionLoader {
+ 
+     const val LIB_VERSION_MIN = 1.3
+     const val LIB_VERSION_MAX = 1.6
++    private const val METADATA_SOURCE_CLASS = "tachiyomi.extension.class"
++    private const val METADATA_SOURCE_FACTORY = "tachiyomi.extension.factory"
++    private const val METADATA_NSFW = "tachiyomi.extension.nsfw"
+     private const val NOVEL_EXTENSION_PACKAGE_PREFIX = "eu.kanade.tachiyomi.novelextension"
+ 
+     @Suppress("DEPRECATION")
+@@ -323,12 +326,24 @@ internal object ExtensionLoader {
+         val pkgName = pkgInfo.packageName
+         val metadata = appInfo.metaData
+ 
++        val requiredFeatures = pkgInfo.reqFeatures.orEmpty().mapNotNull { it.name }.toSet()
++        val manifest = NovelExtensionManifest.resolve(requiredFeatures, metadata?.keySet().orEmpty())
++        if (manifest == null) {
++            Timber.w("Missing supported extension feature for $pkgName")
++            return LoadResult.Error(ApkLoadFailure(pkgName, reason = ApkLoadFailure.Reason.UnsupportedManifest))
++        }
++
+         val extName =
+-            NovelExtensionManifest
+-                .displayName(
+-                    applicationLabel = pkgManager.getApplicationLabel(appInfo).toString(),
+-                    metadataName = metadata?.getString(NovelExtensionManifest.DISPLAY_NAME_KEY),
+-                ).ifBlank { pkgName }
++            if (manifest.isNovel) {
++                NovelExtensionManifest
++                    .displayName(
++                        applicationLabel = pkgManager.getApplicationLabel(appInfo).toString(),
++                        metadataName = metadata?.getString(NovelExtensionManifest.DISPLAY_NAME_KEY),
++                    ).ifBlank { pkgName }
++            } else {
++                // Keep standard APK identity exactly on J2K's path.
++                pkgManager.getApplicationLabel(appInfo).toString().substringAfter("Tachiyomi: ")
++            }
+         val versionName = pkgInfo.versionName
+         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
+         fun failure(reason: ApkLoadFailure.Reason) =
+@@ -340,11 +355,17 @@ internal object ExtensionLoader {
+         }
+ 
+         // Validate lib version
+-        val manifestLibVersion =
+-            metadata
+-                ?.takeIf { it.containsKey(NovelExtensionManifest.EXTENSION_LIB_KEY) }
+-                ?.getFloat(NovelExtensionManifest.EXTENSION_LIB_KEY)
+-        val libVersion = NovelExtensionManifest.libraryVersion(versionName, manifestLibVersion)
++        val libVersion =
++            if (manifest.isNovel) {
++                val manifestLibVersion =
++                    metadata
++                        ?.takeIf { it.containsKey(NovelExtensionManifest.EXTENSION_LIB_KEY) }
++                        ?.getFloat(NovelExtensionManifest.EXTENSION_LIB_KEY)
++                NovelExtensionManifest.libraryVersion(versionName, manifestLibVersion)
++            } else {
++                // This is J2K's authoritative decoding rule for manga APK extensions.
++                versionName.substringBeforeLast('.').toDoubleOrNull()
++            }
+         if (libVersion == null || libVersion < LIB_VERSION_MIN || libVersion > LIB_VERSION_MAX) {
+             Timber.w(
+                 "Lib version is $libVersion, while only versions $LIB_VERSION_MIN to $LIB_VERSION_MAX are allowed",
+@@ -352,13 +373,6 @@ internal object ExtensionLoader {
+             return failure(ApkLoadFailure.Reason.UnsupportedLibrary)
+         }
+ 
+-        val requiredFeatures = pkgInfo.reqFeatures.orEmpty().mapNotNull { it.name }.toSet()
+-        val manifest = NovelExtensionManifest.resolve(requiredFeatures, metadata?.keySet().orEmpty())
+-        if (manifest == null) {
+-            Timber.w("Missing supported extension feature for $extName ($pkgName)")
+-            return failure(ApkLoadFailure.Reason.UnsupportedManifest)
+-        }
+-
+         val signatures = getSignatures(pkgInfo)
+         if (signatures.isNullOrEmpty()) {
+             Timber.w("Package $pkgName isn't signed")
+@@ -383,8 +397,12 @@ internal object ExtensionLoader {
+         }
+ 
+         val isNsfw =
+-            (metadata?.getInt(NovelExtensionManifest.CONTENT_WARNING_KEY) ?: 0) > 0 ||
+-                (metadata?.getInt(manifest.nsfwKey) ?: 0) == 1
++            if (manifest.isNovel) {
++                (metadata?.getInt(NovelExtensionManifest.CONTENT_WARNING_KEY) ?: 0) > 0 ||
++                    (metadata?.getInt(manifest.nsfwKey) ?: 0) == 1
++            } else {
++                metadata?.getInt(METADATA_NSFW) == 1
++            }
+         if (!loadNsfwSource && isNsfw) {
+             Timber.w("NSFW extension $pkgName not allowed")
+             return failure(ApkLoadFailure.Reason.AdultSourcesDisabled)
+@@ -398,9 +416,10 @@ internal object ExtensionLoader {
+                 return failure(ApkLoadFailure.Reason.ClassLoader)
+             }
+ 
+-        val declaredClasses = metadata?.getString(manifest.classKey)
++        val classMetadataKey = if (manifest.isNovel) manifest.classKey else METADATA_SOURCE_CLASS
++        val declaredClasses = metadata?.getString(classMetadataKey)
+         if (declaredClasses.isNullOrBlank()) {
+-            Timber.w("Missing ${manifest.classKey} for extension $extName ($pkgName)")
++            Timber.w("Missing $classMetadataKey for extension $extName ($pkgName)")
+             return failure(ApkLoadFailure.Reason.ClassMetadata)
+         }
+ 
+@@ -410,8 +429,14 @@ internal object ExtensionLoader {
+                 .map(String::trim)
+                 .filter(String::isNotEmpty)
+                 .flatMap { declaredClass ->
++                    val candidates =
++                        if (manifest.isNovel) {
++                            NovelExtensionManifest.classCandidates(declaredClass, pkgInfo.packageName)
++                        } else {
++                            listOf(if (declaredClass.startsWith('.')) pkgInfo.packageName + declaredClass else declaredClass)
++                        }
+                     var lastClassError: ClassNotFoundException? = null
+-                    for (className in NovelExtensionManifest.classCandidates(declaredClass, pkgInfo.packageName)) {
++                    for (className in candidates) {
+                         try {
+                             val obj = Class.forName(className, false, classLoader).getDeclaredConstructor().newInstance()
+                             return@flatMap when (obj) {
+@@ -431,7 +456,7 @@ internal object ExtensionLoader {
+                     return failure(ApkLoadFailure.Reason.SourceConstruction)
+                 }
+ 
+-        if (sources.isEmpty()) {
++        if (manifest.isNovel && sources.isEmpty()) {
+             Timber.w("Extension $extName ($pkgName) did not declare any source classes")
+             return failure(ApkLoadFailure.Reason.EmptySources)
+         }
+@@ -463,7 +488,7 @@ internal object ExtensionLoader {
+                 isNsfw = isNsfw,
+                 isNovel = manifest.isNovel,
+                 sources = sources,
+-                pkgFactory = metadata.getString(manifest.factoryKey),
++                pkgFactory = metadata?.getString(if (manifest.isNovel) manifest.factoryKey else METADATA_SOURCE_FACTORY),
+                 icon = appInfo.loadIcon(pkgManager),
+                 isShared = extensionInfo.isShared,
+             )
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
+index c32a13aefdca94e324bfc9a8c69fff5aee9db302..ace1f496c25be9685693f52516a59f176c5cb42d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
+@@ -7,13 +7,17 @@ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionFilter
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionKey
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionProjector
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionState
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.extension.ExtensionInstallerJob
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.extension.model.InstallStep
++import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
++import eu.kanade.tachiyomi.extension.util.ExtensionLoader
+ import eu.kanade.tachiyomi.ui.migration.BaseMigrationPresenter
++import eu.kanade.tachiyomi.util.system.LocaleHelper
+ import eu.kanade.tachiyomi.util.system.isOnline
+ import eu.kanade.tachiyomi.util.system.toast
+ import kotlinx.coroutines.Dispatchers
+@@ -31,7 +35,7 @@ typealias ExtensionIntallInfo = Pair<InstallStep, PackageInstaller.SessionInfo?>
+ /** J2K migration presenter with one Hayai-owned projection for APK and JS extensions. */
+ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() {
+     private val pluginManager: NovelPluginManager = Injekt.get()
+-    private var extensions = emptyList<ExtensionItem>()
++    private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
+     private var currentDownloads = hashMapOf<String, ExtensionIntallInfo>()
+     private var pluginOperations = emptySet<String>()
+     private var firstLoad = true
+@@ -59,7 +63,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+                     rebuildExtensions()
+                     return@collect
+                 }
+-                val item = extensions.firstOrNull { row ->
++                val item = extensions.values.flatten().firstOrNull { row ->
+                     (row.extension.key as? ManagedExtensionKey.Apk)?.packageName == event.first
+                 } ?: return@collect
+                 val pkgName = (item.extension.key as ManagedExtensionKey.Apk).packageName
+@@ -92,14 +96,20 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+                 showNsfwSources = preferences.showNsfwSources().get(),
+             ),
+         )
+-        extensions = toItems(projected)
++        val rebuilt = ContentKind.entries.associateWith { kind -> toItems(projected, kind) }
++        extensions = rebuilt
+         withContext(NonCancellable + Dispatchers.Main) {
+-            view?.setExtensions(extensions, projected.notices, updateController)
++            ContentKind.entries.forEachIndexed { index, kind ->
++                view?.setExtensions(kind, rebuilt.getValue(kind), projected.notices, updateController && index == 0)
++            }
+         }
+     }
+ 
+     @Synchronized
+-    private fun toItems(state: ManagedExtensionState): List<ExtensionItem> {
++    private fun toItems(
++        state: ManagedExtensionState,
++        contentKind: ContentKind,
++    ): List<ExtensionItem> {
+         val context = view?.context ?: return emptyList()
+         if (firstLoad) {
+             state.entries.forEach { entry ->
+@@ -108,33 +118,80 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+             }
+             firstLoad = false
+         }
++        val updates = state.updates.filter { contentKind in it.contentKinds }
++        val installed = state.installed.filter { contentKind in it.contentKinds }
++        val available = state.available.filter { contentKind in it.contentKinds }
++        val sortOrder = InstalledExtensionsOrder.fromPreference(preferences)
++        val installedSorted =
++            installed.sortedWith(
++                compareBy(
++                    { entry ->
++                        val apk = entry.apkInstalled()
++                        apk?.isObsolete != true
++                    },
++                    { entry ->
++                        val apk = entry.apkInstalled()
++                        when (sortOrder) {
++                            InstalledExtensionsOrder.Name -> entry.name
++                            InstalledExtensionsOrder.RecentlyUpdated ->
++                                apk?.let { Long.MAX_VALUE - ExtensionLoader.extensionUpdateDate(context, it) } ?: Long.MAX_VALUE
++                            InstalledExtensionsOrder.RecentlyInstalled ->
++                                apk?.let { Long.MAX_VALUE - ExtensionLoader.extensionInstallDate(context, it) } ?: Long.MAX_VALUE
++                            InstalledExtensionsOrder.Language -> entry.language
++                        }
++                    },
++                    ManagedExtensionEntry::name,
++                ),
++            )
+         return buildList {
+-            if (state.updates.isNotEmpty()) {
++            if (updates.isNotEmpty()) {
+                 val header = ExtensionGroupItem(
+-                    context.resources.getQuantityString(R.plurals._updates_pending, state.updates.size, state.updates.size),
+-                    state.updates.size,
+-                    canUpdate = true,
++                    context.resources.getQuantityString(R.plurals._updates_pending, updates.size, updates.size),
++                    updates.size,
++                    canUpdate = updates.any { entry ->
++                        val item = entry.toItem(null)
++                        item.installStep == null || item.installStep == InstallStep.Error
++                    },
+                 )
+-                addAll(state.updates.map { it.toItem(header) })
+-            }
+-            if (state.installed.isNotEmpty()) {
+-                val header = ExtensionGroupItem(context.getString(R.string.installed), state.installed.size)
+-                addAll(state.installed.map { it.toItem(header) })
++                addAll(updates.sortedBy(ManagedExtensionEntry::name).map { it.toItem(header) })
+             }
+-            if (state.available.isNotEmpty()) {
+-                val header = ExtensionGroupItem(context.getString(R.string.hayai_extension_available), state.available.size)
+-                addAll(state.available.map { it.toItem(header) })
++            if (installedSorted.isNotEmpty()) {
++                val header = ExtensionGroupItem(
++                    context.getString(R.string.installed),
++                    installedSorted.size,
++                    installedSorting = preferences.installedExtensionsOrder().get(),
++                )
++                addAll(installedSorted.map { it.toItem(header) })
+             }
++            available
++                .sortedBy(ManagedExtensionEntry::name)
++                .groupBy { entry -> LocaleHelper.getSourceDisplayName(entry.language.orEmpty(), context) }
++                .toSortedMap()
++                .forEach { (language, entries) ->
++                    val header = ExtensionGroupItem(language, entries.size)
++                    addAll(entries.map { it.toItem(header) })
++                }
+         }
+     }
+ 
+-    private fun ManagedExtensionEntry.toItem(header: ExtensionGroupItem): ExtensionItem {
++    private fun ManagedExtensionEntry.apkInstalled(): Extension.Installed? {
++        val pkgName = (key as? ManagedExtensionKey.Apk)?.packageName ?: return null
++        return extensionManager.installedExtensionsFlow.value.firstOrNull { it.pkgName == pkgName }
++    }
++
++    private fun ManagedExtensionEntry.toItem(header: ExtensionGroupItem?): ExtensionItem {
+         val apkInfo = (key as? ManagedExtensionKey.Apk)?.packageName?.let(currentDownloads::get)
+         val pluginStep = (key as? ManagedExtensionKey.Js)?.pluginId?.takeIf(pluginOperations::contains)?.let { InstallStep.Loading }
+-        return ExtensionItem(this, header, pluginStep ?: apkInfo?.first, apkInfo?.second)
++        return ExtensionItem(
++            extension = this,
++            header = header,
++            installStep = pluginStep ?: apkInfo?.first,
++            session = apkInfo?.second,
++            apkInstalled = apkInstalled(),
++        )
+     }
+ 
+-    fun getExtensionUpdateCount(): Int = extensions.count { it.extension.hasUpdate }
++    fun getExtensionUpdateCount(): Int = extensions.values.flatten().distinctBy { it.extension.key }.count { it.extension.hasUpdate }
+ 
+     @Synchronized
+     private fun updateInstallStep(
+@@ -142,11 +199,18 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         state: InstallStep?,
+         session: PackageInstaller.SessionInfo?,
+     ): ExtensionItem? {
+-        val position = extensions.indexOfFirst { it.extension.key == extension.key }
+-        if (position == -1) return null
+-        val item = extensions[position].copy(installStep = state, session = session)
+-        extensions = extensions.toMutableList().also { it[position] = item }
+-        return item
++        var firstUpdated: ExtensionItem? = null
++        ContentKind.entries.filter { it in extension.contentKinds }.forEach { kind ->
++            val items = extensions.getValue(kind).toMutableList()
++            val position = items.indexOfFirst { it.extension.key == extension.key }
++            if (position != -1) {
++                val item = items[position].copy(installStep = state, session = session)
++                items[position] = item
++                extensions = extensions + (kind to items)
++                firstUpdated = firstUpdated ?: item
++            }
++        }
++        return firstUpdated
+     }
+ 
+     fun cancelExtensionInstall(item: ExtensionItem) {
+@@ -180,7 +244,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+                     InstallStep.Installed, InstallStep.Error -> currentDownloads.remove(pkgName)
+                     else -> currentDownloads[pkgName] = info
+                 }
+-                extensions.firstOrNull { it.extension.key == ManagedExtensionKey.Apk(pkgName) }?.extension?.let { entry ->
++                extensions.values.flatten().firstOrNull { it.extension.key == ManagedExtensionKey.Apk(pkgName) }?.extension?.let { entry ->
+                     updateInstallStep(entry, info.first, info.second)?.let { item ->
+                         withContext(NonCancellable + Dispatchers.Main) { view?.downloadUpdate(item) }
+                     }
+@@ -189,10 +253,11 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         }
+     }
+ 
+-    fun updateAllPendingExtensions() {
+-        val apkUpdates = extensionManager.installedExtensionsFlow.value.filter(Extension.Installed::hasUpdate)
++    fun updateAllPendingExtensions(contentKind: ContentKind) {
++        val apkUpdates = extensionManager.installedExtensionsFlow.value.filter { contentKind.accepts(it) && it.hasUpdate }
+         updateExtensions(apkUpdates)
+-        extensions.mapNotNull { (it.extension.key as? ManagedExtensionKey.Js)?.pluginId?.takeIf { _ -> it.extension.hasUpdate } }
++        extensions.getValue(contentKind)
++            .mapNotNull { (it.extension.key as? ManagedExtensionKey.Js)?.pluginId?.takeIf { _ -> it.extension.hasUpdate } }
+             .forEach { id -> pluginAction(id) { pluginManager.update(id) } }
+     }
+ 
+@@ -201,7 +266,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         val context = view?.context ?: return
+         extensions.forEach { extension ->
+             currentDownloads[extension.pkgName] = InstallStep.Pending to null
+-            this.extensions.firstOrNull { it.extension.key == ManagedExtensionKey.Apk(extension.pkgName) }?.extension?.let { entry ->
++            this.extensions.values.flatten().firstOrNull { it.extension.key == ManagedExtensionKey.Apk(extension.pkgName) }?.extension?.let { entry ->
+                 updateInstallStep(entry, InstallStep.Pending, null)?.let { view?.downloadUpdate(it) }
+             }
+         }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
+index dc34f43e19de3671fd1eb6ead91e2f72f70e9aa2..402db8b24e4d484f6063d3faeba885527ea08ddf 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomSheet.kt
+@@ -18,6 +18,7 @@ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionKey
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionNotice
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedHealth
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedInstallation
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+@@ -70,16 +71,17 @@ class ExtensionBottomSheet
+         /**
+          * Adapter containing the list of extensions
+          */
+-        private var extAdapter: ExtensionAdapter? = null
++        private var mangaExtAdapter: ExtensionAdapter? = null
++        private var novelExtAdapter: ExtensionAdapter? = null
+         private var migAdapter: FlexibleAdapter<IFlexible<*>>? = null
+ 
+         val adapters
+-            get() = listOf(extAdapter, migAdapter)
++            get() = listOf(mangaExtAdapter, novelExtAdapter, migAdapter)
+ 
+         val presenter = ExtensionBottomPresenter()
+         var currentSourceTitle: String? = null
+ 
+-        private var extensions = emptyList<ExtensionItem>()
++        private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
+         private var notices = emptyList<ManagedExtensionNotice>()
+         var canExpand = false
+         private lateinit var binding: ExtensionsBottomSheetBinding
+@@ -89,8 +91,10 @@ class ExtensionBottomSheet
+ 
+         val extensionFrameLayout: RecyclerWithScrollerView?
+             get() = binding.pager.findViewWithTag("TabbedRecycler0") as? RecyclerWithScrollerView
+-        val migrationFrameLayout: RecyclerWithScrollerView?
++        val novelExtensionFrameLayout: RecyclerWithScrollerView?
+             get() = binding.pager.findViewWithTag("TabbedRecycler1") as? RecyclerWithScrollerView
++        val migrationFrameLayout: RecyclerWithScrollerView?
++            get() = binding.pager.findViewWithTag("TabbedRecycler2") as? RecyclerWithScrollerView
+ 
+         var isExpanding = false
+ 
+@@ -102,8 +106,11 @@ class ExtensionBottomSheet
+         fun onCreate(controller: BrowseController) {
+             // Initialize adapter, scroll listener and recycler views
+             presenter.attachView(this)
+-            extAdapter = ExtensionAdapter(this)
+-            extAdapter?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
++            mangaExtAdapter = ExtensionAdapter(this)
++            novelExtAdapter = ExtensionAdapter(this)
++            listOf(mangaExtAdapter, novelExtAdapter).forEach {
++                it?.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
++            }
+             if (migAdapter == null) {
+                 migAdapter = SourceAdapter(this)
+             }
+@@ -118,6 +125,7 @@ class ExtensionBottomSheet
+                 val bottomBar = controller.activityBinding?.bottomNav
+                 val bottomH = bottomBar?.height ?: insets.getInsets(systemBars()).bottom
+                 extensionFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
++                novelExtensionFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
+                 migrationFrameLayout?.binding?.recycler?.updatePaddingRelative(bottom = bottomH)
+             }
+             binding.tabs.addOnTabSelectedListener(
+@@ -130,10 +138,12 @@ class ExtensionBottomSheet
+                         this@ExtensionBottomSheet.controller.updateTitleAndMenu()
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
++                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = true
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
++                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.requestLayout()
+                         sheetBehavior?.isDraggable = true
+@@ -143,9 +153,10 @@ class ExtensionBottomSheet
+                     override fun onTabUnselected(tab: TabLayout.Tab?) {
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
++                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = false
+-                        if (tab?.position == 1) {
++                        if (tab?.position == 2) {
+                             presenter.deselectSource()
+                         }
+                     }
+@@ -155,12 +166,14 @@ class ExtensionBottomSheet
+                         this@ExtensionBottomSheet.sheetBehavior?.expand()
+                         when (tab?.position) {
+                             0 -> extensionFrameLayout
++                            1 -> novelExtensionFrameLayout
+                             else -> migrationFrameLayout
+                         }?.binding?.recycler?.isNestedScrollingEnabled = true
+                         sheetBehavior?.isDraggable = true
+                         if (!isExpanding) {
+                             when (tab?.position) {
+                                 0 -> extensionFrameLayout
++                                1 -> novelExtensionFrameLayout
+                                 else -> migrationFrameLayout
+                             }?.binding?.recycler?.smoothScrollToTop()
+                         }
+@@ -184,7 +197,7 @@ class ExtensionBottomSheet
+         fun isOnView(view: View): Boolean = "TabbedRecycler${binding.pager.currentItem}" == view.tag
+ 
+         fun updatedNestedRecyclers() {
+-            listOf(extensionFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
++            listOf(extensionFrameLayout, novelExtensionFrameLayout, migrationFrameLayout).forEachIndexed { index, recyclerWithScrollerBinding ->
+                 recyclerWithScrollerBinding?.binding?.recycler?.isNestedScrollingEnabled = binding.pager.currentItem == index
+             }
+         }
+@@ -197,12 +210,14 @@ class ExtensionBottomSheet
+         }
+ 
+         fun updateAllPendingExtensions() {
+-            presenter.updateAllPendingExtensions()
++            presenter.updateAllPendingExtensions(selectedContentKind() ?: ContentKind.Manga)
+         }
+ 
+         fun updateExtTitle() {
+-            val extCount = extensions.count { it.extension.hasUpdate }
+-            if (extCount > 0) binding.tabs.getTabAt(0)?.orCreateBadge?.number = extCount else binding.tabs.getTabAt(0)?.removeBadge()
++            ContentKind.entries.forEachIndexed { index, kind ->
++                val extCount = extensions.getValue(kind).count { it.extension.hasUpdate }
++                if (extCount > 0) binding.tabs.getTabAt(index)?.orCreateBadge?.number = extCount else binding.tabs.getTabAt(index)?.removeBadge()
++            }
+         }
+ 
+         override fun onButtonClick(position: Int) {
+@@ -272,7 +287,7 @@ class ExtensionBottomSheet
+         }
+ 
+         private fun updateAllExtensions(position: Int) {
+-            presenter.updateAllPendingExtensions()
++            presenter.updateAllPendingExtensions(selectedContentKind() ?: return)
+         }
+ 
+         override fun onItemClick(
+@@ -280,7 +295,7 @@ class ExtensionBottomSheet
+             position: Int,
+         ): Boolean {
+             when (binding.tabs.selectedTabPosition) {
+-                0 -> {
++                0, 1 -> {
+                     val extension =
+                         (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return false
+                     if (extension.installation == ManagedInstallation.Untrusted) {
+@@ -307,7 +322,7 @@ class ExtensionBottomSheet
+         }
+ 
+         override fun onItemLongClick(position: Int) {
+-            if (binding.tabs.selectedTabPosition == 0) {
++            if (binding.tabs.selectedTabPosition in 0..1) {
+                 val extension = (selectedExtensionAdapter()?.getItem(position) as? ExtensionItem)?.extension ?: return
+                 if (extension.installation != ManagedInstallation.Available) {
+                     confirmUninstall(extension)
+@@ -387,6 +402,7 @@ class ExtensionBottomSheet
+         }
+ 
+         fun setExtensions(
++            contentKind: ContentKind,
+             extensions: List<ExtensionItem>,
+             notices: List<ManagedExtensionNotice>,
+             updateController: Boolean = true,
+@@ -394,7 +410,7 @@ class ExtensionBottomSheet
+             val newNotice = notices.firstOrNull { notice ->
+                 this.notices.none { it.identity == notice.identity && it.diagnostic == notice.diagnostic }
+             }
+-            this.extensions = extensions
++            this.extensions = this.extensions + (contentKind to extensions)
+             this.notices = notices
+             newNotice?.let { context.toast(context.getString(R.string.hayai_extension_catalog_problem, it.diagnostic)) }
+             if (updateController) {
+@@ -431,19 +447,22 @@ class ExtensionBottomSheet
+         }
+ 
+         fun drawExtensions() {
+-            extAdapter?.updateDataSet(
+-                if (controller.extQuery.isBlank()) extensions else extensions.filter { it.extension.name.contains(controller.extQuery, ignoreCase = true) },
+-            )
++            ContentKind.entries.forEach { kind ->
++                val items = extensions.getValue(kind)
++                extensionAdapter(kind)?.updateDataSet(
++                    if (controller.extQuery.isBlank()) items else items.filter { it.extension.name.contains(controller.extQuery, ignoreCase = true) },
++                )
++            }
+             updateExtTitle()
+             updateExtUpdateAllButton()
+         }
+ 
+         fun canStillGoBack(): Boolean =
+-            (binding.tabs.selectedTabPosition == 1 && migAdapter is MangaAdapter) ||
+-                (binding.tabs.selectedTabPosition == 0 && binding.sheetToolbar.hasExpandedActionView())
++            (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) ||
++                (binding.tabs.selectedTabPosition in 0..1 && binding.sheetToolbar.hasExpandedActionView())
+ 
+         fun canGoBack(): Boolean =
+-            if (binding.tabs.selectedTabPosition == 1 && migAdapter is MangaAdapter) {
++            if (binding.tabs.selectedTabPosition == 2 && migAdapter is MangaAdapter) {
+                 presenter.deselectSource()
+                 false
+             } else if (binding.sheetToolbar.hasExpandedActionView()) {
+@@ -454,7 +473,9 @@ class ExtensionBottomSheet
+             }
+ 
+         fun downloadUpdate(item: ExtensionItem) {
+-            extAdapter?.updateItem(item, item.installStep)
++            ContentKind.entries.filter { it in item.extension.contentKinds }.forEach { kind ->
++                extensionAdapter(kind)?.updateItem(item, item.installStep)
++            }
+             updateExtUpdateAllButton()
+         }
+ 
+@@ -481,7 +502,8 @@ class ExtensionBottomSheet
+         }
+ 
+         fun setCanInstallPrivately(installPrivately: Boolean) {
+-            extAdapter?.installPrivately = installPrivately
++            mangaExtAdapter?.installPrivately = installPrivately
++            novelExtAdapter?.installPrivately = installPrivately
+         }
+ 
+         fun onDestroy() {
+@@ -489,12 +511,13 @@ class ExtensionBottomSheet
+         }
+ 
+         private inner class TabbedSheetAdapter : RecyclerViewPagerAdapter() {
+-            override fun getCount(): Int = 2
++            override fun getCount(): Int = 3
+ 
+             override fun getPageTitle(position: Int): CharSequence =
+                 context.getString(
+                     when (position) {
+-                        0 -> R.string.extensions
++                        0 -> R.string.manga
++                        1 -> R.string.hayai_novels
+                         else -> R.string.migration
+                     },
+                 )
+@@ -562,5 +585,11 @@ class ExtensionBottomSheet
+             }
+         }
+ 
+-        private fun selectedExtensionAdapter(): ExtensionAdapter? = extAdapter.takeIf { binding.tabs.selectedTabPosition == 0 }
++        private fun selectedContentKind(): ContentKind? =
++            binding.tabs.selectedTabPosition.takeIf { it in 0..1 }?.let(ContentKind::fromPosition)
++
++        private fun extensionAdapter(kind: ContentKind): ExtensionAdapter? =
++            if (kind == ContentKind.Manga) mangaExtAdapter else novelExtAdapter
++
++        private fun selectedExtensionAdapter(): ExtensionAdapter? = selectedContentKind()?.let(::extensionAdapter)
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
+index 9423a6b1a8af356a3b8f412d00fcdf54756e7bb4..75cd8de8c03d4105b7de49105e42dee464d995a9 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
+@@ -3,6 +3,10 @@ package eu.kanade.tachiyomi.ui.extension
+ import android.content.res.ColorStateList
+ import android.view.View
+ import android.view.ViewGroup
++import androidx.core.text.buildSpannedString
++import androidx.core.text.color
++import androidx.core.text.scale
++import androidx.core.view.isGone
+ import androidx.core.view.isVisible
+ import androidx.core.view.updateLayoutParams
+ import coil.dispose
+@@ -14,9 +18,12 @@ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
+ import eu.kanade.tachiyomi.databinding.ExtensionCardItemBinding
+ import eu.kanade.tachiyomi.extension.model.InstallStep
++import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
++import eu.kanade.tachiyomi.extension.util.ExtensionLoader
+ import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
+ import eu.kanade.tachiyomi.util.system.LocaleHelper
+ import eu.kanade.tachiyomi.util.system.getResourceColor
++import eu.kanade.tachiyomi.util.system.timeSpanFromNow
+ import eu.kanade.tachiyomi.util.view.applyStyle
+ import eu.kanade.tachiyomi.util.view.applyStyleFromAttr
+ import eu.kanade.tachiyomi.util.view.makeContainerShape
+@@ -36,29 +43,51 @@ class ExtensionHolder(
+ 
+     fun bind(item: ExtensionItem) {
+         val extension = item.extension
++        val infoText = mutableListOf(extension.installedVersion ?: extension.availableVersion.orEmpty())
+         binding.date.isVisible = false
+         binding.extDivider.isVisible = extension.hasUpdate
+-        binding.extTitle.text = extension.name
+-        binding.version.text = buildList {
+-            add(extension.installedVersion ?: extension.availableVersion.orEmpty())
+-            add(
+-                itemView.context.getString(
+-                    if (extension.backend == ManagedExtensionBackend.JavaScript) {
+-                        R.string.hayai_extension_javascript
+-                    } else {
+-                        R.string.hayai_extension_apk
+-                    },
+-                ),
+-            )
+-        }.filter(String::isNotBlank).joinToString(" • ")
+-        binding.lang.isVisible = extension.language != null && extension.installation != ManagedInstallation.Untrusted
++        item.apkInstalled?.takeIf { !it.hasUpdate }?.let { installed ->
++            when (InstalledExtensionsOrder.fromValue(adapter.installedSortOrder)) {
++                InstalledExtensionsOrder.RecentlyUpdated -> {
++                    ExtensionLoader.extensionUpdateDate(itemView.context, installed).takeUnless { it == 0L }?.let {
++                        binding.date.isVisible = true
++                        binding.date.text = itemView.context.timeSpanFromNow(R.string.updated_, it)
++                        infoText.add("")
++                    }
++                }
++                InstalledExtensionsOrder.RecentlyInstalled -> {
++                    ExtensionLoader.extensionInstallDate(itemView.context, installed).takeUnless { it == 0L }?.let {
++                        binding.date.isVisible = true
++                        binding.date.text = itemView.context.timeSpanFromNow(
++                            if (installed.isShared) R.string.installed_ else R.string.added_,
++                            it,
++                        )
++                        infoText.add("")
++                    }
++                }
++                else -> Unit
++            }
++        }
++        binding.lang.isVisible = binding.date.isGone && extension.installation != ManagedInstallation.Untrusted
+         binding.lang.text = extension.language?.let(LocaleHelper::getDisplayName).orEmpty()
++        binding.extTitle.text =
++            if (infoText.size > 1) {
++                buildSpannedString {
++                    append(extension.name + " ")
++                    color(binding.extTitle.context.getResourceColor(android.R.attr.textColorSecondary)) {
++                        scale(0.75f) { append(extension.language?.let(LocaleHelper::getDisplayName).orEmpty()) }
++                    }
++                }
++            } else {
++                extension.name
++            }
++        binding.version.text = infoText.joinToString(" • ")
+         binding.warning.text =
+             when {
++                item.apkInstalled?.isObsolete == true -> itemView.context.getString(R.string.orphaned)
+                 extension.health is ManagedHealth.LoadFailed -> itemView.context.getString(R.string.hayai_extension_load_failed)
+                 extension.installation == ManagedInstallation.Untrusted -> itemView.context.getString(R.string.untrusted)
+                 extension.isNsfw -> itemView.context.getString(R.string.nsfw_short)
+-                extension.backend == ManagedExtensionBackend.JavaScript -> itemView.context.getString(R.string.hayai_extension_javascript)
+                 else -> ""
+             }.uppercase(Locale.ROOT)
+         binding.installProgress.progress = item.sessionProgress ?: 0
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
+index beb6a3aa28efab6dc63f9a8550a885e9b282a217..8d7c192c68c53d94a142df359df134f488a9b903 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
+@@ -9,6 +9,7 @@ import eu.davidea.flexibleadapter.items.AbstractSectionableItem
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.extension.model.InstallStep
++import eu.kanade.tachiyomi.extension.model.Extension
+ import eu.kanade.tachiyomi.source.CatalogueSource
+ 
+ /**
+@@ -22,6 +23,7 @@ data class ExtensionItem(
+     val header: ExtensionGroupItem? = null,
+     val installStep: InstallStep? = null,
+     val session: PackageInstaller.SessionInfo? = null,
++    val apkInstalled: Extension.Installed? = null,
+ ) : AbstractSectionableItem<ExtensionHolder, ExtensionGroupItem>(header) {
+     val sessionProgress: Int?
+         get() = (session?.progress?.times(100)?.toInt())
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
+index b747b048231da2f8484eb2b7ec6004fda68217d6..b8753ad34dbf3cdf9dc80b3caf850902da6baa5a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
+@@ -337,7 +337,7 @@ class BrowseController :
+     }
+ 
+     private fun updateSheetMenu() {
+-        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition == 0
++        val onExtensionTab = binding.bottomSheet.tabs.selectedTabPosition < 2
+         binding.bottomSheet.sheetToolbar.title =
+             if (!onExtensionTab) {
+                 binding.bottomSheet.root.currentSourceTitle
+@@ -523,6 +523,9 @@ class BrowseController :
+         binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+             bottomMargin = -pad.toInt()
+         }
++        binding.bottomSheet.root.novelExtensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
++            bottomMargin = -pad.toInt()
++        }
+         binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+             bottomMargin = -pad.toInt()
+         }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+index a8d7777a84b8a6e26e6866e9cb625caabe62dafc..b688c97f615517fdaee1cd5e530ef082a605f2c2 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+@@ -3,9 +3,13 @@ package eu.kanade.tachiyomi.ui.source
+ import android.content.res.ColorStateList
+ import android.view.View
+ import androidx.core.view.isVisible
++import coil.dispose
++import coil.load
++import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
+ import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import dev.ahmedmohamed.hayai.source.presentation.SourcePresentation
+ import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
+ import eu.kanade.tachiyomi.databinding.SourceItemBinding
+ import eu.kanade.tachiyomi.source.LocalSource
+ import eu.kanade.tachiyomi.source.icon
+@@ -66,8 +70,15 @@ class SourceHolder(
+ 
+         // Set circle letter image.
+         itemView.post {
++            binding.sourceImage.dispose()
++            binding.sourceImage.setImageDrawable(null)
+             val icon = source.icon()
+             when {
++                source is NovelPluginSource && source.iconUrl.isNotBlank() -> {
++                    binding.sourceImage.load(source.iconUrl) {
++                        target(CoverViewTarget(binding.sourceImage))
++                    }
++                }
+                 icon != null -> binding.sourceImage.setImageDrawable(icon)
+                 item.source.id == LocalSource.ID -> binding.sourceImage.setImageResource(R.mipmap.ic_local_source)
+                 item.source.id == LocalNovelSource.ID -> binding.sourceImage.setImageResource(R.drawable.ic_local_novel_source)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
+index 6cb8b4ec50ea0e1128832f0a8421a871d63ae77c..cd7e8024f3c880fb8a574acccb38ca40178920ec 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoController.kt
+@@ -7,6 +7,7 @@ import androidx.core.net.toUri
+ import androidx.recyclerview.widget.LinearLayoutManager
+ import com.google.android.material.snackbar.BaseTransientBottomBar
+ import com.google.android.material.snackbar.Snackbar
++import dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryKind
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.databinding.CategoriesControllerBinding
+@@ -35,6 +36,14 @@ class RepoController(
+         },
+     )
+ 
++    constructor(kind: ExtensionRepositoryKind) : this(
++        Bundle().apply {
++            putString(REPO_KIND, kind.name)
++        },
++    )
++
++    internal val repositoryKind = ExtensionRepositoryKind.from(bundle?.getString(REPO_KIND))
++
+     /**
+      * URL to prefill into the "create repo" row once the list is first shown, awaiting the
+      * user's confirmation rather than being added automatically.
+@@ -59,7 +68,10 @@ class RepoController(
+     /**
+      * Returns the toolbar title to show when this controller is attached.
+      */
+-    override fun getTitle(): String? = resources?.getString(R.string.extension_repos)
++    override fun getTitle(): String? =
++        resources?.getString(
++            if (repositoryKind == ExtensionRepositoryKind.JavaScript) R.string.hayai_novel_plugins else R.string.extension_repos,
++        )
+ 
+     override fun createBinding(inflater: LayoutInflater) = CategoriesControllerBinding.inflate(inflater)
+ 
+@@ -259,5 +271,6 @@ class RepoController(
+ 
+     companion object {
+         const val REPO_URL = "repo_url"
++        private const val REPO_KIND = "repo_kind"
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
+index 9cf0510459a9e78cff2c8993693e38d3ca0755aa..14138dca13257e534f515f1ad37d1a68d714b135 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/repos/RepoPresenter.kt
+@@ -1,8 +1,11 @@
+ package eu.kanade.tachiyomi.ui.source.browse.repos
+ 
++import dev.ahmedmohamed.hayai.extension.managed.ExtensionRepositoryKind
+ import dev.ahmedmohamed.hayai.novel.extension.NovelApkRepositoryRegistry
++import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.api.ExtensionApi
++import eu.kanade.tachiyomi.extension.model.RepoMetadata
+ import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+@@ -11,6 +14,7 @@ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withContext
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
++import java.net.URI
+ import kotlin.coroutines.cancellation.CancellationException
+ 
+ /**
+@@ -20,6 +24,7 @@ class RepoPresenter(
+     private val controller: RepoController,
+     private val preferences: PreferencesHelper = Injekt.get(),
+     private val novelRepositories: NovelApkRepositoryRegistry = Injekt.get(),
++    private val pluginManager: NovelPluginManager = Injekt.get(),
+ ) : BaseCoroutinePresenter<RepoController>() {
+     private var scope = CoroutineScope(Job() + Dispatchers.Default)
+ 
+@@ -28,14 +33,31 @@ class RepoPresenter(
+      * repo.json pointer resolved to) - no filename or path pattern is assumed.
+      */
+     private val repos: Set<String>
+-        get() = preferences.extensionRepos().get().sorted().toSet()
++        get() =
++            when (controller.repositoryKind) {
++                ExtensionRepositoryKind.Apk -> preferences.extensionRepos().get()
++                ExtensionRepositoryKind.JavaScript -> pluginManager.catalog.value.repositories.map { it.url }.toSet()
++            }.sorted().toSet()
+ 
+     private suspend fun addRepo(url: String) {
+-        novelRepositories.addGlobal(url)
++        when (controller.repositoryKind) {
++            ExtensionRepositoryKind.Apk -> novelRepositories.addGlobal(url)
++            ExtensionRepositoryKind.JavaScript -> {
++                pluginManager.addRepository(repositoryName(url), url)
++                val catalog = pluginManager.refresh()
++                catalog.repositoryErrors[url]?.let { failure ->
++                    pluginManager.removeRepository(url)
++                    throw failure
++                }
++            }
++        }
+     }
+ 
+     private suspend fun removeRepo(url: String) {
+-        novelRepositories.removeGlobal(url)
++        when (controller.repositoryKind) {
++            ExtensionRepositoryKind.Apk -> novelRepositories.removeGlobal(url)
++            ExtensionRepositoryKind.JavaScript -> pluginManager.removeRepository(url)
++        }
+     }
+ 
+     /**
+@@ -64,6 +86,10 @@ class RepoPresenter(
+      * after it already showed the bare URL.
+      */
+     private suspend fun refreshRepoMetadata(reposToRefresh: Set<String>) {
++        if (controller.repositoryKind == ExtensionRepositoryKind.JavaScript) {
++            pluginManager.refresh()
++            return
++        }
+         for (repo in reposToRefresh) {
+             try {
+                 val resolvedUrl = ExtensionApi().validateRepo(repo)
+@@ -79,13 +105,21 @@ class RepoPresenter(
+     }
+ 
+     fun getReposWithCreate(): List<RepoItem> {
+-        val metadataByUrl = preferences.extensionRepoMetadata().get()
++        val metadataByUrl =
++            when (controller.repositoryKind) {
++                ExtensionRepositoryKind.Apk -> preferences.extensionRepoMetadata().get()
++                ExtensionRepositoryKind.JavaScript ->
++                    pluginManager.catalog.value.repositories.associate { repository ->
++                        repository.url to RepoMetadata(repository.name, repository.url)
++                    }
++            }
+         return (listOf(CREATE_REPO_ITEM) + repos).map { repo ->
+             RepoItem(repo, if (repo == CREATE_REPO_ITEM) null else metadataByUrl[repo])
+         }
+     }
+ 
+     fun getRepoUrl(repo: String): String {
++        if (controller.repositoryKind == ExtensionRepositoryKind.JavaScript) return repo
+         val website = preferences.extensionRepoMetadata().get()[repo]?.website
+         if (!website.isNullOrBlank()) return website
+ 
+@@ -97,7 +131,8 @@ class RepoPresenter(
+             } ?: repo
+     }
+ 
+-    fun getDiscordUrl(repo: String): String? = preferences.extensionRepoMetadata().get()[repo]?.discordUrl
++    fun getDiscordUrl(repo: String): String? =
++        if (controller.repositoryKind == ExtensionRepositoryKind.JavaScript) null else preferences.extensionRepoMetadata().get()[repo]?.discordUrl
+ 
+     /**
+      * Returns true if the URL is at least shaped like a URL. Deliberately doesn't require any
+@@ -173,6 +208,7 @@ class RepoPresenter(
+     }
+ 
+     private fun removeMetadataIfUnreferenced(repo: String) {
++        if (controller.repositoryKind == ExtensionRepositoryKind.JavaScript) return
+         if (preferences.extensionRepos().get().none { it.equals(repo, true) }) {
+             preferences.extensionRepoMetadata().set(preferences.extensionRepoMetadata().get() - repo)
+         }
+@@ -183,6 +219,16 @@ class RepoPresenter(
+      */
+     private fun repoExists(name: String): Boolean = repos.any { it.equals(name, true) }
+ 
++    private fun repositoryName(url: String): String {
++        val uri = URI(url)
++        val segments = uri.path.orEmpty().split('/').filter(String::isNotBlank)
++        return if (uri.host.equals("raw.githubusercontent.com", true) && segments.size >= 2) {
++            "${segments[0]}/${segments[1]}"
++        } else {
++            uri.host
++        }
++    }
++
+     companion object {
+         private val repoRegex = """^https://\S+$""".toRegex()
+         private val githubRepoRegex = """https://(?:raw.githubusercontent.com|github.com)/(.+?)/(.+?)/.+""".toRegex()
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaultsTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaultsTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7128287e5b6ac0db172b3133d6975d8a96ecf78f
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaultsTest.kt
+@@ -0,0 +1,21 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class ExtensionRepositoryDefaultsTest {
++    @Test
++    fun `first run catalogs match the configured production indexes`() {
++        assertEquals(
++            setOf(
++                "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb",
++                "https://raw.githubusercontent.com/mojuru/cursed-manga-repo/repo/index.pb",
++            ),
++            ExtensionRepositoryDefaults.manga,
++        )
++        assertEquals(
++            "https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json",
++            ExtensionRepositoryDefaults.LNREADER_NOVELS,
++        )
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
+index 4cdf1089cc5dbee744926a29e8ac2bf54bb5ef95..97665a16547aae5414de2b8b230934d002454dda 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
+@@ -4,6 +4,7 @@ import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
+ import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
+ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
+ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import eu.kanade.tachiyomi.extension.model.Extension
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertTrue
+@@ -21,6 +22,8 @@ class ManagedExtensionProjectorTest {
+         )
+ 
+         assertEquals(setOf("apk:same", "js:same"), state.available.map { it.key.stableValue }.toSet())
++        assertEquals(setOf(ContentKind.Manga), state.available.single { it.key.stableValue == "apk:same" }.contentKinds)
++        assertEquals(setOf(ContentKind.Novel), state.available.single { it.key.stableValue == "js:same" }.contentKinds)
+     }
+ 
+     @Test
+@@ -35,6 +38,10 @@ class ManagedExtensionProjectorTest {
+         )
+ 
+         assertEquals(setOf("apk:adult.apk", "js:offline-js"), state.installed.map { it.key.stableValue }.toSet())
++        assertEquals(
++            setOf(ContentKind.Manga),
++            state.installed.single { it.key.stableValue == "apk:adult.apk" }.contentKinds,
++        )
+     }
+ 
+     @Test
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifestTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifestTest.kt
+index 9b26aa9f256db6d05b5689f182807f8f3bc8a29a..4404f9f005583369e55da89c2842297c9e48d2dd 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifestTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifestTest.kt
+@@ -59,6 +59,11 @@ class NovelExtensionManifestTest {
+         assertNull(NovelExtensionManifest.libraryVersion("invalid", null))
+     }
+ 
++    @Test
++    fun `android float metadata is normalized before extension compatibility checks`() {
++        assertEquals(1.6, NovelExtensionManifest.libraryVersion("1.6.9", 1.6f)!!, 0.0)
++    }
++
+     @Test
+     fun `class candidates support relative and migrated Tsundoku namespaces`() {
+         assertEquals(
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 2de7ac791713a47f71ff9f9062870c1d8914475a..9beaa4755f0ede65bf4ef21cea16664d2835dbd8 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -22,13 +22,13 @@ The sole approved image-reader seam is an initial-page intent read in `ReaderAct
+ 
+ The J2K backup pipeline is an intentional narrow adapter seam: `Backup` owns one optional high-numbered Hayai field, `BackupCreator` fills it, and `BackupRestorer` applies it only after J2K has restored manga and chapters. All payload validation, serialization models, stable identity mapping, and database behavior remain Hayai-owned. This preserves old-backup compatibility and avoids teaching J2K models about Hayai tables.
+ 
+-`ExtensionLoader` is also an intentional adapter seam. Package discovery delegates manifest interpretation to Hayai's pure `NovelExtensionManifest` contract, then uses J2K's existing signature trust, NSFW policy, private-extension, and class-loading paths. A small `eu.kanade.tachiyomi.source.NovelSource` compatibility shim retains the exact legacy binary name and recognizes both the current virtual property and older marker implementations. This adds Tsundoku's `tachiyomi.novelextension` namespace without creating a second extension manager or bypassing J2K's security checks.
++`ExtensionLoader` is also an intentional adapter seam. Standard `tachiyomi.extension` packages retain J2K's exact label, version-name library decoding, signature trust, NSFW metadata, class-name resolution, private-extension, and source-construction path. Only packages declaring Tsundoku's `tachiyomi.novelextension` feature enter Hayai's pure `NovelExtensionManifest` adapter, which normalizes Android float metadata before compatibility checks and accepts the audited Tsundoku class namespace. A small `eu.kanade.tachiyomi.source.NovelSource` compatibility shim retains the exact legacy binary name and recognizes both the current virtual property and older marker implementations. This adds novel APK support without creating a second extension manager or changing manga APK behavior.
+ 
+-Extension discovery uses one Hayai-owned `ContentKind` policy for browse, search, reader routing, and migration. Extension management deliberately does not partition the catalog by content kind. `ManagedExtensionProjector` unions J2K APK state and LNReader JavaScript plugin state into one Extensions list with namespaced `apk:` and `js:` identities, format and content badges, and shared Update, Installed, and Available sections. Installation, update, and health are orthogonal, so an installed plugin can remain visible while its runtime is unhealthy or its repository is offline. Language and adult-source filters apply only to remote available entries; installed, untrusted, and load-failed packages remain manageable. J2K continues to own APK loading, signature trust, package installation, source registration, and update semantics. `NovelPluginManager` continues to own JavaScript repository trust, checksums, signing keys, QuickJS warm-up, atomic storage, and semantic versions.
++Extension discovery uses one Hayai-owned `ContentKind` policy for browse, search, reader routing, and migration. The J2K Extensions sheet retains its Manga and Migration behavior and adds a peer Novels tab using the same cards, language groups, installed sorting, search, progress, install, update, settings, trust, and uninstall interactions. `ManagedExtensionProjector` unions novel APK state and LNReader JavaScript plugin state into that Novels tab with namespaced `apk:` and `js:` identities; manga APKs remain in Manga, while a mixed APK can appear in both tabs. Installation, update, and health are orthogonal, so an installed plugin remains manageable while its runtime is unhealthy or its repository is offline. Language and adult-source filters apply only to remote available entries; installed, untrusted, and load-failed packages remain manageable. J2K continues to own APK loading, signature trust, package installation, source registration, and update semantics. `NovelPluginManager` owns only JavaScript repository trust, checksums, signing keys, QuickJS warm-up, atomic storage, and semantic versions.
+ 
+-APK repository URLs remain in J2K's single `extensionRepos` preference. Hayai stores novel membership tags only for backup, restore, and redirect compatibility. The unified APK repository section lists every global APK index, regardless of content kind; adding, removing, or replacing a URL updates the global set and Hayai tags together. Browse and Browse settings expose one repository destination with explicit APK-index and LNReader JavaScript sections. The distinct repository formats remain visible because their trust models differ, but neither section contains a second extension catalog.
++APK repository URLs remain in J2K's single `extensionRepos` preference. Fresh installations start with the user-selected Keiyoushi and Cursed Manga protobuf indexes; both remain Manga repositories, with adult visibility still controlled by J2K's source filter. Hayai stores novel membership tags only for backup, restore, and redirect compatibility. The APK repository section lists every global APK index, regardless of content kind; adding, removing, or replacing a URL updates the global set and Hayai tags together. Browse and Browse settings expose explicit APK-index and LNReader JavaScript destinations, but both destinations reuse J2K's `RepoController`, inline create row, adapter, holder, validation spinner, edit, delete, and undo behavior. `RepoPresenter` switches only the persistence and validation backend. A JavaScript repository's display name is derived from its URL after its index validates, so adding either repository format requires exactly one URL field and no separate form. Fresh installations seed the supplied LNReader v3 index once; removing it is durable and does not recreate it on restart.
+ 
+-LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. Android application context now enters explicitly through `NovelPluginManager`, `NovelPluginSource`, `NovelPluginRuntime`, and `NovelPluginLibrary`; the runtime never resolves an unregistered raw `Context` from global DI. Source construction and asynchronous warm-up failures remain attached to the current installed plugin ID in the unified catalog instead of disappearing. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
++LNReader-compatible JavaScript sources use a separate Hayai-owned trust boundary. `AppModule` registers one manager. `SourceManager` merges the manager's source flow with J2K's authoritative APK source flow and rejects source-ID collisions. Repository documents and plugin downloads are bounded. `NovelPluginRepositoryDocument` normalizes current root arrays and legacy `plugins` or `sources` envelopes, removes invalid optional catalogue websites, and percent-encodes raw path brackets before URI validation. Remote repositories require HTTPS, optional publisher checksums are enforced, and installed code and metadata are published atomically. Each source owns a serialized QuickJS runtime with evaluation, response-size, and cache limits. Installation initializes the runtime before code becomes active. Android application context enters explicitly through `NovelPluginManager`, `NovelPluginSource`, `NovelPluginRuntime`, and `NovelPluginLibrary`; the runtime never resolves an unregistered raw `Context` from global DI. Browse rows resolve relative plugin icon paths against the trusted repository and load them through the same Coil-backed source image view used by J2K. Source construction and asynchronous warm-up failures remain attached to the current installed plugin ID in the extension catalog instead of disappearing. The bridge exposes only the compatibility APIs needed by LNReader plugins, including network, Cheerio and Jsoup, storage, timers, crypto, URL, and protobuf helpers. It does not expose Android APIs or app lifecycle APIs.
+ 
+ ## Database reset and migration
+ 
+@@ -44,7 +44,7 @@ The Advanced setting `eh_is_hentai_enabled` controls adult source discovery. Dis
+ 
+ `NovelSource` returns one `NovelDocument` per chapter. `ReaderLauncher` centralizes all current direct chapter-launch paths: recognized `NovelSource` implementations open `NovelReaderActivity`, while image sources continue into the untouched J2K reader. Library, recents, notifications, search, and manga details call this router. Local HTML/text/EPUB sources, downloaded source chapters, installed Tsundoku novel APKs, and explicitly trusted LNReader JavaScript repositories are production implementations.
+ 
+-`SettingsSearchHelper` contains one registration seam for `NovelSettingsController`. The controller and all novel preferences remain under the Hayai namespace. This seam makes the full novel reader settings searchable without moving reader behavior into J2K. Novel language tools, custom-source building, import/export, enhanced batch add, and E-Hentai account controls are J2K `SettingsController` screens. APK and JavaScript extensions are managed only from Browse's unified Extensions surface. Their feature state, validation, jobs, and persistence remain owned by their typed backends. Only reader and authenticated WebView lifecycles retain dedicated activities.
++`SettingsSearchHelper` contains one registration seam for `NovelSettingsController`. The controller and all novel preferences remain under the Hayai namespace. This seam makes the full novel reader settings searchable without moving reader behavior into J2K. Novel language tools, custom-source building, import/export, enhanced batch add, and E-Hentai account controls are J2K `SettingsController` screens. APK and JavaScript extensions are managed only from Browse's Manga and Novels tabs in the J2K Extensions sheet. Their feature state, validation, jobs, and persistence remain owned by their typed backends. Only reader and authenticated WebView lifecycles retain dedicated activities.
+ 
+ `PreferencesHelper` has one compatibility seam that routes its enum-backed FlowPreferences through Hayai's non-throwing name decoder. Current enum names round-trip unchanged, known legacy aliases retain the closest supported behavior, and removed or future values use each preference's declared default without rewriting the stored value. This protects startup, shortcuts, widgets, settings, and presenters before they consume restored pre-reset preferences. The legacy `group_chapters_history_type=BySource` value is a live enum member again and renders History source sections instead of projecting to `BySeries`. The complete reset-era preference comparison is recorded in `docs/development/legacy-preference-audit.md`.
+ 
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 27c36c2700bb7c8bec7a3e7f4f4a0e11ae34bc3d..89cd3cb0c5040e7cc7ddcd01e13cc46898d446e3 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -44,8 +44,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+ | Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | exact J2K shell and native renderer verified on emulator; WebView, prepend, and incognito emulator flows pending |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+-| Remote novel extension catalogs and installation | One unified Extensions list over J2K APK authority and Hayai JavaScript authority; namespaced identities; explicit load failures; consistent duplicate reconciliation; all APK repositories manageable from one section; shared-safe tagged repository ownership | implemented unverified; focused projector tests, compilation, and unified screen emulator checks pass; APK install/trust/remove flows pending |
+-| LNReader JavaScript repository sources | Unified Extensions list, explicit application-context runtime construction, construction and warm-up error retention, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, and full catalogue/chapter bridge | implemented unverified; focused mixed-catalog tests and compilation pass; emulator install/update/remove and runtime verification pending |
++| Remote novel extension catalogs and installation | A Novels tab beside Manga and Migration over J2K APK authority and Hayai JavaScript authority; namespaced identities; explicit load failures; consistent duplicate reconciliation; shared-safe tagged repository ownership; and J2K's inline repository editor reused for both backends | port verified on emulator with a checksum-verified Keiyoushi Comikey APK and the production LNReader v3 repository; install, detection, settings, and source registration passed |
++| LNReader JavaScript repository sources | Novels-tab J2K cards, explicit application-context runtime construction, construction and warm-up error retention, version-tolerant v3/legacy repository boundary, bounded trusted repositories, isolated QuickJS sources, relative repository icon resolution, and full catalogue/chapter bridge | port verified on emulator by installing production Komga 1.0.2, initializing QuickJS, evaluating filters/settings, registering the source, and loading its remote icon in Browse without a raw-Context DI lookup |
+ | JavaScript source filter and settings sheets | Cached source schemas through J2K filters plus Hayai built-in settings router | foundation verified; emulator settings flow pending |
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+@@ -72,6 +72,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ | Stable and nightly releases | Separate application IDs, Hayai-branded ABI assets, channel-aware updates, monotonic `rN` numbering, isolated nightly publishing, and master-triggered workflow | nightly port verified by hosted r6661 build, tests, signed/minified startup, and publication; no reset stable release published |
+ | Localized Hayai interface | `hayai_` Android resources, typed presentation failures, a reviewed nonlocalizable-literal inventory, per-locale coverage, and deterministic SY translation imports | implemented; static gate verified; translation coverage remains incomplete and is reported per locale |
+ | Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
++| Manga and novel extension management | J2K Extensions sheet with Manga, Novels, and Migration tabs; novel APK and JavaScript entries reuse the J2K row and action pipeline; both repository types reuse J2K's one-field inline repository UI; supplied Keiyoushi, Cursed Manga, and LNReader indexes seed once on first run and remain user-removable | port verified on emulator; Comikey 1.6.9 and Komga 1.0.2 installed and detected without false update or load-failed states |
+ 
+ ## Completion rules
+ 
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index d292027d953091686e0c97592cebbbc179e3933d..7e9577ced9cfe9d4cbdec35a42f8853832775479 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -191,7 +191,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	privat
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val RATING_TEXT = Regex("(?:rating[: ]+)?([0-5](?:\\.[0-9]+)?)", RegexOption.IGNORE_CASE)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val RETRY_TOKEN = Regex("['\"]([A-Za-z0-9_-]{1,128})['\"]")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_HEIGHT = Regex("height\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)px\\s+(-?\\d+)px", RegexOption.IGNORE_CASE)
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)(?:px)?\\s+(-?\\d+)(?:px)?", RegexOption.IGNORE_CASE)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_URL = Regex("url\\(([^)]+)\\)", RegexOption.IGNORE_CASE)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_WIDTH = Regex("width\\s*:\\s*(\\d+)px", RegexOption.IGNORE_CASE)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	ratingCount = document.selectFirst("#rating_count")?.text()?.trim()?.toIntOrNull(),
+@@ -227,7 +227,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	title.
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	title.contains("sad panda") || document.selectFirst("img[src*=sadpanda]") != null ->
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	translated = languageText?.endsWith("TR", ignoreCase = true),
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	uploader = document.selectFirst("#gdn")?.text()?.trim()?.takeIf(String::isNotEmpty),
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val cells = document.select("#gdt .gdtm, #gdt .gdtl")
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val cells = document.select("#gdt .gdtm, #gdt .gdtl, #gdt > a[href]")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val compactInfo = row.selectFirst(".gl2c")?.select("div div")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val current = location.queryParameter("p")?.toIntOrNull() ?: 0
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val direct = image?.absUrl(if (image.hasAttr("data-src")) "data-src" else "src").orEmpty()
+@@ -244,8 +244,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val in
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val info = row.selectFirst(".gl3e")?.select("div")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val key = parseGalleryKey(link.attr("href"))
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val languageText = fields["language"]?.text()?.trim()?.takeIf(String::isNotEmpty)
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = cell.selectFirst("a[href]")?.absUrl("href").orEmpty()
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = linkElement?.absUrl("href").orEmpty()
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = row.selectFirst(".gl3c > a[href*=/g/], .gl2e > div > a[href*=/g/], a[href*=/g/]")
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val linkElement = cell.takeIf { it.`is`("a[href]") } ?: cell.selectFirst("a[href]")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val linkText = if (reverse) "prev" else "next"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val listingPage = runCatching { URI(location).query.orEmpty().split('&').firstOrNull { it.startsWith("p=") }?.substringAfter('=')?.toInt() }.getOrNull() ?: 0
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val namespace = rowNamespace ?: titled.substringBefore(':', "").trim().lowercase().takeIf(String::isNotEmpty)
+@@ -281,8 +282,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	it.he
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.AuthenticationRequired("Sign in and verify ExHentai access in Hayai settings")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.Network("E-Hentai image request failed", failure)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	throw EhFailure.Network("E-Hentai request failed", failure)
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt	val url = site.baseUrl + key.normalizedPath + "&p=$page"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", (page - 1).toString())
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("tl", requireNotNull(toplist.requestValue).toString())
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_apply", "Apply Filter")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	builder.addQueryParameter("f_cats", spec.excludedCategories.sumOf { it.exclusionBit }.toString())
+@@ -605,13 +606,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt	S
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt	Size2400("ovrs_2400", "5"),
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt	Size780("low", "1"),
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/settings/EhRemoteSettings.kt	Size980("med", "2"),
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	}.joinToString("\n")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	}.onFailure { Timber.w(it, "Unable to persist E-Hentai metadata for source %d", id) }
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	add("\n${context.getString(R.string.hayai_eh_description_tags)}\n" + metadata.tags.groupBy { it.namespace }.entries.joinToString("\n") { (namespace, tags) ->
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	add(context.getString(R.string.hayai_eh_description_rating, "%.2f".format(rating), votes))
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	addAll(tags.map { "${it.namespace}: ${it.name}" })
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	genre = tags.map { "${it.namespace}: ${it.name}" }
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	if (!query.contains("/g/")) return null
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	if (metadata.translated == true) context.getString(R.string.hayai_eh_description_translated) else "",
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	metadata.averageRating?.let { put("averageRating", it) }
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	metadata.category?.let { put("category", it) }
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	metadata.favoriteCount?.let { put("favoriteCount", it) }
+@@ -952,6 +949,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	where = "s
+ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	where = "source_id = ? AND manga_url = ?",
+ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt	"hayai-quote-v1",
+ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt	).joinToString("\u0000")
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	"https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json"
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	const val CURSED_MANGA = "https://raw.githubusercontent.com/mojuru/cursed-manga-repo/repo/index.pb"
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	const val KEIYOUSHI_MANGA = "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb"
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "apk:$packageName"
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "js:$pluginId"
++app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt	js.repositoryErrors.forEach { (url, error) -> add(ManagedExtensionNotice("js-repository:$url", error.message ?: error::class.java.simpleName)) }
+ app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt	.getInstance("SHA-256")
+ app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt	.joinToString("") { byte -> "%02x".format(byte) }
+ app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt	.plus("hayai_legacy_rows")
+@@ -1376,12 +1379,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	zip.t
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	zip.text("OEBPS/content.opf", packageDocument(book, allAssets))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	zip.text("OEBPS/nav.xhtml", navigation(book))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/export/NovelEpubExporter.kt	zip.text("OEBPS/toc.ncx", ncx(book))
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	actual.startsWith(configured.substringBeforeLast('/').trimEnd('/') + "/")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	const val KEY = "urls_v1"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	const val OWNED_KEY = "owned_global_urls_v1"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	novelRequire(uri?.scheme == "https" && uri.host != null && uri.userInfo == null, NovelFailure.Code.ExtensionRepositoryHttps)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	private val tags = context.getSharedPreferences("hayai_novel_apk_repositories", Context.MODE_PRIVATE)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelApkExtensionManager.kt	val untrustedNovel = untrusted.filter { it.pkgName in fromNovelRepos.map(Extension.Available::pkgName) || it.pkgName.contains(".novel.") }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	.removePrefix("Tachiyomi: ")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	.removePrefix("Tsundoku: ")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/extension/NovelExtensionManifest.kt	const val CONTENT_WARNING_KEY = "tachiyomix.contentWarning"
+@@ -1507,6 +1507,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	@Su
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	@Suppress("SetJavaScriptEnabled")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	binding.webview.loadUrl("about:blank")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupWebSheet.kt	private fun Uri.isAllowedWebUri() = scheme.equals("https", ignoreCase = true) && !host.isNullOrBlank()
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	private const val BOOTSTRAP_PREFERENCES = "hayai_novel_plugin_bootstrap"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	private const val DEFAULT_REPOSITORY_SEEDED = "default_lnreader_repository_seeded"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	store.saveRepository(NovelPluginRepository("LNReader", url, enabled = true))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt	val preferences = appContext.getSharedPreferences("jsplugin_storage_${descriptor.id}", Context.MODE_PRIVATE)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	?: "other"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginModels.kt	"arabic" to "ar",
+@@ -1990,10 +1993,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	val type = settingObj["type"]?.jsonPrimitive?.content ?: "Text"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	value.replace(Regex("/{2,}"), "/")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/source/NovelPluginSource.kt	when (obj["status"]?.jsonPrimitive?.content) {
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	append(descriptor.lang).append(" · ").append(descriptor.id)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	if (installed != null) append(" · ").append(context.getString(R.string.installed))
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	key = "hayai.plugin.repository.${repository.url.hashCode()}"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/ui/NovelPluginManagerController.kt	private var query = ""
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	.observesTables("hayai_quotes")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	.query("SELECT $COLUMNS FROM hayai_quotes WHERE manga_id = ? ORDER BY timestamp DESC, quote_id")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	"quote_id, manga_id, novel_name, chapter_name, displayed_content, original_content, translated_content, language, timestamp"
+@@ -2956,7 +2955,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewBitmapDecod
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	.joinToString("") { "%02x".format(it) }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(directory.mkdirs() || directory.isDirectory) { "Unable to create page-preview cache directory" }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	check(temporary.renameTo(target)) { "Unable to commit page-preview cache entry" }
+-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v2"
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val images = File(root, "images").apply { mkdirs() }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val listings = File(root, "listings").apply { mkdirs() }
+@@ -3016,15 +3016,3 @@ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	return apk
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	STABLE("HayaiApp/hayai"),
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	val apkLinks = downloadLinks.filter { it.substringAfterLast('/').endsWith(".apk", ignoreCase = true) }
+ app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	val match = Regex("^v?(\\d+(?:\\.\\d+)*)(?:-[A-Za-z]+(\\d+))?$").matchEntire(value) ?: return null
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	private val STYLE_POSITION = Regex("(?:background-position\\s*:\\s*|url\\([^)]+\\)\\s*)(-?\\d+)(?:px)?\\s+(-?\\d+)(?:px)?", RegexOption.IGNORE_CASE)
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val cells = document.select("#gdt .gdtm, #gdt .gdtl, #gdt > a[href]")
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val link = linkElement?.absUrl("href").orEmpty()
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	val linkElement = cell.takeIf { it.`is`("a[href]") } ?: cell.selectFirst("a[href]")
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhRequestBuilder.kt	.addQueryParameter("p", page.toString())
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhentaiSource.kt	genre = tags.map { "${it.namespace}: ${it.name}" }
+-app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "apk:$packageName"
+-app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionModels.kt	override val stableValue: String = "js:$pluginId"
+-app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjector.kt	js.repositoryErrors.forEach { (url, error) -> add(ManagedExtensionNotice("js-repository:$url", error.message ?: error::class.java.simpleName)) }
+-app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ui/NovelPluginRepositoryController.kt	key = "hayai.plugin.repository.${repository.url.hashCode()}"
+-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	const val LISTING_SCHEMA = "v2"
+-app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	digest("$LISTING_SCHEMA:${manga.id}:${manga.source}:${manga.url}:${chapterIds.joinToString("-")}:$page")
+-- 
+2.54.0.windows.1
+

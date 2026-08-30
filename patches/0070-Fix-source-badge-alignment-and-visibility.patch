@@ -1,0 +1,37 @@
+From 9a8b65b52047314eddba9eaf3dc5458cd05d7047 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 08:45:26 +0300
+Subject: [PATCH] Fix source badge alignment and visibility
+
+
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+index 797bd435fce40afd601898ffe677d65954857734..a8d7777a84b8a6e26e6866e9cb625caabe62dafc 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
+@@ -38,8 +38,9 @@ class SourceHolder(
+         val showLanguage = source.includeLangInName(adapter.enabledLanguages, adapter.extensionManager)
+         val sourceName = if (showLanguage && (underPinnedSection || underLastUsedSection)) source.toString() else source.name
+         binding.title.text = sourceName
+-        binding.sourceBadge.text = SourcePresentation.badgeText(itemView.context, source)
+-        binding.sourceBadge.isVisible = binding.sourceBadge.text != null
++        val badgeText = SourcePresentation.badgeText(itemView.context, source)
++        binding.sourceBadge.text = badgeText
++        binding.sourceBadge.isVisible = !badgeText.isNullOrBlank()
+ 
+         binding.sourcePin.apply {
+             iconTint =
+diff --git a/app/src/main/res/layout/source_item.xml b/app/src/main/res/layout/source_item.xml
+index 146288b786db1692bc09e873678fe7019b919b90..6650237466551f8329978e8313bbbc48e65610e0 100644
+--- a/app/src/main/res/layout/source_item.xml
++++ b/app/src/main/res/layout/source_item.xml
+@@ -90,6 +90,7 @@
+             android:textColor="?attr/colorOnSecondaryContainer"
+             app:layout_constraintBottom_toBottomOf="parent"
+             app:layout_constraintEnd_toEndOf="@id/title"
++            app:layout_constraintHorizontal_bias="0"
+             app:layout_constraintStart_toStartOf="@id/title"
+             app:layout_constraintTop_toBottomOf="@id/title"
+             tools:text="JS · Novel" />
+-- 
+2.54.0.windows.1
+

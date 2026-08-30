@@ -1,0 +1,1580 @@
+From 5d25f6397f3f35b6062a259f1ba6ff4efb86ee37 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 07:44:45 +0300
+Subject: [PATCH] Rebuild novel reader UI on J2K chrome
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 95127a1a0b074c28e26894b2c1dc6f3406b53fe4..75587ca505305cebea293c3817aeb6df65b2ba9f 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -74,6 +74,8 @@ ts	phase	decision	why	evidence	result
+ 2026-08-22T02:41:00Z	browse-crash	passed the registered Application explicitly to bundled source icon resolution and restricted asynchronous app-service startup to the main process	reproduced the crash from Source.icon requesting an unregistered raw Context, then verified the complete migration/reader/restart/EH/Browse workflow with Manga, Novels, and E-Hentai rows on emulator	app/src/main/java/eu/kanade/tachiyomi/source/Source.kt; dev/ahmedmohamed/hayai/process/HayaiProcessPolicy.kt; artifacts/emulator-verification/20260822-025217/16-browse.png	VERIFIED
+ 2026-08-22T00:08:20Z	nightly-release	added an isolated nightly build, channel-aware updater policy, Hayai APK selection, monotonic release workflow, and pull-request CI	preserved stable and nightly identities while keeping release policy under the Hayai namespace	app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt; .github/workflows/nightly.yml	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T01:10:00Z	page-preview-parity	replaced eager bitmap strips with typed lazy previews, bounded caches, full navigation, dedicated source artwork, and selected-page reader routing	preserved source authentication and parsing in Hayai while adding one approved initial-page read to the unchanged J2K reader lifecycle	source/preview; EhDetailsPreviewLoader.kt; MangaDetailsController.kt; ReaderLauncher.kt; ReaderActivity.kt	IMPLEMENTED_UNVERIFIED
++2026-08-22T06:20:00Z	novel-reader-ui	discarded the custom novel shell and inflated J2K's real reader activity, navigation, chapter sheet, slider, and chapter rows for novels	kept ReaderActivity and all J2K resources unchanged while binding novel behavior through Hayai-owned activity, chapter adapter, and Tsundoku option sheet	NovelReaderActivity.kt; NovelReaderChapterAdapter.kt; NovelReaderSettingsSheet.kt	VERIFIED
++2026-08-22T04:36:50Z	emulator-verification	verified the exact J2K novel shell, hidden manga page labels, active TTS controls, all five settings tabs, full native background, offline restart recovery, E-Hentai logged-out state, and Browse	drove the installed debug APK on the authorized Pixel_10_Pro_XL and retained screenshots, UI trees, database reports, and Logcat	artifacts/emulator-verification/20260822-043650	VERIFIED
+ 2026-08-22T01:11:00Z	content-discovery	split Browse and the extension installer into Manga and Novel views with one content classifier	preserved J2K search and extension ownership while making local novels and novel APK repositories discoverable	ContentKind; BrowseController.kt; ExtensionBottomSheet.kt; RepoController.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T01:12:00Z	repository-ownership	modeled manga-only, novel-only, and shared APK repository ownership with redirect-safe tags	deleting one content tag retains the global URL and metadata whenever the other content kind still owns it	NovelApkExtensionManager.kt; RepoPresenter.kt; ExtensionApi.kt	IMPLEMENTED_UNVERIFIED
+ 2026-08-22T01:13:00Z	branding	replaced debug and nightly launcher overlays with Hayai adaptive, monochrome, round, and legacy-density assets	kept release-channel application IDs visually and textually Hayai-branded	app/src/debug/res; app/src/nightly/res	IMPLEMENTED_UNVERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+index 330b4eb7ba711b7c4337cab9e6e9bab7ca00238b..c606ac4e90e2551fe6947a5cdd914a0e550f9ded 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+@@ -260,6 +260,8 @@ internal class NativeNovelRenderer(
+         }
+         block.textView = textView
+         block.style = request.style
++        scroll.setBackgroundColor(request.style.backgroundColor)
++        container.setBackgroundColor(request.style.backgroundColor)
+         val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
+         val spanned = HtmlCompat.fromHtml(title + request.content.html, HtmlCompat.FROM_HTML_MODE_LEGACY)
+         block.original = SpannableStringBuilder(spanned)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+index 628cf4602ce76756dac4e0c2c011c0e0ff2233d6..7e6d5681900fd6f2a583ab6b6f131fc3ce4dfd01 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderActivity.kt
+@@ -5,11 +5,14 @@ import android.content.ClipboardManager
+ import android.content.Context
+ import android.content.Intent
+ import android.content.pm.ActivityInfo
++import android.net.Uri
+ import android.os.Bundle
+ import android.os.BatteryManager
+ import android.text.format.DateFormat
+ import android.view.Gravity
+ import android.view.KeyEvent
++import android.view.Menu
++import android.view.MenuItem
+ import android.view.View
+ import android.view.ViewGroup
+ import android.view.WindowManager
+@@ -17,7 +20,6 @@ import android.widget.FrameLayout
+ import android.widget.EditText
+ import android.widget.ImageButton
+ import android.widget.LinearLayout
+-import android.widget.ProgressBar
+ import android.widget.SeekBar
+ import android.widget.TextView
+ import androidx.appcompat.widget.Toolbar
+@@ -25,7 +27,11 @@ import androidx.appcompat.app.AlertDialog
+ import androidx.appcompat.app.AppCompatActivity
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.core.view.setPadding
++import androidx.core.view.isVisible
+ import androidx.lifecycle.lifecycleScope
++import androidx.recyclerview.widget.LinearLayoutManager
++import com.google.android.material.bottomsheet.BottomSheetBehavior
++import com.google.android.material.button.MaterialButton
+ import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
+ import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionaryLauncher
+ import dev.ahmedmohamed.hayai.novel.dictionary.NovelDictionarySettingsStore
+@@ -46,6 +52,10 @@ import eu.kanade.tachiyomi.data.preference.PreferenceStore
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.kanade.tachiyomi.source.SourceManager
++import eu.kanade.tachiyomi.source.online.HttpSource
++import eu.kanade.tachiyomi.ui.webview.WebViewActivity
++import eu.kanade.tachiyomi.ui.reader.ReaderSlider
++import eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterSheet
+ import eu.kanade.tachiyomi.util.system.launchIO
+ import eu.kanade.tachiyomi.util.system.toast
+ import eu.kanade.tachiyomi.ui.main.SearchActivity
+@@ -89,19 +99,21 @@ class NovelReaderActivity :
+     private val dictionarySettings by lazy { NovelDictionarySettingsStore(this) }
+     private lateinit var viewerContainer: FrameLayout
+     private lateinit var appBar: View
+-    private lateinit var bottomChrome: View
+     private lateinit var toolbar: Toolbar
+-    private lateinit var chapterView: TextView
+     private lateinit var statusView: TextView
+     private lateinit var alternateStatusView: TextView
+-    private lateinit var loading: ProgressBar
+-    private lateinit var progressSlider: SeekBar
++    private lateinit var loading: View
++    private lateinit var progressSlider: ReaderSlider
+     private lateinit var verticalProgressSlider: NovelVerticalProgressView
+     private lateinit var progressText: TextView
+-    private lateinit var actionsView: LinearLayout
+     private lateinit var previousButton: ImageButton
+     private lateinit var nextButton: ImageButton
+-    private var playButton: ImageButton? = null
++    private lateinit var chapterSheet: ReaderChapterSheet
++    private lateinit var chapterSheetBehavior: BottomSheetBehavior<ReaderChapterSheet>
++    private lateinit var chapterAdapter: NovelReaderChapterAdapter
++    private lateinit var ttsButton: MaterialButton
++    private lateinit var autoScrollButton: MaterialButton
++    private var bookmarkMenuItem: MenuItem? = null
+     private var renderer: NovelRenderer? = null
+     private val chapterQueue = NovelChapterQueue<LoadedNovelChapter, Long>({ requireNotNull(it.chapter.id) }, 1)
+     private lateinit var ttsController: NovelTtsController
+@@ -142,7 +154,9 @@ class NovelReaderActivity :
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         ttsController = NovelTtsController(this, this)
+-        setContentView(R.layout.hayai_novel_reader_activity)
++        // Inflate J2K's real image-reader shell. Hayai supplies novel behavior through
++        // adapters below; upstream owns the chrome, navigation, and chapter-sheet visuals.
++        setContentView(R.layout.reader_activity)
+         bindReaderShell()
+         configureWindow()
+ 
+@@ -240,18 +254,8 @@ class NovelReaderActivity :
+         if (focus) loading.visibility = View.VISIBLE
+         if (focus) toolbar.title = chapter.manga.title
+         val displayedChapterTitle = displayedChapterTitle(chapter)
+-        if (focus) chapterView.text =
+-            buildString {
+-                append(displayedChapterTitle, "  •  ", chapter.position + 1, "/", chapter.total)
+-                if (chapter.isDownloaded) append("  •  Offline")
+-                append(
+-                    "  •  ",
+-                    NumberFormat.getIntegerInstance().format(chapter.statistics.wordCount),
+-                    " words  •  ",
+-                    chapter.statistics.estimatedMinutes(),
+-                    " min",
+-                )
+-            }
++        if (focus) toolbar.subtitle = chapterSubtitle(chapter, displayedChapterTitle)
++        if (focus) updateBookmarkMenu()
+         if (focus) {
+             previousButton.isEnabled = chapter.hasPrevious
+             nextButton.isEnabled = chapter.hasNext
+@@ -297,6 +301,9 @@ class NovelReaderActivity :
+         prefetchJob?.cancel()
+         prefetchJob = lifecycleScope.launch(Dispatchers.IO) { session.prefetchAdjacent(preferences.novelKeepChaptersLoaded.get()) }
+         if (focus) updateProgressSlider(currentProgress)
++        if (::chapterAdapter.isInitialized) {
++            chapterAdapter.submit(session.chapterSnapshot(), chapter.chapter.id)
++        }
+         rebuildBottomActions()
+         configureWindow()
+         startStatusUpdates()
+@@ -366,20 +373,26 @@ class NovelReaderActivity :
+             else -> "Chapter ${chapter.position + 1}: ${chapter.chapter.name}"
+         }
+ 
++    private fun chapterSubtitle(
++        chapter: LoadedNovelChapter,
++        displayedTitle: String = displayedChapterTitle(chapter),
++    ): String =
++        buildString {
++            append(displayedTitle, "  •  ", chapter.position + 1, "/", chapter.total)
++            if (chapter.isDownloaded) append("  •  Offline")
++            append(
++                "  •  ",
++                NumberFormat.getIntegerInstance().format(chapter.statistics.wordCount),
++                " words  •  ",
++                chapter.statistics.estimatedMinutes(),
++                " min",
++            )
++        }
++
+     private fun updateChapterChrome(chapter: LoadedNovelChapter) {
+         toolbar.title = chapter.manga.title
+-        chapterView.text =
+-            buildString {
+-                append(displayedChapterTitle(chapter), "  •  ", chapter.position + 1, "/", chapter.total)
+-                if (chapter.isDownloaded) append("  •  Offline")
+-                append(
+-                    "  •  ",
+-                    NumberFormat.getIntegerInstance().format(chapter.statistics.wordCount),
+-                    " words  •  ",
+-                    chapter.statistics.estimatedMinutes(),
+-                    " min",
+-                )
+-            }
++        toolbar.subtitle = chapterSubtitle(chapter)
++        updateBookmarkMenu()
+         previousButton.isEnabled = chapter.hasPrevious
+         nextButton.isEnabled = chapter.hasNext
+     }
+@@ -529,9 +542,10 @@ class NovelReaderActivity :
+ 
+     private fun updateProgressSlider(value: Int) {
+         programmaticProgress = true
+-        progressSlider.progress = value
++        progressSlider.value = value.toFloat()
+         verticalProgressSlider.progress = value
+         progressText.text = "$value%"
++        alternateStatusView.text = "100%"
+         programmaticProgress = false
+     }
+ 
+@@ -570,7 +584,6 @@ class NovelReaderActivity :
+     }
+ 
+     private fun showReaderSettings() {
+-        if (preferences.novelTtsAutoStartOnPanelOpen.get() && !ttsController.isPlaying) extractTtsParagraphs(autoStart = true)
+         NovelReaderSettingsSheet(
+             this,
+             preferences,
+@@ -973,6 +986,7 @@ class NovelReaderActivity :
+     private fun startAutoScroll() {
+         if (autoScroll) return
+         autoScroll = true
++        if (::autoScrollButton.isInitialized) configureChapterSheetActions()
+         val delay = (110L - preferences.novelAutoScrollSpeed.get().coerceIn(1, 20) * 5L).coerceAtLeast(10L)
+         autoScrollRunnable =
+             object : Runnable {
+@@ -988,6 +1002,7 @@ class NovelReaderActivity :
+         autoScroll = false
+         autoScrollRunnable?.let { renderer?.view?.removeCallbacks(it) }
+         autoScrollRunnable = null
++        if (::autoScrollButton.isInitialized) configureChapterSheetActions()
+     }
+ 
+     private fun stepReader(direction: Int) {
+@@ -1017,7 +1032,6 @@ class NovelReaderActivity :
+         statusView.visibility = if (preferences.novelStatusBarEnabled.get()) View.VISIBLE else View.GONE
+         if (statusView.visibility != View.VISIBLE) return
+         val chapter = loaded
+-        alternateStatusView.visibility = View.GONE
+         val batteryManager = getSystemService(BATTERY_SERVICE) as BatteryManager
+         val parts = NovelStatusItems.deserialize(preferences.novelStatusBarOrder.get()).mapNotNull { item ->
+             when (item) {
+@@ -1068,39 +1082,51 @@ class NovelReaderActivity :
+ 
+     private fun showError(message: String) {
+         loading.visibility = View.GONE
+-        chapterView.text = message
++        toolbar.subtitle = message
+         toast(message)
+     }
+ 
+     private fun bindReaderShell() {
+-        viewerContainer = findViewById(R.id.novel_viewer_container)
+-        appBar = findViewById(R.id.novel_reader_app_bar)
+-        bottomChrome = findViewById(R.id.novel_reader_bottom_chrome)
+-        toolbar = findViewById(R.id.novel_reader_toolbar)
+-        chapterView = findViewById(R.id.novel_reader_chapter)
+-        loading = findViewById(R.id.novel_reader_loading)
+-        progressSlider = findViewById(R.id.novel_reader_progress)
++        viewerContainer = findViewById(R.id.viewer_container)
++        appBar = findViewById(R.id.app_bar)
++        toolbar = findViewById(R.id.toolbar)
++        loading = findViewById(R.id.please_wait)
++        chapterSheet = findViewById(R.id.chapters_sheet)
++        chapterSheetBehavior = BottomSheetBehavior.from(chapterSheet)
++        progressSlider = findViewById(R.id.page_seekbar)
++        progressSlider.valueFrom = 0f
++        progressSlider.valueTo = 100f
++        progressSlider.stepSize = 1f
++        progressSlider.setLabelFormatter { "${it.toInt()}%" }
+         verticalProgressSlider = NovelVerticalProgressView(this).apply { max = 100 }
+-        findViewById<ViewGroup>(R.id.novel_reader_root).addView(verticalProgressSlider)
+-        progressText = findViewById(R.id.novel_reader_progress_text)
+-        previousButton = findViewById(R.id.novel_reader_previous)
+-        nextButton = findViewById(R.id.novel_reader_next)
+-        actionsView = findViewById(R.id.novel_reader_actions)
++        findViewById<ViewGroup>(R.id.reader_layout).addView(verticalProgressSlider)
++        progressText = findViewById(R.id.left_page_text)
++        alternateStatusView = findViewById(R.id.right_page_text)
++        previousButton = findViewById(R.id.left_chapter)
++        nextButton = findViewById(R.id.right_chapter)
++        viewerContainer.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
++        findViewById<View>(R.id.touch_view).visibility = View.GONE
+         bindStatusView()
++        setSupportActionBar(toolbar)
++        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+         toolbar.setNavigationOnClickListener { finish() }
++        toolbar.setOnClickListener { showChapterPicker() }
++        bindToolbarMenu()
+         previousButton.setOnClickListener { dispatch(NovelReaderAction.Navigate(-1)) }
+         nextButton.setOnClickListener { dispatch(NovelReaderAction.Navigate(1)) }
++        bindChapterSheet()
+         configureProgressControls()
+-        progressSlider.setOnSeekBarChangeListener(
+-            object : SeekBar.OnSeekBarChangeListener {
+-                override fun onProgressChanged(seekBar: SeekBar?, value: Int, fromUser: Boolean) {
+-                    progressText.text = "$value%"
+-                    if (fromUser && !programmaticProgress) currentProgress = value
+-                }
+-
+-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
++        progressSlider.addOnChangeListener { _, value, fromUser ->
++            if (fromUser && !programmaticProgress) {
++                currentProgress = value.toInt()
++                progressText.text = "$currentProgress%"
++            }
++        }
++        progressSlider.addOnSliderTouchListener(
++            object : com.google.android.material.slider.Slider.OnSliderTouchListener {
++                override fun onStartTrackingTouch(slider: com.google.android.material.slider.Slider) = Unit
+ 
+-                override fun onStopTrackingTouch(seekBar: SeekBar?) {
++                override fun onStopTrackingTouch(slider: com.google.android.material.slider.Slider) {
+                     renderer?.seek(currentProgress)
+                     saveProgress()
+                 }
+@@ -1125,19 +1151,16 @@ class NovelReaderActivity :
+     }
+ 
+     private fun bindStatusView() {
+-        val topStatus = findViewById<TextView>(R.id.novel_reader_status_top)
+-        val bottomStatus = findViewById<TextView>(R.id.novel_reader_status_bottom)
+-        statusView = if (preferences.novelStatusBarPosition.get() == "top") topStatus else bottomStatus
+-        alternateStatusView = if (statusView === topStatus) bottomStatus else topStatus
++        statusView = findViewById(R.id.page_number)
+         statusView.textSize = if (preferences.novelStatusBarSize.get() == "medium") 14f else 11f
+-        alternateStatusView.visibility = View.GONE
+     }
+ 
+     private fun configureProgressControls() {
+         val enabled = preferences.novelShowProgressSlider.get()
+         val vertical = enabled && preferences.novelVerticalScrollbar.get()
+         progressSlider.visibility = if (enabled && !vertical) View.VISIBLE else View.GONE
+-        progressText.visibility = if (enabled && !vertical) View.VISIBLE else View.GONE
++        progressText.visibility = View.GONE
++        alternateStatusView.visibility = View.GONE
+         verticalProgressSlider.visibility = if (vertical && controlsVisible) View.VISIBLE else View.GONE
+         val heightFraction = if (preferences.novelVerticalProgressSliderSize.get() == "half") 0.5f else 1f
+         verticalProgressSlider.layoutParams =
+@@ -1146,6 +1169,173 @@ class NovelReaderActivity :
+             }
+     }
+ 
++    private fun bindChapterSheet() {
++        val binding = chapterSheet.binding
++        chapterAdapter =
++            NovelReaderChapterAdapter(
++                onChapterSelected = ::openChapterFromSheet,
++                onBookmarkToggled = ::toggleChapterBookmark,
++            )
++        binding.chapterRecycler.layoutManager = LinearLayoutManager(this)
++        binding.chapterRecycler.adapter = chapterAdapter
++        binding.chaptersButton.setOnClickListener { toggleChapterSheet() }
++        binding.topbarLayout.setOnClickListener { toggleChapterSheet() }
++        chapterSheetBehavior.isHideable = true
++        chapterSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
++        chapterSheetBehavior.addBottomSheetCallback(
++            object : BottomSheetBehavior.BottomSheetCallback() {
++                override fun onSlide(bottomSheet: View, slideOffset: Float) {
++                    findViewById<View>(R.id.nav_layout).alpha = (1f - slideOffset.coerceAtLeast(0f)).coerceIn(0f, 1f)
++                    binding.chapterRecycler.alpha = slideOffset.coerceAtLeast(0f)
++                }
++
++                override fun onStateChanged(bottomSheet: View, newState: Int) {
++                    val expanded = newState == BottomSheetBehavior.STATE_EXPANDED
++                    findViewById<View>(R.id.nav_layout).isVisible = controlsVisible && !expanded
++                    binding.chapterRecycler.isVisible = expanded
++                }
++            },
++        )
++        configureChapterSheetActions()
++    }
++
++    private fun configureChapterSheetActions() {
++        if (!::chapterSheet.isInitialized) return
++        val binding = chapterSheet.binding
++        val ttsActive = ttsController.hasActivePlayback
++        val configured = NovelBottomActions.deserialize(preferences.novelBottomBarItems.get())
++        val enabled = configured.filter(NovelBottomActionState::enabled).map(NovelBottomActionState::action)
++        previousButton.isVisible = NovelBottomAction.PreviousChapter in enabled
++        nextButton.isVisible = NovelBottomAction.NextChapter in enabled
++        binding.chaptersButton.apply {
++            setIconResource(R.drawable.ic_format_list_numbered_24dp)
++            contentDescription = "Chapters"
++            tooltipText = contentDescription
++            isVisible = true
++        }
++        binding.webviewButton.apply {
++            setIconResource(if (ttsActive) R.drawable.ic_skip_previous_24 else R.drawable.ic_open_in_webview_24dp)
++            contentDescription = if (ttsActive) "Previous paragraph" else "Open in WebView"
++            tooltipText = contentDescription
++            isVisible = true
++            setOnClickListener {
++                if (ttsActive) ttsController.previousParagraph() else openSourcePage(inApp = true)
++            }
++        }
++        val slots =
++            listOf(
++                binding.readingMode,
++                binding.rotationSheetButton,
++                binding.cropBordersSheetButton,
++                binding.doublePage,
++                binding.shiftPageButton,
++            )
++        if (ttsActive) {
++            bindReaderSheetButton(slots[0], R.drawable.ic_pause_24dp.takeIf { ttsController.isPlaying } ?: R.drawable.ic_play_arrow_24dp, if (ttsController.isPlaying) "Pause" else "Resume") {
++                if (ttsController.isPlaying) ttsController.pause() else ttsController.play()
++            }
++            ttsButton = slots[0]
++            bindReaderSheetButton(slots[1], R.drawable.ic_skip_next_24, "Next paragraph", ttsController::nextParagraph)
++            bindReaderSheetButton(slots[2], R.drawable.ic_close_circle_24dp, "Stop reading aloud", ttsController::stop)
++            bindReaderSheetButton(slots[3], R.drawable.ic_text_fields_24dp, "Read from viewport") {
++                dispatch(NovelReaderAction.StartTtsAtViewport)
++            }
++            slots[4].isVisible = false
++        } else {
++            val slotActions =
++                enabled.filterNot {
++                    it == NovelBottomAction.PreviousChapter ||
++                        it == NovelBottomAction.NextChapter ||
++                        it == NovelBottomAction.Settings
++                }
++            slots.forEachIndexed { index, button ->
++                val action = slotActions.getOrNull(index)
++                if (action == null) button.isVisible = false else bindNovelSheetAction(button, action)
++            }
++        }
++        binding.displayOptions.apply {
++            setIconResource(R.drawable.ic_tune_24dp)
++            contentDescription = "Reader settings"
++            tooltipText = contentDescription
++            isVisible = NovelBottomAction.Settings in enabled || ttsActive
++            setOnClickListener { dispatch(NovelReaderAction.ShowSettings) }
++        }
++    }
++
++    private fun bindNovelSheetAction(button: MaterialButton, action: NovelBottomAction) {
++        when (action) {
++            NovelBottomAction.ScrollToTop -> bindReaderSheetButton(button, R.drawable.ic_arrow_upward_24dp, "Scroll to top") { dispatch(NovelReaderAction.Seek(0)) }
++            NovelBottomAction.Translate -> bindReaderSheetButton(button, R.drawable.ic_translate_24dp, "Translate selection") { dispatch(NovelReaderAction.TranslateSelection) }
++            NovelBottomAction.AutoScroll -> {
++                autoScrollButton = button
++                bindReaderSheetButton(button, if (autoScroll) R.drawable.ic_pause_24dp else R.drawable.ic_swap_vert_24dp, if (autoScroll) "Stop auto-scroll" else "Auto-scroll") {
++                    dispatch(NovelReaderAction.ToggleAutoScroll)
++                }
++            }
++            NovelBottomAction.Tts -> {
++                ttsButton = button
++                bindReaderSheetButton(button, R.drawable.ic_record_voice_over_24dp, "Read aloud") { extractTtsParagraphs(autoStart = true) }
++                button.setOnLongClickListener { ttsController.stop(); true }
++            }
++            NovelBottomAction.TtsViewport -> bindReaderSheetButton(button, R.drawable.ic_text_fields_24dp, "Read from viewport") { dispatch(NovelReaderAction.StartTtsAtViewport) }
++            NovelBottomAction.TtsPreviousParagraph -> bindReaderSheetButton(button, R.drawable.ic_skip_previous_24, "Previous paragraph", ttsController::previousParagraph)
++            NovelBottomAction.TtsNextParagraph -> bindReaderSheetButton(button, R.drawable.ic_skip_next_24, "Next paragraph", ttsController::nextParagraph)
++            NovelBottomAction.Orientation -> bindReaderSheetButton(button, R.drawable.ic_screen_rotation_24dp, "Change orientation") { dispatch(NovelReaderAction.ToggleOrientation) }
++            NovelBottomAction.Edit -> bindReaderSheetButton(button, R.drawable.ic_edit_24dp, "Edit chapter") { dispatch(NovelReaderAction.ToggleEditMode) }
++            NovelBottomAction.Quotes -> bindReaderSheetButton(button, R.drawable.ic_format_list_numbered_24dp, "Quotes") { dispatch(NovelReaderAction.ShowQuotes) }
++            NovelBottomAction.PreviousChapter,
++            NovelBottomAction.NextChapter,
++            NovelBottomAction.Settings,
++            -> button.isVisible = false
++        }
++    }
++
++    private fun bindReaderSheetButton(
++        button: MaterialButton,
++        icon: Int,
++        description: String,
++        action: () -> Unit,
++    ) {
++        button.setIconResource(icon)
++        button.contentDescription = description
++        button.tooltipText = description
++        button.isVisible = true
++        button.setOnLongClickListener(null)
++        button.setOnClickListener { action() }
++    }
++
++    private fun toggleChapterSheet() {
++        chapterSheetBehavior.state =
++            if (chapterSheetBehavior.state == BottomSheetBehavior.STATE_EXPANDED) {
++                BottomSheetBehavior.STATE_COLLAPSED
++            } else {
++                BottomSheetBehavior.STATE_EXPANDED
++            }
++    }
++
++    private fun openChapterFromSheet(chapter: eu.kanade.tachiyomi.data.database.models.Chapter) {
++        val chapterId = chapter.id ?: return
++        chapterSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
++        saveProgress()
++        loadJob?.cancel()
++        loadJob =
++            lifecycleScope.launch {
++                loading.visibility = View.VISIBLE
++                val result = withContext(Dispatchers.IO) { runCatching { session.moveTo(chapterId) } }
++                result.fold(
++                    onSuccess = { loaded -> loaded?.let(::showChapter) ?: showError("The chapter is unavailable.") },
++                    onFailure = { showError(it.message ?: "The chapter could not be loaded.") },
++                )
++            }
++    }
++
++    private fun toggleChapterBookmark(chapter: eu.kanade.tachiyomi.data.database.models.Chapter) {
++        chapter.bookmark = !chapter.bookmark
++        lifecycleScope.launch(Dispatchers.IO) { Injekt.get<DatabaseHelper>().insertChapter(chapter).executeAsBlocking() }
++        chapterAdapter.submit(session.chapterSnapshot(), loaded?.chapter?.id)
++        if (chapter.id == loaded?.chapter?.id) updateBookmarkMenu()
++    }
++
+     private fun ensureRenderer(mode: NovelRenderingMode): NovelRenderer {
+         renderer?.takeIf { it.mode == mode }?.let { return it }
+         renderer?.destroy()
+@@ -1174,43 +1364,7 @@ class NovelReaderActivity :
+         return created
+     }
+ 
+-    private fun rebuildBottomActions() {
+-        actionsView.removeAllViews()
+-        playButton = null
+-        NovelBottomActions.deserialize(preferences.novelBottomBarItems.get()).filter(NovelBottomActionState::enabled).forEach { state ->
+-            val button = actionButton(state.action)
+-            actionsView.addView(button)
+-            if (state.action == NovelBottomAction.Tts) playButton = button
+-        }
+-    }
+-
+-    private fun actionButton(action: NovelBottomAction) =
+-        ImageButton(this).apply {
+-            val spec = bottomActionSpec(action)
+-            setImageResource(spec.first)
+-            contentDescription = spec.second
+-            background = getDrawable(android.R.drawable.list_selector_background)
+-            setPadding(12, 12, 12, 12)
+-            setOnClickListener { dispatch(spec.third) }
+-            layoutParams = LinearLayout.LayoutParams(48.dp, 48.dp)
+-        }
+-
+-    private fun bottomActionSpec(action: NovelBottomAction): Triple<Int, String, NovelReaderAction> =
+-        when (action) {
+-            NovelBottomAction.PreviousChapter -> Triple(R.drawable.ic_skip_previous_24, "Previous chapter", NovelReaderAction.Navigate(-1))
+-            NovelBottomAction.NextChapter -> Triple(R.drawable.ic_skip_next_24, "Next chapter", NovelReaderAction.Navigate(1))
+-            NovelBottomAction.ScrollToTop -> Triple(R.drawable.ic_arrow_upward_24dp, "Scroll to top", NovelReaderAction.Seek(0))
+-            NovelBottomAction.Translate -> Triple(R.drawable.ic_translate_24dp, "Translate selection", NovelReaderAction.TranslateSelection)
+-            NovelBottomAction.AutoScroll -> Triple(R.drawable.ic_refresh_24dp, "Auto-scroll", NovelReaderAction.ToggleAutoScroll)
+-            NovelBottomAction.Tts -> Triple(R.drawable.ic_play_arrow_24dp, "Read aloud", NovelReaderAction.ToggleTts)
+-            NovelBottomAction.TtsViewport -> Triple(R.drawable.ic_play_arrow_24dp, "Read from viewport", NovelReaderAction.StartTtsAtViewport)
+-            NovelBottomAction.TtsPreviousParagraph -> Triple(R.drawable.ic_skip_previous_24, "Previous paragraph", NovelReaderAction.PreviousTtsParagraph)
+-            NovelBottomAction.TtsNextParagraph -> Triple(R.drawable.ic_skip_next_24, "Next paragraph", NovelReaderAction.NextTtsParagraph)
+-            NovelBottomAction.Orientation -> Triple(R.drawable.ic_screen_rotation_24dp, "Change orientation", NovelReaderAction.ToggleOrientation)
+-            NovelBottomAction.Settings -> Triple(R.drawable.ic_settings_24dp, "Reader settings", NovelReaderAction.ShowSettings)
+-            NovelBottomAction.Edit -> Triple(R.drawable.ic_edit_24dp, "Edit chapter", NovelReaderAction.ToggleEditMode)
+-            NovelBottomAction.Quotes -> Triple(R.drawable.ic_format_list_numbered_24dp, "Quotes", NovelReaderAction.ShowQuotes)
+-        }
++    private fun rebuildBottomActions() = configureChapterSheetActions()
+ 
+     private fun dispatch(action: NovelReaderAction) {
+         when (action) {
+@@ -1279,7 +1433,8 @@ class NovelReaderActivity :
+     private fun setChromeVisible(visible: Boolean) {
+         controlsVisible = visible
+         appBar.visibility = if (visible) View.VISIBLE else View.GONE
+-        bottomChrome.visibility = if (visible) View.VISIBLE else View.GONE
++        findViewById<View>(R.id.nav_layout).isVisible = visible && chapterSheetBehavior.state != BottomSheetBehavior.STATE_EXPANDED
++        chapterSheetBehavior.state = if (visible) BottomSheetBehavior.STATE_COLLAPSED else BottomSheetBehavior.STATE_HIDDEN
+         configureProgressControls()
+     }
+ 
+@@ -1299,9 +1454,92 @@ class NovelReaderActivity :
+         val chapter = loaded?.chapter ?: return
+         chapter.bookmark = !chapter.bookmark
+         lifecycleScope.launch(Dispatchers.IO) { Injekt.get<DatabaseHelper>().insertChapter(chapter).executeAsBlocking() }
++        updateBookmarkMenu()
+         toast(if (chapter.bookmark) "Chapter bookmarked" else "Bookmark removed")
+     }
+ 
++    private fun bindToolbarMenu() {
++        bookmarkMenuItem =
++            toolbar.menu
++                .add(Menu.NONE, MENU_BOOKMARK, Menu.NONE, "Bookmark")
++                .setIcon(R.drawable.ic_bookmark_border_24dp)
++                .setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_ALWAYS)
++        toolbar.menu.add(Menu.NONE, MENU_RELOAD, Menu.NONE, "Reload chapter")
++        toolbar.menu.add(Menu.NONE, MENU_OFFLINE, Menu.NONE, "Save or remove offline copy")
++        toolbar.menu.add(Menu.NONE, MENU_STATISTICS, Menu.NONE, "Chapter statistics")
++        toolbar.menu.add(Menu.NONE, MENU_HIGHLIGHTS, Menu.NONE, "Highlights")
++        toolbar.menu.add(Menu.NONE, MENU_OPEN_WEBVIEW, Menu.NONE, "Open in WebView")
++        toolbar.menu.add(Menu.NONE, MENU_OPEN_BROWSER, Menu.NONE, "Open in browser")
++        toolbar.menu.add(Menu.NONE, MENU_SHARE, Menu.NONE, "Share")
++        toolbar.menu.add(Menu.NONE, MENU_SETTINGS, Menu.NONE, "Reader settings")
++        toolbar.setOnMenuItemClickListener { item ->
++            when (item.itemId) {
++                MENU_BOOKMARK -> dispatch(NovelReaderAction.ToggleBookmark)
++                MENU_RELOAD -> reloadChapter()
++                MENU_OFFLINE -> dispatch(NovelReaderAction.ToggleOffline)
++                MENU_STATISTICS -> dispatch(NovelReaderAction.ShowStatistics)
++                MENU_HIGHLIGHTS -> dispatch(NovelReaderAction.ShowHighlights)
++                MENU_OPEN_WEBVIEW -> openSourcePage(inApp = true)
++                MENU_OPEN_BROWSER -> openSourcePage(inApp = false)
++                MENU_SHARE -> shareSourcePage()
++                MENU_SETTINGS -> dispatch(NovelReaderAction.ShowSettings)
++                else -> return@setOnMenuItemClickListener false
++            }
++            true
++        }
++    }
++
++    private fun updateBookmarkMenu() {
++        bookmarkMenuItem?.apply {
++            val bookmarked = loaded?.chapter?.bookmark == true
++            title = if (bookmarked) "Remove bookmark" else "Bookmark"
++            setIcon(if (bookmarked) R.drawable.ic_bookmark_24dp else R.drawable.ic_bookmark_border_24dp)
++        }
++    }
++
++    private fun showChapterPicker() {
++        if (::chapterAdapter.isInitialized && session.chapterSnapshot().isNotEmpty()) toggleChapterSheet()
++    }
++
++    private fun reloadChapter() {
++        loadJob?.cancel()
++        loadJob =
++            lifecycleScope.launch {
++                loading.visibility = View.VISIBLE
++                val result = withContext(Dispatchers.IO) { runCatching { session.reload() } }
++                result.fold(::showChapter) { showError(it.message ?: "The chapter could not be reloaded.") }
++            }
++    }
++
++    private fun sourcePageUrl(): String? =
++        runCatching { (session.source as? HttpSource)?.getMangaUrl(session.manga) }.getOrNull()
++
++    private fun openSourcePage(inApp: Boolean) {
++        val url = sourcePageUrl() ?: return toast("This source does not expose a web page.")
++        val intent =
++            if (inApp) {
++                WebViewActivity.newIntent(this, url, session.source.id, loaded?.manga?.title)
++            } else {
++                Intent(Intent.ACTION_VIEW, Uri.parse(url))
++            }
++        runCatching { startActivity(intent) }.onFailure { toast("No application can open this source page.") }
++    }
++
++    private fun shareSourcePage() {
++        val chapter = loaded ?: return
++        val url = sourcePageUrl()
++        val text = listOfNotNull(chapter.manga.title, chapter.chapter.name, url).joinToString("\n")
++        startActivity(
++            Intent.createChooser(
++                Intent(Intent.ACTION_SEND).apply {
++                    type = "text/plain"
++                    putExtra(Intent.EXTRA_TEXT, text)
++                },
++                "Share chapter",
++            ),
++        )
++    }
++
+     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
+ 
+     private fun orientationValue(value: Int): Int =
+@@ -1320,8 +1558,7 @@ class NovelReaderActivity :
+     }
+ 
+     override fun onPlaybackChanged(playing: Boolean) {
+-        playButton?.setImageResource(if (playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_arrow_24dp)
+-        playButton?.contentDescription = if (playing) "Pause" else "Read aloud"
++        if (::ttsButton.isInitialized) configureChapterSheetActions()
+     }
+ 
+     override fun onChapterCompleted() {
+@@ -1422,6 +1659,15 @@ class NovelReaderActivity :
+     override fun onRendererError(message: String) = toast(message)
+ 
+     companion object {
++        private const val MENU_BOOKMARK = 0x484100
++        private const val MENU_RELOAD = 0x484101
++        private const val MENU_OFFLINE = 0x484102
++        private const val MENU_STATISTICS = 0x484103
++        private const val MENU_HIGHLIGHTS = 0x484104
++        private const val MENU_OPEN_WEBVIEW = 0x484105
++        private const val MENU_OPEN_BROWSER = 0x484106
++        private const val MENU_SHARE = 0x484107
++        private const val MENU_SETTINGS = 0x484108
+         private const val EXTRA_MANGA_ID = "hayai.manga_id"
+         private const val EXTRA_CHAPTER_ID = "hayai.chapter_id"
+         private const val DEFAULT_HIGHLIGHT_COLOR = 0xFFFFEB3B.toInt()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderChapterAdapter.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderChapterAdapter.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..85ecb11005f414d37029a315685a5d2c449bf889
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderChapterAdapter.kt
+@@ -0,0 +1,57 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import android.view.LayoutInflater
++import android.view.ViewGroup
++import androidx.core.view.isVisible
++import androidx.recyclerview.widget.RecyclerView
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import eu.kanade.tachiyomi.databinding.ReaderChapterItemBinding
++
++/** Binds J2K's reader chapter rows without introducing a second chapter model. */
++internal class NovelReaderChapterAdapter(
++    private val onChapterSelected: (Chapter) -> Unit,
++    private val onBookmarkToggled: (Chapter) -> Unit,
++) : RecyclerView.Adapter<NovelReaderChapterAdapter.ViewHolder>() {
++    private var chapters = emptyList<Chapter>()
++    private var selectedChapterId: Long? = null
++
++    fun submit(chapters: List<Chapter>, selectedChapterId: Long?) {
++        this.chapters = chapters
++        this.selectedChapterId = selectedChapterId
++        notifyDataSetChanged()
++    }
++
++    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
++        ViewHolder(
++            ReaderChapterItemBinding.inflate(LayoutInflater.from(parent.context), parent, false),
++        )
++
++    override fun getItemCount(): Int = chapters.size
++
++    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
++        holder.bind(chapters[position])
++    }
++
++    inner class ViewHolder(
++        private val binding: ReaderChapterItemBinding,
++    ) : RecyclerView.ViewHolder(binding.root) {
++        fun bind(chapter: Chapter) {
++            val chapterId = chapter.id
++            binding.chapterTitle.text = chapter.name
++            binding.chapterSubtitle.text =
++                when {
++                    chapter.read -> "Read"
++                    chapter.last_page_read > 0 -> "${chapter.last_page_read.coerceIn(0, 100)}% read"
++                    else -> "Unread"
++                }
++            binding.root.isActivated = chapterId == selectedChapterId
++            binding.root.alpha = if (chapter.read) 0.65f else 1f
++            binding.bookmarkImage.setImageResource(
++                if (chapter.bookmark) eu.kanade.tachiyomi.R.drawable.ic_bookmark_24dp else eu.kanade.tachiyomi.R.drawable.ic_bookmark_border_24dp,
++            )
++            binding.progress.isVisible = false
++            binding.root.setOnClickListener { onChapterSelected(chapter) }
++            binding.bookmarkButton.setOnClickListener { onBookmarkToggled(chapter) }
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+index 8473d5e1723d40ba2df830963598f22fa57f2194..a112bf83c9776f0de7d25c1f09255e13624f82cb 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+@@ -60,6 +60,21 @@ internal class NovelReaderSession(
+ 
+     fun adjacent(next: Boolean): Chapter? = chapters.getOrNull(chapterIndex + if (next) 1 else -1)
+ 
++    fun chapterSnapshot(): List<Chapter> = chapters.toList()
++
++    suspend fun moveTo(chapterId: Long): LoadedNovelChapter? {
++        val previousIndex = chapterIndex
++        val targetIndex = chapters.indexOfFirst { it.id == chapterId }
++        if (targetIndex < 0) return null
++        chapterIndex = targetIndex
++        return try {
++            loadCurrent()
++        } catch (error: Throwable) {
++            chapterIndex = previousIndex
++            throw error
++        }
++    }
++
+     fun focus(chapterId: Long): Boolean {
+         val index = chapters.indexOfFirst { it.id == chapterId }
+         if (index < 0) return false
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
+index b9b7c47d5c0b43c8064cae3453202dc30e720fea..45d08e47d37f37cd8913c3f2c2df064c8c7eb6b1 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
+@@ -1,23 +1,30 @@
+ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.app.Activity
+-import android.graphics.Typeface
++import android.content.res.ColorStateList
+ import android.graphics.Color
++import android.graphics.Typeface
+ import android.view.Gravity
+ import android.view.View
+ import android.view.ViewGroup
+-import android.widget.ArrayAdapter
+-import android.widget.Button
+-import android.widget.CheckBox
++import android.widget.HorizontalScrollView
++import android.widget.ImageButton
+ import android.widget.LinearLayout
+-import android.widget.SeekBar
+-import android.widget.Spinner
+ import android.widget.TextView
+ import androidx.appcompat.app.AlertDialog
++import androidx.core.content.ContextCompat
++import androidx.core.view.isVisible
+ import androidx.core.widget.NestedScrollView
+-import eu.kanade.tachiyomi.R
++import com.google.android.material.button.MaterialButton
++import com.google.android.material.chip.Chip
++import com.google.android.material.chip.ChipGroup
++import com.google.android.material.materialswitch.MaterialSwitch
++import com.google.android.material.slider.Slider
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.preference.Preference
++import eu.kanade.tachiyomi.util.system.getResourceColor
++import eu.kanade.tachiyomi.widget.MaterialSpinnerView
+ import eu.kanade.tachiyomi.widget.TabbedBottomSheetDialog
+ 
+ internal class NovelReaderSettingsSheet(
+@@ -35,6 +42,32 @@ internal class NovelReaderSettingsSheet(
+     private val ttsView = page { ttsPage(this) }
+     private val moreView = page { morePage(this) }
+ 
++    init {
++        val tabs =
++            listOf(
++                R.drawable.ic_text_fields_24dp to R.string.hayai_novel_tab_reader,
++                R.drawable.ic_palette_24dp to R.string.hayai_novel_tab_text,
++                R.drawable.ic_swipe_24dp to R.string.hayai_novel_tab_layout,
++                R.drawable.ic_record_voice_over_24dp to R.string.hayai_novel_tab_tts,
++                R.drawable.ic_code_24dp to R.string.hayai_novel_tab_more,
++            )
++        tabs.forEachIndexed { index, (icon, label) ->
++            binding.tabs.getTabAt(index)?.apply {
++                setIcon(icon)
++                text = null
++                contentDescription = context.getString(label)
++            }
++        }
++        binding.menu.isVisible = true
++        binding.menu.tooltipText = context.getString(R.string.reader_settings)
++        binding.menu.contentDescription = context.getString(R.string.reader_settings)
++        binding.menu.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_outline_settings_24dp))
++        binding.menu.setOnClickListener {
++            onAction(NovelReaderAction.OpenFullSettings)
++            dismiss()
++        }
++    }
++
+     override fun getTabViews(): List<View> = listOf(readerView, textView, layoutView, ttsView, moreView)
+ 
+     override fun getTabTitles(): List<Int> =
+@@ -137,21 +170,26 @@ internal class NovelReaderSettingsSheet(
+                 preferences.novelVerticalScrollbarPosition.get() == "left" -> 2
+                 else -> 3
+             }
+-        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(8.dp, 4.dp, 8.dp, 4.dp) }
+-        row.addView(TextView(context).apply { text = "Progress mode" }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+-        row.addView(Spinner(context).apply {
+-            adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, values)
+-            setSelection(current)
+-            onItemSelectedListener = SimpleItemSelectedListener { selection ->
+-                val enabled = selection != 0
+-                val vertical = selection >= 2
+-                if (preferences.novelShowProgressSlider.get() != enabled) preferences.novelShowProgressSlider.set(enabled)
+-                if (preferences.novelVerticalScrollbar.get() != vertical) preferences.novelVerticalScrollbar.set(vertical)
+-                if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
+-                onChromeChanged()
+-            }
+-        })
+-        page.addView(row)
++        page.addView(TextView(context).apply { text = "Progress mode"; setPadding(0, 12.dp, 0, 4.dp) })
++        val chips = ChipGroup(context).apply { isSingleSelection = true; isSelectionRequired = true; isSingleLine = true }
++        values.forEachIndexed { selection, label ->
++            chips.addView(
++                Chip(context).apply {
++                    text = label
++                    isCheckable = true
++                    isChecked = selection == current
++                    setOnClickListener {
++                        val enabled = selection != 0
++                        val vertical = selection >= 2
++                        if (preferences.novelShowProgressSlider.get() != enabled) preferences.novelShowProgressSlider.set(enabled)
++                        if (preferences.novelVerticalScrollbar.get() != vertical) preferences.novelVerticalScrollbar.set(vertical)
++                        if (vertical) preferences.novelVerticalScrollbarPosition.set(if (selection == 2) "left" else "right")
++                        onChromeChanged()
++                    }
++                },
++            )
++        }
++        page.addView(HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(chips) })
+     }
+ 
+     private fun morePage(page: LinearLayout) {
+@@ -163,7 +201,6 @@ internal class NovelReaderSettingsSheet(
+         page.toggle("Show raw HTML", preferences.novelShowRawHtml, onStyleChanged)
+         page.toggle("WebView developer tools", preferences.novelWebViewDevTools)
+         page.toggle("Show WebView console errors", preferences.novelConsoleErrorToast)
+-        page.button("Open full novel settings") { onAction(NovelReaderAction.OpenFullSettings) }
+         page.heading("Bottom actions")
+         bottomActionEditor(page)
+         page.heading("Status order")
+@@ -184,7 +221,7 @@ internal class NovelReaderSettingsSheet(
+             addView(
+                 LinearLayout(context).apply {
+                     orientation = LinearLayout.VERTICAL
+-                    setPadding(16.dp, 8.dp, 16.dp, 24.dp)
++                    setPadding(24.dp, 4.dp, 24.dp, 24.dp)
+                     content()
+                 },
+                 ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+@@ -192,59 +229,124 @@ internal class NovelReaderSettingsSheet(
+         }
+ 
+     private fun LinearLayout.heading(text: String) {
+-        addView(TextView(context).apply { this.text = text; textSize = 14f; setTypeface(typeface, Typeface.BOLD); setPadding(8.dp, 16.dp, 8.dp, 4.dp) })
++        addView(
++            TextView(context).apply {
++                this.text = text
++                textSize = 15f
++                setTypeface(typeface, Typeface.BOLD)
++                setTextColor(context.getResourceColor(R.attr.colorPrimary))
++                setPadding(0, 16.dp, 0, 4.dp)
++            },
++        )
+     }
+ 
+     private fun LinearLayout.toggle(label: String, preference: Preference<Boolean>, changed: () -> Unit = {}) {
+-        addView(CheckBox(context).apply {
+-            text = label
+-            isChecked = preference.get()
+-            setPadding(8.dp, 4.dp, 8.dp, 4.dp)
+-            setOnCheckedChangeListener { _, checked -> preference.set(checked); changed() }
+-        })
++        addView(
++            MaterialSwitch(context).apply {
++                text = label
++                textSize = 15f
++                isChecked = preference.get()
++                minHeight = 48.dp
++                setTextColor(context.getResourceColor(R.attr.colorOnBackground))
++                setOnCheckedChangeListener { _, checked ->
++                    preference.set(checked)
++                    changed()
++                }
++            },
++            matchWrap(),
++        )
+     }
+ 
+     private fun <T> LinearLayout.choice(label: String, preference: Preference<T>, values: List<Pair<String, T>>, changed: () -> Unit = {}) {
+-        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(8.dp, 4.dp, 8.dp, 4.dp) }
+-        row.addView(TextView(context).apply { text = label }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+-        row.addView(Spinner(context).apply {
+-            adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, values.map { it.first })
+-            setSelection(values.indexOfFirst { it.second == preference.get() }.coerceAtLeast(0))
+-            onItemSelectedListener = SimpleItemSelectedListener { position ->
+-                val selected = values[position].second
+-                if (selected != preference.get()) { preference.set(selected); changed() }
+-            }
+-        })
+-        addView(row)
++        val selected = values.indexOfFirst { it.second == preference.get() }.coerceAtLeast(0)
++        addView(
++            MaterialSpinnerView(context, null).apply {
++                title = label
++                setEntries(values.map { it.first })
++                setSelection(selected)
++                onItemSelectedListener = { position ->
++                    val value = values[position].second
++                    if (value != preference.get()) {
++                        preference.set(value)
++                        changed()
++                    }
++                }
++            },
++            matchWrap(),
++        )
+     }
+ 
+     private fun LinearLayout.slider(label: String, preference: Preference<Int>, min: Int, max: Int, suffix: String, changed: () -> Unit = {}) {
+-        val title = TextView(context)
+-        fun update(value: Int) { title.text = "$label   $value $suffix" }
+-        update(preference.get())
+-        addView(title.apply { setPadding(8.dp, 8.dp, 8.dp, 0) })
+-        addView(SeekBar(context).apply {
+-            this.max = max - min
+-            progress = preference.get().coerceIn(min, max) - min
+-            setOnSeekBarChangeListener(SimpleSeekBarListener { value -> preference.set(value + min); update(value + min); changed() })
++        val valueText = sliderHeader(label)
++        fun update(value: Int) { valueText.text = "$value $suffix" }
++        update(preference.get().coerceIn(min, max))
++        addView(Slider(context).apply {
++            valueFrom = min.toFloat()
++            valueTo = max.toFloat()
++            stepSize = 1f
++            value = preference.get().coerceIn(min, max).toFloat()
++            addOnChangeListener { _, newValue, fromUser ->
++                if (fromUser) {
++                    val resolved = newValue.toInt()
++                    preference.set(resolved)
++                    update(resolved)
++                    changed()
++                }
++            }
+         })
+     }
+ 
+     private fun LinearLayout.sliderFloat(label: String, preference: Preference<Float>, min: Int, max: Int, scale: Float, changed: () -> Unit = {}) {
+-        val title = TextView(context)
+-        fun update(value: Int) { title.text = "$label   ${"%.1f".format(value / scale)}×" }
+-        val initial = (preference.get() * scale).toInt().coerceIn(min, max)
++        val valueText = sliderHeader(label)
++        fun update(value: Float) { valueText.text = "${"%.1f".format(value)}×" }
++        val initial = preference.get().coerceIn(min / scale, max / scale)
+         update(initial)
+-        addView(title.apply { setPadding(8.dp, 8.dp, 8.dp, 0) })
+-        addView(SeekBar(context).apply {
+-            this.max = max - min
+-            progress = initial - min
+-            setOnSeekBarChangeListener(SimpleSeekBarListener { value -> val actual = value + min; preference.set(actual / scale); update(actual); changed() })
++        addView(Slider(context).apply {
++            valueFrom = min / scale
++            valueTo = max / scale
++            stepSize = 1f / scale
++            value = initial
++            addOnChangeListener { _, newValue, fromUser ->
++                if (fromUser) {
++                    preference.set(newValue)
++                    update(newValue)
++                    changed()
++                }
++            }
+         })
+     }
+ 
+     private fun LinearLayout.button(label: String, action: () -> Unit) {
+-        addView(Button(context).apply { text = label; setOnClickListener { action() } })
++        addView(
++            MaterialButton(context, null, android.R.attr.borderlessButtonStyle).apply {
++                text = label
++                gravity = Gravity.START or Gravity.CENTER_VERTICAL
++                minHeight = 48.dp
++                isAllCaps = false
++                setPadding(0, 0, 0, 0)
++                setOnClickListener { action() }
++            },
++            matchWrap(),
++        )
++    }
++
++    private fun LinearLayout.sliderHeader(label: String): TextView {
++        val value = TextView(context).apply {
++            textSize = 14f
++            gravity = Gravity.END
++            setTextColor(context.getResourceColor(android.R.attr.textColorSecondary))
++        }
++        addView(
++            LinearLayout(context).apply {
++                orientation = LinearLayout.HORIZONTAL
++                gravity = Gravity.CENTER_VERTICAL
++                setPadding(0, 12.dp, 0, 0)
++                addView(TextView(context).apply { text = label; textSize = 15f }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
++                addView(value, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
++            },
++            matchWrap(),
++        )
++        return value
+     }
+ 
+     private fun editString(title: String, preference: Preference<String>, changed: () -> Unit) {
+@@ -296,25 +398,31 @@ internal class NovelReaderSettingsSheet(
+             val group = LinearLayout(context).apply { tag = marker; orientation = LinearLayout.VERTICAL }
+             val items = NovelBottomActions.deserialize(preferences.novelBottomBarItems.get()).toMutableList()
+             items.forEachIndexed { index, state ->
+-                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+-                row.addView(CheckBox(context).apply {
+-                    text = state.action.name.replace(Regex("([a-z])([A-Z])"), "$1 $2")
+-                    isChecked = state.enabled
+-                    setOnCheckedChangeListener { _, checked ->
++                group.addView(
++                    orderedRow(
++                        title = state.action.displayName(),
++                        enabled = state.enabled,
++                        canMoveUp = index > 0,
++                        canMoveDown = index < items.lastIndex,
++                        onEnabledChanged = { checked ->
+                         items[index] = state.copy(enabled = checked)
+                         preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
+                         onChromeChanged()
+-                    }
+-                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+-                row.addView(Button(context).apply { text = "↑"; isEnabled = index > 0; setOnClickListener {
+-                    val moved = items.removeAt(index); items.add(index - 1, moved)
+-                    preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items)); onChromeChanged(); render()
+-                } })
+-                row.addView(Button(context).apply { text = "↓"; isEnabled = index < items.lastIndex; setOnClickListener {
+-                    val moved = items.removeAt(index); items.add(index + 1, moved)
+-                    preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items)); onChromeChanged(); render()
+-                } })
+-                group.addView(row)
++                        },
++                        onMoveUp = {
++                            items.add(index - 1, items.removeAt(index))
++                            preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
++                            onChromeChanged()
++                            render()
++                        },
++                        onMoveDown = {
++                            items.add(index + 1, items.removeAt(index))
++                            preferences.novelBottomBarItems.set(NovelBottomActions.serialize(items))
++                            onChromeChanged()
++                            render()
++                        },
++                    ),
++                )
+             }
+             container.addView(group)
+         }
+@@ -328,35 +436,102 @@ internal class NovelReaderSettingsSheet(
+             val group = LinearLayout(context).apply { tag = marker; orientation = LinearLayout.VERTICAL }
+             val items = NovelStatusItems.deserialize(preferences.novelStatusBarOrder.get()).toMutableList()
+             items.forEachIndexed { index, item ->
+-                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+-                row.addView(TextView(context).apply { text = item.name }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+-                row.addView(Button(context).apply { text = "↑"; isEnabled = index > 0; setOnClickListener {
+-                    val moved = items.removeAt(index); items.add(index - 1, moved)
+-                    preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items)); onChromeChanged(); render()
+-                } })
+-                row.addView(Button(context).apply { text = "↓"; isEnabled = index < items.lastIndex; setOnClickListener {
+-                    val moved = items.removeAt(index); items.add(index + 1, moved)
+-                    preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items)); onChromeChanged(); render()
+-                } })
+-                group.addView(row)
++                group.addView(
++                    orderedRow(
++                        title = item.name,
++                        enabled = null,
++                        canMoveUp = index > 0,
++                        canMoveDown = index < items.lastIndex,
++                        onEnabledChanged = {},
++                        onMoveUp = {
++                            items.add(index - 1, items.removeAt(index))
++                            preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items))
++                            onChromeChanged()
++                            render()
++                        },
++                        onMoveDown = {
++                            items.add(index + 1, items.removeAt(index))
++                            preferences.novelStatusBarOrder.set(NovelStatusItems.serialize(items))
++                            onChromeChanged()
++                            render()
++                        },
++                    ),
++                )
+             }
+             container.addView(group)
+         }
+         render()
+     }
+ 
+-    private val Int.dp: Int get() = (this * context.resources.displayMetrics.density).toInt()
++    private fun orderedRow(
++        title: String,
++        enabled: Boolean?,
++        canMoveUp: Boolean,
++        canMoveDown: Boolean,
++        onEnabledChanged: (Boolean) -> Unit,
++        onMoveUp: () -> Unit,
++        onMoveDown: () -> Unit,
++    ): View =
++        LinearLayout(context).apply {
++            orientation = LinearLayout.HORIZONTAL
++            gravity = Gravity.CENTER_VERTICAL
++            minimumHeight = 48.dp
++            if (enabled == null) {
++                addView(
++                    TextView(context).apply {
++                        text = title
++                        textSize = 15f
++                        setTextColor(context.getResourceColor(R.attr.colorOnBackground))
++                    },
++                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
++                )
++            } else {
++                addView(
++                    MaterialSwitch(context).apply {
++                        text = title
++                        textSize = 15f
++                        isChecked = enabled
++                        setTextColor(context.getResourceColor(R.attr.colorOnBackground))
++                        setOnCheckedChangeListener { _, checked -> onEnabledChanged(checked) }
++                    },
++                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
++                )
++            }
++            addView(orderButton(R.drawable.ic_arrow_upward_24dp, "Move $title up", canMoveUp, onMoveUp))
++            addView(orderButton(R.drawable.ic_arrow_downward_24dp, "Move $title down", canMoveDown, onMoveDown))
++        }
+ 
+-    private class SimpleSeekBarListener(private val changed: (Int) -> Unit) : SeekBar.OnSeekBarChangeListener {
+-        override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) { if (fromUser) changed(progress) }
+-        override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
+-        override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
+-    }
+-}
++    private fun orderButton(icon: Int, label: String, enabled: Boolean, action: () -> Unit): ImageButton =
++        ImageButton(context).apply {
++            layoutParams = LinearLayout.LayoutParams(40.dp, 40.dp)
++            setImageResource(icon)
++            imageTintList = ColorStateList.valueOf(context.getResourceColor(R.attr.colorOnBackground))
++            setBackgroundResource(R.drawable.square_ripple)
++            contentDescription = label
++            isEnabled = enabled
++            alpha = if (enabled) 1f else 0.38f
++            setPadding(8.dp, 8.dp, 8.dp, 8.dp)
++            setOnClickListener { action() }
++        }
++
++    private fun NovelBottomAction.displayName(): String =
++        when (this) {
++            NovelBottomAction.PreviousChapter -> "Previous chapter"
++            NovelBottomAction.NextChapter -> "Next chapter"
++            NovelBottomAction.ScrollToTop -> "Scroll to top"
++            NovelBottomAction.Translate -> "Translate"
++            NovelBottomAction.AutoScroll -> "Auto-scroll"
++            NovelBottomAction.Tts -> "Read aloud"
++            NovelBottomAction.TtsViewport -> "Read from viewport"
++            NovelBottomAction.TtsPreviousParagraph -> "Previous paragraph"
++            NovelBottomAction.TtsNextParagraph -> "Next paragraph"
++            NovelBottomAction.Orientation -> "Orientation"
++            NovelBottomAction.Settings -> "Settings"
++            NovelBottomAction.Edit -> "Edit"
++            NovelBottomAction.Quotes -> "Quotes"
++        }
+ 
+-private class SimpleItemSelectedListener(
+-    private val selected: (Int) -> Unit,
+-) : android.widget.AdapterView.OnItemSelectedListener {
+-    override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) = selected(position)
+-    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
++    private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
++
++    private val Int.dp: Int get() = (this * context.resources.displayMetrics.density).toInt()
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsController.kt
+index 7858d2753ff27e1989d87479896742ba6d4601cd..a5a4b6c4ed8ae93f8d84db17e978d3f757e6ab5d 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsController.kt
+@@ -31,6 +31,7 @@ internal class NovelTtsController(
+     }
+ 
+     val isPlaying: Boolean get() = service?.isPlaying == true
++    val hasActivePlayback: Boolean get() = service?.hasActivePlayback == true
+ 
+     fun configure(speed: Float, pitch: Float, voiceName: String, allowBackground: Boolean = false) = whenReady { configure(speed, pitch, voiceName, allowBackground) }
+     fun setChapter(mangaId: Long, chapterId: Long, novelTitle: String, chapterTitle: String) =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt
+index 33567b094e7bddec90c3732334ccc533187ff361..56893d19185eba183869f52e50382f5f79d0a554 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt
+@@ -41,6 +41,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
+     private var chunksChapterId = -1L
+ 
+     val isPlaying: Boolean get() = initialized && playing && !paused
++    val hasActivePlayback: Boolean get() = chunks.isNotEmpty() && (playing || paused)
+ 
+     override fun onCreate() {
+         super.onCreate()
+diff --git a/app/src/main/res/drawable/ic_palette_24dp.xml b/app/src/main/res/drawable/ic_palette_24dp.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..1c5bd8b465400fad3644470648b114f90891e2ad
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_palette_24dp.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="@android:color/white" android:pathData="M12,3a9,9 0,0 0,-9,9c0,4.97 4.03,9 9,9h1.5a1.5,1.5 0,0 0,0 -3H12a1.5,1.5 0,0 1,0 -3h2a7,7 0,0 0,0 -14h-2zM7,13a1.5,1.5 0,1 1,0 -3a1.5,1.5 0,0 1,0 3zM9,8a1.5,1.5 0,1 1,0 -3a1.5,1.5 0,0 1,0 3zM15,8a1.5,1.5 0,1 1,0 -3a1.5,1.5 0,0 1,0 3zM18,13a1.5,1.5 0,1 1,0 -3a1.5,1.5 0,0 1,0 3z" />
++</vector>
+diff --git a/app/src/main/res/drawable/ic_record_voice_over_24dp.xml b/app/src/main/res/drawable/ic_record_voice_over_24dp.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..ece428d1a2591502c45c27da263aa603b9a3c777
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_record_voice_over_24dp.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="@android:color/white" android:pathData="M9,11a4,4 0,1 0,0 -8a4,4 0,0 0,0 8zM9,13c-3.33,0 -6,1.67 -6,4v2h12v-2c0,-2.33 -2.67,-4 -6,-4zM16.5,4.5l-1.4,1.4A4.98,4.98 0,0 1,17 10a4.98,4.98 0,0 1,-1.9 3.9l1.4,1.4A6.96,6.96 0,0 0,19 10a6.96,6.96 0,0 0,-2.5 -5.5zM19.3,1.7l-1.4,1.4A8.96,8.96 0,0 1,21 10a8.96,8.96 0,0 1,-3.1 6.9l1.4,1.4A10.94,10.94 0,0 0,23 10a10.94,10.94 0,0 0,-3.7 -8.3z" />
++</vector>
+diff --git a/app/src/main/res/drawable/ic_swipe_24dp.xml b/app/src/main/res/drawable/ic_swipe_24dp.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..38ed2e49dce7bb8618c2519940f3cfbe537023b2
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_swipe_24dp.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="@android:color/white" android:pathData="M6.5,8.5L10,5v2h4a5,5 0,0 1,5 5v1h-2v-1a3,3 0,0 0,-3 -3h-4v2L6.5,8.5zM17.5,15.5L14,19v-2h-4a5,5 0,0 1,-5 -5v-1h2v1a3,3 0,0 0,3 3h4v-2l3.5,2.5z" />
++</vector>
+diff --git a/app/src/main/res/drawable/ic_text_fields_24dp.xml b/app/src/main/res/drawable/ic_text_fields_24dp.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..b7b86089c84cfa67fea1c5430b53b8292b51adfb
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_text_fields_24dp.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="@android:color/white" android:pathData="M2.5,4v3h5v12h3V7h5V4h-13zM21.5,9h-9v3h3v7h3v-7h3V9z" />
++</vector>
+diff --git a/app/src/main/res/layout/hayai_novel_reader_activity.xml b/app/src/main/res/layout/hayai_novel_reader_activity.xml
+deleted file mode 100644
+index c726cacf675cbb3347f6e3bae8d95d12e709ab0f..0000000000000000000000000000000000000000
+--- a/app/src/main/res/layout/hayai_novel_reader_activity.xml
++++ /dev/null
+@@ -1,150 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+-    xmlns:app="http://schemas.android.com/apk/res-auto"
+-    xmlns:tools="http://schemas.android.com/tools"
+-    android:id="@+id/novel_reader_root"
+-    android:layout_width="match_parent"
+-    android:layout_height="match_parent"
+-    android:background="?android:colorBackground">
+-
+-    <FrameLayout
+-        android:id="@+id/novel_viewer_container"
+-        android:layout_width="match_parent"
+-        android:layout_height="match_parent" />
+-
+-    <ProgressBar
+-        android:id="@+id/novel_reader_loading"
+-        android:layout_width="48dp"
+-        android:layout_height="48dp"
+-        android:layout_gravity="center"
+-        android:indeterminate="true" />
+-
+-    <TextView
+-        android:id="@+id/novel_reader_status_top"
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_gravity="top"
+-        android:background="?android:colorBackground"
+-        android:ellipsize="end"
+-        android:gravity="center_vertical"
+-        android:maxLines="1"
+-        android:paddingHorizontal="12dp"
+-        android:paddingVertical="6dp"
+-        android:textColor="?android:textColorPrimary"
+-        android:visibility="gone"
+-        tools:text="10:42   Chapter 3   48%   82%" />
+-
+-    <LinearLayout
+-        android:id="@+id/novel_reader_app_bar"
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_gravity="top"
+-        android:background="@drawable/reader_toolbar_ripple"
+-        android:orientation="vertical">
+-
+-        <androidx.appcompat.widget.Toolbar
+-            android:id="@+id/novel_reader_toolbar"
+-            android:layout_width="match_parent"
+-            android:layout_height="?attr/actionBarSize"
+-            android:background="@android:color/transparent"
+-            app:navigationIcon="@drawable/ic_close_24dp"
+-            app:subtitleTextColor="@color/action_bar_tint_alpha"
+-            app:titleTextColor="?actionBarTintColor"
+-            tools:subtitle="Chapter 3 of 20"
+-            tools:title="Novel title" />
+-
+-        <TextView
+-            android:id="@+id/novel_reader_chapter"
+-            android:layout_width="match_parent"
+-            android:layout_height="wrap_content"
+-            android:ellipsize="end"
+-            android:maxLines="2"
+-            android:paddingHorizontal="16dp"
+-            android:paddingBottom="8dp"
+-            android:textColor="?actionBarTintColor"
+-            android:textSize="12sp"
+-            tools:text="Chapter 3   3/20   1,850 words   8 min" />
+-    </LinearLayout>
+-
+-    <LinearLayout
+-        android:id="@+id/novel_reader_bottom_chrome"
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_gravity="bottom"
+-        android:background="@drawable/chapter_nav"
+-        android:orientation="vertical"
+-        android:paddingTop="4dp"
+-        android:paddingBottom="6dp">
+-
+-        <TextView
+-            android:id="@+id/novel_reader_status_bottom"
+-            android:layout_width="match_parent"
+-            android:layout_height="wrap_content"
+-            android:ellipsize="end"
+-            android:gravity="center_vertical"
+-            android:maxLines="1"
+-            android:paddingHorizontal="12dp"
+-            android:paddingVertical="4dp"
+-            android:textColor="?actionBarTintColor"
+-            android:visibility="gone"
+-            tools:text="10:42   Chapter 3   48%   82%" />
+-
+-        <LinearLayout
+-            android:id="@+id/novel_reader_progress_row"
+-            android:layout_width="match_parent"
+-            android:layout_height="40dp"
+-            android:gravity="center_vertical"
+-            android:orientation="horizontal"
+-            android:paddingHorizontal="8dp">
+-
+-            <ImageButton
+-                android:id="@+id/novel_reader_previous"
+-                android:layout_width="40dp"
+-                android:layout_height="40dp"
+-                android:background="?selectableItemBackgroundBorderless"
+-                android:contentDescription="@string/previous_chapter"
+-                android:padding="8dp"
+-                app:srcCompat="@drawable/ic_skip_previous_24"
+-                app:tint="?actionBarTintColor" />
+-
+-            <TextView
+-                android:id="@+id/novel_reader_progress_text"
+-                android:layout_width="48dp"
+-                android:layout_height="wrap_content"
+-                android:gravity="center"
+-                android:textColor="?actionBarTintColor"
+-                tools:text="48%" />
+-
+-            <SeekBar
+-                android:id="@+id/novel_reader_progress"
+-                android:layout_width="0dp"
+-                android:layout_height="40dp"
+-                android:layout_weight="1"
+-                android:max="100" />
+-
+-            <ImageButton
+-                android:id="@+id/novel_reader_next"
+-                android:layout_width="40dp"
+-                android:layout_height="40dp"
+-                android:background="?selectableItemBackgroundBorderless"
+-                android:contentDescription="@string/next_chapter"
+-                android:padding="8dp"
+-                app:srcCompat="@drawable/ic_skip_next_24"
+-                app:tint="?actionBarTintColor" />
+-        </LinearLayout>
+-
+-        <HorizontalScrollView
+-            android:layout_width="match_parent"
+-            android:layout_height="48dp"
+-            android:fillViewport="true"
+-            android:scrollbars="none">
+-
+-            <LinearLayout
+-                android:id="@+id/novel_reader_actions"
+-                android:layout_width="wrap_content"
+-                android:layout_height="match_parent"
+-                android:gravity="center"
+-                android:orientation="horizontal" />
+-        </HorizontalScrollView>
+-    </LinearLayout>
+-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+diff --git a/docs/architecture/novel-reader-parity.md b/docs/architecture/novel-reader-parity.md
+index 8128aaab398bd1d16206f8168dc39a61b04f70a2..c20c2f36a4a91e0b0027c258e3336e8756fae9c1 100644
+--- a/docs/architecture/novel-reader-parity.md
++++ b/docs/architecture/novel-reader-parity.md
+@@ -4,7 +4,7 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
+ 
+ ## Ownership
+ 
+-- `NovelReaderActivity` owns the reader shell, chapter focus, progress, and typed actions.
++- `NovelReaderActivity` owns novel chapter focus, progress, and typed actions while inflating J2K's unmodified `reader_activity.xml` shell.
+ - `NativeNovelRenderer` owns selectable native text blocks.
+ - `WebNovelRenderer` owns isolated WebView chapter blocks.
+ - `NovelChapterQueue` bounds retained chapter data. A prefetched chapter never becomes current until its block becomes visible.
+@@ -17,12 +17,13 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
+ | Behavior | Tsundoku source | Hayai implementation |
+ |---|---|---|
+ | Reader preferences and stable keys | `ReaderPreferences.kt` | `HayaiPreferences.kt` |
+-| Reading, Appearance, Controls, TTS, and Advanced tabs | `NovelPage.kt` | `NovelReaderSettingsSheet.kt` and `NovelSettingsController.kt` |
++| Reading, Appearance, Controls, TTS, and Advanced tabs | `NovelPage.kt` | Tsundoku icon tabs with J2K spinner, switch, slider, and toolbar-settings controls in `NovelReaderSettingsSheet.kt`; searchable counterparts in `NovelSettingsController.kt` |
+ | Tap-zone mode IDs | `NovelConfig.kt` and `viewer/navigation/*` | `NovelTapZones` |
+ | Continuous chapter loading | `NovelTextViewViewer.kt` and `NovelWebViewViewer.kt` | `NovelChapterQueue`, both renderers, and visible-block callbacks |
+ | Web styling and append snippets | `NovelWebViewStyler.kt` | `NovelHtmlDocumentBuilder`, `WebNovelRenderer`, and `NovelCustomizationStore` |
+-| Progress controls | `NovelReaderAppBars.kt` | the horizontal slider and `NovelVerticalProgressView` |
+-| TTS | `viewer/text/shared/TtsController.kt` | `NovelTtsController` and `NovelTtsPlaybackService` |
++| Reader app bars and chapter actions | `NovelReaderAppBars.kt` | the actual J2K `reader_activity.xml`, `reader_nav.xml`, collapsible `reader_chapters_sheet.xml`, and a Hayai-owned chapter adapter |
++| Progress controls | `NovelReaderAppBars.kt` | J2K's real `ReaderNavView` and `ReaderSlider`, without the manga page-number cells, plus `NovelVerticalProgressView` when explicitly selected |
++| TTS | `viewer/text/shared/TtsController.kt` | `NovelTtsController` and `NovelTtsPlaybackService`; active transport controls replace novel action slots inside J2K's reader sheet |
+ | Quotes and highlights | the novel reader selection tools | `NovelQuoteStore`, `NovelHighlightStore`, and typed reader actions |
+ 
+ ## Continuous-flow rules
+@@ -47,6 +48,6 @@ This reference maps the Hayai reader to Tsundoku commit `547ddea3ce3e2a4943a1279
+ 
+ ## Verification state
+ 
+-The coherent batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` emulator run in `artifacts/emulator-verification/20260822-022932` verified legacy migration, native local-novel launch, the Reading/Appearance/Controls/TTS/Advanced sheet, offline save, process restart recovery, and the logged-out EH settings state. The emulator also exposed an initialization-order crash in the first tabbed-sheet implementation; the verifier was rerun successfully after the fix.
++The coherent reader batch passed `:app:testDevDebugUnitTest`, `:app:assembleDevDebug`, the upstream-boundary check, and `git diff --check`. The authorized `Pixel_10_Pro_XL` run in `artifacts/emulator-verification/20260822-043650` verified legacy migration, the exact J2K reader shell, the absence of manga page-number labels, active TTS transport controls, all five reader settings tabs, offline save, process restart recovery, the logged-out E-Hentai settings state, and Browse.
+ 
+-Do not describe the entire reader as emulator-verified yet. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote/highlight selection, and orientation changes still need dedicated device flows.
++The discarded custom-shell workflow remains in `artifacts/emulator-verification/20260822-032809` only as regression evidence. WebView continuous scrolling, prepend offset, retry cooldown, imported fonts, TTS background recovery and notification handoff, incognito history, quote and highlight selection, and orientation changes still need dedicated device flows.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 76677fe3f366ac0db80fca07323574d903c5c7f6..ea880bb445ffe748d7bf446c8dac66612aeacda6 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -29,7 +29,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+-| Dedicated reader, central routing, and J2K history | Hayai-owned J2K-style XML shell, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | implemented; native local-chapter launch and process restart verified; WebView, prepend, and incognito emulator flows pending |
++| Dedicated reader, central routing, and J2K history | The unmodified J2K `reader_activity`/navigation/chapter-sheet resources, Hayai chapter/action adapters, native `TextView` and isolated `WebView` renderers, typed actions, bounded continuous append/prepend with stable chapter blocks and visible-chapter progress/history, incognito-aware J2K state, and `ReaderLauncher` | exact J2K shell and native renderer verified on emulator; WebView, prepend, and incognito emulator flows pending |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+ | Remote novel extension catalogs and installation | J2K extension manager; Tsundoku metadata; Manga/Novel installer tabs; shared-safe tagged repository ownership and separate management entry points | implemented unverified; compile and emulator install flows pending |
+ | LNReader JavaScript repository sources | Hayai manager, bounded trusted repositories, isolated QuickJS sources, full catalogue/chapter bridge | port |
+@@ -37,9 +37,9 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Visual custom-source builder | Validated Hayai source definitions, live preview, JavaScript compilation, persistence, and install/remove UI | implemented unverified |
+ | Local novels and EPUB import/export | Document storage, local novel source, and bounded EPUB3 exporter | implemented unverified |
+ | Text downloads/offline reading | Document downloader plus J2K details download/remove controls, separate from image pages | implemented; local chapter offline save and restart recovery verified; bulk-flow pending |
+-| Typography, themes, spacing, navigation, presets, snippets, search/replace | Five-tab live reader sheet, Tsundoku preference keys and exact tap-zone tables, SAF-imported validated fonts shared by native/Web renderers, progress modes, ordered bottom/status registries, searchable full settings, ordered snippets with append semantics, and testable ordered replacements | implemented; all five reader tabs verified on emulator; imported-font flow pending |
++| Typography, themes, spacing, navigation, presets, snippets, search/replace | Five Tsundoku icon tabs with J2K spinner, switch, slider, and toolbar-settings controls; Tsundoku preference keys and exact tap-zone tables; SAF-imported validated fonts shared by native/Web renderers; progress modes; compact ordered bottom/status registries; searchable full settings; ordered snippets with append semantics; and testable ordered replacements | all five tabs verified on emulator; imported-font flow pending |
+ | Translation and dictionary handoff | Bounded provider clients, cache, selection/chapter reader actions, installed-app lookup, and web fallback | implemented unverified |
+-| TTS and playback controls | Foreground media-playback service, notification actions, viewport start, paragraph navigation/highlight, chapter handoff, and activity reattachment | implemented unverified; emulator background/restart recovery pending |
++| TTS and playback controls | Foreground media-playback service, notification actions, Tsundoku transport actions surfaced through J2K's reader-sheet buttons, chapter handoff, highlight, and activity reattachment | active exact-shell transport verified on emulator; background and restart recovery pending |
+ | Quotes | Typed `hayai_quotes`, native/Web selection capture, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | implemented unverified; emulator selection lifecycle pending |
+ | Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, editing, schema, and backup | implemented unverified |
+ | Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, progress-aware J2K chapter rows, and library statistics | integration foundation verified; emulator presentation pending |
+diff --git a/tools/verify-hayai-emulator.ps1 b/tools/verify-hayai-emulator.ps1
+index 2498db57ede3933308074b0f932f40a3c485852c..8a39dc07e01ed431ab7849cd1ea4de3caf190004 100644
+--- a/tools/verify-hayai-emulator.ps1
++++ b/tools/verify-hayai-emulator.ps1
+@@ -279,9 +279,27 @@ try {
+     Start-Sleep -Seconds 2
+     Dismiss-CompatibilityWarning
+     Start-Sleep -Seconds 1
+-    Assert-Node "Verification Novel" "02-novel-reader"
+-    Assert-Node "Read aloud" "02-novel-reader-actions"
++    $readerWindow = Dump-Window "02-novel-reader-actions"
++    [void](Find-Node $readerWindow "Verification Novel")
++    [void](Find-Node $readerWindow "Read aloud")
++    $mangaProgressLabels = $readerWindow.SelectNodes("//node") | Where-Object {
++        $_.'resource-id' -match ':(id/)?(left_page_text|right_page_text)$'
++    }
++    if ($mangaProgressLabels) { throw "Novel mode exposed J2K's manga page-number labels." }
+     Capture "02-novel-reader"
++    Tap-Node "^Read aloud$" "02a-open-tts-controls"
++    $ttsWindow = $null
++    for ($attempt = 0; $attempt -lt 8 -and $null -eq $ttsWindow; $attempt++) {
++        Start-Sleep -Seconds 1
++        $candidate = Dump-Window "02b-tts-controls-$attempt"
++        if ($null -ne (Find-NodeOptional $candidate "^Read from viewport$")) { $ttsWindow = $candidate }
++    }
++    if ($null -eq $ttsWindow) { throw "The J2K action row did not enter active TTS mode." }
++    @("Read from viewport", "Previous paragraph", "Next paragraph", "Stop reading aloud") | ForEach-Object {
++        [void](Find-Node $ttsWindow "^$([regex]::Escape($_))$")
++    }
++    Capture "02b-tts-controls"
++    Tap-WindowNode (Find-Node $ttsWindow "^Stop reading aloud$") "Stop reading aloud"
+     $readerWindow = Dump-Window "02-novel-reader-settings-action"
+     if ($null -eq (Find-NodeOptional $readerWindow "^Reading$")) {
+         if ($null -eq (Find-NodeOptional $readerWindow "^Reader settings$")) { throw "Neither the reader settings action nor its sheet was visible." }
+@@ -289,10 +307,24 @@ try {
+     }
+     $settingsWindow = Dump-Window "03-reader-settings-tabs"
+     @("Reading", "Appearance", "Controls", "TTS", "Advanced") | ForEach-Object { [void](Find-Node $settingsWindow "^$([regex]::Escape($_))$") }
+-    Capture "03-reader-settings-tabs"
++    [void](Find-Node $settingsWindow "Reading engine")
++    Capture "03-reader-settings-reading"
++    foreach ($tab in @(
++        @{ Name = "Appearance"; Evidence = "04-reader-settings-appearance"; Expected = "Typography" },
++        @{ Name = "Controls"; Evidence = "05-reader-settings-controls"; Expected = "Page" },
++        @{ Name = "TTS"; Evidence = "06-reader-settings-tts"; Expected = "Read aloud" }
++    )) {
++        Tap-Node "^$($tab.Name)$" "$($tab.Evidence)-tap"
++        Assert-Node "$($tab.Expected)" "$($tab.Evidence)-content"
++        Capture $tab.Evidence
++    }
++    $settingsWindow = Dump-Window "07-reader-settings-tabs"
+     Tap-WindowNode (Find-Node $settingsWindow "^Advanced$") "Advanced"
+     $advancedWindow = Dump-Window "07-reader-advanced"
+     [void](Find-Node $advancedWindow "Content")
++    [void](Find-Node $advancedWindow "Use EPUB styles")
++    [void](Find-Node $advancedWindow "Move Previous chapter down")
++    Capture "07-reader-settings-advanced"
+     Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
+     Start-Sleep -Seconds 3
+     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
+-- 
+2.54.0.windows.1
+

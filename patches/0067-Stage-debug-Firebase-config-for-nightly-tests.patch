@@ -1,0 +1,22 @@
+From 5ca8d517b2f788aa49e9546dc1b3ba366037263f Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 15:04:27 +0300
+Subject: [PATCH] Stage debug Firebase config for nightly tests
+
+
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index 06975dc46225e8ccbfae005b688d397c4d502d45..a1fa3afcfab150f96855edb98791d5108d9fc5e6 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -38,6 +38,8 @@ jobs:
+         run: |
+           mkdir -p ~/.gradle
+           cp .github/runner-files/ci-gradle.properties ~/.gradle/gradle.properties
++          mkdir -p app/src/dev
++          cp app/src/standard/google-services.json app/src/dev/google-services.json
+ 
+       - name: Choose nightly number
+         env:
+-- 
+2.54.0.windows.1
+

@@ -1,0 +1,39 @@
+From c70a9abadaac8c7b5da34d81557f15b353fefb9b Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 07:46:48 +0300
+Subject: [PATCH] Prevent recursive patch stack exports
+
+
+diff --git a/tools/refresh-patchset.ps1 b/tools/refresh-patchset.ps1
+index 977c6c5386cedc7027f06c224bcbe8e27014f816..2958addec73471fca0b91f0fc80657624e14bb20 100644
+--- a/tools/refresh-patchset.ps1
++++ b/tools/refresh-patchset.ps1
+@@ -27,12 +27,21 @@ try {
+         Remove-Item -LiteralPath $_.FullName
+     }
+ 
+-    $output = git format-patch --binary --full-index --no-stat --output-directory $patchRoot "$baseCommit..HEAD"
+-    if ($LASTEXITCODE -ne 0) {
+-        throw "git format-patch failed."
++    $commits = @(git rev-list --reverse --no-merges "$baseCommit..HEAD")
++    $patchNames = @()
++    foreach ($commit in $commits) {
++        $changedPaths = @(git diff-tree --no-commit-id --name-only -r $commit)
++        $hasPayload = $changedPaths | Where-Object { $_ -notlike "patches/*" } | Select-Object -First 1
++        if (!$hasPayload) { continue }
++
++        $patchNumber = $patchNames.Count + 1
++        $output = git format-patch --binary --full-index --no-stat --start-number $patchNumber --output-directory $patchRoot -1 $commit
++        if ($LASTEXITCODE -ne 0) {
++            throw "git format-patch failed for $commit."
++        }
++        $patchNames += @($output | ForEach-Object { Split-Path -Leaf $_ })
+     }
+ 
+-    $patchNames = @($output | ForEach-Object { Split-Path -Leaf $_ })
+     Set-Content -LiteralPath (Join-Path $patchRoot "UPSTREAM_BASE") -Value $baseCommit -Encoding utf8NoBOM
+     Set-Content -LiteralPath (Join-Path $patchRoot "series") -Value $patchNames -Encoding utf8NoBOM
+     Write-Host "Exported $($patchNames.Count) Hayai patches from $baseCommit."
+-- 
+2.54.0.windows.1
+
