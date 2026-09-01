@@ -95,3 +95,4 @@
 0095-Unify-novel-reader-and-migration-workflows.patch
 0096-Fix-legacy-novel-migration-classification.patch
 0097-Fix-novel-migration-and-storage-workflows.patch
+0098-Fix-novel-reader-regressions-and-offline-translation.patch
