@@ -238,6 +238,7 @@ internal class NovelReaderSettingsSheet(
         page.button(R.string.hayai_novel_reader_highlights) { onAction(NovelReaderAction.ShowHighlights) }
         page.button(R.string.hayai_novel_reader_dictionary_lookup) { onAction(NovelReaderAction.DictionaryLookup) }
         page.button(R.string.hayai_novel_reader_translate_chapter) { onAction(NovelReaderAction.TranslateChapter) }
+        page.button(R.string.hayai_novel_translation_offline_all) { onAction(NovelReaderAction.TranslateAllChapters) }
         page.button(R.string.hayai_novel_reader_chapter_statistics) { onAction(NovelReaderAction.ShowStatistics) }
         page.button(R.string.hayai_novel_reader_toggle_offline) { onAction(NovelReaderAction.ToggleOffline) }
         page.button(R.string.hayai_novel_reader_toggle_bookmark) { onAction(NovelReaderAction.ToggleBookmark) }

@@ -4,6 +4,7 @@ import dev.ahmedmohamed.hayai.novel.source.NovelContentType
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import dev.ahmedmohamed.hayai.novel.settings.NovelRegexReplacement
 import dev.ahmedmohamed.hayai.novel.settings.NovelReplacementEngine
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import kotlinx.serialization.json.Json
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
@@ -155,6 +156,19 @@ internal data class NovelContentOptions(
     val autoSplitWordCount: Int,
     val regexReplacements: String,
 )
+
+internal fun HayaiPreferences.novelContentOptions() =
+    NovelContentOptions(
+        hideChapterTitle = novelHideChapterTitle.get(),
+        forceLowercase = novelForceTextLowercase.get(),
+        blockMedia = novelBlockMedia.get(),
+        keepEmbeddedCss = novelEnableEpubStyles.get(),
+        keepEmbeddedJs = novelEnableEpubJs.get(),
+        showRawHtml = novelShowRawHtml.get(),
+        autoSplitText = novelAutoSplitText.get(),
+        autoSplitWordCount = novelAutoSplitWordCount.get(),
+        regexReplacements = novelRegexReplacements.get(),
+    )
 
 internal data class ProcessedNovelContent(
     val html: String,

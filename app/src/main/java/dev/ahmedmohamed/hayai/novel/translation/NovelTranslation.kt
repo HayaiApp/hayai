@@ -22,11 +22,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.parser.Parser
-import java.io.File
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.URI
-import java.security.MessageDigest
 
 enum class NovelTranslationEngineId { GOOGLE_WEB, LIBRE_TRANSLATE, OPENAI_COMPATIBLE, DEEPL }
 
@@ -66,44 +64,6 @@ class NovelTranslationSettingsStore(context: Context, private val json: Json = J
     private companion object { const val KEY = "settings_v1" }
 }
 
-@Serializable
-data class CachedNovelTranslation(
-    val key: String,
-    val sourceLanguage: String,
-    val targetLanguage: String,
-    val engine: NovelTranslationEngineId,
-    val sourceHash: String,
-    val translatedText: String,
-    val detectedLanguage: String?,
-    val createdAt: Long,
-)
-
-class NovelTranslationCache(context: Context, private val json: Json = Json { ignoreUnknownKeys = true }) {
-    private val root = File(context.cacheDir, "hayai/novel-translations").apply { mkdirs() }
-    fun get(key: String, source: String, settings: NovelTranslationSettings): CachedNovelTranslation? {
-        val id = cacheId(key, source, settings)
-        val file = File(root, "$id.json")
-        if (!file.isFile || file.length() !in 1..MAX_ENTRY_BYTES) return null
-        return runCatching { json.decodeFromString<CachedNovelTranslation>(file.readText()) }.getOrNull()?.takeIf { it.sourceHash == hash(source) }
-    }
-    fun put(key: String, source: String, settings: NovelTranslationSettings, text: String, detected: String?): CachedNovelTranslation {
-        require(text.length <= MAX_TEXT_CHARS)
-        val id = cacheId(key, source, settings)
-        val value = CachedNovelTranslation(id, settings.sourceLanguage, settings.targetLanguage, settings.engine, hash(source), text, detected, System.currentTimeMillis())
-        val target = File(root, "$id.json")
-        val temporary = File(root, ".$id.${System.nanoTime()}.tmp")
-        temporary.writeText(json.encodeToString(value))
-        check(temporary.renameTo(target) || run { target.delete(); temporary.renameTo(target) })
-        return value
-    }
-    fun clear() {
-        root.listFiles { file -> file.extension == "json" }.orEmpty().forEach(File::delete)
-    }
-    private fun cacheId(key: String, source: String, settings: NovelTranslationSettings) = hash("$key\u0000${settings.engine}\u0000${settings.sourceLanguage}\u0000${settings.targetLanguage}\u0000${settings.endpoint}\u0000${settings.model}\u0000${hash(source)}")
-    private fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
-    private companion object { const val MAX_ENTRY_BYTES = 4L * 1024 * 1024; const val MAX_TEXT_CHARS = 2_000_000 }
-}
-
 data class NovelTranslationResult(
     val text: String,
     val detectedLanguage: String? = null,
@@ -119,14 +79,55 @@ data class NovelTranslationWarning(
 
 class NovelTranslationService(
     private val network: NetworkHelper,
-    private val cache: NovelTranslationCache,
+    private val store: NovelTranslationStore? = null,
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
-    suspend fun translate(cacheKey: String, text: String, settings: NovelTranslationSettings): NovelTranslationResult {
+    suspend fun translate(
+        locator: NovelTranslationLocator,
+        text: String,
+        settings: NovelTranslationSettings,
+    ): NovelTranslationResult {
         val checked = settings.validate()
         val normalized = text.trim()
         require(normalized.isNotEmpty() && normalized.length <= MAX_DOCUMENT_CHARS)
-        cache.get(cacheKey, normalized, checked)?.let { return NovelTranslationResult(it.translatedText, it.detectedLanguage) }
+        val sourceHash = NovelTranslationHash.sha256(normalized)
+        store?.findCompleted(locator, checked.targetLanguage, sourceHash)?.let {
+            return NovelTranslationResult(it.translatedContent, it.detectedLanguage)
+        }
+        val result = translateNormalized(normalized, checked)
+        if (result.complete) {
+            val now = System.currentTimeMillis()
+            store?.saveCompleted(
+                StoredNovelTranslation(
+                    locator = locator,
+                    sourceLanguage = checked.sourceLanguage,
+                    targetLanguage = checked.targetLanguage,
+                    sourceHash = sourceHash,
+                    translatedContent = result.text,
+                    engineId = checked.engine.name,
+                    detectedLanguage = result.detectedLanguage,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+        }
+        return result
+    }
+
+    suspend fun translateText(
+        text: String,
+        settings: NovelTranslationSettings,
+    ): NovelTranslationResult {
+        val checked = settings.validate()
+        val normalized = text.trim()
+        require(normalized.isNotEmpty() && normalized.length <= MAX_DOCUMENT_CHARS)
+        return translateNormalized(normalized, checked)
+    }
+
+    private suspend fun translateNormalized(
+        normalized: String,
+        checked: NovelTranslationSettings,
+    ): NovelTranslationResult {
         val chunks = split(normalized)
         val results = mutableListOf<NovelTranslationResult>()
         for ((index, chunk) in chunks.withIndex()) {
@@ -148,7 +149,6 @@ class NovelTranslationService(
         }
         val joined = results.joinToString("\n\n") { it.text }
         val detected = results.firstNotNullOfOrNull(NovelTranslationResult::detectedLanguage)
-        cache.put(cacheKey, normalized, checked, joined, detected)
         return NovelTranslationResult(joined, detected)
     }
 

@@ -17,6 +17,7 @@ internal object NovelHtmlDocumentBuilder {
         val heading = if (style.hideChapterTitle) "" else "<h1 class=\"hayai-chapter-title\">${escape(chapterTitle)}</h1>"
         val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
         val writingDirection = style.writingDirection.value
+        val customizationScript = buildCustomizationScript(style.customJs)
         return """
             <!doctype html>
             <html class="hayai-$renderingMode" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
@@ -26,9 +27,23 @@ internal object NovelHtmlDocumentBuilder {
             </head><body>
               <main id="hayai-reader"><article class="hayai-chapter-block" data-chapter-id="$chapterId" data-state="ready">$heading${content.html}</article></main>
               <script>${BRIDGE_SCRIPT}</script>
-              <script>${style.customJs.safeScriptText()}</script>
+              $customizationScript
             </body></html>
             """.trimIndent()
+    }
+
+    private fun buildCustomizationScript(source: String): String {
+        if (source.isBlank()) return ""
+        return """
+            <script>
+              window.hayaiRunCustomScript = () => {
+                try { ${source.safeScriptText()} }
+                catch (error) { console.error('Hayai custom script failed', error); }
+              };
+              window.hayaiReader.prepareCustomization();
+              window.hayaiRunCustomScript();
+            </script>
+        """.trimIndent()
     }
 
     private fun buildReaderCss(style: NovelReaderStyle): String {
@@ -123,6 +138,14 @@ internal object NovelHtmlDocumentBuilder {
           };
           const activeBlock = () => document.querySelector('.hayai-chapter-block[data-active="true"]') || visibleBlock();
           const activate = block => { blocks().forEach(it=>delete it.dataset.active); if(block)block.dataset.active='true'; return block; };
+          const originalHtml = new Map();
+          const rememberOriginal = block => {
+            if (block && !originalHtml.has(String(block.dataset.chapterId))) originalHtml.set(String(block.dataset.chapterId), block.innerHTML);
+            return block;
+          };
+          const rerunCustomScript = () => {
+            if (typeof window.hayaiRunCustomScript === 'function') window.hayaiRunCustomScript();
+          };
           const progress = () => {
             const block = activeBlock(); if(!block)return 0;
             const max = paged() ? Math.max(1,block.scrollWidth-pageStride()) : Math.max(1,block.offsetHeight-innerHeight);
@@ -177,6 +200,7 @@ internal object NovelHtmlDocumentBuilder {
           }, {passive:true});
           window.hayaiReader = {
             progress,
+            prepareCustomization() { rememberOriginal(activeBlock()); },
             upsertBlock(id, html, placement, focus) {
               const root=document.querySelector('#hayai-reader'); if(!root)return false;
               const key=String(id); let block=blocks().find(it=>it.dataset.chapterId===key); const beforeHeight=document.documentElement.scrollHeight; const beforeScroll=scrollY;
@@ -226,8 +250,8 @@ internal object NovelHtmlDocumentBuilder {
               return best;
             },
             documentText() { const root=activeBlock(); return root ? root.innerText : ''; },
-            showTranslation(text) { const root=activeBlock(); if(!root)return; if(!root.dataset.originalHtml)root.dataset.originalHtml=root.innerHTML; root.replaceChildren(...text.split(/\n{2,}/).filter(Boolean).map(value=>{const p=document.createElement('p');p.textContent=value;return p;})); },
-            showOriginal() { const root=activeBlock(); if(root&&root.dataset.originalHtml){root.innerHTML=root.dataset.originalHtml;delete root.dataset.originalHtml;} },
+            showTranslation(text) { const root=rememberOriginal(activeBlock()); if(!root)return; root.replaceChildren(...text.split(/\n{2,}/).filter(Boolean).map(value=>{const p=document.createElement('p');p.textContent=value;return p;})); rerunCustomScript(); },
+            showOriginal() { const root=activeBlock();const original=root?originalHtml.get(String(root.dataset.chapterId)):null;if(root&&original!=null){root.innerHTML=original;rerunCustomScript();} },
               takeSelection() {
                 const selected = (getSelection() ? getSelection().toString() : '').trim() || (lastSelection ? lastSelection.selectedText : '');
                 lastSelection = null;

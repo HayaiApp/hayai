@@ -74,6 +74,7 @@ class HayaiLegacyMigration(
                 LegacyImportPlan.typedHayaiTables.forEach { counts[it.targetTable] = copyTable(source, target, it) }
                 val archivedCounts = archiveAllTables(source, target)
                 HayaiSchema.backfillArchivedMetadata(target)
+                LegacyTranslationCacheMigration.runIfNeeded(target, requireComplete = true)
                 archivedCounts.forEach { (table, count) -> counts["archive:$table"] = count }
                 counts["hayai_legacy_rows"] = archivedCounts.values.sum()
                 val foreignKeyErrors = foreignKeyErrors(target)

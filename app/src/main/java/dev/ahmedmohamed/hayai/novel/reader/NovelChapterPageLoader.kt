@@ -4,17 +4,22 @@ import android.content.Context
 import dev.ahmedmohamed.hayai.novel.download.NovelAssetReferences
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
 import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+import dev.ahmedmohamed.hayai.novel.source.NovelContentType
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import dev.ahmedmohamed.hayai.novel.source.NovelDocumentLoader
 import dev.ahmedmohamed.hayai.novel.source.NovelSource
 import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatStore
 import dev.ahmedmohamed.hayai.novel.statistics.NovelChapterStatistics
 import dev.ahmedmohamed.hayai.novel.statistics.NovelStatisticsResolver
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationLocator
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
+import dev.ahmedmohamed.hayai.novel.translation.SqliteNovelTranslationStore
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
+import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.isNovelSource
@@ -29,6 +34,7 @@ import okhttp3.Request
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 
 internal object NovelReaderIdentity {
@@ -44,6 +50,7 @@ internal data class NovelChapterContent(
     val statistics: NovelChapterStatistics,
     val assets: NovelAssetProvider,
     val markReadThreshold: Int,
+    val translatedOfflineLanguage: String? = null,
 )
 
 internal interface NovelOfflineAwareAssetProvider : NovelAssetProvider {
@@ -103,7 +110,7 @@ internal class NovelChapterPageLoader(
 }
 
 internal class NovelDocumentRepository(
-    context: Context,
+    private val context: Context,
     private val manga: Manga,
     private val source: Source,
     private val database: DatabaseHelper,
@@ -118,13 +125,28 @@ internal class NovelDocumentRepository(
         check(NovelReaderIdentity.isNovel(source)) { "Source ${source.id} is not a novel source" }
         val offline = downloadStore.loadDocument(source.id, chapter.url)
         if (offline != null) offlineChapterUrls += chapter.url else offlineChapterUrls -= chapter.url
-        val document =
-            offline
-                ?: (source as? NovelSource)?.getChapterDocument(chapter)
-                ?: NovelDocumentLoader.load(source, chapter)
         val chapterId = requireNotNull(chapter.id) { "Novel chapter is missing its durable database identity" }
+        val locator = NovelTranslationLocator(chapterId, source.id, manga.url, chapter.url)
+        var translatedOfflineLanguage: String? = null
+        val document =
+            offline ?: try {
+                (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!error.allowsOfflineTranslationFallback()) throw error
+                val targetLanguage = NovelTranslationSettingsStore(context).get().targetLanguage
+                val translated =
+                    SqliteNovelTranslationStore(database)
+                        .findLatestCompletedForOfflineFallback(locator, targetLanguage)
+                        ?: throw error
+                translatedOfflineLanguage = translated.targetLanguage
+                NovelDocument(translated.translatedContent, NovelContentType.PlainText)
+            }
         val resolvedStatistics = NovelStatisticsResolver.resolve(document, persisted = { statistics.get(chapterId) })
-        runCatching { statistics.store(chapterId, resolvedStatistics) }
+        if (translatedOfflineLanguage == null) {
+            runCatching { statistics.store(chapterId, resolvedStatistics) }
+        }
         return NovelChapterContent(
             manga = manga,
             chapter = chapter,
@@ -134,6 +156,7 @@ internal class NovelDocumentRepository(
             statistics = resolvedStatistics,
             assets = this,
             markReadThreshold = preferences.novelMarkAsReadThreshold.get().coerceIn(1, 100),
+            translatedOfflineLanguage = translatedOfflineLanguage,
         )
     }
 
@@ -176,3 +199,6 @@ internal class NovelDocumentRepository(
         return response.body.byteStream()
     }
 }
+
+internal fun Throwable.allowsOfflineTranslationFallback(): Boolean =
+    this is IOException || this is HttpException && (code == 408 || code == 429 || code in 500..599)

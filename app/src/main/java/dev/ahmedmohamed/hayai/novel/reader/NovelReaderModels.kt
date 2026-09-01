@@ -252,6 +252,7 @@ internal sealed interface NovelReaderAction {
     data object ToggleOrientation : NovelReaderAction
     data object TranslateSelection : NovelReaderAction
     data object TranslateChapter : NovelReaderAction
+    data object TranslateAllChapters : NovelReaderAction
     data object DictionaryLookup : NovelReaderAction
     data object ShowStatistics : NovelReaderAction
     data object ToggleOffline : NovelReaderAction

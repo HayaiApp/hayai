@@ -68,6 +68,12 @@ internal class NovelReaderViewer(
     val isRightToLeft: Boolean
         get() = NovelWritingDirection.fromPreference(preferences.novelWritingDirection.get()) == NovelWritingDirection.VerticalRl
 
+    val currentChapterId: Long?
+        get() = activeContent?.chapter?.id
+
+    val nextChapterId: Long?
+        get() = viewerChapters?.nextChapter?.chapter?.id
+
     override fun getView(): View = root
 
     override fun setChapters(chapters: ViewerChapters) {
@@ -166,11 +172,15 @@ internal class NovelReaderViewer(
         val page = currentNovelPage(progress) ?: return
         moveToPage(page)
     }
+    fun markCurrentChapterRead(chapterId: Long? = currentChapterId) {
+        if (chapterId != null && currentChapterId == chapterId) seek(NovelProgressPage.MAX_PROGRESS)
+    }
     fun scrollToTop() = seek(0)
     fun selection(callback: (NovelSelection?) -> Unit) = renderer?.selection(callback) ?: callback(null)
     fun documentText(callback: (String) -> Unit) = renderer?.documentText(callback) ?: callback("")
     fun paragraphs(callback: (List<String>) -> Unit) = renderer?.paragraphs(callback) ?: callback(emptyList())
     fun viewportParagraph(callback: (Int) -> Unit) = renderer?.viewportParagraph(callback) ?: callback(0)
+    fun isShort(callback: (Boolean) -> Unit) = renderer?.isShort(callback) ?: callback(false)
     fun showTranslation(text: String) = renderer?.showTranslation(text)
     fun showOriginal() = renderer?.showOriginal()
     fun applyHighlights(items: List<NovelPersistentHighlight>) = renderer?.applyHighlights(items)
@@ -264,18 +274,7 @@ internal class NovelReaderViewer(
             NovelWritingDirection.fromPreference(preferences.novelWritingDirection.get()),
         )
 
-    private fun contentOptions() =
-        NovelContentOptions(
-            hideChapterTitle = preferences.novelHideChapterTitle.get(),
-            forceLowercase = preferences.novelForceTextLowercase.get(),
-            blockMedia = preferences.novelBlockMedia.get(),
-            keepEmbeddedCss = preferences.novelEnableEpubStyles.get(),
-            keepEmbeddedJs = preferences.novelEnableEpubJs.get(),
-            showRawHtml = preferences.novelShowRawHtml.get(),
-            autoSplitText = preferences.novelAutoSplitText.get(),
-            autoSplitWordCount = preferences.novelAutoSplitWordCount.get(),
-            regexReplacements = preferences.novelRegexReplacements.get(),
-        )
+    private fun contentOptions() = preferences.novelContentOptions()
 
     private fun readerStyle(options: NovelContentOptions): NovelReaderStyle {
         val dark = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES

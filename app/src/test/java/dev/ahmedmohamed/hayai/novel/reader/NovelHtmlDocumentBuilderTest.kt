@@ -61,11 +61,42 @@ class NovelHtmlDocumentBuilderTest {
         assertTrue(html.contains("ResizeObserver"))
     }
 
+    @Test
+    fun `custom script is rerun after translation and pristine original restoration`() {
+        val html =
+            NovelHtmlDocumentBuilder.build(
+                ProcessedNovelContent("<p>He said \"hello\"</p>", null),
+                "Chapter",
+                style(customJs = "document.body.dataset.customized = 'yes';"),
+            )
+
+        assertTrue(html.contains("window.hayaiRunCustomScript = () =>"))
+        assertTrue(html.contains("window.hayaiReader.prepareCustomization();"))
+        assertTrue(html.contains("const root=rememberOriginal(activeBlock())"))
+        assertTrue(html.contains("originalHtml.get(String(root.dataset.chapterId))"))
+        assertTrue(html.contains("root.innerHTML=original;rerunCustomScript();"))
+        assertTrue(html.contains("document.body.dataset.customized = 'yes';"))
+    }
+
+    @Test
+    fun `custom script closing tags cannot escape its wrapper`() {
+        val html =
+            NovelHtmlDocumentBuilder.build(
+                ProcessedNovelContent("<p>Body</p>", null),
+                "Chapter",
+                style(customJs = "document.body.dataset.value = '</script>';"),
+            )
+
+        assertTrue(html.contains("<\\/script>"))
+        assertFalse(html.contains("dataset.value = '</script>'"))
+    }
+
     private fun style(
         fontFamily: String = "sans-serif",
         hideTitle: Boolean = false,
         renderingMode: String = "default",
         writingDirection: NovelWritingDirection = NovelWritingDirection.Horizontal,
+        customJs: String = "",
     ) = NovelReaderStyle(
         fontSize = 16,
         fontFamily = fontFamily,
@@ -86,7 +117,7 @@ class NovelHtmlDocumentBuilderTest {
         sourceCssPriority = false,
         renderingMode = renderingMode,
         customCss = "",
-        customJs = "",
+        customJs = customJs,
         ttsHighlightColor = 0xFFFFFF00.toInt(),
         ttsHighlightTextColor = 0xFF000000.toInt(),
         ttsHighlightStyle = "background",

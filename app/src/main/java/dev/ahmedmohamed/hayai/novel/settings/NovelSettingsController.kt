@@ -138,8 +138,8 @@ class NovelSettingsController : SettingsController() {
                 entries = listOf(R.string.hayai_novel_reader_current_only, R.string.previous, R.string.next, R.string.hayai_novel_reader_previous_and_next).map(context::getString)
                 entryValues = listOf(0, 1, 2, 3)
             }
-            sliderPreference { bindTo(novel.novelAutoLoadNextChapterAt); title = context.getString(R.string.hayai_novel_reader_load_next_at); entryValues = (50..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
-            sliderPreference { bindTo(novel.novelMarkAsReadThreshold); title = context.getString(R.string.hayai_novel_reader_mark_as_read_at); entryValues = (50..100 step 5).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
+            sliderPreference { bindTo(novel.novelAutoLoadNextChapterAt); title = context.getString(R.string.hayai_novel_reader_load_next_at); entryValues = (50..100).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
+            sliderPreference { bindTo(novel.novelMarkAsReadThreshold); title = context.getString(R.string.hayai_novel_reader_mark_as_read_at); entryValues = (50..100).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
             switchPreference { bindTo(novel.novelHideChapterTitle); title = context.getString(R.string.hayai_novel_reader_hide_chapter_title) }
             intListPreference(activity) {
                 bindTo(novel.novelChapterTitleDisplay)

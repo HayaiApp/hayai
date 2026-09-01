@@ -165,6 +165,11 @@
     <string name="hayai_novel_lookup_blocked_navigation">Only secure web pages can open in the lookup sheet.</string>
     <string name="hayai_novel_lookup_renderer_failed">The lookup page closed after its web process stopped.</string>
     <string name="hayai_novel_reader_translate_chapter">Translate chapter</string>
+    <string name="hayai_novel_translation_offline_all">Translate all chapters for offline reading</string>
+    <string name="hayai_novel_translation_offline_queued">Queued %1$d chapters for offline translation</string>
+    <string name="hayai_novel_translation_offline_progress">Translating novel chapters for offline reading</string>
+    <string name="hayai_novel_translation_settings_changed">Translation settings changed. Queue the chapters again.</string>
+    <string name="hayai_novel_translation_incomplete">Translation stopped before the chapter was complete</string>
     <string name="hayai_novel_reader_chapter_statistics">Chapter statistics</string>
     <string name="hayai_novel_reader_toggle_offline">Save or remove offline copy</string>
     <string name="hayai_novel_reader_toggle_bookmark">Toggle chapter bookmark</string>

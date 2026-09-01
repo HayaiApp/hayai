@@ -6,7 +6,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONObject
 
 object HayaiSchema {
-    const val VERSION = 4
+    const val VERSION = 5
 
     fun ensure(db: SupportSQLiteDatabase) {
         db.execSQL(
@@ -119,6 +119,8 @@ object HayaiSchema {
         migrateToVersion2(db)
         migrateToVersion3(db)
         migrateToVersion4(db)
+        migrateToVersion5(db)
+        LegacyTranslationCacheMigration.runIfNeeded(db, requireComplete = false)
     }
 
     private fun migrateToVersion2(db: SupportSQLiteDatabase) {
@@ -223,6 +225,79 @@ object HayaiSchema {
             )
             db.execSQL(
                 "INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (4, ?)",
+                arrayOf(System.currentTimeMillis()),
+            )
+            if (ownsTransaction) db.setTransactionSuccessful()
+        } finally {
+            if (ownsTransaction) db.endTransaction()
+        }
+    }
+
+    private fun migrateToVersion5(db: SupportSQLiteDatabase) {
+        if (hasMigration(db, 5)) return
+        val ownsTransaction = !db.inTransaction()
+        if (ownsTransaction) db.beginTransaction()
+        try {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS hayai_novel_translations(
+                    chapter_id INTEGER NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    manga_url TEXT NOT NULL,
+                    chapter_url TEXT NOT NULL,
+                    source_language TEXT NOT NULL,
+                    target_language TEXT NOT NULL,
+                    source_hash_sha256 TEXT NOT NULL,
+                    translated_content TEXT NOT NULL,
+                    content_format TEXT NOT NULL DEFAULT 'plain_text_v1' CHECK(content_format = 'plain_text_v1'),
+                    engine_id TEXT NOT NULL,
+                    detected_language TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    PRIMARY KEY(chapter_id, target_language),
+                    UNIQUE(source_id, manga_url, chapter_url, target_language),
+                    FOREIGN KEY(chapter_id) REFERENCES chapters(_id) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS hayai_novel_translations_stable_idx " +
+                    "ON hayai_novel_translations(source_id, manga_url, chapter_url)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS hayai_novel_translation_jobs(
+                    job_id TEXT NOT NULL PRIMARY KEY,
+                    batch_id TEXT NOT NULL,
+                    chapter_id INTEGER NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    manga_url TEXT NOT NULL,
+                    chapter_url TEXT NOT NULL,
+                    source_language TEXT NOT NULL,
+                    target_language TEXT NOT NULL,
+                    engine_id TEXT NOT NULL,
+                    provider_config_hash TEXT NOT NULL,
+                    position_index INTEGER NOT NULL,
+                    priority INTEGER NOT NULL DEFAULT 0,
+                    force_retranslate INTEGER NOT NULL DEFAULT 0 CHECK(force_retranslate IN (0, 1)),
+                    state TEXT NOT NULL CHECK(state IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+                    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+                    lease_token TEXT,
+                    lease_until INTEGER,
+                    last_error TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    UNIQUE(batch_id, chapter_id, target_language),
+                    FOREIGN KEY(chapter_id) REFERENCES chapters(_id) ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS hayai_novel_translation_jobs_work_idx " +
+                    "ON hayai_novel_translation_jobs(state, priority DESC, position_index, created_at)",
+            )
+            db.execSQL(
+                "INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (5, ?)",
                 arrayOf(System.currentTimeMillis()),
             )
             if (ownsTransaction) db.setTransactionSuccessful()

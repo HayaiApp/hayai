@@ -18,6 +18,9 @@ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginStore
 import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceDefinition
 import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceStore
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationLocator
+import dev.ahmedmohamed.hayai.novel.translation.SqliteNovelTranslationStore
+import dev.ahmedmohamed.hayai.novel.translation.StoredNovelTranslation
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
 import kotlinx.serialization.encodeToString
@@ -83,6 +86,7 @@ class HayaiBackupService(
             novelHighlights = NovelHighlightStore(database, json).exportAll(),
             novelCustomSources = readNovelCustomSources(),
             novelApkRepositories = readNovelApkRepositories(),
+            novelTranslations = readNovelTranslations(identities.values.toSet()),
         )
     }
 
@@ -132,6 +136,36 @@ class HayaiBackupService(
                                 put("word_count", stat.wordCount)
                             },
                     )
+                }.also { if (it) restored++ }
+            }
+            val translationStore = SqliteNovelTranslationStore(database)
+            data.novelTranslations.forEach { translation ->
+                process("novel translation ${translation.chapterUrl}", errors, { skipped++ }) {
+                    val manga = findManga(translation.sourceId, translation.mangaUrl, mangaCache) ?: return@process false
+                    val chapter =
+                        database.getChapters(manga).executeAsBlocking().singleOrNull { it.url == translation.chapterUrl }
+                            ?: return@process false
+                    translationStore.restoreCompleted(
+                        StoredNovelTranslation(
+                            locator =
+                                NovelTranslationLocator(
+                                    chapterId = requireNotNull(chapter.id),
+                                    sourceId = translation.sourceId,
+                                    mangaUrl = translation.mangaUrl,
+                                    chapterUrl = translation.chapterUrl,
+                                ),
+                            sourceLanguage = translation.sourceLanguage,
+                            targetLanguage = translation.targetLanguage,
+                            sourceHash = translation.sourceHash,
+                            translatedContent = translation.translatedContent,
+                            contentFormat = translation.contentFormat,
+                            engineId = translation.engineId,
+                            detectedLanguage = translation.detectedLanguage,
+                            createdAt = translation.createdAt,
+                            updatedAt = translation.updatedAt,
+                        ),
+                    )
+                    true
                 }.also { if (it) restored++ }
             }
             data.ehFavorites.distinct().forEach { favorite ->
@@ -239,6 +273,29 @@ class HayaiBackupService(
         return appContext.getSharedPreferences("hayai_novel_apk_repositories", Context.MODE_PRIVATE)
             .getStringSet("urls_v1", emptySet()).orEmpty().sorted()
     }
+
+    private fun readNovelTranslations(identities: Set<MangaIdentity>): List<HayaiBackupNovelTranslation> =
+        SqliteNovelTranslationStore(database)
+            .exportCompleted()
+            .asSequence()
+            .filter { translation ->
+                MangaIdentity(translation.locator.sourceId, translation.locator.mangaUrl) in identities
+            }.map { translation ->
+                HayaiBackupNovelTranslation(
+                    sourceId = translation.locator.sourceId,
+                    mangaUrl = translation.locator.mangaUrl,
+                    chapterUrl = translation.locator.chapterUrl,
+                    sourceLanguage = translation.sourceLanguage,
+                    targetLanguage = translation.targetLanguage,
+                    sourceHash = translation.sourceHash,
+                    translatedContent = translation.translatedContent,
+                    contentFormat = translation.contentFormat,
+                    engineId = translation.engineId,
+                    detectedLanguage = translation.detectedLanguage,
+                    createdAt = translation.createdAt,
+                    updatedAt = translation.updatedAt,
+                )
+            }.toList()
 
     private suspend fun restoreNovelCustomSources(
         definitions: List<NovelCustomSourceDefinition>,
@@ -627,7 +684,7 @@ class HayaiBackupService(
     private fun HayaiBackupData.itemCount() =
         quotes.size + novelRepositories.size + chapterStats.size + ehFavorites.size + novelPlugins.size +
             ehGalleryAliases.size + sourceMetadata.size + ehCategoryMappings.size + novelHighlights.size +
-            novelCustomSources.size + novelApkRepositories.size
+            novelCustomSources.size + novelApkRepositories.size + novelTranslations.size
 
     private data class MangaIdentity(
         val sourceId: Long,
@@ -712,6 +769,18 @@ internal object HayaiBackupLimits {
             if (data.novelApkRepositories.size > 100 || data.novelApkRepositories.distinct().size != data.novelApkRepositories.size) {
                 add("Invalid novel APK repository list")
             }
+            if (data.novelTranslations.size > 1_000_000) add("Too many completed novel translations")
+            if (data.novelTranslations.sumOf { it.translatedContent.length.toLong() } > 512L * 1024 * 1024) {
+                add("Completed novel translation backup data is too large")
+            }
+            if (
+                data.novelTranslations
+                    .groupBy { listOf(it.sourceId.toString(), it.mangaUrl, it.chapterUrl, it.targetLanguage) }
+                    .values
+                    .any { translations -> translations.distinct().size > 1 }
+            ) {
+                add("Conflicting duplicate completed novel translation")
+            }
             data.quotes
                 .firstOrNull {
                     it.id.length !in 1..128 ||
@@ -789,6 +858,19 @@ internal object HayaiBackupLimits {
                     uri.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null
                 }.getOrDefault(true)
             }?.let { add("Invalid novel APK repository") }
+            data.novelTranslations.firstOrNull { translation ->
+                translation.mangaUrl.length !in 1..8_192 ||
+                    translation.chapterUrl.length !in 1..8_192 ||
+                    translation.sourceLanguage.length !in 1..64 ||
+                    translation.targetLanguage.length !in 1..64 ||
+                    !translation.sourceHash.matches(Regex("[0-9a-f]{64}")) ||
+                    translation.translatedContent.length !in 1..2_000_000 ||
+                    translation.contentFormat != StoredNovelTranslation.CONTENT_FORMAT ||
+                    translation.engineId.length !in 1..128 ||
+                    (translation.detectedLanguage?.length ?: 0) > 64 ||
+                    translation.createdAt < 0 ||
+                    translation.updatedAt < translation.createdAt
+            }?.let { add("Invalid completed novel translation") }
         }
 
     private fun validateEhDuplicates(data: HayaiBackupData): List<String> =
