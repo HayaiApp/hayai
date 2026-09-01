@@ -69,6 +69,7 @@ class HayaiBackupDataTest {
                     ),
                 novelCustomSources = listOf(customSource()),
                 novelApkRepositories = listOf("https://extensions.example/index.min.json"),
+                novelTranslations = listOf(translation()),
             )
 
         val encoded = ProtoBuf.encodeToByteArray(HayaiBackupData.serializer(), data)
@@ -132,6 +133,19 @@ class HayaiBackupDataTest {
             )
 
         assertTrue(errors.any { it.contains("Invalid novel APK repository") })
+    }
+
+    @Test
+    fun `validation rejects conflicting or incomplete completed translations`() {
+        val translation = translation()
+        val conflicting =
+            HayaiBackupData(
+                novelTranslations = listOf(translation, translation.copy(translatedContent = "different")),
+            )
+        val incomplete = HayaiBackupData(novelTranslations = listOf(translation.copy(translatedContent = "")))
+
+        assertTrue(HayaiBackupLimits.validate(conflicting).any { it.contains("duplicate completed novel translation") })
+        assertTrue(HayaiBackupLimits.validate(incomplete).any { it.contains("Invalid completed novel translation") })
     }
 
     @Test
@@ -275,5 +289,21 @@ class HayaiBackupDataTest {
             details = NovelDetailsSelectors("h1"),
             chapters = NovelChapterSelectors(".chapter", ".title", "a"),
             content = NovelContentSelectors("article"),
+        )
+
+    private fun translation() =
+        HayaiBackupNovelTranslation(
+            sourceId = 7,
+            mangaUrl = "/novel",
+            chapterUrl = "/chapter",
+            sourceLanguage = "ja",
+            targetLanguage = "en",
+            sourceHash = "a".repeat(64),
+            translatedContent = "translated",
+            contentFormat = "plain_text_v1",
+            engineId = "GOOGLE_WEB",
+            detectedLanguage = "ja",
+            createdAt = 10,
+            updatedAt = 11,
         )
 }

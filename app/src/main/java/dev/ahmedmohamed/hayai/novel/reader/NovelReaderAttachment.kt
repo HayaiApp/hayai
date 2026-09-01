@@ -36,9 +36,13 @@ import dev.ahmedmohamed.hayai.novel.lookup.NovelSelectionQuery
 import dev.ahmedmohamed.hayai.novel.quote.NovelQuoteStore
 import dev.ahmedmohamed.hayai.novel.quote.NovelQuote
 import dev.ahmedmohamed.hayai.novel.quote.QuoteAddResult
-import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationCache
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationHash
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationLocator
+import dev.ahmedmohamed.hayai.novel.translation.NovelOfflineTranslationWorker
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationService
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationText
+import dev.ahmedmohamed.hayai.novel.translation.SqliteNovelTranslationStore
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
@@ -73,7 +77,8 @@ internal class NovelReaderAttachment(
     private val quoteStore = NovelQuoteStore(database)
     private val highlightStore = NovelHighlightStore(database)
     private val translationSettings = NovelTranslationSettingsStore(activity)
-    private val translationService = NovelTranslationService(Injekt.get<NetworkHelper>(), NovelTranslationCache(activity))
+    private val translationStore = SqliteNovelTranslationStore(database)
+    private val translationService = NovelTranslationService(Injekt.get<NetworkHelper>(), translationStore)
     private val offlineManager = NovelOfflineManager(activity, database, Injekt.get<SourceManager>(), Injekt.get<NetworkHelper>())
     private val fontStore = NovelFontStore(activity, preferences)
     private val dictionary = NovelDictionaryLauncher(activity)
@@ -90,6 +95,7 @@ internal class NovelReaderAttachment(
     private var resumeAutoScrollAfterPause = false
     private var bookmarkMenuItem: MenuItem? = null
     private var lookupSheet: NovelLookupWebSheet? = null
+    private val ttsChapterHandoff = NovelTtsChapterHandoff()
     private val fontImportLauncher =
         activity.activityResultRegistry.register(
             "hayai-novel-font-${System.identityHashCode(this)}",
@@ -336,12 +342,15 @@ internal class NovelReaderAttachment(
         this.content = content
         val mangaId = requireNotNull(content.manga.id) { "Novel is missing its durable database identity" }
         val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
+        ttsChapterHandoff.cancelUnlessTarget(chapterId)
         tts.setChapter(mangaId, chapterId, content.manga.title, content.chapter.name)
         updateBookmarkMenu()
     }
 
     override fun onDocumentReady() {
+        val readyChapterId = content?.chapter?.id ?: return
         viewer.paragraphs { paragraphs ->
+            if (viewer.currentChapterId != readyChapterId) return@paragraphs
             tts.configure(
                 preferences.novelTtsSpeed.get(),
                 preferences.novelTtsPitch.get(),
@@ -349,8 +358,13 @@ internal class NovelReaderAttachment(
                 preferences.novelTtsBackgroundPlayback.get(),
             )
             tts.setParagraphs(paragraphs)
+            if (ttsChapterHandoff.consume(readyChapterId)) tts.play()
+        }
+        if (preferences.novelMarkShortChapterAsRead.get()) {
+            viewer.isShort { short -> if (short) viewer.markCurrentChapterRead(readyChapterId) }
         }
         restoreHighlights()
+        showStoredTranslationIfAvailable(readyChapterId)
     }
 
     override fun onSelectionAction(action: NovelSelectionAction, selection: NovelSelection) {
@@ -386,8 +400,12 @@ internal class NovelReaderAttachment(
     override fun onPlaybackChanged(playing: Boolean) = bindBottomActions()
 
     override fun onChapterCompleted() {
-        viewer.seek(100)
-        if (preferences.novelTtsAutoNextChapter.get()) viewer.moveToNext()
+        viewer.markCurrentChapterRead()
+        val nextChapterId = viewer.nextChapterId
+        if (preferences.novelTtsAutoNextChapter.get() && nextChapterId != null) {
+            ttsChapterHandoff.schedule(nextChapterId)
+            viewer.moveToNext()
+        }
     }
 
     override fun onError(message: String) = activity.toast(message)
@@ -401,6 +419,7 @@ internal class NovelReaderAttachment(
         fontImportLauncher.unregister()
         quoteImportLauncher.unregister()
         stopAutoScroll()
+        ttsChapterHandoff.clear()
         tts.destroy()
     }
 
@@ -426,6 +445,7 @@ internal class NovelReaderAttachment(
             NovelReaderAction.ToggleOrientation -> cycleOrientation()
             NovelReaderAction.TranslateSelection -> viewer.selection { it?.selectedText?.let(::translate) }
             NovelReaderAction.TranslateChapter -> translateChapter()
+            NovelReaderAction.TranslateAllChapters -> translateAllChapters()
             NovelReaderAction.DictionaryLookup -> viewer.selection { selection ->
                 selection?.selectedText?.let { text ->
                     runCatching { dictionary.open(text, dictionarySettings.get()) }
@@ -742,19 +762,52 @@ internal class NovelReaderAttachment(
             .show()
     }
 
-    private fun translateChapter() = viewer.documentText { translate(it, replaceDocument = true) }
-
-    private fun translate(text: String, replaceDocument: Boolean = false) {
+    private fun translateChapter() {
         val current = content ?: return
+        activity.scope.launch {
+            val text = withContext(Dispatchers.Default) { NovelTranslationText.canonical(current.document) }
+            translate(text, replaceDocument = true, locator = current.translationLocator())
+        }
+    }
+
+    private fun translateAllChapters() {
+        activity.scope.launch {
+            val result =
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        val chapters = database.getChapters(manga).executeAsBlocking()
+                        NovelOfflineTranslationWorker.enqueueAll(activity, manga, chapters, translationSettings.get())
+                    }
+                }
+            result.fold(
+                onSuccess = { queued -> activity.toast(activity.getString(R.string.hayai_novel_translation_offline_queued, queued)) },
+                onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_translation_failed)) },
+            )
+        }
+    }
+
+    private fun translate(
+        text: String,
+        replaceDocument: Boolean = false,
+        locator: NovelTranslationLocator? = null,
+    ) {
         if (text.isBlank()) return
         activity.scope.launch {
             val settings = translationSettings.get()
-            val key = "${current.manga.source}:${current.manga.url}:${current.chapter.url}:${text.hashCode()}"
-            val result = withContext(Dispatchers.IO) { runCatching { translationService.translate(key, text, settings) } }
+            val result =
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        locator?.let { translationService.translate(it, text, settings) }
+                            ?: translationService.translateText(text, settings)
+                    }
+                }
             result.fold(
                 onSuccess = { translated ->
                     if (replaceDocument) {
-                        viewer.showTranslation(translated.text)
+                        if (locator == null || content?.chapter?.id == locator.chapterId) {
+                            viewer.showTranslation(translated.text)
+                            restoreHighlights()
+                        }
                     } else {
                         AlertDialog.Builder(activity)
                             .setTitle(R.string.hayai_novel_reader_translate)
@@ -768,6 +821,32 @@ internal class NovelReaderAttachment(
             )
         }
     }
+
+    private fun showStoredTranslationIfAvailable(chapterId: Long) {
+        val current = content ?: return
+        if (current.chapter.id != chapterId || current.translatedOfflineLanguage != null) return
+        activity.scope.launch {
+            val settings = translationSettings.get()
+            val text = withContext(Dispatchers.Default) { NovelTranslationText.canonical(current.document) }
+            if (text.isBlank()) return@launch
+            val stored =
+                withContext(Dispatchers.IO) {
+                    translationStore.findCompleted(current.translationLocator(), settings.targetLanguage, NovelTranslationHash.sha256(text))
+                }
+            if (stored != null && content?.chapter?.id == chapterId) {
+                viewer.showTranslation(stored.translatedContent)
+                restoreHighlights()
+            }
+        }
+    }
+
+    private fun NovelChapterContent.translationLocator() =
+        NovelTranslationLocator(
+            chapterId = requireNotNull(chapter.id),
+            sourceId = manga.source,
+            mangaUrl = manga.url,
+            chapterUrl = chapter.url,
+        )
 
     private fun toggleOffline() {
         val current = content ?: return

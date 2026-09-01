@@ -45,6 +45,7 @@ class NovelMigrationDataMover(
         val quotes = readQuotes(sourceMangaId)
         val statistics = readStatistics(sourceMangaId)
         val highlights = readHighlights(sourceMangaId)
+        val translations = readTranslations(sourceManga)
         val progressChapterIds = mutableSetOf<Long>()
         val userStateChapterIds = mutableSetOf<Long>()
         if (migrateChapterState) {
@@ -63,6 +64,7 @@ class NovelMigrationDataMover(
             addAll(progressChapterIds)
             addAll(statistics.map(NovelMigrationStatistic::chapterId))
             addAll(highlights.map(NovelMigrationHighlight::chapterId))
+            addAll(translations.map(NovelMigrationTranslation::chapterId))
         }
         val chapterMap =
             NovelMigrationChapterMapper.map(
@@ -76,6 +78,16 @@ class NovelMigrationDataMover(
                 source = statistics,
                 target = readStatistics(targetMangaId),
                 chapterMap = chapterMap,
+                replace = replace,
+            )
+        val translationActions =
+            NovelMigrationTranslationPlanner.plan(
+                source = translations,
+                target = readTranslations(targetManga),
+                chapterMap = chapterMap,
+                targetSourceId = targetManga.source,
+                targetMangaUrl = targetManga.url,
+                targetChapterUrls = targetChapterUrls,
                 replace = replace,
             )
 
@@ -101,6 +113,8 @@ class NovelMigrationDataMover(
         } else {
             copiedHighlights.forEach(::insertHighlight)
         }
+        applyTranslations(translationActions)
+        if (replace) cancelSourceTranslationJobs(sourceManga.source, sourceManga.url)
     }
 
     private fun applyProgress(
@@ -198,6 +212,59 @@ class NovelMigrationDataMover(
                 }
             updateExactlyOne("hayai_novel_highlights", "highlight_id = ?", arrayOf(highlight.id), values)
         }
+    }
+
+    private fun applyTranslations(actions: List<NovelMigrationTranslationAction>) {
+        actions.forEach { action ->
+            when (action.operation) {
+                NovelMigrationTranslationOperation.Rebind,
+                NovelMigrationTranslationOperation.Insert,
+                -> {
+                    val values = action.target.toValues()
+                    if (action.operation == NovelMigrationTranslationOperation.Rebind) {
+                        updateExactlyOne(
+                            "hayai_novel_translations",
+                            "chapter_id = ? AND target_language = ?",
+                            arrayOf<Any>(action.sourceChapterId, action.target.targetLanguage),
+                            values,
+                        )
+                    } else {
+                        insertExactly("hayai_novel_translations", values)
+                    }
+                }
+                NovelMigrationTranslationOperation.DeleteSource -> {
+                    val deleted =
+                        database.lowLevel().delete(
+                            DeleteQuery.builder()
+                                .table("hayai_novel_translations")
+                                .where("chapter_id = ? AND target_language = ?")
+                                .whereArgs(action.sourceChapterId, action.target.targetLanguage)
+                                .build(),
+                        )
+                    if (deleted != 1) throw NovelMigrationException("Could not remove the source completed translation")
+                }
+            }
+        }
+    }
+
+    private fun cancelSourceTranslationJobs(
+        sourceId: Long,
+        mangaUrl: String,
+    ) {
+        database.lowLevel().update(
+            UpdateQuery.builder()
+                .table("hayai_novel_translation_jobs")
+                .where("source_id = ? AND manga_url = ? AND state IN ('queued', 'running', 'failed')")
+                .whereArgs(sourceId, mangaUrl)
+                .build(),
+            ContentValues(5).apply {
+                put("state", "cancelled")
+                putNull("lease_token")
+                putNull("lease_until")
+                putNull("last_error")
+                put("updated_at", System.currentTimeMillis())
+            },
+        )
     }
 
     private fun planCopiedQuotes(
@@ -363,6 +430,38 @@ class NovelMigrationDataMover(
             }
         }
 
+    private fun readTranslations(manga: Manga): List<NovelMigrationTranslation> =
+        query(
+            "SELECT chapter_id,source_id,manga_url,chapter_url,source_language,target_language," +
+                "source_hash_sha256,translated_content,content_format,engine_id,detected_language,created_at,updated_at " +
+                "FROM hayai_novel_translations WHERE source_id = ? AND manga_url = ? " +
+                "ORDER BY chapter_id,target_language",
+            manga.source,
+            manga.url,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        NovelMigrationTranslation(
+                            chapterId = cursor.getLong(0),
+                            sourceId = cursor.getLong(1),
+                            mangaUrl = cursor.getString(2),
+                            chapterUrl = cursor.getString(3),
+                            sourceLanguage = cursor.getString(4),
+                            targetLanguage = cursor.getString(5),
+                            sourceHash = cursor.getString(6),
+                            translatedContent = cursor.getString(7),
+                            contentFormat = cursor.getString(8),
+                            engineId = cursor.getString(9),
+                            detectedLanguage = cursor.nullableString(10),
+                            createdAt = cursor.getLong(11),
+                            updatedAt = cursor.getLong(12),
+                        ),
+                    )
+                }
+            }
+        }
+
     private fun highlightAtId(id: String): NovelMigrationHighlight? =
         query(
             "SELECT highlight_id,manga_id,chapter_id,source_id,manga_url,chapter_url,color,note,anchor_json," +
@@ -427,6 +526,23 @@ class NovelMigrationDataMover(
         )
 
     private fun Cursor.nullableString(index: Int): String? = if (isNull(index)) null else getString(index)
+
+    private fun NovelMigrationTranslation.toValues() =
+        ContentValues(13).apply {
+            put("chapter_id", chapterId)
+            put("source_id", sourceId)
+            put("manga_url", mangaUrl)
+            put("chapter_url", chapterUrl)
+            put("source_language", sourceLanguage)
+            put("target_language", targetLanguage)
+            put("source_hash_sha256", sourceHash)
+            put("translated_content", translatedContent)
+            put("content_format", contentFormat)
+            put("engine_id", engineId)
+            put("detected_language", detectedLanguage)
+            put("created_at", createdAt)
+            put("updated_at", updatedAt)
+        }
 
     private companion object {
         const val MAX_ID_ATTEMPTS = 100
@@ -538,6 +654,75 @@ internal object NovelMigrationStatisticPlanner {
                 wordCount = statistic.wordCount,
             )
         }
+    }
+}
+
+internal data class NovelMigrationTranslation(
+    val chapterId: Long,
+    val sourceId: Long,
+    val mangaUrl: String,
+    val chapterUrl: String,
+    val sourceLanguage: String,
+    val targetLanguage: String,
+    val sourceHash: String,
+    val translatedContent: String,
+    val contentFormat: String,
+    val engineId: String,
+    val detectedLanguage: String?,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+internal enum class NovelMigrationTranslationOperation {
+    Rebind,
+    Insert,
+    DeleteSource,
+}
+
+internal data class NovelMigrationTranslationAction(
+    val operation: NovelMigrationTranslationOperation,
+    val sourceChapterId: Long,
+    val target: NovelMigrationTranslation,
+)
+
+internal object NovelMigrationTranslationPlanner {
+    fun plan(
+        source: List<NovelMigrationTranslation>,
+        target: List<NovelMigrationTranslation>,
+        chapterMap: Map<Long, Long>,
+        targetSourceId: Long,
+        targetMangaUrl: String,
+        targetChapterUrls: Map<Long, String>,
+        replace: Boolean,
+    ): List<NovelMigrationTranslationAction> {
+        val targetByKey = target.associateBy { it.chapterId to it.targetLanguage }
+        return source
+            .sortedWith(compareBy(NovelMigrationTranslation::chapterId, NovelMigrationTranslation::targetLanguage))
+            .mapNotNull { translation ->
+                val targetChapterId = chapterMap.getValue(translation.chapterId)
+                val targetChapterUrl =
+                    targetChapterUrls[targetChapterId]
+                        ?: throw NovelMigrationException("Target chapter $targetChapterId disappeared during migration")
+                val moved =
+                    translation.copy(
+                        chapterId = targetChapterId,
+                        sourceId = targetSourceId,
+                        mangaUrl = targetMangaUrl,
+                        chapterUrl = targetChapterUrl,
+                    )
+                val existing = targetByKey[targetChapterId to translation.targetLanguage]
+                if (existing != null && existing != moved) {
+                    throw NovelMigrationException("Completed translation conflicts with target chapter $targetChapterId")
+                }
+                val operation =
+                    when {
+                        existing == null && replace -> NovelMigrationTranslationOperation.Rebind
+                        existing == null -> NovelMigrationTranslationOperation.Insert
+                        replace -> NovelMigrationTranslationOperation.DeleteSource
+                        else -> return@mapNotNull null
+                    }
+                NovelMigrationTranslationAction(operation, translation.chapterId, moved)
+            }
     }
 }
 

@@ -821,6 +821,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/LewdClassifier.kt	"nsfw",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/LewdClassifier.kt	"pornographic",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/LewdClassifier.kt	"smut",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/LewdClassifier.kt	private fun isNonHentai(tag: String): Boolean = tag.contains("non-h", ignoreCase = true)
+app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	!translation.sourceHash.matches(Regex("[0-9a-f]{64}")) ||
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	?.let { add("Invalid E-Hentai category mapping") }
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	?.let { add("Invalid novel chapter statistic") }
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	?.let { add("Invalid novel repository") }
@@ -840,6 +841,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	"translate
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	"UPDATE hayai_eh_sync_checkpoint SET requires_full_reconcile = 1 WHERE singleton = 1",
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	"was not restored for source ${unresolved.sourceId}"
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	): Boolean = gid.toLongOrNull()?.let { it > 0 } == true && token.matches(Regex("[A-Za-z0-9_-]{1,128}"))
+app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	}?.let { add("Invalid completed novel translation") }
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	}?.let { add("Invalid E-Hentai favorite") }
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	}?.let { add("Invalid E-Hentai gallery alias") }
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	}?.let { add("Invalid Hayai quote ${it.id.take(32)}") }
@@ -847,6 +849,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	}?.let { a
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	}?.let { add("Invalid novel highlight") }
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	}?.let { add("Invalid novel plugin backup") }
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	}?.let { add("Invalid source metadata") }
+app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	add("Completed novel translation backup data is too large")
+app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	add("Conflicting duplicate completed novel translation")
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	add("Conflicting duplicate E-Hentai favorite")
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	add("Conflicting duplicate E-Hentai gallery alias")
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	add("Conflicting duplicate source metadata")
@@ -882,6 +886,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	if (data.n
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	if (data.novelPlugins.size > 500) add("Too many novel plugins")
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	if (data.novelPlugins.sumOf { it.code.size.toLong() } > 64L * 1024 * 1024) add("Novel plugin backup data is too large")
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	if (data.novelRepositories.size > 1_000) add("Too many novel repositories")
+app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	if (data.novelTranslations.size > 1_000_000) add("Too many completed novel translations")
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	if (data.quotes.size > 100_000) add("Too many Hayai quotes")
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	if (data.sourceMetadata.size > 100_000) add("Too many source metadata records")
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	if (data.sourceMetadata.sumOf { it.tags.size.toLong() } > 2_000_000) add("Too many source metadata tags")
@@ -895,6 +900,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	process("E
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	process("E-Hentai gallery alias ${alias.alternateGid}", errors, { skipped++ }) {
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	process("novel APK repository $repository", errors, { skipped++ }) {
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	process("novel repository ${repository.baseUrl}", errors, { skipped++ }) {
+app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	process("novel translation ${translation.chapterUrl}", errors, { skipped++ }) {
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	process("quote ${quote.id}", errors, { skipped++ }) {
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	process("source metadata ${metadata.mangaUrl}", errors, { skipped++ }) {
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	put("alternate_gid", value.alternate.gid)
@@ -1002,12 +1008,17 @@ app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiLegacyMigration.kt	val s
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"""
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	""".trimIndent(),
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"CREATE INDEX IF NOT EXISTS hayai_novel_highlights_stable_idx " +
+app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"CREATE INDEX IF NOT EXISTS hayai_novel_translation_jobs_work_idx " +
+app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"CREATE INDEX IF NOT EXISTS hayai_novel_translations_stable_idx " +
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (2, ?)",
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (3, ?)",
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (4, ?)",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"INSERT INTO hayai_schema_migrations(version, applied_at) VALUES (5, ?)",
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"INSERT OR IGNORE INTO hayai_eh_sync_checkpoint(singleton, generation, requires_full_reconcile) VALUES (1, 0, 1)",
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"INSERT OR IGNORE INTO hayai_schema_migrations(version, applied_at) VALUES (1, ?)",
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"ON hayai_novel_highlights(source_id, manga_url, chapter_url)",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"ON hayai_novel_translation_jobs(state, priority DESC, position_index, created_at)",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"ON hayai_novel_translations(source_id, manga_url, chapter_url)",
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"search_tags" -> insertArchivedTag(db, identity.first, identity.second, payload)
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"search_titles" -> insertArchivedTitle(db, identity.first, identity.second, payload)
 app/src/main/java/dev/ahmedmohamed/hayai/migration/HayaiSchema.kt	"SELECT 1 FROM hayai_source_metadata WHERE source_id = ? AND manga_url = ?",
@@ -1169,6 +1180,44 @@ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	T
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val FILE_NAME = Regex("novel_[0-9]+\\.json")
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val fileMangaId = file.name.removePrefix("novel_").removeSuffix(".json").toLongOrNull()
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyQuoteJsonMigration.kt	val inserted = db.insert("hayai_quotes", SQLiteDatabase.CONFLICT_IGNORE, values)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"FROM hayai_novel_translations WHERE chapter_id = ? AND target_language = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"INSERT OR REPLACE INTO hayai_novel_import_runs(plan_id, status, completed_at) VALUES (?, 'complete', ?)",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"JOIN mangas ON mangas._id = chapters.manga_id " +
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"SELECT 1 FROM hayai_novel_import_runs WHERE plan_id = ? AND status = 'complete'",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"SELECT mangas.source,mangas.url,chapters.url FROM chapters " +
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"SELECT payload_json FROM hayai_legacy_rows " +
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"SELECT source_id,manga_url,chapter_url,source_language,source_hash_sha256," +
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"translated_content,content_format,engine_id,detected_language,created_at " +
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"WHERE chapters._id = ? AND mangas._id = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	"WHERE table_name = 'chapter_translation_cache' ORDER BY legacy_key",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	@SerialName("chapter_id") val chapterId: Long,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	@SerialName("created_at") val createdAt: Long,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	@SerialName("engine_id") val engineId: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	@SerialName("manga_id") val mangaId: Long,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	@SerialName("original_hash") val originalHash: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	@SerialName("source_language") val sourceLanguage: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	@SerialName("target_language") val targetLanguage: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	@SerialName("translated_content") val translatedContent: String,
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	check(db.insert("hayai_novel_translations", SQLiteDatabase.CONFLICT_ABORT, values) >= 0)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	contentFormat = "plain_text_v1",
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	error("Could not safely promote $pending legacy translation row(s)")
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	if (requireComplete) error("Legacy translation conflicts with an existing completed translation")
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	originalHash.matches(Regex("[0-9a-fA-F]{64}")) &&
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	private const val PLAN_ID = "legacy-translation-cache-v1"
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("chapter_id", identity.chapterId)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("chapter_url", identity.chapterUrl)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("content_format", "plain_text_v1")
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("created_at", row.createdAt)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("engine_id", row.engineId)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("manga_url", identity.mangaUrl)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("source_hash_sha256", row.originalHash.lowercase())
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("source_id", identity.sourceId)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("source_language", row.sourceLanguage)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("target_language", row.targetLanguage)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("translated_content", row.translatedContent)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	put("updated_at", row.createdAt)
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	putNull("detected_language")
+app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	Timber.w("Legacy translation promotion remains pending for %d row(s)", pending)
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	"""
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	""".trimIndent()
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	fun isChallengeResult(result: String?): Boolean = result == "true"
@@ -1378,10 +1427,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	co
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	normalized.isNotBlank() && normalized.length <= MAX_ASSET_PATH_LENGTH && normalized.split('/').none { it == ".." }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	return "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}${extension?.let { ".$it" }.orEmpty()}"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val backup = File(root, ".$key.bak-${UUID.randomUUID()}")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val digest = MessageDigest.getInstance("SHA-256")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val offlinePaths = references.associateWith { reference -> "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}" }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	return "offline/${sha256(reference.toByteArray(Charsets.UTF_8))}${extension?.let { ".$it" }.orEmpty()}"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val extension = cleanPath.substringAfterLast('.', "").lowercase().takeIf { it.matches(SAFE_EXTENSION) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val SAFE_ASSET_FILE = Regex("[0-9a-f]{64}")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadStore.kt	val SAFE_EXTENSION = Regex("[a-z0-9]{1,10}")
@@ -1514,6 +1562,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/ExternalNovelImporter.kt
 app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("INSERT OR REPLACE INTO hayai_novel_import_runs(plan_id,status,completed_at) VALUES (?,'complete',?)")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("SELECT 1 FROM hayai_novel_import_runs WHERE plan_id=? AND status='complete'")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/importer/J2kNovelImportTarget.kt	.query("SELECT 1 FROM mangas_categories WHERE manga_id=? AND category_id=?")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? LIMIT 1",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"SELECT 1 FROM hayai_novel_plugin_sources WHERE source_id = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.ifBlank { "asset.bin" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.joinToString("") { "%02x".format(it) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace("&", "&amp;")
@@ -1538,12 +1592,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsControl
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val cover = coverUrl?.takeIf { mediaType(it).startsWith("image/") }?.let { url ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val digest = MessageDigest.getInstance("SHA-256")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	val language = source.lang.takeUnless { it.isBlank() || it == "all" } ?: "en"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? LIMIT 1",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"SELECT 1 FROM hayai_novel_plugin_sources WHERE source_id = ? " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"COALESCE(SUM(CASE WHEN c.read = 1 THEN s.word_count " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"ELSE (s.word_count * MIN(MAX(c.last_page_read, 0), 100) / 100) END), 0) " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.kt	"FROM hayai_novel_chapter_stats s JOIN chapters c ON c._id = s.chapter_id " +
@@ -1553,36 +1601,54 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelJ2kIntegration.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	?: throw NovelMigrationException("Source chapter $sourceId is missing")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	?: throw NovelMigrationException("Target chapter $targetChapterId disappeared during migration")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	.table("hayai_novel_chapter_stats")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	.table("hayai_novel_translation_jobs")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	.table("hayai_novel_translations")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	.where("chapter_id = ? AND target_language = ?")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	.where("chapter_id = ?")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	.where("source_id = ? AND manga_url = ? AND state IN ('queued', 'running', 'failed')")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"Chapter ${source.chapterNumber} has ${targets.size} possible migration targets",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"chapter_id = ? AND target_language = ?",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"chapter_id = ?",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"created_at,updated_at FROM hayai_novel_highlights WHERE highlight_id = ?",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"created_at,updated_at FROM hayai_novel_highlights WHERE manga_id = ? ORDER BY highlight_id",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"FROM hayai_novel_translations WHERE source_id = ? AND manga_url = ? " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"hayai_novel_chapter_stats",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"hayai_novel_translations",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"hayai-migration-highlight-v1",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"hayai-migration-quote-v1",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? ORDER BY stats.chapter_id",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"ORDER BY chapter_id,target_language",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"SELECT chapter_id,source_id,manga_url,chapter_url,source_language,target_language," +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"SELECT highlight_id,manga_id,chapter_id,source_id,manga_url,chapter_url,color,note,anchor_json," +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"SELECT quote_id,manga_id,novel_name,chapter_name,displayed_content,original_content," +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"SELECT stats.chapter_id,stats.word_count FROM hayai_novel_chapter_stats stats " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"source_hash_sha256,translated_content,content_format,engine_id,detected_language,created_at,updated_at " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"translated_content,language,timestamp FROM hayai_quotes WHERE manga_id = ? ORDER BY quote_id",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	"translated_content,language,timestamp FROM hayai_quotes WHERE quote_id = ?",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	chapter.id ?: throw NovelMigrationException("Novel chapter has no database identity")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	if (deleted != 1) throw NovelMigrationException("Could not remove the source completed translation")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	if (updated != 1) throw NovelMigrationException("Expected one $table row, updated $updated")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	if (updated != expected) throw NovelMigrationException("Expected to move $expected quotes, moved $updated")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	insertExactly("hayai_novel_chapter_stats", values)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	insertExactly("hayai_novel_highlights", values)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	insertExactly("hayai_novel_translations", values)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	insertExactly("hayai_quotes", values)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("anchor_json", highlight.anchorJson)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_id", action.targetChapterId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_id", chapterId)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_id", chapterMap.getValue(highlight.chapterId))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_id", highlight.chapterId)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_name", quote.chapterName)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_url", chapterUrl)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_url", highlight.chapterUrl)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("chapter_url", highlightTargetChapterUrl(highlight, chapterMap, targetChapterUrls))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("color", highlight.color)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("content_format", contentFormat)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("created_at", createdAt)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("created_at", highlight.createdAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("detected_language", detectedLanguage)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("displayed_content", quote.displayedContent)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("engine_id", engineId)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("highlight_id", highlight.id)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("language", quote.language)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("last_page_read", source.last_page_read)
@@ -1590,19 +1656,32 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMov
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_id", quote.mangaId)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_id", targetMangaId)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_url", highlight.mangaUrl)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_url", mangaUrl)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("manga_url", targetManga.url)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("note", highlight.note)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("novel_name", quote.novelName)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("original_content", quote.originalContent)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("pages_left", source.pages_left)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("quote_id", quote.id)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("source_hash_sha256", sourceHash)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("source_id", highlight.sourceId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("source_id", sourceId)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("source_id", targetManga.source)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("source_language", sourceLanguage)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("state", "cancelled")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("target_language", targetLanguage)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("timestamp", quote.timestamp)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("translated_content", quote.translatedContent)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("translated_content", translatedContent)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("updated_at", highlight.updatedAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("updated_at", System.currentTimeMillis())
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("updated_at", updatedAt)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	put("word_count", action.wordCount)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	putNull("last_error")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	putNull("lease_token")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	putNull("lease_until")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Chapter statistic conflicts with target chapter $targetChapterId")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Completed translation conflicts with target chapter $targetChapterId")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Could not allocate a destination highlight identity")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Could not allocate a destination quote identity")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	throw NovelMigrationException("Could not insert migrated data into $table")
@@ -1617,12 +1696,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMov
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val sourceMangaId = sourceManga.id ?: throw NovelMigrationException("Source novel has no database identity")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val targetMangaId = targetManga.id ?: throw NovelMigrationException("Target novel has no database identity")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val values = ContentValues(1).apply { put("manga_id", targetMangaId) }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt	"JOIN chapters ON chapters._id = stats.chapter_id WHERE chapters.manga_id = ? LIMIT 1",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt	"SELECT 1 FROM hayai_novel_plugin_sources WHERE source_id = ? " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt	"UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt	"UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt	"UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicy.kt	private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	.setType("text/plain")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	@Suppress("DEPRECATION")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	const val GOOGLE_TRANSLATE_PACKAGE = "com.google.android.apps.translate"
@@ -2225,6 +2298,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	else -> ".hayai-tts-active { background:$background; color:$foreground; border-radius:.2em; }"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	if (source.isBlank()) return ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	private const val BRIDGE_SCRIPT = """
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	private fun cssString(value: String): String = "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	private fun String.safeScriptText(): String = replace("</script", "<\\/script", ignoreCase = true)
@@ -2248,7 +2322,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	N
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	type = "text/plain"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val key = "${current.manga.source}:${current.manga.url}:${current.chapter.url}:${text.hashCode()}"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val labels = fonts.map { "${if (fontStore.token(it) == selected) "✓  " else ""}${it.name}" }.toTypedArray()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val mangaId = requireNotNull(content.manga.id) { "Novel is missing its durable database identity" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val result = runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, input.text.toString(), "") }
@@ -2771,6 +2844,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt	val totalBooks = (series?.get("books") as? JsonArray)?.size
 app/src/main/java/dev/ahmedmohamed/hayai/novel/tracker/services/RanobeDbService.kt	val url = "$baseUrl/api/v0/books".toHttpUrl().newBuilder().addQueryParameter("q", query).build()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelLanguageToolsSettingsController.kt	val values = NovelDictionaryProvider.entries.filter { it.name.startsWith("WEB_") }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelOfflineTranslationWorker.kt	NovelDownloadStore(File(applicationContext.filesDir, "hayai/novel-downloads")),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelOfflineTranslationWorker.kt	NovelTranslationHash.sha256("${engine.name}\u0000$sourceLanguage\u0000$targetLanguage\u0000$endpoint\u0000$model")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelOfflineTranslationWorker.kt	private const val WORK_NAME = "hayai.novel.offline-translation"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelOfflineTranslationWorker.kt	setProgress(androidx.work.workDataOf("completed" to completed))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	.addQueryParameter("client", "gtx").addQueryParameter("sl", settings.sourceLanguage).addQueryParameter("tl", settings.targetLanguage)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	.addQueryParameter("dt", "t").addQueryParameter("q", text).build()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	companion object { private val LANGUAGE = Regex("auto|[a-z]{2,3}(?:-[A-Z]{2})?") }
@@ -2782,13 +2859,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	m
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	obj["detectedLanguage"]?.jsonPrimitive?.content,
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	obj["translatedText"]?.jsonPrimitive?.content
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	private companion object { const val KEY = "settings_v1" }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	private fun cacheId(key: String, source: String, settings: NovelTranslationSettings) = hash("$key\u0000${settings.engine}\u0000${settings.sourceLanguage}\u0000${settings.targetLanguage}\u0000${settings.endpoint}\u0000${settings.model}\u0000${hash(source)}")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	private fun hash(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	private fun jsonRequest(url: String, body: String, key: String): Request = Request.Builder().url(url).apply { if (key.isNotBlank()) header("Authorization", "Bearer $key") }.post(body.toRequestBody("application/json".toMediaType())).build()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	private val preferences = context.getSharedPreferences("hayai_novel_translation", Context.MODE_PRIVATE)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	private val root = File(context.cacheDir, "hayai/novel-translations").apply { mkdirs() }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	return execute(jsonRequest(settings.endpoint.trimEnd('/') + "/chat/completions", body, settings.apiKey)) { response ->
-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	root.listFiles { file -> file.extension == "json" }.orEmpty().forEach(File::delete)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	text = results.joinToString("\n\n") { it.text },
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val apiKey: String = "",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val body = FormBody.Builder().add("text", text).add("target_lang", settings.targetLanguage.uppercase()).apply { if (settings.sourceLanguage != "auto") add("source_lang", settings.sourceLanguage.uppercase()) }.build()
@@ -2797,7 +2870,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	v
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val boundary = maxOf(remaining.lastIndexOf("\n\n", MAX_CHUNK_CHARS), remaining.lastIndexOf(". ", MAX_CHUNK_CHARS), remaining.lastIndexOf(' ', MAX_CHUNK_CHARS)).takeIf { it >= MAX_CHUNK_CHARS / 2 } ?: MAX_CHUNK_CHARS
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val choices = obj["choices"]?.jsonArray
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val endpoint: String = "",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val file = File(root, "$id.json")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val items = (json.parseToJsonElement(response) as JsonObject)["translations"]?.jsonArray
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val joined = results.joinToString("\n\n") { it.text }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val localHttp = uri?.scheme == "http" && uri.host in setOf("localhost", "127.0.0.1", "::1")
@@ -2806,11 +2878,93 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	v
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val prompt = "Translate from ${settings.sourceLanguage} to ${settings.targetLanguage}. Return only the translation. Preserve paragraphs and meaning."
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val request = Request.Builder().url(settings.endpoint.trimEnd('/') + "/v2/translate").header("Authorization", "DeepL-Auth-Key ${settings.apiKey}").post(body).build()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val sourceLanguage: String = "auto",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val target = File(root, "$id.json")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val targetLanguage: String = "en",
-app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val temporary = File(root, ".$id.${System.nanoTime()}.tmp")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val translated = root[0].jsonArray.joinToString("") { it.jsonArray[0].jsonPrimitive.content }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val url = "https://translate.googleapis.com/translate_a/single".toHttpUrl().newBuilder()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	.getInstance("SHA-256")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	.joinToString("") { byte -> "%02x".format(byte) }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	.where("chapter_id = ? AND target_language = ?")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	.where("job_id = ? AND state = 'running' AND lease_token = ?")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"(source_id = ? AND manga_url = ? AND chapter_url = ? AND target_language = ?)",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"$SELECT_COMPLETED WHERE (chapter_id = ? AND target_language = ?) OR " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"$SELECT_COMPLETED WHERE chapter_id = ? AND target_language = ? AND source_hash_sha256 = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"$SELECT_COMPLETED WHERE chapter_id = ? AND target_language = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"$SELECT_JOB WHERE batch_id = ? AND chapter_id = ? AND target_language = ?",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"$SELECT_JOB WHERE state = 'queued' AND attempt_count < ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"AND force_retranslate = ? AND state IN ('queued', 'running') LIMIT 1",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"AND source_language = ? AND target_language = ? AND engine_id = ? AND provider_config_hash = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"engine_id,provider_config_hash,position_index,priority,force_retranslate,created_at " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"FROM hayai_novel_translation_jobs"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"FROM hayai_novel_translations"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"last_error = 'retry limit reached after expired lease',updated_at = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"ORDER BY priority DESC,position_index,created_at,job_id LIMIT 1",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"SELECT 1 FROM $TABLE_JOBS WHERE chapter_id = ? AND source_id = ? AND manga_url = ? AND chapter_url = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"SELECT chapter_id,source_id,manga_url,chapter_url,source_language,target_language," +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"SELECT job_id,batch_id,chapter_id,source_id,manga_url,chapter_url,source_language,target_language," +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"source_hash_sha256,translated_content,content_format,engine_id,detected_language,created_at,updated_at " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"UPDATE $TABLE_JOBS SET state = 'failed',lease_token = NULL,lease_until = NULL," +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"UPDATE $TABLE_JOBS SET state = 'queued',lease_token = NULL,lease_until = NULL,updated_at = ? " +
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"WHERE state = 'running' AND lease_until <= ? AND attempt_count < ?",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	"WHERE state = 'running' AND lease_until <= ? AND attempt_count >= ?",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	check(cursor.moveToFirst()) { "Translation job disappeared" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	check(updated == 1) { "Completed translation disappeared during update" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	check(updated == 1) { "Translation job lease is no longer owned" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	check(updated == 1) { "Translation job was claimed concurrently" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	const val CONTENT_FORMAT = "plain_text_v1"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	const val TABLE_COMPLETED = "hayai_novel_translations"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	const val TABLE_JOBS = "hayai_novel_translation_jobs"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	private val SHA_256 = Regex("[0-9a-f]{64}")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("attempt_count", 0)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("attempt_count", jobAttemptCount(request.jobId) + 1)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("batch_id", batchId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("chapter_id", locator.chapterId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("chapter_url", locator.chapterUrl)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("content_format", contentFormat)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("created_at", createdAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("created_at", existing.createdAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("detected_language", detectedLanguage)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("engine_id", engineId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("force_retranslate", force)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("job_id", jobId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("last_error", message)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("lease_token", token)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("lease_until", leaseUntil)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("manga_url", locator.mangaUrl)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("position_index", position)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("priority", priority)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("provider_config_hash", providerConfigHash)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("source_hash_sha256", sourceHash)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("source_id", locator.sourceId)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("source_language", sourceLanguage)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("state", "completed")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("state", "queued")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("state", "running")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("state", nextState)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("target_language", targetLanguage)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("translated_content", translatedContent)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("updated_at", createdAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("updated_at", now)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("updated_at", result.updatedAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	put("updated_at", updatedAt)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	putNull("last_error")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	putNull("lease_token")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	putNull("lease_until")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	query("$SELECT_COMPLETED ORDER BY source_id,manga_url,chapter_url,target_language").use { cursor ->
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	query("SELECT 1 FROM $TABLE_JOBS WHERE state IN ('queued', 'running') LIMIT 1").use { it.moveToFirst() }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	query("SELECT attempt_count FROM $TABLE_JOBS WHERE job_id = ?", jobId).use { cursor ->
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	require(existing == checked) { "Completed translation conflicts with restored data" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	require(existing.locator == checked.locator) { "Completed translation identity conflicts" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	require(existing.sameRequestAs(request)) { "Translation job identity conflicts" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	require(matches.size <= 1) { "Completed translation identities resolve to different rows" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	UpdateQuery.builder().table(TABLE_JOBS).where("job_id = ? AND state = 'queued'").whereArgs(request.jobId).build(),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	val nextState = if (retryable && claim.attemptCount < MAX_ATTEMPTS) "queued" else "failed"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	val SHA_256 = Regex("[0-9a-f]{64}")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.kt	.replace("\r\n", "\n")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.kt	.replace(Regex(" *\\n *"), "\n")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.kt	.replace(Regex("[\\t ]+"), " ")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.kt	.replace(Regex("\\n{3,}"), "\n\n")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.kt	regexReplacements = "[]",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.kt	val processed = NovelContentProcessor().process(document, chapterName = "", OPTIONS)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	"""[{"id":"prev_chapter","enabled":true},{"id":"scroll_to_top","enabled":true},{"id":"translate","enabled":false},{"id":"auto_scroll","enabled":false},{"id":"tts","enabled":true},{"id":"quotes","enabled":true},{"id":"orientation","enabled":false},{"id":"settings","enabled":true},{"id":"edit","enabled":false},{"id":"next_chapter","enabled":true}]""",
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	"novel_bottom_bar_items",
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_HENTAI_FEATURES = "eh_is_hentai_enabled"
@@ -3147,14 +3301,14 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	norm
 app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	normalized.contains("nhentai") -> SourceFamily.NHentai
 app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	normalized.contains("novel") -> SourceFamily.Novel
 app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	normalized.contains("pururin") || normalized.contains("puruin") -> SourceFamily.Pururin
+app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	"content" -> requirePersistedWritePermission(context, uri)
+app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	"file" -> prepareFileDirectory(context, uri)
+app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	if (uri.scheme != "file") return false
 app/src/main/java/dev/ahmedmohamed/hayai/theme/HayaiThemePreferences.kt	const val KEY_CUSTOM_SEED_COLOR = "hayai_theme_custom_seed_color"
 app/src/main/java/dev/ahmedmohamed/hayai/theme/HayaiThemePreferences.kt	const val KEY_CUSTOM_SEED_ENABLED = "hayai_theme_custom_seed_enabled"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	?: error("The release has no Hayai APK for $primaryAbi.")
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"arm64-v8a" -> "-arm64-v8a"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"armeabi-v7a" -> "-armeabi-v7a"
-app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	"content" -> requirePersistedWritePermission(context, uri)
-app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	"file" -> prepareFileDirectory(context, uri)
-app/src/main/java/dev/ahmedmohamed/hayai/storage/StorageLocationAccess.kt	if (uri.scheme != "file") return false
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"x86_64" -> "-x86_64"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	"x86" -> "-x86"
 app/src/main/java/dev/ahmedmohamed/hayai/update/HayaiReleasePolicy.kt	else -> ""

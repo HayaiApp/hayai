@@ -424,6 +424,7 @@ class ReaderViewModel(
         val loader = loader ?: return -1
 
         Timber.d("Loading adjacent ${chapter.chapter.url}")
+        saveCurrentChapterReadingProgress()
         var lastPage: Int? = if (chapter.chapter.pages_left <= 1) 0 else chapter.chapter.last_page_read
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
         try {

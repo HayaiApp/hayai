@@ -19,9 +19,10 @@ data class HayaiBackupData(
     @ProtoNumber(10) val novelHighlights: List<NovelHighlightBackup> = emptyList(),
     @ProtoNumber(11) val novelCustomSources: List<NovelCustomSourceDefinition> = emptyList(),
     @ProtoNumber(12) val novelApkRepositories: List<String> = emptyList(),
+    @ProtoNumber(13) val novelTranslations: List<HayaiBackupNovelTranslation> = emptyList(),
 ) {
     companion object {
-        const val CURRENT_VERSION = 4
+        const val CURRENT_VERSION = 5
         const val MINIMUM_SUPPORTED_VERSION = 1
     }
 }
@@ -53,6 +54,22 @@ data class HayaiBackupChapterStat(
     @ProtoNumber(2) val mangaUrl: String,
     @ProtoNumber(3) val chapterUrl: String,
     @ProtoNumber(4) val wordCount: Long,
+)
+
+@Serializable
+data class HayaiBackupNovelTranslation(
+    @ProtoNumber(1) val sourceId: Long,
+    @ProtoNumber(2) val mangaUrl: String,
+    @ProtoNumber(3) val chapterUrl: String,
+    @ProtoNumber(4) val sourceLanguage: String,
+    @ProtoNumber(5) val targetLanguage: String,
+    @ProtoNumber(6) val sourceHash: String,
+    @ProtoNumber(7) val translatedContent: String,
+    @ProtoNumber(8) val contentFormat: String,
+    @ProtoNumber(9) val engineId: String,
+    @ProtoNumber(10) val detectedLanguage: String? = null,
+    @ProtoNumber(11) val createdAt: Long,
+    @ProtoNumber(12) val updatedAt: Long,
 )
 
 @Serializable

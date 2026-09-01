@@ -110,6 +110,53 @@ class NovelMigrationDataMoverTest {
     }
 
     @Test
+    fun `completed translations map to the stable target identity`() {
+        val actions =
+            NovelMigrationTranslationPlanner.plan(
+                source = listOf(translation(1, 7, "/old", "/old/1")),
+                target = emptyList(),
+                chapterMap = mapOf(1L to 10L),
+                targetSourceId = 8,
+                targetMangaUrl = "/new",
+                targetChapterUrls = mapOf(10L to "/new/1"),
+                replace = false,
+            )
+
+        assertEquals(NovelMigrationTranslationOperation.Insert, actions.single().operation)
+        assertEquals(translation(10, 8, "/new", "/new/1"), actions.single().target)
+    }
+
+    @Test
+    fun `completed translation migration is idempotent and refuses conflicting target content`() {
+        val source = translation(1, 7, "/old", "/old/1")
+        val moved = translation(10, 8, "/new", "/new/1")
+
+        assertEquals(
+            emptyList<NovelMigrationTranslationAction>(),
+            NovelMigrationTranslationPlanner.plan(
+                source = listOf(source),
+                target = listOf(moved),
+                chapterMap = mapOf(1L to 10L),
+                targetSourceId = 8,
+                targetMangaUrl = "/new",
+                targetChapterUrls = mapOf(10L to "/new/1"),
+                replace = false,
+            ),
+        )
+        assertThrows(NovelMigrationException::class.java) {
+            NovelMigrationTranslationPlanner.plan(
+                source = listOf(source),
+                target = listOf(moved.copy(translatedContent = "different")),
+                chapterMap = mapOf(1L to 10L),
+                targetSourceId = 8,
+                targetMangaUrl = "/new",
+                targetChapterUrls = mapOf(10L to "/new/1"),
+                replace = false,
+            )
+        }
+    }
+
+    @Test
     fun `copied quote identities include destination and complete payload`() {
         val quote =
             NovelMigrationQuote(
@@ -157,4 +204,26 @@ class NovelMigrationDataMoverTest {
             NovelMigrationCopyIdentity.highlightId(highlight.copy(chapterUrl = "/other/chapter"), attempt = 0),
         )
     }
+
+    private fun translation(
+        chapterId: Long,
+        sourceId: Long,
+        mangaUrl: String,
+        chapterUrl: String,
+    ) =
+        NovelMigrationTranslation(
+            chapterId = chapterId,
+            sourceId = sourceId,
+            mangaUrl = mangaUrl,
+            chapterUrl = chapterUrl,
+            sourceLanguage = "ja",
+            targetLanguage = "en",
+            sourceHash = "a".repeat(64),
+            translatedContent = "translated",
+            contentFormat = "plain_text_v1",
+            engineId = "GOOGLE_WEB",
+            detectedLanguage = "ja",
+            createdAt = 10,
+            updatedAt = 11,
+        )
 }
