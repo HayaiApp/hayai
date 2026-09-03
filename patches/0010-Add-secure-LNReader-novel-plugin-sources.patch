@@ -1,4 +1,4 @@
-From c3ee1ee9de911d7e7fc4cb2cb13ed6bc2c5b8b95 Mon Sep 17 00:00:00 2001
+From ab5f798ec4ac48245c6fa568022824b3bd3d933b Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 19:40:14 +0300
 Subject: [PATCH] Add secure LNReader novel plugin sources
@@ -6137,7 +6137,7 @@ index 3e6673bd01657702a27479bc35ed98ed17f50071..713d70b7a02f6c06ceb1ed74c5157860
                      titleRes = R.string.hayai_retry_legacy_migration
                      summaryRes = R.string.hayai_retry_legacy_migration_summary
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 6db4956c41c510a385e1208446e36ed84c83b06c..61386f0a621fbfdcd659ebed1e33ed0fbd127596 100644
+index 18648915046822b0eb48f4682f58ec78dfab6e91..f1e0b2f03e6ad80b7e2ce7da6cdf502f4968f685 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -1261,4 +1261,15 @@

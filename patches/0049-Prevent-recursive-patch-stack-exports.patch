@@ -1,4 +1,4 @@
-From c70a9abadaac8c7b5da34d81557f15b353fefb9b Mon Sep 17 00:00:00 2001
+From 213b75a77ddeef3e78050b7e73ee587e9dd2dd35 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 07:46:48 +0300
 Subject: [PATCH] Prevent recursive patch stack exports

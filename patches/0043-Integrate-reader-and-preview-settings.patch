@@ -1,4 +1,4 @@
-From 477da06758c5d7b1472984fe311f84525894aa4f Mon Sep 17 00:00:00 2001
+From ce529a2b52c7337d6716224ba55feaeeaee65544 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 04:44:56 +0300
 Subject: [PATCH] Integrate reader and preview settings
@@ -121,7 +121,7 @@ index 58dd5be9b9dd1bc09837da8fb5bf7774edab26d9..d27b39760ec86381c690097eec5696e5
          const val KEY_HIDDEN_SOURCES_IN_UPDATES = "hidden_sources_in_updates"
      }
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 0bac9fee8e5c2738541a20e9ace0057ecc454e57..c78d178c2891a2c99f7d822eecaad047b81123d1 100644
+index d7b742a921977f72b82d0f1937a15ff877178f6f..09ecc188e5fd9208abc0ed7ce9a4de6b4918a032 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -1270,6 +1270,23 @@

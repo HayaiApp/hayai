@@ -1,4 +1,4 @@
-From d735bab93c0bc574d0d849cc7dfcd82daed5becb Mon Sep 17 00:00:00 2001
+From 7c0b39456ad049659b33c26877c7421e7fd2cade Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 27 Aug 2026 00:45:11 +0300
 Subject: [PATCH] Unify novel reader and migration workflows
@@ -5537,7 +5537,7 @@ index 2c5801732dfa7cfad1995609418c592ff1370632..fb0f3c8f84da4c7a1862f6e73e08c1ed
              if (MigrationFlags.hasCategories(flags)) {
                  val categories = db.getCategoriesForManga(prevManga).executeAsBlocking()
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
-index e0f3d7183f0f0da033fff8885ed80f50beb763ae..c87e4d0cfa5a273fb0111f41c987fe5694ae365f 100644
+index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83e867b181 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
 @@ -81,6 +81,9 @@ import com.google.android.material.slider.SliderOrientation
@@ -5739,8 +5739,8 @@ index e0f3d7183f0f0da033fff8885ed80f50beb763ae..c87e4d0cfa5a273fb0111f41c987fe56
          viewModel.setReadStartTime()
      }
  
-@@ -1708,7 +1744,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
-         config?.setFullscreen()
+@@ -1709,7 +1745,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+         (viewer as? PagerViewer)?.refreshCutoutInsets()
          if (isInMultiWindowMode) {
              wic.show(systemBars())
 -        } else if (!menuVisible && preferences.fullscreen().get()) {
@@ -5748,7 +5748,7 @@ index e0f3d7183f0f0da033fff8885ed80f50beb763ae..c87e4d0cfa5a273fb0111f41c987fe56
              wic.hide(systemBars())
              wic.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
          }
-@@ -1799,7 +1835,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1800,7 +1836,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
          if (viewerChapters.nextChapter == null && viewerChapters.prevChapter == null) {
              binding.readerNav.startCell.isVisible = false
              binding.readerNav.endCell.isVisible = false
@@ -5757,7 +5757,7 @@ index e0f3d7183f0f0da033fff8885ed80f50beb763ae..c87e4d0cfa5a273fb0111f41c987fe56
              binding.readerNav.leftChapter.alpha = if (viewerChapters.nextChapter != null) 1f else 0.5f
              binding.readerNav.rightChapter.alpha = if (viewerChapters.prevChapter != null) 1f else 0.5f
          } else {
-@@ -1909,6 +1945,35 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1910,6 +1946,35 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
          hasExtraPage: Boolean,
      ) {
          viewModel.onPageSelected(page, hasExtraPage)
@@ -5793,7 +5793,7 @@ index e0f3d7183f0f0da033fff8885ed80f50beb763ae..c87e4d0cfa5a273fb0111f41c987fe56
          val pages = page.chapter.pages ?: return
  
          val currentPage =
-@@ -1934,7 +1999,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1935,7 +2000,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
              }
          }
          binding.pageNumber.text = if (resources.isLTR) "$currentPage/$totalPages" else "$totalPages/$currentPage"
@@ -5802,7 +5802,7 @@ index e0f3d7183f0f0da033fff8885ed80f50beb763ae..c87e4d0cfa5a273fb0111f41c987fe56
              binding.readerNav.rightPageText.text = currentPage
              binding.readerNav.leftPageText.text = totalPages
          } else {
-@@ -2253,7 +2318,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -2254,7 +2319,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                          setMenuVisibility(false)
                      }
                  }
@@ -6016,7 +6016,7 @@ index 44ba1213bc132502cb7f5d3fb98fa6e34d70ddf3..3a38098ebf70480c56aea9bcd44b57be
          android:id="@+id/action_more"
          android:icon="@drawable/ic_more_vert_24dp"
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index aefc8822874a1cc28a6379f8efaa84974f69e3c9..c85d6ee9f20554fda8f333dff4b4f5721a1096f5 100644
+index f43f9884eb54f06b71015c7c3a3fcb0969117c43..e004318aed2adea4baa19a8108ebf0f06fd7441f 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -330,6 +330,7 @@

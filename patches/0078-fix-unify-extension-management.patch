@@ -1,4 +1,4 @@
-From ac32043034f94311889b90c07d6d1a6bc5e69d42 Mon Sep 17 00:00:00 2001
+From f8e26b3683ca3cda9c26d03faf85de96d243e2fc Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 13:05:11 +0300
 Subject: [PATCH] fix: unify extension management

@@ -1,4 +1,4 @@
-From 784216afc5084c538ab8b05a9e31de800541808e Mon Sep 17 00:00:00 2001
+From b20d36899e19be9f7f46d5a887c1d179de6b25b7 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 16:48:42 +0300
 Subject: [PATCH] Reset Hayai onto TachiyomiJ2K baseline
@@ -2048,7 +2048,7 @@ index 384e99410bdc832b4b63507cfb1a32324b6cc4e1..a207173243ad6a712ff19a7d4a49964d
                                  finish()
                                  return true
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 754144bef2dfcb95204f335b8dcb9f748cd85c3e..5d1dba1024cf5fda2c4aadf8aa62b5c2db30efa6 100644
+index 63a9be59e8f55c77484c951d7a676283a51468d9..ad2d3a726758b32dd088cb0072339783c9493f8b 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -51,6 +51,7 @@ import com.google.android.material.chip.Chip
@@ -6252,7 +6252,7 @@ index 0000000000000000000000000000000000000000..3effc7aab9f1df77dcb18f21f50df5d9
 +    <color name="hayai_background_gray">#374151</color>
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 92b8ef739e361d6e0338fbbe2c20f936eff5537d..25fba045da6fadbf5928584fa5b373323f6cbf06 100644
+index 97ae8a4b2b9e23d2d6d246af10a621aa81586bea..fdf286fc41aaee66a931ded30d913542fe7ad3b3 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -1,11 +1,20 @@

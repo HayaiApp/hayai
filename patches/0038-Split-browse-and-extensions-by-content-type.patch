@@ -1,4 +1,4 @@
-From 7e6b54984b91b05a4d0b8d86f36e8426fc2f1faa Mon Sep 17 00:00:00 2001
+From cc44d07c12c2f365b24ef5a14390a0794f6119c9 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 03:59:23 +0300
 Subject: [PATCH] Split browse and extensions by content type
@@ -1098,7 +1098,7 @@ index 0000000000000000000000000000000000000000..ee13fa6c2def6431ac8272ee69670391
 +        android:pathData="M12,12C16.8,11.2 20.6,12.2 24,15C27.4,12.2 31.2,11.2 36,12V34C31.5,33.3 27.7,34.4 24,37C20.3,34.4 16.5,33.3 12,34ZM15,16V30.7C18,30.6 20.5,31.3 22,32.3V18.1C20.2,16.5 17.9,15.8 15,16ZM33,16C30.1,15.8 27.8,16.5 26,18.1V32.3C27.5,31.3 30,30.6 33,30.7Z" />
 +</vector>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index c72ead3a76db2b4d8348ff4052a66d09e9311375..0bac9fee8e5c2738541a20e9ace0057ecc454e57 100644
+index 33abefa866366ea0767aa7817b3a3336e1916ecb..d7b742a921977f72b82d0f1937a15ff877178f6f 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -328,6 +328,8 @@

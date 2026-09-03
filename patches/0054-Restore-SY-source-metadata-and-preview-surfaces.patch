@@ -1,4 +1,4 @@
-From 7aa094a3bd3f43da505b8e33fc76151d8182ecf8 Mon Sep 17 00:00:00 2001
+From bbb14d7b8e0ba2ec9350192a6f9ebeab58875da4 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 11:23:51 +0300
 Subject: [PATCH] Restore SY source metadata and preview surfaces
@@ -30448,7 +30448,7 @@ index ab49c4550580e5038a157fd76033db421c71e0bc..36825d884e9ca8cbd9a50f82b1a91aca
          addSingletonFactory { NovelMigrationPolicy(get(), get()) }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index cf4b290ad26c3780bf8a2cdc225a33de4f93369c..739bcfe2a4df932962960ce35c6a03d7b24387cb 100644
+index 60460d5ee63445fb1ddd71575fb50f756de27497..bab15801c8c6c4fc6be4b1ceed2527690efcf73d 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -63,6 +63,9 @@ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry

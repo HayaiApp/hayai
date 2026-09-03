@@ -1,4 +1,4 @@
-From e5fc53c9be94c20131c43964d12a4b469777a6ea Mon Sep 17 00:00:00 2001
+From e850ff0a34d51fd382420b5ea4217ef9f28e5603 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 13:15:13 +0300
 Subject: [PATCH] Move novel plugins into J2K settings

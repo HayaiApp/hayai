@@ -1,4 +1,4 @@
-From 5d25f6397f3f35b6062a259f1ba6ff4efb86ee37 Mon Sep 17 00:00:00 2001
+From 3e7724d4dc43e46e9d2439a1db0b76e11e870459 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 07:44:45 +0300
 Subject: [PATCH] Rebuild novel reader UI on J2K chrome

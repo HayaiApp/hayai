@@ -1,4 +1,4 @@
-From 4fddae23d2eddc2088622eddbdbdf3dbe00977ff Mon Sep 17 00:00:00 2001
+From b66cd15379d7c3c841438a56f237e004ba87c8a8 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Fri, 21 Aug 2026 21:16:45 +0300
 Subject: [PATCH] Complete enhanced hentai sources and gallery updater
@@ -2719,7 +2719,7 @@ index 88ded18efca45159b2df07137b8b09fa3e62e017..a673a7f2a49ad2c1cd8d8cc85a142497
      }
  }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index c079b1c4d6832be869f8c516c9cefcd88db5a5ca..cf5b1c5fefc1b116f43e05f896e990befe1e8296 100644
+index aa6acc7225dcccd9ee8f322912633798fdc5c5be..3cf4f714b3236145201774ff5642f06a5f784b71 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -50,12 +50,14 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
