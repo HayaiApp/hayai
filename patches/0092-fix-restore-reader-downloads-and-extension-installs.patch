@@ -1,4 +1,4 @@
-From d46898d1fcdcab44ae105006e8fdcfe2a1903ffc Mon Sep 17 00:00:00 2001
+From ec7696649a5b8932dd6e6588c60c36fc2c0b27dc Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 21:33:24 +0300
 Subject: [PATCH] fix: restore reader downloads and extension installs
@@ -417,10 +417,10 @@ index 5252cb913322007250b37d1570866598d5bb5b10..94044aa59b8ce75352d0edc5f5302261
 +    ): Boolean = autoStart && !downloaderRunning
 +}
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt b/app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt
-index 47158e62e8226e55be2a6361670537b67ff7d40e..c465408447364bbc04fbf11fbca58cd08901aa0f 100644
+index 437ad09324e61e2d5f86ba0de356d5a817133206..32b542dd7a81a00218567c1022e361b4e72e5a41 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt
-@@ -121,7 +121,7 @@ class LibraryUpdateNotifier(
+@@ -122,7 +122,7 @@ class LibraryUpdateNotifier(
                          ),
                      )
                      setContentIntent(pendingIntent)
@@ -429,7 +429,7 @@ index 47158e62e8226e55be2a6361670537b67ff7d40e..c465408447364bbc04fbf11fbca58cd0
                      addAction(
                          R.drawable.ic_file_open_24dp,
                          context.getString(R.string.open_log),
-@@ -159,7 +159,7 @@ class LibraryUpdateNotifier(
+@@ -160,7 +160,7 @@ class LibraryUpdateNotifier(
                          ),
                      )
                      setContentIntent(NotificationHandler.openUrl(context, HELP_SKIPPED_URL))
@@ -438,16 +438,7 @@ index 47158e62e8226e55be2a6361670537b67ff7d40e..c465408447364bbc04fbf11fbca58cd0
                      addAction(
                          R.drawable.ic_file_open_24dp,
                          context.getString(R.string.open_log),
-@@ -195,7 +195,7 @@ class LibraryUpdateNotifier(
-                     notifications.add(
-                         Pair(
-                             context.notification(Notifications.CHANNEL_NEW_CHAPTERS) {
--                                setSmallIcon(R.drawable.ic_tachij2k_notification)
-+                                setSmallIcon(R.drawable.ic_hayai_monochrome_launcher)
-                                 try {
-                                     val request =
-                                         ImageRequest
-@@ -277,7 +277,7 @@ class LibraryUpdateNotifier(
+@@ -231,7 +231,7 @@ class LibraryUpdateNotifier(
                  notify(
                      Notifications.ID_NEW_CHAPTERS,
                      context.notification(Notifications.CHANNEL_NEW_CHAPTERS) {
@@ -556,7 +547,7 @@ index d70a19d54293f455e10f11e5af94be8d5d3787d5..f2e90ddfa02b32a07703ee8e0fb7da62
 +    }
  }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt b/app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt
-index b6641fa24e3019907800ce0fcc683d426c3cabaa..77322ae7ed357c422f7fd7db21b79e7dce05ed09 100644
+index a5c102e8b9ec2d9fd1b24e2d21446b6525639d7f..6dbd1b1fe21c0456c5433d71e8fb63e1db23b456 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt
 @@ -25,7 +25,7 @@ class CrashLogUtil(

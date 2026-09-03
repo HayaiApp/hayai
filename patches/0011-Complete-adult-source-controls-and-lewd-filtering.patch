@@ -1,4 +1,4 @@
-From 2db8fd3ff423722b4dbdc63f726e7c3c3592f167 Mon Sep 17 00:00:00 2001
+From 671ae7e751ba422b45456780400a92f371b4d740 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 19:55:31 +0300
 Subject: [PATCH] Complete adult source controls and lewd filtering
@@ -515,7 +515,7 @@ index f9e0f82775c80fdc6c319a569c8c3366e90997cb..734a6f437e2f7d9a690c9b546e9f8990
                  .filterNot { it.id.toString() in hiddenCatalogues }
                  .sortedBy { "(${it.lang}) ${it.name}" }
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 61386f0a621fbfdcd659ebed1e33ed0fbd127596..3b9dbe6c1a871aa6ae0dd044caec5d22c3198d90 100644
+index f1e0b2f03e6ad80b7e2ce7da6cdf502f4968f685..63a2e3e56f612faccf1c16c07891f654066e2f40 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -11,10 +11,8 @@

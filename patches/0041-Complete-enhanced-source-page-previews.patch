@@ -1,4 +1,4 @@
-From bc3e141ded2dfd707c614f5b3b8c3e329e3543fc Mon Sep 17 00:00:00 2001
+From 8caf740055e7a07e92e9e1828e8e6c1297ae9326 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 04:09:33 +0300
 Subject: [PATCH] Complete enhanced source page previews
@@ -1240,7 +1240,7 @@ index 64de2217ec110cac66c0ce42557297b5c586049f..51974eaa04d3cc9e504974382f479073
  fun Source.pkgName() = Injekt.get<ExtensionManager>().getPackageName(id)
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 7c1bbd582bc0dc6b626f8a422e8ff075b66af04d..02e5c0793d8656f91164cc8d3aec52a3d05671c8 100644
+index 09bca1f2b575673941667389535186b75a545d04..d8a1bec1b71d184e8f0ecf4b50655d778102e093 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -8,6 +8,7 @@ import android.content.ClipData
@@ -1471,7 +1471,7 @@ index 7c1bbd582bc0dc6b626f8a422e8ff075b66af04d..02e5c0793d8656f91164cc8d3aec52a3
          private enum class RangeMode {
              Download,
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
-index 6da635435f0def6a93e5638ed12f04aeb84d9d83..e0f3d7183f0f0da033fff8885ed80f50beb763ae 100644
+index 673ee10e552ac21a376cbded71ea1ec950858b43..78b95ebae863d22aae92eb027df1df834bed2a86 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
 @@ -81,6 +81,7 @@ import com.google.android.material.slider.SliderOrientation

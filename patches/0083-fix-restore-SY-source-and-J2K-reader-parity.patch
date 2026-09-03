@@ -1,4 +1,4 @@
-From 81ce5367aaf01fce8e2f9b5a107960bf0709ddc7 Mon Sep 17 00:00:00 2001
+From e5ee1ea739c567d05e4cf776a5f58eb88ddac95e Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 17:14:45 +0300
 Subject: [PATCH] fix: restore SY source and J2K reader parity
@@ -1205,7 +1205,7 @@ index 0000000000000000000000000000000000000000..400d6a016e93efd2867ca30803ac3d63
 +        get() = totalPages?.let { arrayOf<Any>(page, it) } ?: arrayOf<Any>(page)
 +}
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 823434438351cc2db9254936419f28ca65775e69..9290f4d5155366d5dc98d3c9478ba92e6511bddf 100644
+index fbc8c65373ba0f5488c390daff51b4894791a072..1675db314221b92da76c87222dff0f2506799b2f 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -8,7 +8,6 @@ import android.content.ClipData

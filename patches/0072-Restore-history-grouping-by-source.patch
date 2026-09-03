@@ -1,4 +1,4 @@
-From 642f1ea468e5b043eb56f0eece4ad5c06eb9120d Mon Sep 17 00:00:00 2001
+From 6ed3bb244538a8d78d15bbffa2ae1cfcaf1ab0ae Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 09:09:00 +0300
 Subject: [PATCH] Restore history grouping by source
@@ -403,7 +403,7 @@ index 7f4a45c9081ed3380612d10d7b5a0729993ee543..f293ac5fd26935f6f57ddb14772769fb
      </string-array>
  
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index ea2ee9299574387bf97e69ed16359861e6158328..aefc8822874a1cc28a6379f8efaa84974f69e3c9 100644
+index c0f7eb6765eaca0b281348b58bc0d47b770e3238..f43f9884eb54f06b71015c7c3a3fcb0969117c43 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -312,6 +312,7 @@

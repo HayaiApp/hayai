@@ -1,4 +1,4 @@
-From e0cb4a325475203c24e7b41e68d5f9457072af8f Mon Sep 17 00:00:00 2001
+From 16747481ef00914df834ac4e47ca59fe437b0999 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 09:08:49 +0300
 Subject: [PATCH] Fix LNReader v3 repository compatibility

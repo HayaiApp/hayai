@@ -1,4 +1,4 @@
-From fd2c8738b87b835cf44d539bff178ac226f1ca8c Mon Sep 17 00:00:00 2001
+From 39b5249912401bba2f6b8ab1ce4423ad814cd8b8 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 09:14:15 +0300
 Subject: [PATCH] Localize Hayai feature surfaces
@@ -8339,7 +8339,7 @@ index 32309337f5e67c3640e448bdfd5d919211726234..ab49c4550580e5038a157fd76033db42
          addSingletonFactory {
              SourceDetailsPreviewRegistry(
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 02e5c0793d8656f91164cc8d3aec52a3d05671c8..cf4b290ad26c3780bf8a2cdc225a33de4f93369c 100644
+index d8a1bec1b71d184e8f0ecf4b50655d778102e093..60460d5ee63445fb1ddd71575fb50f756de27497 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -1505,7 +1505,7 @@ class MangaDetailsController :
@@ -8499,7 +8499,7 @@ index e3d67eac211f3a0887045bf12d9466aeae2baf14..05746c1bd4eef8ee842a159f692eeeaf
 \ No newline at end of file
 +</LinearLayout>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index c78d178c2891a2c99f7d822eecaad047b81123d1..ea2ee9299574387bf97e69ed16359861e6158328 100644
+index 09ecc188e5fd9208abc0ed7ce9a4de6b4918a032..c0f7eb6765eaca0b281348b58bc0d47b770e3238 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -1273,15 +1273,12 @@

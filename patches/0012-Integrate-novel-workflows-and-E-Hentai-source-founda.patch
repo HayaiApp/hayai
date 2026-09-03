@@ -1,4 +1,4 @@
-From b4e78b1a7ad21a78707ab6b607f827ca02ec34b5 Mon Sep 17 00:00:00 2001
+From a4c72a7fd4e520d130f9ba1322bf12a9239f66cb Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Fri, 21 Aug 2026 00:31:46 +0300
 Subject: [PATCH] Integrate novel workflows and E-Hentai source foundation
@@ -6134,7 +6134,7 @@ index db66b44b1bfd8c1bffd972cf83e913cacc637804..4183b808d3c552a982ee93cf78852699
      }
  }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 5d1dba1024cf5fda2c4aadf8aa62b5c2db30efa6..c079b1c4d6832be869f8c516c9cefcd88db5a5ca 100644
+index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798fdc5c5be 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -23,6 +23,7 @@ import android.view.View
@@ -6411,7 +6411,7 @@ index 5d1dba1024cf5fda2c4aadf8aa62b5c2db30efa6..c079b1c4d6832be869f8c516c9cefcd8
              presenter.deleteChapter(chapter)
          } else {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt
-index 42303921cb3abf9ba4458a13ada02fba64125b89..5b33ddf4d610b89ba368d646a71382f74d732b5e 100644
+index 0dce43fa43f0a93caa288d2f0915038fedc93751..a43f9aa5f73ca4ef4b7aa23b98419a270b68a49b 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt
 @@ -394,6 +394,7 @@ class MangaHeaderHolder(
@@ -7002,7 +7002,7 @@ index d847df8dfb116b26281c77cd801991ec458978c4..76bf268f9b5057f060a2b282647324dd
 \ No newline at end of file
 +</eu.kanade.tachiyomi.widget.StatefulNestedScrollView>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 3b9dbe6c1a871aa6ae0dd044caec5d22c3198d90..699a8a5feb9d996708f8bfe8c0f49d27a0ce978b 100644
+index 63a2e3e56f612faccf1c16c07891f654066e2f40..d8b88baa98dc349469acb65d7c5f5de3d5259645 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -1261,6 +1261,34 @@

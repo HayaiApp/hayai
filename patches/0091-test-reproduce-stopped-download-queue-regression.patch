@@ -1,4 +1,4 @@
-From 82abd839eeed777432c7fa90433c5bccac601333 Mon Sep 17 00:00:00 2001
+From 3a2062ce92a05a79ea6de33c8d692c6af1dc8818 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 21:11:47 +0300
 Subject: [PATCH] test: reproduce stopped download queue regression

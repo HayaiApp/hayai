@@ -1,4 +1,4 @@
-From 9a8b65b52047314eddba9eaf3dc5458cd05d7047 Mon Sep 17 00:00:00 2001
+From d34073e4ec087458a85d9b8b80f58d899c7598a0 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 08:45:26 +0300
 Subject: [PATCH] Fix source badge alignment and visibility
