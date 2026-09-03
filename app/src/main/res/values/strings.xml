@@ -1349,4 +1349,15 @@
     <string name="hayai_novel_plugin_install_warning">This plugin can access websites and store source settings through Hayai’s restricted JavaScript bridge. Install only if you trust its repository.</string>
     <string name="hayai_remove_repository_confirmation">Remove %1$s? Installed plugins from this repository stay installed until you uninstall them.</string>
     <string name="refresh">Refresh</string>
+    <string name="hayai_novel_title_max_lines">Novel title lines</string>
+    <string name="hayai_novel_title_max_lines_summary">Maximum title lines for novel entries in the library</string>
+    <string name="hayai_saved_searches">Saved</string>
+    <string name="hayai_save_current_search">Save current search</string>
+    <string name="hayai_saved_search_name">Preset name</string>
+    <string name="hayai_saved_search_saved">Search preset saved</string>
+    <string name="hayai_saved_search_name_required">Enter a name for this preset</string>
+    <string name="hayai_saved_search_details">Query: %1$s</string>
+    <string name="hayai_saved_search_no_query">No text query</string>
+    <string name="hayai_apply_saved_search">Apply</string>
+    <string name="hayai_saved_search_deleted">Search preset deleted</string>
 </resources>

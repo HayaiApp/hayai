@@ -103,6 +103,7 @@ class HayaiPreferences(
     val novelStatusBarOrder = store.getString("pref_novel_status_bar_order", """["time","chapter","progress","battery"]""")
     val novelOrientation = store.getInt("pref_novel_reader_orientation", 0)
     val novelFullscreen = store.getBoolean("pref_novel_reader_fullscreen", true)
+    val novelTitleMaxLines = store.getInt(KEY_NOVEL_TITLE_MAX_LINES, 2)
 
     // Keep the legacy Hayai keys so restored and in-place preferences migrate without a copy step.
     val hiddenSourcesInHistory = store.getStringSet(KEY_HIDDEN_SOURCES_IN_HISTORY, emptySet())
@@ -115,6 +116,7 @@ class HayaiPreferences(
         const val KEY_PAGE_PREVIEW_ROWS = "pref_page_preview_rows"
         const val KEY_HIDDEN_SOURCES_IN_HISTORY = "hidden_sources_in_history"
         const val KEY_HIDDEN_SOURCES_IN_UPDATES = "hidden_sources_in_updates"
+        const val KEY_NOVEL_TITLE_MAX_LINES = "pref_novel_title_max_lines"
     }
 }
 

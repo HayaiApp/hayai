@@ -64,16 +64,27 @@
             android:layout_height="wrap_content"
             android:text="@string/reset"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/search_btn"
+            app:layout_constraintEnd_toStartOf="@id/saved_btn"
             app:layout_constraintHorizontal_chainStyle="spread_inside"
             app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/saved_btn"
+            style="@style/Widget.Material3Expressive.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/hayai_saved_searches"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/search_btn"
+            app:layout_constraintStart_toEndOf="@id/reset_btn"
             app:layout_constraintTop_toTopOf="parent" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/search_btn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="48dp"
+            android:layout_marginStart="8dp"
             android:layout_marginEnd="16dp"
             android:text="@string/filter"
             app:flow_verticalBias="1.0"
@@ -81,9 +92,9 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_chainStyle="spread"
-            app:layout_constraintStart_toEndOf="@id/reset_btn"
+            app:layout_constraintStart_toEndOf="@id/saved_btn"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintWidth_min="150dp" />
+            app:layout_constraintWidth_min="96dp" />
 
         <View
             android:id="@+id/bottom_divider"

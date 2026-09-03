@@ -14,6 +14,9 @@ import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.getResourceColor
 import eu.kanade.tachiyomi.util.view.makeContainerShape
 import eu.kanade.tachiyomi.util.view.setCards
+import dev.ahmedmohamed.hayai.novel.integration.NovelTitlePresentation
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 /**
  * Class used to hold the displayed data of a manga in the library, like the cover or the binding.title.
@@ -29,6 +32,7 @@ class LibraryListHolder(
     adapter: LibraryCategoryAdapter,
 ) : LibraryHolder(view, adapter) {
     private val binding = MangaListItemBinding.bind(view)
+    private val novelTitles = Injekt.get<NovelTitlePresentation>()
 
     private var transitionMangaId: Long? = null
 
@@ -75,8 +79,9 @@ class LibraryListHolder(
             binding.playLayout.isVisible = false
             return
         }
+        val configuredMaxLines = novelTitles.maxLines(item.manga, authorMatched = false)
         binding.constraintLayout.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-            height = 52.dpToPx
+            height = if (configuredMaxLines > 2) ViewGroup.LayoutParams.WRAP_CONTENT else 52.dpToPx
         }
         binding.padding.isVisible = true
         binding.card.isVisible = true
@@ -108,12 +113,12 @@ class LibraryListHolder(
             }
 
         binding.subtitle.text = authorArtist.highlightText(item.filter, color)
-        binding.title.maxLines = 2
+        binding.title.maxLines = configuredMaxLines
         binding.title.post {
             val hasAuthorInFilter =
                 item.filter.isNotBlank() && authorArtist.contains(item.filter, true)
             binding.subtitle.isVisible = binding.title.lineCount <= 1 || hasAuthorInFilter
-            binding.title.maxLines = if (hasAuthorInFilter) 1 else 2
+            binding.title.maxLines = novelTitles.maxLines(item.manga, hasAuthorInFilter)
         }
 
         // Update the cover.

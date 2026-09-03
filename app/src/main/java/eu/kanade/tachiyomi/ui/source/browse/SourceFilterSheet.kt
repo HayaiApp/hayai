@@ -31,6 +31,7 @@ class SourceFilterSheet(
     var onSearchClicked = {}
 
     var onResetClicked = {}
+    var onSavedClicked = {}
 
     override var recyclerView: RecyclerView? = binding.filtersRecycler
 
@@ -42,6 +43,7 @@ class SourceFilterSheet(
     init {
         binding.searchBtn.setOnClickListener { dismiss() }
         binding.resetBtn.setOnClickListener { onResetClicked() }
+        binding.savedBtn.setOnClickListener { onSavedClicked() }
 
         sheetBehavior.peekHeight = 450.dpToPx
         sheetBehavior.collapse()
@@ -125,6 +127,11 @@ class SourceFilterSheet(
         if (filterChanged) {
             onSearchClicked()
         }
+    }
+
+    fun dismissWithoutSearch() {
+        filterChanged = false
+        dismiss()
     }
 
     fun setFilters(items: List<IFlexible<*>>) {

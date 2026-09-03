@@ -9,6 +9,8 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.isVisible
@@ -26,11 +28,15 @@ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
 import dev.ahmedmohamed.hayai.source.presentation.SourceBrowseLayout
 import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
+import dev.ahmedmohamed.hayai.source.search.SavedSourceFilterCodec
+import dev.ahmedmohamed.hayai.source.search.SavedSourceSearch
+import dev.ahmedmohamed.hayai.source.search.SavedSourceSearchStore
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.data.preference.PreferenceStore
 import eu.kanade.tachiyomi.databinding.BrowseSourceControllerBinding
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.ConfigurableSource
@@ -70,6 +76,8 @@ import eu.kanade.tachiyomi.widget.EmptyView
 import eu.kanade.tachiyomi.widget.LinearLayoutManagerAccurateOffset
 import timber.log.Timber
 import uy.kohesive.injekt.injectLazy
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import kotlin.math.roundToInt
 
 /**
@@ -113,6 +121,7 @@ open class BrowseSourceController(
      */
     private val preferences: PreferencesHelper by injectLazy()
     private val ehPreferences: EhPreferences by injectLazy()
+    private val savedSourceSearches by lazy { SavedSourceSearchStore(Injekt.get<PreferenceStore>()) }
 
     /**
      * Adapter containing the list of manga from the catalogue.
@@ -434,6 +443,7 @@ open class BrowseSourceController(
             presenter.sourceFilters = newFilters
             sheet.setFilters(presenter.filterItems)
         }
+        sheet.onSavedClicked = { showSavedSearches(sheet) }
         sheet.setOnDismissListener {
             filterSheet = null
         }
@@ -441,6 +451,73 @@ open class BrowseSourceController(
             filterSheet = null
         }
         sheet.show()
+    }
+
+    private fun showSavedSearches(sheet: SourceFilterSheet) {
+        val activity = activity ?: return
+        val saved = savedSourceSearches.list(presenter.source.id)
+        val labels = listOf(activity.getString(R.string.hayai_save_current_search)) + saved.map { it.name }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.hayai_saved_searches)
+            .setItems(labels.toTypedArray()) { _, which ->
+                if (which == 0) {
+                    val input = EditText(activity).apply {
+                        hint = activity.getString(R.string.hayai_saved_search_name)
+                        maxLines = 1
+                    }
+                    AlertDialog.Builder(activity)
+                        .setTitle(R.string.hayai_save_current_search)
+                        .setView(input)
+                        .setPositiveButton(R.string.save) { _, _ ->
+                            runCatching {
+                                savedSourceSearches.save(
+                                    presenter.source.id,
+                                    input.text.toString(),
+                                    presenter.query,
+                                    presenter.sourceFilters,
+                                )
+                            }.onSuccess {
+                                activity.toast(R.string.hayai_saved_search_saved)
+                            }.onFailure {
+                                activity.toast(R.string.hayai_saved_search_name_required)
+                            }
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                } else {
+                    showSavedSearchActions(sheet, saved[which - 1])
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showSavedSearchActions(sheet: SourceFilterSheet, saved: SavedSourceSearch) {
+        val activity = activity ?: return
+        AlertDialog.Builder(activity)
+            .setTitle(saved.name)
+            .setMessage(activity.getString(R.string.hayai_saved_search_details, saved.query.ifBlank { activity.getString(R.string.hayai_saved_search_no_query) }))
+            .setPositiveButton(R.string.hayai_apply_saved_search) { _, _ -> applySavedSearch(sheet, saved) }
+            .setNeutralButton(R.string.delete) { _, _ ->
+                savedSourceSearches.delete(saved.id)
+                activity.toast(R.string.hayai_saved_search_deleted)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun applySavedSearch(sheet: SourceFilterSheet, saved: SavedSourceSearch) {
+        val filters = presenter.source.getFilterList()
+        SavedSourceFilterCodec.restore(filters, saved.filters)
+        presenter.query = saved.query
+        presenter.sourceFilters = filters
+        presenter.appliedFilters = filters
+        activityBinding?.searchToolbar?.searchView?.setQuery(saved.query, false)
+        showProgressBar()
+        adapter?.clear()
+        presenter.restartPager(saved.query, filters)
+        updatePopLatestIcons()
+        sheet.dismissWithoutSearch()
     }
 
     /**

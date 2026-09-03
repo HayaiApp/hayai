@@ -55,6 +55,9 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Delegates only novel-card title line count to a Hayai presentation policy.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryGridHolder.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryListHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/filter/FilterBottomSheet.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/main/SearchActivity.kt"
@@ -102,6 +105,8 @@ try {
         # Approved in docs/architecture/j2k-reset.md. Projects the conditional Hayai E-Hentai settings destination.
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsMainController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsAppearanceController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Hosts the novel-card line-count preference in the existing Library settings.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsLibraryController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsDownloadController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt"
@@ -114,6 +119,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Adds one saved-search action to the existing source filter sheet.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/SourceFilterSheet.kt"
         # Approved in docs/architecture/j2k-reset.md. Optional typed rich-result and tag-filter presentation only.
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceGridHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceHolder.kt"

@@ -38,6 +38,7 @@ import dev.ahmedmohamed.hayai.novel.quote.NovelQuote
 import dev.ahmedmohamed.hayai.novel.quote.QuoteAddResult
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationHash
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationLocator
+import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationPresentation
 import dev.ahmedmohamed.hayai.novel.translation.NovelOfflineTranslationWorker
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationService
 import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
@@ -93,6 +94,7 @@ internal class NovelReaderAttachment(
     private var autoScrollRunnable: Runnable? = null
     private var resumeAutoScrollAfterSelection = false
     private var resumeAutoScrollAfterPause = false
+    private var displayedLanguageTag = ""
     private var bookmarkMenuItem: MenuItem? = null
     private var lookupSheet: NovelLookupWebSheet? = null
     private val ttsChapterHandoff = NovelTtsChapterHandoff()
@@ -340,6 +342,7 @@ internal class NovelReaderAttachment(
 
     override fun onChapterContent(content: NovelChapterContent) {
         this.content = content
+        displayedLanguageTag = content.translatedOfflineLanguage.orEmpty()
         val mangaId = requireNotNull(content.manga.id) { "Novel is missing its durable database identity" }
         val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
         ttsChapterHandoff.cancelUnlessTarget(chapterId)
@@ -349,22 +352,11 @@ internal class NovelReaderAttachment(
 
     override fun onDocumentReady() {
         val readyChapterId = content?.chapter?.id ?: return
-        viewer.paragraphs { paragraphs ->
-            if (viewer.currentChapterId != readyChapterId) return@paragraphs
-            tts.configure(
-                preferences.novelTtsSpeed.get(),
-                preferences.novelTtsPitch.get(),
-                preferences.novelTtsVoice.get(),
-                preferences.novelTtsBackgroundPlayback.get(),
-            )
-            tts.setParagraphs(paragraphs)
-            if (ttsChapterHandoff.consume(readyChapterId)) tts.play()
-        }
         if (preferences.novelMarkShortChapterAsRead.get()) {
             viewer.isShort { short -> if (short) viewer.markCurrentChapterRead(readyChapterId) }
         }
         restoreHighlights()
-        showStoredTranslationIfAvailable(readyChapterId)
+        resolveDisplayedTranslation(readyChapterId)
     }
 
     override fun onSelectionAction(action: NovelSelectionAction, selection: NovelSelection) {
@@ -471,7 +463,13 @@ internal class NovelReaderAttachment(
 
     private fun startTts(paragraph: Int) {
         viewer.paragraphs { paragraphs ->
-            tts.configure(preferences.novelTtsSpeed.get(), preferences.novelTtsPitch.get(), preferences.novelTtsVoice.get(), preferences.novelTtsBackgroundPlayback.get())
+            tts.configure(
+                preferences.novelTtsSpeed.get(),
+                preferences.novelTtsPitch.get(),
+                preferences.novelTtsVoice.get(),
+                displayedLanguageTag,
+                preferences.novelTtsBackgroundPlayback.get(),
+            )
             tts.setParagraphs(paragraphs, paragraph)
             tts.play()
         }
@@ -805,8 +803,16 @@ internal class NovelReaderAttachment(
                 onSuccess = { translated ->
                     if (replaceDocument) {
                         if (locator == null || content?.chapter?.id == locator.chapterId) {
-                            viewer.showTranslation(translated.text)
-                            restoreHighlights()
+                            val presentation = NovelTranslationPresentation.from(translated.text, settings.targetLanguage)
+                            val preservePlayback = tts.hasActivePlayback
+                            displayedLanguageTag = presentation.languageTag
+                            viewer.showTranslation(presentation.paragraphs) {
+                                restoreHighlights()
+                                configureTtsForDisplayedDocument(
+                                    chapterId = content?.chapter?.id ?: return@showTranslation,
+                                    preservePlayback = preservePlayback,
+                                )
+                            }
                         }
                     } else {
                         AlertDialog.Builder(activity)
@@ -822,9 +828,14 @@ internal class NovelReaderAttachment(
         }
     }
 
-    private fun showStoredTranslationIfAvailable(chapterId: Long) {
+    private fun resolveDisplayedTranslation(chapterId: Long) {
         val current = content ?: return
-        if (current.chapter.id != chapterId || current.translatedOfflineLanguage != null) return
+        if (current.chapter.id != chapterId) return
+        if (current.translatedOfflineLanguage != null) {
+            displayedLanguageTag = current.translatedOfflineLanguage
+            configureTtsForDisplayedDocument(chapterId, preservePlayback = false)
+            return
+        }
         activity.scope.launch {
             val settings = translationSettings.get()
             val text = withContext(Dispatchers.Default) { NovelTranslationText.canonical(current.document) }
@@ -834,8 +845,37 @@ internal class NovelReaderAttachment(
                     translationStore.findCompleted(current.translationLocator(), settings.targetLanguage, NovelTranslationHash.sha256(text))
                 }
             if (stored != null && content?.chapter?.id == chapterId) {
-                viewer.showTranslation(stored.translatedContent)
-                restoreHighlights()
+                val presentation = NovelTranslationPresentation.from(stored.translatedContent, settings.targetLanguage)
+                displayedLanguageTag = presentation.languageTag
+                viewer.showTranslation(presentation.paragraphs) {
+                    restoreHighlights()
+                    configureTtsForDisplayedDocument(chapterId, preservePlayback = false)
+                }
+            } else if (content?.chapter?.id == chapterId) {
+                displayedLanguageTag = settings.sourceLanguage.takeUnless { it == "auto" }.orEmpty()
+                configureTtsForDisplayedDocument(chapterId, preservePlayback = false)
+            }
+        }
+    }
+
+    private fun configureTtsForDisplayedDocument(
+        chapterId: Long,
+        preservePlayback: Boolean,
+    ) {
+        viewer.paragraphs { paragraphs ->
+            if (viewer.currentChapterId != chapterId) return@paragraphs
+            tts.configure(
+                preferences.novelTtsSpeed.get(),
+                preferences.novelTtsPitch.get(),
+                preferences.novelTtsVoice.get(),
+                displayedLanguageTag,
+                preferences.novelTtsBackgroundPlayback.get(),
+            )
+            if (preservePlayback) {
+                tts.replaceParagraphs(paragraphs)
+            } else {
+                tts.setParagraphs(paragraphs)
+                if (ttsChapterHandoff.consume(chapterId)) tts.play()
             }
         }
     }

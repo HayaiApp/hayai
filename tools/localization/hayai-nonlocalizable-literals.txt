@@ -2216,8 +2216,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	UpdateQu
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	val INSERT_QUERY = InsertQuery.builder().table("hayai_quotes").build()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	val normalized = value.replace("\r\n", "\n").replace('\r', '\n').trim()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	block.paragraphs = Jsoup.parse(request.content.html).select("h1,h2,h3,h4,h5,h6,p,li,blockquote").map { it.text().trim() }.filter(String::isNotBlank)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	block.paragraphs = text.split(Regex("\\n{2,}")).filter(String::isNotBlank)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	textView.gravity = when (style.textAlign) { "center" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL; "right", "end" -> Gravity.TOP or Gravity.END; else -> Gravity.TOP or Gravity.START }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	val text = paragraphs.joinToString("\n\n")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	var original: CharSequence = "",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	var title: String = "",
@@ -2297,7 +2297,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	const activeBlock = () => document.querySelector('.hayai-chapter-block[data-active="true"]') || visibleBlock();
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	else -> ".hayai-tts-active { background:$background; color:$foreground; border-radius:.2em; }"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; text-combine-upright:digits 2; line-break:strict; word-break:normal; overflow-wrap:normal; font-kerning:normal; font-feature-settings:"vert" 1,"vrt2" 1; hanging-punctuation:first last; }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	if (source.isBlank()) return ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	private const val BRIDGE_SCRIPT = """
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	private fun cssString(value: String): String = "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
@@ -2316,9 +2316,11 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	"hayai-novel-font-${System.identityHashCode(this)}",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	"hayai-novel-quotes-${System.identityHashCode(this)}",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${Uri.encode(text)}")))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	displayedLanguageTag = settings.sourceLanguage.takeUnless { it == "auto" }.orEmpty()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	if (selected == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	NovelReaderAction.ImportFont -> fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	private var displayedLanguageTag = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	type = "text/plain"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
@@ -2387,6 +2389,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	const val ACTION_TOGGLE = "dev.ahmedmohamed.hayai.novel.tts.TOGGLE"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	const val CHANNEL_ID = "hayai_novel_tts"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var chapterTitle = ""
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var languageTag = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var novelTitle = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var voiceName = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt	check(!isNovel(manga, sourceManager)) { "Novel chapters do not use image-page indices" }
@@ -2402,6 +2405,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"const
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"if(left>0)setTimeout(tick,Math.min(1000,left));else b.onclick=()=>HayaiReader.retryChapter(id);};tick();})()",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"window.hayaiReader.progress()",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"window.hayaiReader.setBlockState(${json.encodeToString(chapterId.toString())},${json.encodeToString(html)},${json.encodeToString(placement)},$focus)",
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"window.hayaiReader.showTranslation(${json.encodeToString(paragraphs)})",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"window.hayaiReader.upsertBlock(${json.encodeToString(block.chapterId.toString())}," +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	@SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	const val JS_INTERFACE = "HayaiReader"
@@ -2419,8 +2423,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	overri
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun highlightSpokenParagraph(index: Int) = evaluate("window.hayaiReader.highlight($index)")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun isShort(callback: (Boolean) -> Unit) = webView.evaluateJavascript("(window.hayaiReader.documentText().length > 0) && (window.hayaiReader.progress() === 0) && (document.querySelector('.hayai-chapter-block[data-active=true]')?.offsetHeight <= innerHeight)") { callback(it == "true") }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun seek(progress: Int) = evaluate("window.hayaiReader.scrollToPercent(${progress.coerceIn(0, 100)})")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun showOriginal() = evaluate("window.hayaiReader.showOriginal()")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun showTranslation(text: String) = evaluate("window.hayaiReader.showTranslation(${json.encodeToString(text)})")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun step(direction: Int) = evaluate("window.hayaiReader.step(${direction.coerceIn(-1, 1)})")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	override fun stepPixels(pixels: Int) = evaluate("window.hayaiReader.stepPixels($pixels)")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	val base = request.content.baseUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
@@ -2430,6 +2432,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	val re
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	webView.evaluateJavascript("JSON.stringify(window.hayaiReader.paragraphs())") { encoded ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	webView.evaluateJavascript("JSON.stringify(window.hayaiReader.takeSelectionAnchor())") { encoded ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	webView.evaluateJavascript("window.hayaiReader.documentText()") { callback(decodeJsString(it).orEmpty()) }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	webView.evaluateJavascript("window.hayaiReader.showOriginal()") { onComplete() }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	webView.evaluateJavascript("window.hayaiReader.viewportParagraph ? window.hayaiReader.viewportParagraph() : 0") {
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	webView.loadDataWithBaseURL(base, html, "text/html", "UTF-8", null)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelCustomizationStore.kt	"(function(){const snippets=${json.encodeToString(snippets)};for(const snippet of snippets){" +
@@ -2881,6 +2884,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	v
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val targetLanguage: String = "en",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val translated = root[0].jsonArray.joinToString("") { it.jsonArray[0].jsonPrimitive.content }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslation.kt	val url = "https://translate.googleapis.com/translate_a/single".toHttpUrl().newBuilder()
+app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationPresentation.kt	val text: String = paragraphs.joinToString("\n\n")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	.getInstance("SHA-256")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	.joinToString("") { byte -> "%02x".format(byte) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationStore.kt	.where("chapter_id = ? AND target_language = ?")
@@ -2972,6 +2976,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const v
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_HIDDEN_SOURCES_IN_UPDATES = "hidden_sources_in_updates"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_LEWD_LIBRARY_FILTER = "pref_filter_library_lewd_v2"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_NOVEL_LIBRARY_FILTER = "pref_filter_library_novel_v1"
+app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_NOVEL_TITLE_MAX_LINES = "pref_novel_title_max_lines"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_PAGE_PREVIEW_ROWS = "pref_page_preview_rows"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelAutoLoadNextChapterAt = store.getInt("pref_novel_auto_load_next_at", 95)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelAutoScrollSpeed = store.getInt("pref_novel_auto_scroll_speed_half", 6)
@@ -3267,6 +3272,19 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	pr
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val files = root.walkTopDown().filter(File::isFile).filterNot { it.extension == "tmp" }.toList()
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val temporary = File.createTempFile("$key.", ".tmp", directory)
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val MANGA_ID = "manga_id"
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	const val KEY = "hayai_saved_source_searches_v1"
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.CheckBox -> result += SavedFilterState(path, "check", filter.state.toString())
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.Select<*> -> result += SavedFilterState(path, "select", filter.state.toString())
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.Text -> result += SavedFilterState(path, "text", filter.state.take(MAX_TEXT_LENGTH))
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.TriState -> result += SavedFilterState(path, "tri", filter.state.toString())
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	private val preference = preferenceStore.getString(KEY, "[]")
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	result += if (selection == null) SavedFilterState(path, "sort-none", "") else SavedFilterState(path, "sort", selection.index.toString(), selection.ascending)
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "check" && filter is Filter.CheckBox -> saved.value.toBooleanStrictOrNull()?.let { filter.state = it; true }
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "select" && filter is Filter.Select<*> -> saved.value.toIntOrNull()?.takeIf { it in filter.values.indices }?.let { filter.state = it; true }
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "sort-none" && filter is Filter.Sort -> true.also { filter.state = null }
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "sort" && filter is Filter.Sort -> saved.value.toIntOrNull()?.takeIf { it in filter.values.indices }?.let { filter.state = Filter.Sort.Selection(it, saved.extra); true }
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "text" && filter is Filter.Text -> saved.value.take(MAX_TEXT_LENGTH).let { filter.state = it; true }
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "tri" && filter is Filter.TriState -> saved.value.toIntOrNull()?.takeIf { it in 0..2 }?.let { filter.state = it; true }
 app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt	private const val SOURCE_ID_KEY = "hayai_source_id"
 app/src/main/java/dev/ahmedmohamed/hayai/source/settings/SourceSettingsController.kt	Timber.e(error, "Unable to create settings for source %d", configurable.id)
 app/src/main/java/dev/ahmedmohamed/hayai/source/SourceCapabilityRegistry.kt	"8muses",
