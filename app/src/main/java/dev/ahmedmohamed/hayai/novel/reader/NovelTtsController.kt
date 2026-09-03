@@ -32,11 +32,15 @@ internal class NovelTtsController(
 
     val isPlaying: Boolean get() = service?.isPlaying == true
     val hasActivePlayback: Boolean get() = service?.hasActivePlayback == true
+    val currentParagraphIndex: Int get() = service?.currentParagraphIndex ?: 0
 
-    fun configure(speed: Float, pitch: Float, voiceName: String, allowBackground: Boolean = false) = whenReady { configure(speed, pitch, voiceName, allowBackground) }
+    fun configure(speed: Float, pitch: Float, voiceName: String, languageTag: String, allowBackground: Boolean = false) =
+        whenReady { configure(speed, pitch, voiceName, languageTag, allowBackground) }
     fun setChapter(mangaId: Long, chapterId: Long, novelTitle: String, chapterTitle: String) =
         whenReady { setChapter(mangaId, chapterId, novelTitle, chapterTitle) }
     fun setParagraphs(paragraphs: List<String>, startParagraph: Int = 0) = whenReady { setParagraphs(paragraphs, startParagraph) }
+    fun replaceParagraphs(paragraphs: List<String>, startParagraph: Int = currentParagraphIndex) =
+        whenReady { replaceParagraphs(paragraphs, startParagraph) }
     fun toggle() = whenReady { toggle() }
     fun play() = whenReady { play() }
     fun pause() = service?.pause() ?: Unit

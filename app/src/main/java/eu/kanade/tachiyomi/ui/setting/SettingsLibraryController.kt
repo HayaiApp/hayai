@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.data.preference.MANGA_NON_READ
 import eu.kanade.tachiyomi.data.preference.MARK_DUPLICATE_CHAPTER_READ_EXISTING
 import eu.kanade.tachiyomi.data.preference.MARK_DUPLICATE_CHAPTER_READ_NEW
 import eu.kanade.tachiyomi.data.preference.asImmediateFlowIn
+import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.ui.category.CategoryController
 import eu.kanade.tachiyomi.ui.library.LibraryPresenter
 import eu.kanade.tachiyomi.ui.library.display.TabbedLibraryDisplaySheet
@@ -69,6 +70,14 @@ class SettingsLibraryController : SettingsController() {
                     onClick {
                         TabbedLibraryDisplaySheet(this@SettingsLibraryController).show()
                     }
+                }
+
+                sliderPreference {
+                    key = HayaiPreferences.KEY_NOVEL_TITLE_MAX_LINES
+                    defaultValue = 2
+                    title = context.getString(R.string.hayai_novel_title_max_lines)
+                    summary = context.getString(R.string.hayai_novel_title_max_lines_summary)
+                    entryValues = (1..5).toList()
                 }
 
                 multiSelectListPreferenceMat(activity) {

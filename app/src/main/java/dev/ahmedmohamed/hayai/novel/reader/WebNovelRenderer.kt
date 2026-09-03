@@ -38,6 +38,9 @@ internal class WebNovelRenderer(
     private val json = Json { ignoreUnknownKeys = true }
     private var requestedProgress = 0
     private var editMode = false
+    private var documentReady = false
+    private val pendingBlocks = mutableListOf<PendingBlock>()
+    private var pendingRetainedIds: Set<Long>? = null
     private val webView = object : WebView(context) {
         override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? {
             val wrapped =
@@ -103,11 +106,19 @@ internal class WebNovelRenderer(
     override fun display(block: NovelRenderBlock, placement: NovelBlockPlacement, focus: Boolean) {
         val content = block.content
         if (placement == NovelBlockPlacement.ReplaceAll && content is NovelBlockContent.Ready) {
+            documentReady = false
+            pendingBlocks.clear()
+            pendingRetainedIds = null
             requestedProgress = content.request.initialProgress.coerceIn(0, 100)
             val request = content.request
             val html = NovelHtmlDocumentBuilder.build(request.content.scopeAssets(request.chapterId), request.chapterTitle, request.style, request.chapterId)
             val base = request.content.baseUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
             webView.loadDataWithBaseURL(base, html, "text/html", "UTF-8", null)
+            return
+        }
+        if (!documentReady) {
+            pendingBlocks.removeAll { it.block.chapterId == block.chapterId }
+            pendingBlocks += PendingBlock(block, placement, focus)
             return
         }
         val placementValue = if (placement == NovelBlockPlacement.Before) "before" else "after"
@@ -138,6 +149,11 @@ internal class WebNovelRenderer(
     }
 
     override fun retain(chapterIds: Set<Long>) {
+        if (!documentReady) {
+            pendingRetainedIds = chapterIds
+            pendingBlocks.removeAll { it.block.chapterId !in chapterIds }
+            return
+        }
         evaluate("window.hayaiReader.retainBlocks(${json.encodeToString(chapterIds.map { it.toString() })})")
     }
 
@@ -182,8 +198,15 @@ internal class WebNovelRenderer(
         }
     }
 
-    override fun showTranslation(text: String) = evaluate("window.hayaiReader.showTranslation(${json.encodeToString(text)})")
-    override fun showOriginal() = evaluate("window.hayaiReader.showOriginal()")
+    override fun showTranslation(paragraphs: List<String>, onComplete: () -> Unit) {
+        webView.evaluateJavascript(
+            "window.hayaiReader.showTranslation(${json.encodeToString(paragraphs)})",
+        ) { onComplete() }
+    }
+
+    override fun showOriginal(onComplete: () -> Unit) {
+        webView.evaluateJavascript("window.hayaiReader.showOriginal()") { onComplete() }
+    }
 
     override fun applyHighlights(items: List<NovelPersistentHighlight>) {
         val payload =
@@ -259,12 +282,13 @@ internal class WebNovelRenderer(
         @JavascriptInterface
         fun onChapterProgress(chapterId: String, progress: Int) = webView.post {
             chapterId.toLongOrNull()?.let { callbacks.onVisibleChapter(it, progress.coerceIn(0, 100)) }
-            callbacks.onProgress(progress.coerceIn(0, 100))
         }
 
         @JavascriptInterface
-        fun onPageLocation(progress: Int, pageNumber: Int, pageCount: Int) = webView.post {
+        fun onPageLocation(chapterId: String, progress: Int, pageNumber: Int, pageCount: Int) = webView.post {
+            val id = chapterId.toLongOrNull() ?: return@post
             callbacks.onPageLocation(
+                id,
                 progress.coerceIn(0, 100),
                 pageNumber.coerceAtLeast(1),
                 pageCount.coerceAtLeast(1),
@@ -276,6 +300,9 @@ internal class WebNovelRenderer(
 
         @JavascriptInterface
         fun onReady(progress: Int) = webView.post {
+            documentReady = true
+            pendingBlocks.toList().also { pendingBlocks.clear() }.forEach { display(it.block, it.placement, it.focus) }
+            pendingRetainedIds?.also { pendingRetainedIds = null; retain(it) }
             seek(requestedProgress)
             callbacks.onReady(requestedProgress)
         }
@@ -308,6 +335,12 @@ internal class WebNovelRenderer(
         val suffix: String,
         val occurrence: Int,
         val color: String,
+    )
+
+    private data class PendingBlock(
+        val block: NovelRenderBlock,
+        val placement: NovelBlockPlacement,
+        val focus: Boolean,
     )
 
     private companion object {

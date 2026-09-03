@@ -25,6 +25,9 @@ import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.view.backgroundColor
 import eu.kanade.tachiyomi.util.view.setCards
 import eu.kanade.tachiyomi.widget.AutofitRecyclerView
+import dev.ahmedmohamed.hayai.novel.integration.NovelTitlePresentation
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 /**
  * Class used to hold the displayed data of a manga in the library, like the cover or the title.
@@ -57,6 +60,8 @@ class LibraryGridHolder(
     private var authorArtist = ""
     private var filter = ""
     private var transitionMangaId: Long? = null
+    private val novelTitles = Injekt.get<NovelTitlePresentation>()
+    private var boundManga: Manga? = null
 
     /**
      * The title has to be laid out before its line count is known, so the subtitle can only be
@@ -71,7 +76,7 @@ class LibraryGridHolder(
             if (binding.subtitle.isVisible != showSubtitle) {
                 binding.subtitle.isVisible = showSubtitle
             }
-            val maxLines = if (hasAuthorInFilter) 1 else 2
+            val maxLines = boundManga?.let { novelTitles.maxLines(it, hasAuthorInFilter) } ?: 2
             if (binding.title.maxLines != maxLines) {
                 binding.title.maxLines = maxLines
             }
@@ -134,6 +139,7 @@ class LibraryGridHolder(
      * @param item the manga item to bind.
      */
     override fun onSetValues(item: LibraryItem) {
+        boundManga = item.manga
         applyOutline()
         // Only the view that started a transition keeps a name, dropped once it shows another manga
         if (transitionMangaId != null && transitionMangaId != item.manga.id) {

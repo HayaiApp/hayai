@@ -35,6 +35,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     private var speed = 1f
     private var pitch = 1f
     private var voiceName = ""
+    private var languageTag = ""
     private var generation = 0
     private var activeUtterance: String? = null
     private var mangaId = -1L
@@ -45,6 +46,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
 
     val isPlaying: Boolean get() = initialized && playing && !paused
     val hasActivePlayback: Boolean get() = chunks.isNotEmpty() && (playing || paused)
+    val currentParagraphIndex: Int get() = chunks.getOrNull(chunkIndex)?.paragraphIndex ?: 0
 
     override fun onCreate() {
         super.onCreate()
@@ -71,7 +73,6 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         initialized = status == TextToSpeech.SUCCESS
         if (!initialized) return reportError(getString(R.string.hayai_novel_reader_tts_unavailable))
-        engine.language = Locale.getDefault()
         engine.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
@@ -90,10 +91,11 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     fun attach(callbacks: Callbacks) { this.callbacks = WeakReference(callbacks); callbacks.onPlaybackChanged(isPlaying) }
     fun detach(callbacks: Callbacks) { if (this.callbacks.get() === callbacks) this.callbacks.clear() }
 
-    fun configure(speed: Float, pitch: Float, voiceName: String, allowBackground: Boolean) {
+    fun configure(speed: Float, pitch: Float, voiceName: String, languageTag: String, allowBackground: Boolean) {
         this.speed = speed.coerceIn(0.5f, 6f)
         this.pitch = pitch.coerceIn(0.5f, 6f)
         this.voiceName = voiceName
+        this.languageTag = languageTag
         this.allowBackground = allowBackground
         if (initialized) applyConfiguration()
     }
@@ -109,9 +111,21 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
         val replacement = paragraphs.flatMapIndexed { index, text -> TtsTextUtils.splitTextForTts(text, TextToSpeech.getMaxSpeechInputLength() - 100).map { TtsChunk(index, it) } }
         if (chunksChapterId == chapterId && replacement == chunks && chunks.isNotEmpty()) return
         stopEngine(true)
+        playing = false
+        paused = false
         chunks = replacement
         chunksChapterId = chapterId
         chunkIndex = chunks.indexOfFirst { it.paragraphIndex >= startParagraph }.takeIf { it >= 0 } ?: 0
+    }
+
+    fun replaceParagraphs(paragraphs: List<String>, startParagraph: Int) {
+        val resume = isPlaying
+        val remainPaused = paused
+        setParagraphs(paragraphs, startParagraph)
+        when {
+            resume -> play()
+            remainPaused && chunks.isNotEmpty() -> paused = true
+        }
     }
 
     fun toggle() { if (isPlaying) pause() else play() }
@@ -198,7 +212,16 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     private fun applyConfiguration() {
         engine.setSpeechRate(speed)
         engine.setPitch(pitch)
-        if (voiceName.isNotBlank()) engine.voices?.firstOrNull { it.name == voiceName }?.let { engine.voice = it }
+        val requestedLocale = languageTag.takeIf(String::isNotBlank)?.let(Locale::forLanguageTag)
+        if (requestedLocale != null && engine.isLanguageAvailable(requestedLocale) >= TextToSpeech.LANG_AVAILABLE) {
+            engine.language = requestedLocale
+        } else {
+            engine.language = Locale.getDefault()
+        }
+        if (voiceName.isNotBlank()) {
+            engine.voices?.firstOrNull { it.name == voiceName && (requestedLocale == null || it.locale.language == requestedLocale.language) }
+                ?.let { engine.voice = it }
+        }
     }
 
     private fun reportError(message: String) {

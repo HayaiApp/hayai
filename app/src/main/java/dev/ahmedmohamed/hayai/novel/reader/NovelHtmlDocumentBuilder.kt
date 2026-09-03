@@ -69,11 +69,12 @@ internal object NovelHtmlDocumentBuilder {
               line-height:${style.lineHeight.coerceIn(0.8f, 3f)}; text-align:$align;
               overflow-wrap:anywhere; -webkit-user-select:$selection; user-select:$selection;
             }
-            html.hayai-paged, html.hayai-paged body { height:100%; overflow-y:hidden; }
-            html.hayai-paged body { overflow-x:auto; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
+            html.hayai-paged { height:100%; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
+            html.hayai-paged body { height:100%; min-height:0; overflow:visible; }
             html.hayai-paged #hayai-reader { height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px; column-fill:auto; }
             html.hayai-paged .hayai-chapter-block { scroll-snap-align:start; }
-            html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; }
+            html.hayai-paged .hayai-chapter-block + .hayai-chapter-block { break-before:column; }
+            html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; text-combine-upright:digits 2; line-break:strict; word-break:normal; overflow-wrap:normal; font-kerning:normal; font-feature-settings:"vert" 1,"vrt2" 1; hanging-punctuation:first last; }
             html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
             *, *::before, *::after { box-sizing:border-box; max-width:100%; }
             p { margin:${style.paragraphSpacing.coerceIn(0f, 5f)}em 0; text-indent:${style.paragraphIndent.coerceIn(0f, 10f)}em; }
@@ -129,12 +130,20 @@ internal object NovelHtmlDocumentBuilder {
     private const val BRIDGE_SCRIPT = """
         (() => {
           const paged = () => document.documentElement.classList.contains('hayai-paged');
-          const pageStride = () => Math.max(1, innerWidth);
+          const scroller = () => document.scrollingElement || document.documentElement;
+          const pageStride = () => Math.max(1, scroller().clientWidth || innerWidth);
           const reversePages = () => document.documentElement.dataset.writingDirection === 'vertical-rl';
           const blocks = () => [...document.querySelectorAll('.hayai-chapter-block')];
           const visibleBlock = () => {
             const target = paged() ? pageStride() / 3 : innerHeight / 3;
             return blocks().sort((a,b) => Math.abs((paged()?a.getBoundingClientRect().left:a.getBoundingClientRect().top)-target)-Math.abs((paged()?b.getBoundingClientRect().left:b.getBoundingClientRect().top)-target))[0] || null;
+          };
+          const pageRects = block => block ? [...block.getClientRects()].filter(rect => rect.width > 0 && rect.height > 0) : [];
+          const blockPageLocation = block => {
+            const rects=pageRects(block);if(!rects.length)return {number:1,count:1};
+            const target=pageStride()/2;let best=0,distance=Number.MAX_VALUE;
+            rects.forEach((rect,index)=>{const next=Math.abs((rect.left+rect.right)/2-target);if(next<distance){distance=next;best=index;}});
+            return {number:best+1,count:rects.length};
           };
           const activeBlock = () => document.querySelector('.hayai-chapter-block[data-active="true"]') || visibleBlock();
           const activate = block => { blocks().forEach(it=>delete it.dataset.active); if(block)block.dataset.active='true'; return block; };
@@ -148,19 +157,13 @@ internal object NovelHtmlDocumentBuilder {
           };
           const progress = () => {
             const block = activeBlock(); if(!block)return 0;
-            const max = paged() ? Math.max(1,block.scrollWidth-pageStride()) : Math.max(1,block.offsetHeight-innerHeight);
-            const position = reversePages() ? Math.abs(scrollX) : scrollX;
-            const origin = reversePages() ? Math.abs(block.offsetLeft) : block.offsetLeft;
-            const current = paged() ? Math.max(0,position-origin) : Math.max(0,scrollY-block.offsetTop);
+            if(paged()){const location=blockPageLocation(block);return location.count<=1?100:Math.round((location.number-1)*100/(location.count-1));}
+            const max = Math.max(1,block.offsetHeight-innerHeight);
+            const current = Math.max(0,scrollY-block.offsetTop);
             return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
           };
           const pageLocation = () => {
-            const stride = pageStride();
-            const extent = Math.max(stride, document.scrollingElement ? document.scrollingElement.scrollWidth : document.documentElement.scrollWidth);
-            const count = Math.max(1, Math.ceil(extent / stride));
-            const position = Math.abs(scrollX);
-            const number = Math.max(1, Math.min(count, Math.round(position / stride) + 1));
-            return {number, count};
+            return blockPageLocation(activeBlock());
           };
           let scheduled = false;
             const selectionAnchor = () => {
@@ -193,7 +196,7 @@ internal object NovelHtmlDocumentBuilder {
               scheduled = false;
               const block=activate(visibleBlock()); const value=progress();
               if (window.HayaiReader && block && block.dataset.state==='ready') {
-                if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(value,location.number,location.count); }
+                 if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(block.dataset.chapterId,value,location.number,location.count); }
                 else HayaiReader.onChapterProgress(block.dataset.chapterId,value);
               }
             });
@@ -203,37 +206,38 @@ internal object NovelHtmlDocumentBuilder {
             prepareCustomization() { rememberOriginal(activeBlock()); },
             upsertBlock(id, html, placement, focus) {
               const root=document.querySelector('#hayai-reader'); if(!root)return false;
-              const key=String(id); let block=blocks().find(it=>it.dataset.chapterId===key); const beforeHeight=document.documentElement.scrollHeight; const beforeScroll=scrollY;
+              const key=String(id); let block=blocks().find(it=>it.dataset.chapterId===key); const beforeExtent=paged()?scroller().scrollWidth:scroller().scrollHeight; const beforeScroll=paged()?scroller().scrollLeft:scroller().scrollTop;
               if(!block){block=document.createElement('article');block.className='hayai-chapter-block';block.dataset.chapterId=key;if(placement==='before')root.prepend(block);else root.append(block);}
               block.innerHTML=html; block.dataset.state='ready';
-              if(placement==='before'&&!focus)scrollTo(0,beforeScroll+Math.max(0,document.documentElement.scrollHeight-beforeHeight));
-              if(focus){activate(block);block.scrollIntoView({block:'start',behavior:'auto'});}
+              if(placement==='before'&&!focus){const delta=Math.max(0,(paged()?scroller().scrollWidth:scroller().scrollHeight)-beforeExtent);if(paged())scroller().scrollTo({left:beforeScroll+(reversePages()?-delta:delta),behavior:'auto'});else scroller().scrollTo({top:beforeScroll+delta,behavior:'auto'});}
+              if(focus){activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});}
               return true;
             },
             setBlockState(id, html, placement, focus) {
-              const root=document.querySelector('#hayai-reader');if(!root)return false;const key=String(id);let block=blocks().find(it=>it.dataset.chapterId===key);const beforeHeight=document.documentElement.scrollHeight;const beforeScroll=scrollY;
+              const root=document.querySelector('#hayai-reader');if(!root)return false;const key=String(id);let block=blocks().find(it=>it.dataset.chapterId===key);const beforeExtent=paged()?scroller().scrollWidth:scroller().scrollHeight;const beforeScroll=paged()?scroller().scrollLeft:scroller().scrollTop;
               if(!block){block=document.createElement('article');block.className='hayai-chapter-block';block.dataset.chapterId=key;if(placement==='before')root.prepend(block);else root.append(block);}
-              block.innerHTML=html;block.dataset.state='pending';if(placement==='before'&&!focus)scrollTo(0,beforeScroll+Math.max(0,document.documentElement.scrollHeight-beforeHeight));if(focus){activate(block);block.scrollIntoView({block:'start',behavior:'auto'});}return true;
+              block.innerHTML=html;block.dataset.state='pending';if(placement==='before'&&!focus){const delta=Math.max(0,(paged()?scroller().scrollWidth:scroller().scrollHeight)-beforeExtent);if(paged())scroller().scrollTo({left:beforeScroll+(reversePages()?-delta:delta),behavior:'auto'});else scroller().scrollTo({top:beforeScroll+delta,behavior:'auto'});}if(focus){activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});}return true;
             },
-            retainBlocks(ids) { const keep=new Set(ids.map(String));const active=activeBlock();const before=active?active.getBoundingClientRect().top:0;blocks().forEach(block=>{if(!keep.has(block.dataset.chapterId))block.remove();});if(active&&active.isConnected){const after=active.getBoundingClientRect().top;scrollBy(0,after-before);}activate(active&&active.isConnected?active:visibleBlock()); },
-            focusBlock(id,value=0) { const block=blocks().find(it=>it.dataset.chapterId===String(id));if(!block)return false;activate(block);const ratio=Math.max(0,Math.min(100,value))/100;scrollTo({top:block.offsetTop+Math.max(0,block.offsetHeight-innerHeight)*ratio,left:0,behavior:'auto'});return true; },
+            retainBlocks(ids) { const keep=new Set(ids.map(String));const active=activeBlock();const before=active?active.getBoundingClientRect():null;blocks().forEach(block=>{if(!keep.has(block.dataset.chapterId))block.remove();});if(active&&active.isConnected&&before){const after=active.getBoundingClientRect();if(paged())scroller().scrollBy({left:after.left-before.left,behavior:'auto'});else scroller().scrollBy({top:after.top-before.top,behavior:'auto'});}activate(active&&active.isConnected?active:visibleBlock()); },
+            focusBlock(id,value=0) { const block=blocks().find(it=>it.dataset.chapterId===String(id));if(!block)return false;activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});this.scrollToPercent(value);return true; },
             scrollToPercent(value) {
               const block=activeBlock();if(!block)return;
               const ratio = Math.max(0, Math.min(100, value)) / 100;
               if (paged()) {
-                const max = Math.max(0, block.scrollWidth - pageStride());
-                scrollTo({left:(reversePages()?-1:1)*(block.offsetLeft+max * ratio), top:0, behavior:'auto'});
+                const location=blockPageLocation(block);const target=Math.round((location.count-1)*ratio);
+                block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});
+                scroller().scrollBy({left:(reversePages()?-1:1)*pageStride()*target,behavior:'auto'});
               } else {
                 const max = Math.max(0, block.offsetHeight - innerHeight);
                 scrollTo({top:block.offsetTop+max * ratio, left:0, behavior:'auto'});
               }
             },
             step(direction, fraction = .85) {
-              if (paged()) scrollBy({left:(reversePages()?-1:1)*pageStride() * direction, behavior:'smooth'});
+               if (paged()) scroller().scrollBy({left:(reversePages()?-1:1)*pageStride() * direction, behavior:'smooth'});
               else scrollBy({top:innerHeight * fraction * direction, behavior:'smooth'});
             },
             stepPixels(pixels) {
-              if (paged()) scrollBy({left:(reversePages()?-1:1)*pixels, behavior:'auto'});
+               if (paged()) scroller().scrollBy({left:(reversePages()?-1:1)*pixels, behavior:'auto'});
               else scrollBy({top:pixels, behavior:'auto'});
             },
             paragraphs() {
@@ -250,7 +254,7 @@ internal object NovelHtmlDocumentBuilder {
               return best;
             },
             documentText() { const root=activeBlock(); return root ? root.innerText : ''; },
-            showTranslation(text) { const root=rememberOriginal(activeBlock()); if(!root)return; root.replaceChildren(...text.split(/\n{2,}/).filter(Boolean).map(value=>{const p=document.createElement('p');p.textContent=value;return p;})); rerunCustomScript(); },
+            showTranslation(paragraphs) { const root=rememberOriginal(activeBlock()); if(!root)return false; root.replaceChildren(...paragraphs.filter(Boolean).map(value=>{const p=document.createElement('p');p.textContent=value;return p;})); rerunCustomScript(); return true; },
             showOriginal() { const root=activeBlock();const original=root?originalHtml.get(String(root.dataset.chapterId)):null;if(root&&original!=null){root.innerHTML=original;rerunCustomScript();} },
               takeSelection() {
                 const selected = (getSelection() ? getSelection().toString() : '').trim() || (lastSelection ? lastSelection.selectedText : '');
@@ -307,10 +311,10 @@ internal object NovelHtmlDocumentBuilder {
             const block=activate(visibleBlock());
             if (window.HayaiReader&&block) {
               HayaiReader.onReady(progress());
-              if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(progress(),location.number,location.count); }
+              if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(block.dataset.chapterId,progress(),location.number,location.count); }
             }
             if (window.ResizeObserver) new ResizeObserver(() => {
-              if (window.HayaiReader&&paged()) { const location=pageLocation(); HayaiReader.onPageLocation(progress(),location.number,location.count); }
+              if (window.HayaiReader&&paged()) { const active=activeBlock();const location=pageLocation();if(active)HayaiReader.onPageLocation(active.dataset.chapterId,progress(),location.number,location.count); }
             }).observe(document.querySelector('#hayai-reader'));
           });
         })();

@@ -160,18 +160,21 @@ internal class NativeNovelRenderer(
         callback((local * block.paragraphs.size).toInt().coerceIn(0, block.paragraphs.lastIndex))
     }
 
-    override fun showTranslation(text: String) {
+    override fun showTranslation(paragraphs: List<String>, onComplete: () -> Unit) {
         val block = activeBlock() ?: return
+        val text = paragraphs.joinToString("\n\n")
         setBlockText(block, text)
-        block.paragraphs = text.split(Regex("\\n{2,}")).filter(String::isNotBlank)
+        block.paragraphs = paragraphs
+        onComplete()
     }
 
-    override fun showOriginal() {
+    override fun showOriginal(onComplete: () -> Unit) {
         val block = activeBlock() ?: return
         applyingText = true
         block.textView?.text = SpannableStringBuilder(block.original)
         block.paragraphs = block.originalParagraphs
         applyingText = false
+        onComplete()
     }
 
     override fun applyHighlights(items: List<NovelPersistentHighlight>) {

@@ -1,0 +1,39 @@
+<!doctype html>
+<html class="hayai-paged">
+<head>
+  <meta charset="utf-8">
+  <style>
+    html { height: 100%; overflow-x: auto; overflow-y: hidden; }
+    body { box-sizing: border-box; height: 100%; margin: 0; padding: 24px 16px; overflow: visible; font: 18px/1.6 sans-serif; }
+    #hayai-reader { height: calc(100vh - 48px); column-width: calc(100vw - 32px); column-gap: 32px; column-fill: auto; }
+    .hayai-chapter-block { min-height: calc(100vh - 48px); break-inside: auto; }
+    .hayai-chapter-block + .hayai-chapter-block { break-before: column; }
+    html[data-writing-direction="vertical-rl"] body { writing-mode: vertical-rl; text-orientation: mixed; line-break: strict; }
+    p { margin: 0 0 1em; }
+  </style>
+</head>
+<body>
+  <main id="hayai-reader">
+    <article class="hayai-chapter-block" data-chapter-id="1"></article>
+    <article class="hayai-chapter-block" data-chapter-id="2"></article>
+  </main>
+  <output id="result"></output>
+  <script>
+    if (location.search.includes('vertical')) document.documentElement.dataset.writingDirection = 'vertical-rl';
+    const blocks = [...document.querySelectorAll('.hayai-chapter-block')];
+    blocks[0].innerHTML = Array.from({length: 45}, (_, i) => `<p>First chapter paragraph ${i + 1}. This is enough text to create multiple real viewport pages.</p>`).join('');
+    blocks[1].innerHTML = Array.from({length: 28}, (_, i) => `<p>Second chapter paragraph ${i + 1}. This chapter must start on its own page.</p>`).join('');
+    setTimeout(() => {
+      const root = document.scrollingElement;
+      const data = {
+        viewport: root.clientWidth,
+        scrollWidth: root.scrollWidth,
+        pageCount: Math.ceil(root.scrollWidth / root.clientWidth),
+        scrollLeft: root.scrollLeft,
+        blocks: blocks.map(block => ({id: block.dataset.chapterId, rects: block.getClientRects().length, width: block.getBoundingClientRect().width, left: block.getBoundingClientRect().left, right: block.getBoundingClientRect().right}))
+      };
+      document.querySelector('#result').textContent = JSON.stringify(data);
+    }, 50);
+  </script>
+</body>
+</html>
