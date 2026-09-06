@@ -8,7 +8,9 @@ param(
     [string] $Serial = "",
 
     [ValidateRange(10, 60)]
-    [int] $StartupWaitSeconds = 20
+    [int] $StartupWaitSeconds = 20,
+
+    [string] $DiagnosticsDirectory = "artifacts/apk-startup"
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,30 +48,38 @@ if (($install -join "`n") -notmatch "Success") {
     throw "APK installation did not report success:`n$($install -join [Environment]::NewLine)"
 }
 
-Invoke-Adb -Arguments @("shell", "am", "force-stop", $PackageId) | Out-Null
-Invoke-Adb -Arguments @("logcat", "-c") | Out-Null
-Invoke-Adb -Arguments @("shell", "monkey", "-p", $PackageId, "-c", "android.intent.category.LAUNCHER", "1") | Out-Null
-Start-Sleep -Seconds $StartupWaitSeconds
+New-Item -ItemType Directory -Path $DiagnosticsDirectory -Force | Out-Null
+try {
+    Invoke-Adb -Arguments @("shell", "am", "force-stop", $PackageId) | Out-Null
+    Invoke-Adb -Arguments @("logcat", "-c") | Out-Null
+    Invoke-Adb -Arguments @("shell", "monkey", "-p", $PackageId, "-c", "android.intent.category.LAUNCHER", "1") |
+        Tee-Object -FilePath (Join-Path $DiagnosticsDirectory "launch.txt")
+    Start-Sleep -Seconds $StartupWaitSeconds
 
-$crashLog = Invoke-Adb -Arguments @("logcat", "-d", "-v", "brief", "AndroidRuntime:E", "*:S")
-$crashText = $crashLog -join [Environment]::NewLine
-if ($crashText -match "FATAL EXCEPTION" -and $crashText -match [regex]::Escape($PackageId)) {
-    throw "APK crashed during startup:`n$crashText"
+    $crashLog = Invoke-Adb -Arguments @("logcat", "-d", "-v", "brief", "AndroidRuntime:E", "*:S")
+    $crashText = $crashLog -join [Environment]::NewLine
+    if ($crashText -match "FATAL EXCEPTION" -and $crashText -match [regex]::Escape($PackageId)) {
+        throw "APK crashed during startup:`n$crashText"
+    }
+
+    $activities = (Invoke-Adb -Arguments @("shell", "dumpsys", "activity", "activities")) -join [Environment]::NewLine
+    $packagePattern = [regex]::Escape($PackageId)
+    if ($activities -match "$packagePattern/eu\.kanade\.tachiyomi\.crash\.CrashActivity") {
+        throw "Hayai redirected to CrashActivity during startup."
+    }
+
+    $mainActivityPattern = "$packagePattern/eu\.kanade\.tachiyomi\.ui\.main\.MainActivity"
+    $mainProcess = (Invoke-Adb -Arguments @("shell", "pidof", $PackageId) | Select-Object -Last 1).Trim()
+    if (-not $mainProcess -or $activities -notmatch $mainActivityPattern) {
+        $relevantActivities = $activities -split "`r?`n" | Where-Object {
+            $_ -match "ResumedActivity|topResumedActivity|CrashActivity|$packagePattern"
+        } | Select-Object -First 30
+        throw "Hayai MainActivity or its main process did not survive startup:`n$($relevantActivities -join [Environment]::NewLine)"
+    }
+
+    Write-Output "Signed/minified APK startup verification passed for $PackageId."
+} finally {
+    & adb @adbPrefix logcat -d -v threadtime 2>&1 | Set-Content (Join-Path $DiagnosticsDirectory "logcat.txt")
+    & adb @adbPrefix shell dumpsys activity exit-info $PackageId 2>&1 | Set-Content (Join-Path $DiagnosticsDirectory "exit-info.txt")
+    & adb @adbPrefix shell dumpsys activity activities 2>&1 | Set-Content (Join-Path $DiagnosticsDirectory "activities.txt")
 }
-
-$activities = (Invoke-Adb -Arguments @("shell", "dumpsys", "activity", "activities")) -join [Environment]::NewLine
-$packagePattern = [regex]::Escape($PackageId)
-if ($activities -match "$packagePattern/eu\.kanade\.tachiyomi\.crash\.CrashActivity") {
-    throw "Hayai redirected to CrashActivity during startup."
-}
-
-$mainActivityPattern = "$packagePattern/eu\.kanade\.tachiyomi\.ui\.main\.MainActivity"
-$mainProcess = (Invoke-Adb -Arguments @("shell", "pidof", $PackageId) | Select-Object -Last 1).Trim()
-if (-not $mainProcess -or $activities -notmatch $mainActivityPattern) {
-    $relevantActivities = $activities -split "`r?`n" | Where-Object {
-        $_ -match "ResumedActivity|topResumedActivity|CrashActivity|$packagePattern"
-    } | Select-Object -First 30
-    throw "Hayai MainActivity or its main process did not survive startup:`n$($relevantActivities -join [Environment]::NewLine)"
-}
-
-Write-Output "Signed/minified APK startup verification passed for $PackageId."
