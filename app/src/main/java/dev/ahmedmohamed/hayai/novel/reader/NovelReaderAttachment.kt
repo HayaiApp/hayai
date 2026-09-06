@@ -9,15 +9,11 @@ import android.net.Uri
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.view.Gravity
 import android.view.WindowManager
-import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
-import androidx.core.view.setPadding
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.button.MaterialButton
@@ -97,6 +93,7 @@ internal class NovelReaderAttachment(
     private var displayedLanguageTag = ""
     private var bookmarkMenuItem: MenuItem? = null
     private var lookupSheet: NovelLookupWebSheet? = null
+    private var contentSheet: NovelReaderContentSheet? = null
     private val ttsChapterHandoff = NovelTtsChapterHandoff()
     private val fontImportLauncher =
         activity.activityResultRegistry.register(
@@ -411,6 +408,8 @@ internal class NovelReaderAttachment(
         closed = true
         lookupSheet?.dismiss()
         lookupSheet = null
+        contentSheet?.dismiss()
+        contentSheet = null
         fontImportLauncher.unregister()
         quoteImportLauncher.unregister()
         stopAutoScroll()
@@ -515,85 +514,77 @@ internal class NovelReaderAttachment(
         }
     }
 
+    private fun readerSheet(title: CharSequence, build: NovelReaderContentSheet.() -> Unit): NovelReaderContentSheet {
+        contentSheet?.dismiss()
+        return NovelReaderContentSheet(activity, title).also { sheet ->
+            contentSheet = sheet
+            sheet.setOnDismissListener { if (contentSheet === sheet) contentSheet = null }
+            sheet.build()
+            if (!closed) sheet.show()
+        }
+    }
+
     private fun showStatistics() {
         val current = content ?: return
         val number = NumberFormat.getIntegerInstance()
         val progress = current.chapter.last_page_read.coerceIn(0, 100)
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.hayai_novel_reader_chapter_statistics)
-            .setMessage(activity.getString(R.string.hayai_novel_reader_statistics_message, number.format(current.statistics.wordCount), current.statistics.estimatedMinutes(), number.format(current.statistics.wordsRead(progress)), current.statistics.remainingMinutes(progress), activity.getString(R.string.hayai_novel_reader_percent_value, progress)))
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
+        readerSheet(activity.getString(R.string.hayai_novel_reader_chapter_statistics)) {
+            text(current.chapter.name)
+            text(activity.getString(R.string.hayai_novel_reader_statistics_message, number.format(current.statistics.wordCount), current.statistics.estimatedMinutes(), number.format(current.statistics.wordsRead(progress)), current.statistics.remainingMinutes(progress), activity.getString(R.string.hayai_novel_reader_percent_value, progress)))
+        }
     }
 
     private fun saveQuote(initial: String) {
         val current = content ?: return
-        val input = EditText(activity).apply {
-            setText(initial)
-            minLines = 4
-            setHint(R.string.hayai_novel_reader_quote)
-        }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.hayai_novel_reader_save_quote)
-            .setView(input)
-            .setPositiveButton(R.string.save) { _, _ ->
-                activity.scope.launch(Dispatchers.IO) {
-                    val result = runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, input.text.toString(), "") }
-                    withContext(Dispatchers.Main) {
-                        result.fold(
-                            onSuccess = { activity.toast(if (it is QuoteAddResult.Created) R.string.hayai_novel_reader_quote_saved else R.string.hayai_novel_reader_quote_duplicate) },
-                            onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_quote_save_error)) },
-                        )
-                    }
+        readerSheet(activity.getString(R.string.hayai_novel_reader_save_quote)) {
+            text(current.chapter.name)
+            val body = input(R.string.hayai_novel_reader_quote, initial, multiline = true)
+            action(R.string.hayai_novel_sheet_save, primary = true) { button ->
+                val value = body.text.toString().trim()
+                if (value.isBlank()) { body.error = activity.getString(R.string.hayai_novel_sheet_quote_required); return@action }
+                button.isEnabled = false
+                activity.scope.launch {
+                    val result = withContext(Dispatchers.IO) { runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, value, "") } }
+                    button.isEnabled = true
+                    result.fold(
+                        onSuccess = {
+                            activity.toast(if (it is QuoteAddResult.Created) R.string.hayai_novel_reader_quote_saved else R.string.hayai_novel_reader_quote_duplicate)
+                            dismiss()
+                        },
+                        onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_quote_save_error)) },
+                    )
                 }
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        }
     }
 
     private fun showQuotes() {
         val mangaId = content?.manga?.id ?: return
         activity.scope.launch {
             val quotes = withContext(Dispatchers.IO) { quoteStore.forManga(mangaId) }
-            val labels = quotes.map { activity.getString(R.string.hayai_novel_reader_quote_list_item, it.chapterName, it.displayedContent.replace('\n', ' ').take(80)) }.toTypedArray()
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.hayai_novel_reader_saved_quotes)
-                .setItems(labels) { _, index -> showQuote(quotes[index]) }
-                .setNeutralButton(R.string.hayai_novel_reader_import_quotes) { _, _ ->
+            if (closed) return@launch
+            readerSheet(activity.getString(R.string.hayai_novel_reader_saved_quotes)) {
+                overflow(R.string.hayai_novel_reader_import_quotes) {
+                    dismiss()
                     quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
                 }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+                items(quotes, R.string.hayai_novel_reader_no_quotes, { it.chapterName }, { it.displayedContent }, ::showQuote)
+            }
         }
     }
 
     private fun showQuote(quote: NovelQuote) {
-        AlertDialog.Builder(activity)
-            .setTitle(quote.chapterName)
-            .setMessage(quote.displayedContent)
-            .setItems(
-                arrayOf(
-                    activity.getString(R.string.copy_value),
-                    activity.getString(R.string.hayai_novel_reader_copy_attribution),
-                    activity.getString(R.string.edit),
-                    activity.getString(R.string.hayai_novel_reader_move_earlier),
-                    activity.getString(R.string.hayai_novel_reader_move_later),
-                    activity.getString(R.string.delete),
-                ),
-            ) { _, action ->
-                when (action) {
-                    0 -> copyQuote(quote.displayedContent)
-                    1 -> copyQuote(activity.getString(R.string.hayai_novel_reader_quote_attribution, quote.displayedContent, quote.novelName, quote.chapterName))
-                    2 -> editQuote(quote)
-                    3 -> moveQuote(quote, -1)
-                    4 -> moveQuote(quote, 1)
-                    5 -> deleteQuote(quote)
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        readerSheet(quote.chapterName) {
+            back(::showQuotes)
+            text(quote.displayedContent, selectable = true)
+            action(R.string.hayai_novel_sheet_copy) { copyQuote(quote.displayedContent) }
+            action(R.string.hayai_novel_reader_copy_attribution) { copyQuote(activity.getString(R.string.hayai_novel_reader_quote_attribution, quote.displayedContent, quote.novelName, quote.chapterName)) }
+            action(R.string.hayai_novel_reader_edit_quote) { editQuote(quote) }
+            overflow(R.string.hayai_novel_reader_move_earlier) { moveQuote(quote, -1) }
+            overflow(R.string.hayai_novel_reader_move_later) { moveQuote(quote, 1) }
+            overflow(R.string.hayai_novel_sheet_delete) { deleteQuote(quote) }
+        }
     }
-
     private fun copyQuote(text: String) {
         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(activity.getString(R.string.hayai_novel_reader_quote_clipboard), text))
@@ -601,43 +592,36 @@ internal class NovelReaderAttachment(
     }
 
     private fun editQuote(quote: NovelQuote) {
-        val body = EditText(activity).apply {
-            setText(quote.displayedContent)
-            minLines = 4
-            gravity = Gravity.TOP
-        }
-        val chapter = EditText(activity).apply {
-            setText(quote.chapterName)
-            setSingleLine()
-        }
-        val language = EditText(activity).apply {
-            setText(quote.language.orEmpty())
-            setSingleLine()
-        }
-        val form = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20.dp, 8.dp, 20.dp, 8.dp)
-            addView(chapter)
-            addView(language)
-            addView(body)
-        }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.hayai_novel_reader_edit_quote)
-            .setView(form)
-            .setPositiveButton(R.string.save) { _, _ ->
+        readerSheet(activity.getString(R.string.hayai_novel_reader_edit_quote)) {
+            back { showQuote(quote) }
+            val chapter = input(R.string.hayai_novel_reader_chapter, quote.chapterName)
+            val language = input(R.string.hayai_novel_reader_language_optional, quote.language.orEmpty())
+            val body = input(R.string.hayai_novel_reader_quote, quote.displayedContent, multiline = true)
+            action(R.string.hayai_novel_sheet_save, primary = true) { button ->
+                val value = body.text.toString().trim()
+                if (value.isBlank()) { body.error = activity.getString(R.string.hayai_novel_sheet_quote_required); return@action }
+                val chapterName = chapter.text.toString()
+                val languageTag = language.text.toString()
+                button.isEnabled = false
                 activity.scope.launch {
-                    val updated = withContext(Dispatchers.IO) { quoteStore.update(quote.id, body.text.toString(), chapter.text.toString(), language.text.toString()) }
-                    activity.toast(if (updated == null) R.string.hayai_novel_reader_quote_missing else R.string.hayai_novel_reader_quote_updated)
+                    val result = withContext(Dispatchers.IO) { runCatching { quoteStore.update(quote.id, value, chapterName, languageTag) } }
+                    button.isEnabled = true
+                    result.fold(
+                        onSuccess = { updated ->
+                            activity.toast(if (updated == null) R.string.hayai_novel_reader_quote_missing else R.string.hayai_novel_reader_quote_updated)
+                            if (isShowing) showQuotes()
+                        },
+                        onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_quote_update_error)) },
+                    )
                 }
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        }
     }
-
     private fun moveQuote(quote: NovelQuote, direction: Int) {
         activity.scope.launch {
             val moved = withContext(Dispatchers.IO) { quoteStore.move(quote.mangaId, quote.id, direction) }
             activity.toast(if (moved) R.string.hayai_novel_reader_quote_reordered else R.string.hayai_novel_reader_quote_at_edge)
+            if (contentSheet?.isShowing == true) showQuotes()
         }
     }
 
@@ -649,6 +633,7 @@ internal class NovelReaderAttachment(
                 activity.scope.launch {
                     val deleted = withContext(Dispatchers.IO) { quoteStore.delete(quote.id) }
                     activity.toast(if (deleted) R.string.hayai_novel_reader_quote_deleted else R.string.hayai_novel_reader_quote_missing)
+                    if (contentSheet?.isShowing == true) showQuotes()
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -707,62 +692,63 @@ internal class NovelReaderAttachment(
         val current = content ?: return
         activity.scope.launch {
             val highlights = withContext(Dispatchers.IO) { highlightStore.forStableChapter(current.manga.source, current.manga.url, current.chapter.url) }
-            if (highlights.isEmpty()) return@launch activity.toast(R.string.hayai_novel_reader_no_highlights)
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.hayai_novel_reader_highlights)
-                .setItems(highlights.map { it.note?.let { note -> "$note · ${it.anchor.exact.take(100)}" } ?: it.anchor.exact.take(100) }.toTypedArray()) { _, index ->
-                    showHighlight(highlights[index])
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+            if (closed) return@launch
+            readerSheet(activity.getString(R.string.hayai_novel_reader_highlights)) {
+                items(highlights, R.string.hayai_novel_reader_no_highlights, { it.anchor.exact }, { it.note.orEmpty() }, ::showHighlight)
+            }
         }
     }
 
     private fun showHighlight(highlight: NovelHighlight) {
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.hayai_novel_reader_highlight)
-            .setMessage(highlight.anchor.exact)
-            .setPositiveButton(R.string.edit) { _, _ -> editHighlight(highlight) }
-            .setNeutralButton(R.string.delete) { _, _ ->
-                activity.scope.launch {
-                    withContext(Dispatchers.IO) { highlightStore.delete(highlight.id) }
-                    restoreHighlights()
-                }
+        readerSheet(activity.getString(R.string.hayai_novel_reader_highlight)) {
+            back(::showHighlights)
+            text(highlight.anchor.exact, selectable = true)
+            highlight.note?.takeIf(String::isNotBlank)?.let { text(it) }
+            action(R.string.hayai_novel_reader_edit_highlight) { editHighlight(highlight) }
+            overflow(R.string.hayai_novel_sheet_delete) {
+                AlertDialog.Builder(activity)
+                    .setTitle(R.string.hayai_novel_sheet_delete)
+                    .setMessage(R.string.hayai_novel_reader_cannot_undo)
+                    .setPositiveButton(R.string.hayai_novel_sheet_delete) { _, _ ->
+                        activity.scope.launch {
+                            withContext(Dispatchers.IO) { highlightStore.delete(highlight.id) }
+                            restoreHighlights()
+                            if (isShowing) showHighlights()
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        }
     }
 
     private fun editHighlight(highlight: NovelHighlight) {
-        val note = EditText(activity).apply {
-            setHint(R.string.hayai_novel_reader_optional_note)
-            setText(highlight.note)
-        }
-        val colors = intArrayOf(0xFFFFEB3B.toInt(), 0xFF80DEEA.toInt(), 0xFFA5D6A7.toInt(), 0xFFF8BBD0.toInt(), 0xFFFFCC80.toInt())
-        var selectedColor = colors.indexOf(highlight.color).takeIf { it >= 0 } ?: 0
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.hayai_novel_reader_edit_highlight)
-            .setView(note)
-            .setSingleChoiceItems(
-                arrayOf(
-                    activity.getString(R.string.hayai_novel_reader_yellow),
-                    activity.getString(R.string.hayai_novel_reader_cyan),
-                    activity.getString(R.string.hayai_novel_reader_green),
-                    activity.getString(R.string.hayai_novel_reader_pink),
-                    activity.getString(R.string.hayai_novel_reader_orange),
-                ),
-                selectedColor,
-            ) { _, which -> selectedColor = which }
-            .setPositiveButton(R.string.save) { _, _ ->
+        readerSheet(activity.getString(R.string.hayai_novel_reader_edit_highlight)) {
+            back { showHighlight(highlight) }
+            text(highlight.anchor.exact, selectable = true)
+            val note = input(R.string.hayai_novel_reader_optional_note, highlight.note.orEmpty(), multiline = true)
+            val colors = intArrayOf(0xFFFFEB3B.toInt(), 0xFF80DEEA.toInt(), 0xFFA5D6A7.toInt(), 0xFFF8BBD0.toInt(), 0xFFFFCC80.toInt())
+            var selectedColor = colors.indexOf(highlight.color).takeIf { it >= 0 } ?: 0
+            form.addView(eu.kanade.tachiyomi.widget.MaterialSpinnerView(activity, null).apply {
+                title = activity.getString(R.string.hayai_novel_sheet_highlight_color)
+                setEntries(listOf(R.string.hayai_novel_reader_yellow, R.string.hayai_novel_reader_cyan, R.string.hayai_novel_reader_green, R.string.hayai_novel_reader_pink, R.string.hayai_novel_reader_orange).map(activity::getString))
+                setSelection(selectedColor)
+                onItemSelectedListener = { selectedColor = it }
+            })
+            action(R.string.hayai_novel_sheet_save, primary = true) { button ->
+                val noteText = note.text.toString()
+                button.isEnabled = false
                 activity.scope.launch {
-                    withContext(Dispatchers.IO) { highlightStore.update(highlight.id, colors[selectedColor], note.text.toString()) }
-                    restoreHighlights()
+                    val result = withContext(Dispatchers.IO) { runCatching { highlightStore.update(highlight.id, colors[selectedColor], noteText) } }
+                    button.isEnabled = true
+                    result.fold(
+                        onSuccess = { restoreHighlights(); if (isShowing) showHighlights() },
+                        onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_highlight_save_error)) },
+                    )
                 }
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        }
     }
-
     private fun translateChapter() {
         val current = content ?: return
         activity.scope.launch {
@@ -818,11 +804,9 @@ internal class NovelReaderAttachment(
                             }
                         }
                     } else {
-                        AlertDialog.Builder(activity)
-                            .setTitle(R.string.hayai_novel_reader_translate)
-                            .setMessage(translated.text)
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show()
+                        readerSheet(activity.getString(R.string.hayai_novel_reader_translate)) {
+                            text(translated.text, selectable = true)
+                        }
                     }
                     Unit
                 },
@@ -960,43 +944,30 @@ internal class NovelReaderAttachment(
 
     private fun showImportedFonts() {
         val fonts = fontStore.fonts()
-        if (fonts.isEmpty()) {
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.hayai_novel_reader_imported_fonts)
-                .setMessage(R.string.hayai_novel_reader_no_imported_fonts)
-                .setPositiveButton(R.string.hayai_novel_reader_import) { _, _ ->
-                    fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-            return
-        }
         val selected = preferences.novelFontFamily.get()
-        val labels = fonts.map { "${if (fontStore.token(it) == selected) "✓  " else ""}${it.name}" }.toTypedArray()
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.hayai_novel_reader_imported_fonts)
-            .setItems(labels) { _, index ->
-                val font = fonts[index]
-                AlertDialog.Builder(activity)
-                    .setTitle(font.name)
-                    .setItems(arrayOf(activity.getString(R.string.hayai_novel_reader_use_font), activity.getString(R.string.delete))) { _, action ->
-                        if (action == 0) {
-                            preferences.novelFontFamily.set(fontStore.token(font))
-                        } else {
-                            if (selected == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
-                            fontStore.delete(font.id)
-                        }
-                        viewer.refreshStyle()
-                    }
-                    .show()
-            }
-            .setPositiveButton(R.string.hayai_novel_reader_import) { _, _ ->
+        readerSheet(activity.getString(R.string.hayai_novel_reader_imported_fonts)) {
+            action(R.string.hayai_novel_reader_import, primary = true) {
+                dismiss()
                 fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            items(fonts, R.string.hayai_novel_reader_no_imported_fonts, { it.name }, { if (fontStore.token(it) == selected) activity.getString(R.string.hayai_novel_sheet_selected) else "" }) { font ->
+                readerSheet(font.name) {
+                    back(::showImportedFonts)
+                    action(R.string.hayai_novel_reader_use_font, primary = true) {
+                        preferences.novelFontFamily.set(fontStore.token(font))
+                        viewer.refreshStyle()
+                        showImportedFonts()
+                    }
+                    overflow(R.string.hayai_novel_sheet_delete) {
+                        if (preferences.novelFontFamily.get() == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
+                        fontStore.delete(font.id)
+                        viewer.refreshStyle()
+                        showImportedFonts()
+                    }
+                }
+            }
+        }
     }
-
     private fun sourcePageUrl(): String? =
         runCatching { (source as? HttpSource)?.getMangaUrl(manga) }.getOrNull()
 

@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="hayai_novel_sheet_close">Close</string>
+    <string name="hayai_novel_sheet_back">Back</string>
+    <string name="hayai_novel_sheet_save">Save</string>
+    <string name="hayai_novel_sheet_copy">Copy text</string>
+    <string name="hayai_novel_sheet_delete">Delete</string>
+    <string name="hayai_novel_sheet_selected">Selected</string>
+    <string name="hayai_novel_sheet_highlight_color">Highlight color</string>
+    <string name="hayai_novel_sheet_quote_required">Enter some text for this quote</string>
     <!-- Novel reader settings and shared labels -->
     <string name="hayai_novel_reader_typography">Typography</string>
     <string name="hayai_novel_reader_renderer">Renderer</string>
