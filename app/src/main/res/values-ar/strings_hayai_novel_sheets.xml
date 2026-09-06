@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hayai_novel_sheet_close">إغلاق</string>
+    <string name="hayai_novel_sheet_back">رجوع</string>
+    <string name="hayai_novel_sheet_save">حفظ</string>
+    <string name="hayai_novel_sheet_copy">نسخ النص</string>
+    <string name="hayai_novel_sheet_delete">حذف</string>
+    <string name="hayai_novel_sheet_selected">محدد</string>
+    <string name="hayai_novel_sheet_highlight_color">لون التظليل</string>
+    <string name="hayai_novel_sheet_quote_required">أدخل نصًا لهذا الاقتباس</string>
+</resources>

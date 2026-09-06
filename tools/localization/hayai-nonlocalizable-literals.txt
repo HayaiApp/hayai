@@ -2314,22 +2314,22 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val resolvedFontFamily = if (importedFontId != null) "'HayaiImported'" else fontFamily
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val selection = if (style.textSelectable) "text" else "none"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	?: error("Unable to read the selected quote file")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	.setItems(highlights.map { it.note?.let { note -> "$note · ${it.anchor.exact.take(100)}" } ?: it.anchor.exact.take(100) }.toTypedArray()) { _, index ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	"hayai-novel-font-${System.identityHashCode(this)}",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	"hayai-novel-quotes-${System.identityHashCode(this)}",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${Uri.encode(text)}")))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	displayedLanguageTag = settings.sourceLanguage.takeUnless { it == "auto" }.orEmpty()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	if (selected == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	if (preferences.novelFontFamily.get() == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	items(fonts, R.string.hayai_novel_reader_no_imported_fonts, { it.name }, { if (fontStore.token(it) == selected) activity.getString(R.string.hayai_novel_sheet_selected) else "" }) { font ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	NovelReaderAction.ImportFont -> fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	private var displayedLanguageTag = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	type = "text/plain"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val labels = fonts.map { "${if (fontStore.token(it) == selected) "✓  " else ""}${it.name}" }.toTypedArray()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val mangaId = requireNotNull(content.manga.id) { "Novel is missing its durable database identity" }
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val result = runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, input.text.toString(), "") }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val result = withContext(Dispatchers.IO) { runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, value, "") } }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val text = listOfNotNull(current.manga.title, current.chapter.name, sourcePageUrl()).joinToString("\n")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderContentSheet.kt	fun <T> items(values: List<T>, @StringRes empty: Int, label: (T) -> CharSequence, detail: (T) -> CharSequence = { "" }, selected: (T) -> Unit) {
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	AutoScroll("auto_scroll"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Battery("battery"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Chapter("chapter"),
