@@ -1,0 +1,973 @@
+From 1f31b38d592f3cbf08d68254f9073d0d9cea9990 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 6 Sep 2026 17:02:56 +0300
+Subject: [PATCH] Use shared reader sheets for quotes and related content
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index c4c7c53a8684e337fe68181d714210ccbbc5536f..7f79b6d6b29aa1e3b15ceccebd39341487b3f794 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -160,3 +160,4 @@ ts	phase	decision	why	evidence	result
+ 2026-09-06T16:00:29.1228328+03:00	novel-reader-stability	kept chapter blocks across J2K preload and page-selection updates; added chapter scroll and bidirectional continuous or paged reading; restored native selection and typography; standardized source logos	preserves the visible text and routes progress through the selected J2K chapter; replaces conflicting layout controls with one backward-compatible preference	NovelReaderViewer.kt; NativeNovelRenderer.kt; NovelHtmlDocumentBuilder.kt; SourceArtwork.kt; tsundoku fe54f05ae038cbc2ae72713c6ac68a2fbccb11af; tools/verify-novel-web-reader.cjs	BROWSER_VERIFIED_ANDROID_PENDING
+ 2026-09-06T16:31:19.7593216+03:00	novel-reader-stability-verification	verified chapter modes, native selection and viewport anchors, browser pagination, and shared source logos	501 unit tests and 7 Android instrumentation tests passed; Chromium regressions passed; device uses Android 37 16 KB compatibility mode; live-extension and full lifecycle stress checks remain pending	artifacts/novel-reader/gradle-selection.log; gradle-touchscreen.log; instrumentation.log; docs/architecture/j2k-reset.md	VERIFIED_SCOPED
+ 2026-09-06T16:39:20.9088942+03:00	j2k-update-september-6	replayed 103 Hayai commits onto eight new J2K commits from e848fcebef to c88c8e1b3d	preserved upstream card containers and e-ink page flashing; filtered side-data restore by upstream selection; used compatible flash enum decoder; no schema change	BackupRestorer.kt; PreferencesHelper.kt; BrowseSourceListHolder.kt; manga_list_item.xml; existing ReaderActivity adapter; artifacts/novel-reader/j2k-gradle.log	COMPILE_UNIT_BOUNDARY_VERIFIED
++2026-09-06T17:02:55.6903785+03:00	reader-content-sheets	reused J2K E2E sheets and Material controls for quotes, highlights, statistics, translation results, and fonts; moved legacy JSON import into overflow	no J2K file or storage-schema changes; 501 unit tests passed; 2 Android sheet tests passed after correcting text-field layout params and keyboard expansion; localization and boundary passed	NovelReaderAttachment.kt; NovelReaderContentSheet.kt; artifacts/novel-reader/sheets-instrumentation.log	VERIFIED_SCOPED
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderContentSheetInstrumentedTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderContentSheetInstrumentedTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..3dc811c0398985cb0974bf09bf89e834280da034
+--- /dev/null
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderContentSheetInstrumentedTest.kt
+@@ -0,0 +1,102 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import android.graphics.Rect
++import android.graphics.Bitmap
++import android.os.SystemClock
++import android.view.View
++import android.view.ViewGroup
++import androidx.core.view.ViewCompat
++import androidx.core.view.WindowInsetsCompat
++import androidx.core.view.WindowInsetsControllerCompat
++import androidx.recyclerview.widget.RecyclerView
++import androidx.test.core.app.ActivityScenario
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import com.google.android.material.appbar.MaterialToolbar
++import com.google.android.material.button.MaterialButton
++import com.google.android.material.textfield.TextInputEditText
++import java.io.File
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.main.MainActivity
++import org.junit.After
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++
++@RunWith(AndroidJUnit4::class)
++class NovelReaderContentSheetInstrumentedTest {
++    private lateinit var activity: ActivityScenario<MainActivity>
++    private lateinit var sheet: NovelReaderContentSheet
++
++    @Before fun launch() { activity = ActivityScenario.launch(MainActivity::class.java) }
++    @After fun close() { activity.onActivity { if (::sheet.isInitialized) sheet.dismiss() }; activity.close() }
++
++    @Test fun longQuoteListScrollsWhileImportStaysInOverflow() {
++        activity.onActivity { host ->
++            sheet = NovelReaderContentSheet(host, host.getString(R.string.hayai_novel_reader_saved_quotes))
++            sheet.overflow(R.string.hayai_novel_reader_import_quotes) {}
++            sheet.items((1..200).toList(), R.string.hayai_novel_reader_no_quotes, { "Chapter $it" }, { "Saved quote $it" }) {}
++            sheet.show()
++        }
++        await {
++            val list = descendants(sheet.window!!.decorView).filterIsInstance<RecyclerView>().single()
++            list.canScrollVertically(1)
++        }
++        activity.onActivity {
++            val toolbar = sheet.findViewById<MaterialToolbar>(R.id.toolbar)!!
++            val list = descendants(sheet.window!!.decorView).filterIsInstance<RecyclerView>().single()
++            assertTrue(list.childCount < 200)
++            list.scrollToPosition(199)
++            assertTrue(toolbar.showOverflowMenu())
++        }
++        await { sheet.findViewById<MaterialToolbar>(R.id.toolbar)!!.isOverflowMenuShowing }
++    }
++
++    @Test fun editorSaveRemainsVisibleAboveKeyboardWithLongText() {
++        activity.onActivity { host ->
++            sheet = NovelReaderContentSheet(host, host.getString(R.string.hayai_novel_reader_edit_quote))
++            sheet.input(R.string.hayai_novel_reader_chapter, "Chapter 1")
++            val body = sheet.input(R.string.hayai_novel_reader_quote, "A long selected quote.\n".repeat(80), true)
++            sheet.action(R.string.hayai_novel_sheet_save, primary = true) {}
++            sheet.show()
++            body.requestFocus()
++        }
++        await { sheet.window!!.decorView.hasWindowFocus() }
++        activity.onActivity {
++            val body = descendants(sheet.window!!.decorView).filterIsInstance<TextInputEditText>().last()
++            WindowInsetsControllerCompat(sheet.window!!, body).show(WindowInsetsCompat.Type.ime())
++        }
++        await { ViewCompat.getRootWindowInsets(sheet.window!!.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
++        await {
++            val button = descendants(sheet.window!!.decorView).filterIsInstance<MaterialButton>().single()
++            val rect = Rect()
++            button.getGlobalVisibleRect(rect) && rect.height() == button.height && button.height > 0
++        }
++    }
++
++    private fun await(check: () -> Boolean) {
++        val end = SystemClock.uptimeMillis() + 8000
++        var passed = false
++        while (!passed && SystemClock.uptimeMillis() < end) {
++            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
++            activity.onActivity { passed = check() }
++            if (!passed) SystemClock.sleep(50)
++        }
++        if (!passed) {
++            val instrumentation = InstrumentationRegistry.getInstrumentation()
++            instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
++                File(instrumentation.targetContext.getExternalFilesDir(null), "reader-sheet-failure.png").outputStream().use {
++                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
++                }
++                bitmap.recycle()
++            }
++        }
++        assertTrue("Reader sheet did not reach the expected visible state", passed)
++    }
++
++    private fun descendants(view: View): Sequence<View> = sequence {
++        yield(view)
++        if (view is ViewGroup) repeat(view.childCount) { yieldAll(descendants(view.getChildAt(it))) }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt
+index 96b643ba3c3f6a0b2c63c541874356dc3a84fe66..ba14539ca28d3c14373c03d4335e4f217a837829 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt
+@@ -9,15 +9,11 @@ import android.net.Uri
+ import android.view.Menu
+ import android.view.MenuItem
+ import android.view.View
+-import android.view.Gravity
+ import android.view.WindowManager
+-import android.widget.EditText
+ import android.widget.FrameLayout
+-import android.widget.LinearLayout
+ import androidx.activity.result.contract.ActivityResultContracts
+ import androidx.appcompat.app.AlertDialog
+ import androidx.core.view.isVisible
+-import androidx.core.view.setPadding
+ import androidx.core.view.WindowInsetsCompat.Type.systemBars
+ import androidx.core.view.WindowInsetsControllerCompat
+ import com.google.android.material.button.MaterialButton
+@@ -97,6 +93,7 @@ internal class NovelReaderAttachment(
+     private var displayedLanguageTag = ""
+     private var bookmarkMenuItem: MenuItem? = null
+     private var lookupSheet: NovelLookupWebSheet? = null
++    private var contentSheet: NovelReaderContentSheet? = null
+     private val ttsChapterHandoff = NovelTtsChapterHandoff()
+     private val fontImportLauncher =
+         activity.activityResultRegistry.register(
+@@ -411,6 +408,8 @@ internal class NovelReaderAttachment(
+         closed = true
+         lookupSheet?.dismiss()
+         lookupSheet = null
++        contentSheet?.dismiss()
++        contentSheet = null
+         fontImportLauncher.unregister()
+         quoteImportLauncher.unregister()
+         stopAutoScroll()
+@@ -515,85 +514,77 @@ internal class NovelReaderAttachment(
+         }
+     }
+ 
++    private fun readerSheet(title: CharSequence, build: NovelReaderContentSheet.() -> Unit): NovelReaderContentSheet {
++        contentSheet?.dismiss()
++        return NovelReaderContentSheet(activity, title).also { sheet ->
++            contentSheet = sheet
++            sheet.setOnDismissListener { if (contentSheet === sheet) contentSheet = null }
++            sheet.build()
++            if (!closed) sheet.show()
++        }
++    }
++
+     private fun showStatistics() {
+         val current = content ?: return
+         val number = NumberFormat.getIntegerInstance()
+         val progress = current.chapter.last_page_read.coerceIn(0, 100)
+-        AlertDialog.Builder(activity)
+-            .setTitle(R.string.hayai_novel_reader_chapter_statistics)
+-            .setMessage(activity.getString(R.string.hayai_novel_reader_statistics_message, number.format(current.statistics.wordCount), current.statistics.estimatedMinutes(), number.format(current.statistics.wordsRead(progress)), current.statistics.remainingMinutes(progress), activity.getString(R.string.hayai_novel_reader_percent_value, progress)))
+-            .setPositiveButton(android.R.string.ok, null)
+-            .show()
++        readerSheet(activity.getString(R.string.hayai_novel_reader_chapter_statistics)) {
++            text(current.chapter.name)
++            text(activity.getString(R.string.hayai_novel_reader_statistics_message, number.format(current.statistics.wordCount), current.statistics.estimatedMinutes(), number.format(current.statistics.wordsRead(progress)), current.statistics.remainingMinutes(progress), activity.getString(R.string.hayai_novel_reader_percent_value, progress)))
++        }
+     }
+ 
+     private fun saveQuote(initial: String) {
+         val current = content ?: return
+-        val input = EditText(activity).apply {
+-            setText(initial)
+-            minLines = 4
+-            setHint(R.string.hayai_novel_reader_quote)
+-        }
+-        AlertDialog.Builder(activity)
+-            .setTitle(R.string.hayai_novel_reader_save_quote)
+-            .setView(input)
+-            .setPositiveButton(R.string.save) { _, _ ->
+-                activity.scope.launch(Dispatchers.IO) {
+-                    val result = runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, input.text.toString(), "") }
+-                    withContext(Dispatchers.Main) {
+-                        result.fold(
+-                            onSuccess = { activity.toast(if (it is QuoteAddResult.Created) R.string.hayai_novel_reader_quote_saved else R.string.hayai_novel_reader_quote_duplicate) },
+-                            onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_quote_save_error)) },
+-                        )
+-                    }
++        readerSheet(activity.getString(R.string.hayai_novel_reader_save_quote)) {
++            text(current.chapter.name)
++            val body = input(R.string.hayai_novel_reader_quote, initial, multiline = true)
++            action(R.string.hayai_novel_sheet_save, primary = true) { button ->
++                val value = body.text.toString().trim()
++                if (value.isBlank()) { body.error = activity.getString(R.string.hayai_novel_sheet_quote_required); return@action }
++                button.isEnabled = false
++                activity.scope.launch {
++                    val result = withContext(Dispatchers.IO) { runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, value, "") } }
++                    button.isEnabled = true
++                    result.fold(
++                        onSuccess = {
++                            activity.toast(if (it is QuoteAddResult.Created) R.string.hayai_novel_reader_quote_saved else R.string.hayai_novel_reader_quote_duplicate)
++                            dismiss()
++                        },
++                        onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_quote_save_error)) },
++                    )
+                 }
+             }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
++        }
+     }
+ 
+     private fun showQuotes() {
+         val mangaId = content?.manga?.id ?: return
+         activity.scope.launch {
+             val quotes = withContext(Dispatchers.IO) { quoteStore.forManga(mangaId) }
+-            val labels = quotes.map { activity.getString(R.string.hayai_novel_reader_quote_list_item, it.chapterName, it.displayedContent.replace('\n', ' ').take(80)) }.toTypedArray()
+-            AlertDialog.Builder(activity)
+-                .setTitle(R.string.hayai_novel_reader_saved_quotes)
+-                .setItems(labels) { _, index -> showQuote(quotes[index]) }
+-                .setNeutralButton(R.string.hayai_novel_reader_import_quotes) { _, _ ->
++            if (closed) return@launch
++            readerSheet(activity.getString(R.string.hayai_novel_reader_saved_quotes)) {
++                overflow(R.string.hayai_novel_reader_import_quotes) {
++                    dismiss()
+                     quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+                 }
+-                .setNegativeButton(android.R.string.cancel, null)
+-                .show()
++                items(quotes, R.string.hayai_novel_reader_no_quotes, { it.chapterName }, { it.displayedContent }, ::showQuote)
++            }
+         }
+     }
+ 
+     private fun showQuote(quote: NovelQuote) {
+-        AlertDialog.Builder(activity)
+-            .setTitle(quote.chapterName)
+-            .setMessage(quote.displayedContent)
+-            .setItems(
+-                arrayOf(
+-                    activity.getString(R.string.copy_value),
+-                    activity.getString(R.string.hayai_novel_reader_copy_attribution),
+-                    activity.getString(R.string.edit),
+-                    activity.getString(R.string.hayai_novel_reader_move_earlier),
+-                    activity.getString(R.string.hayai_novel_reader_move_later),
+-                    activity.getString(R.string.delete),
+-                ),
+-            ) { _, action ->
+-                when (action) {
+-                    0 -> copyQuote(quote.displayedContent)
+-                    1 -> copyQuote(activity.getString(R.string.hayai_novel_reader_quote_attribution, quote.displayedContent, quote.novelName, quote.chapterName))
+-                    2 -> editQuote(quote)
+-                    3 -> moveQuote(quote, -1)
+-                    4 -> moveQuote(quote, 1)
+-                    5 -> deleteQuote(quote)
+-                }
+-            }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
++        readerSheet(quote.chapterName) {
++            back(::showQuotes)
++            text(quote.displayedContent, selectable = true)
++            action(R.string.hayai_novel_sheet_copy) { copyQuote(quote.displayedContent) }
++            action(R.string.hayai_novel_reader_copy_attribution) { copyQuote(activity.getString(R.string.hayai_novel_reader_quote_attribution, quote.displayedContent, quote.novelName, quote.chapterName)) }
++            action(R.string.hayai_novel_reader_edit_quote) { editQuote(quote) }
++            overflow(R.string.hayai_novel_reader_move_earlier) { moveQuote(quote, -1) }
++            overflow(R.string.hayai_novel_reader_move_later) { moveQuote(quote, 1) }
++            overflow(R.string.hayai_novel_sheet_delete) { deleteQuote(quote) }
++        }
+     }
+-
+     private fun copyQuote(text: String) {
+         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+         clipboard.setPrimaryClip(ClipData.newPlainText(activity.getString(R.string.hayai_novel_reader_quote_clipboard), text))
+@@ -601,43 +592,36 @@ internal class NovelReaderAttachment(
+     }
+ 
+     private fun editQuote(quote: NovelQuote) {
+-        val body = EditText(activity).apply {
+-            setText(quote.displayedContent)
+-            minLines = 4
+-            gravity = Gravity.TOP
+-        }
+-        val chapter = EditText(activity).apply {
+-            setText(quote.chapterName)
+-            setSingleLine()
+-        }
+-        val language = EditText(activity).apply {
+-            setText(quote.language.orEmpty())
+-            setSingleLine()
+-        }
+-        val form = LinearLayout(activity).apply {
+-            orientation = LinearLayout.VERTICAL
+-            setPadding(20.dp, 8.dp, 20.dp, 8.dp)
+-            addView(chapter)
+-            addView(language)
+-            addView(body)
+-        }
+-        AlertDialog.Builder(activity)
+-            .setTitle(R.string.hayai_novel_reader_edit_quote)
+-            .setView(form)
+-            .setPositiveButton(R.string.save) { _, _ ->
++        readerSheet(activity.getString(R.string.hayai_novel_reader_edit_quote)) {
++            back { showQuote(quote) }
++            val chapter = input(R.string.hayai_novel_reader_chapter, quote.chapterName)
++            val language = input(R.string.hayai_novel_reader_language_optional, quote.language.orEmpty())
++            val body = input(R.string.hayai_novel_reader_quote, quote.displayedContent, multiline = true)
++            action(R.string.hayai_novel_sheet_save, primary = true) { button ->
++                val value = body.text.toString().trim()
++                if (value.isBlank()) { body.error = activity.getString(R.string.hayai_novel_sheet_quote_required); return@action }
++                val chapterName = chapter.text.toString()
++                val languageTag = language.text.toString()
++                button.isEnabled = false
+                 activity.scope.launch {
+-                    val updated = withContext(Dispatchers.IO) { quoteStore.update(quote.id, body.text.toString(), chapter.text.toString(), language.text.toString()) }
+-                    activity.toast(if (updated == null) R.string.hayai_novel_reader_quote_missing else R.string.hayai_novel_reader_quote_updated)
++                    val result = withContext(Dispatchers.IO) { runCatching { quoteStore.update(quote.id, value, chapterName, languageTag) } }
++                    button.isEnabled = true
++                    result.fold(
++                        onSuccess = { updated ->
++                            activity.toast(if (updated == null) R.string.hayai_novel_reader_quote_missing else R.string.hayai_novel_reader_quote_updated)
++                            if (isShowing) showQuotes()
++                        },
++                        onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_quote_update_error)) },
++                    )
+                 }
+             }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
++        }
+     }
+-
+     private fun moveQuote(quote: NovelQuote, direction: Int) {
+         activity.scope.launch {
+             val moved = withContext(Dispatchers.IO) { quoteStore.move(quote.mangaId, quote.id, direction) }
+             activity.toast(if (moved) R.string.hayai_novel_reader_quote_reordered else R.string.hayai_novel_reader_quote_at_edge)
++            if (contentSheet?.isShowing == true) showQuotes()
+         }
+     }
+ 
+@@ -649,6 +633,7 @@ internal class NovelReaderAttachment(
+                 activity.scope.launch {
+                     val deleted = withContext(Dispatchers.IO) { quoteStore.delete(quote.id) }
+                     activity.toast(if (deleted) R.string.hayai_novel_reader_quote_deleted else R.string.hayai_novel_reader_quote_missing)
++                    if (contentSheet?.isShowing == true) showQuotes()
+                 }
+             }
+             .setNegativeButton(android.R.string.cancel, null)
+@@ -707,62 +692,63 @@ internal class NovelReaderAttachment(
+         val current = content ?: return
+         activity.scope.launch {
+             val highlights = withContext(Dispatchers.IO) { highlightStore.forStableChapter(current.manga.source, current.manga.url, current.chapter.url) }
+-            if (highlights.isEmpty()) return@launch activity.toast(R.string.hayai_novel_reader_no_highlights)
+-            AlertDialog.Builder(activity)
+-                .setTitle(R.string.hayai_novel_reader_highlights)
+-                .setItems(highlights.map { it.note?.let { note -> "$note · ${it.anchor.exact.take(100)}" } ?: it.anchor.exact.take(100) }.toTypedArray()) { _, index ->
+-                    showHighlight(highlights[index])
+-                }
+-                .setNegativeButton(android.R.string.cancel, null)
+-                .show()
++            if (closed) return@launch
++            readerSheet(activity.getString(R.string.hayai_novel_reader_highlights)) {
++                items(highlights, R.string.hayai_novel_reader_no_highlights, { it.anchor.exact }, { it.note.orEmpty() }, ::showHighlight)
++            }
+         }
+     }
+ 
+     private fun showHighlight(highlight: NovelHighlight) {
+-        AlertDialog.Builder(activity)
+-            .setTitle(R.string.hayai_novel_reader_highlight)
+-            .setMessage(highlight.anchor.exact)
+-            .setPositiveButton(R.string.edit) { _, _ -> editHighlight(highlight) }
+-            .setNeutralButton(R.string.delete) { _, _ ->
+-                activity.scope.launch {
+-                    withContext(Dispatchers.IO) { highlightStore.delete(highlight.id) }
+-                    restoreHighlights()
+-                }
++        readerSheet(activity.getString(R.string.hayai_novel_reader_highlight)) {
++            back(::showHighlights)
++            text(highlight.anchor.exact, selectable = true)
++            highlight.note?.takeIf(String::isNotBlank)?.let { text(it) }
++            action(R.string.hayai_novel_reader_edit_highlight) { editHighlight(highlight) }
++            overflow(R.string.hayai_novel_sheet_delete) {
++                AlertDialog.Builder(activity)
++                    .setTitle(R.string.hayai_novel_sheet_delete)
++                    .setMessage(R.string.hayai_novel_reader_cannot_undo)
++                    .setPositiveButton(R.string.hayai_novel_sheet_delete) { _, _ ->
++                        activity.scope.launch {
++                            withContext(Dispatchers.IO) { highlightStore.delete(highlight.id) }
++                            restoreHighlights()
++                            if (isShowing) showHighlights()
++                        }
++                    }
++                    .setNegativeButton(android.R.string.cancel, null)
++                    .show()
+             }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
++        }
+     }
+ 
+     private fun editHighlight(highlight: NovelHighlight) {
+-        val note = EditText(activity).apply {
+-            setHint(R.string.hayai_novel_reader_optional_note)
+-            setText(highlight.note)
+-        }
+-        val colors = intArrayOf(0xFFFFEB3B.toInt(), 0xFF80DEEA.toInt(), 0xFFA5D6A7.toInt(), 0xFFF8BBD0.toInt(), 0xFFFFCC80.toInt())
+-        var selectedColor = colors.indexOf(highlight.color).takeIf { it >= 0 } ?: 0
+-        AlertDialog.Builder(activity)
+-            .setTitle(R.string.hayai_novel_reader_edit_highlight)
+-            .setView(note)
+-            .setSingleChoiceItems(
+-                arrayOf(
+-                    activity.getString(R.string.hayai_novel_reader_yellow),
+-                    activity.getString(R.string.hayai_novel_reader_cyan),
+-                    activity.getString(R.string.hayai_novel_reader_green),
+-                    activity.getString(R.string.hayai_novel_reader_pink),
+-                    activity.getString(R.string.hayai_novel_reader_orange),
+-                ),
+-                selectedColor,
+-            ) { _, which -> selectedColor = which }
+-            .setPositiveButton(R.string.save) { _, _ ->
++        readerSheet(activity.getString(R.string.hayai_novel_reader_edit_highlight)) {
++            back { showHighlight(highlight) }
++            text(highlight.anchor.exact, selectable = true)
++            val note = input(R.string.hayai_novel_reader_optional_note, highlight.note.orEmpty(), multiline = true)
++            val colors = intArrayOf(0xFFFFEB3B.toInt(), 0xFF80DEEA.toInt(), 0xFFA5D6A7.toInt(), 0xFFF8BBD0.toInt(), 0xFFFFCC80.toInt())
++            var selectedColor = colors.indexOf(highlight.color).takeIf { it >= 0 } ?: 0
++            form.addView(eu.kanade.tachiyomi.widget.MaterialSpinnerView(activity, null).apply {
++                title = activity.getString(R.string.hayai_novel_sheet_highlight_color)
++                setEntries(listOf(R.string.hayai_novel_reader_yellow, R.string.hayai_novel_reader_cyan, R.string.hayai_novel_reader_green, R.string.hayai_novel_reader_pink, R.string.hayai_novel_reader_orange).map(activity::getString))
++                setSelection(selectedColor)
++                onItemSelectedListener = { selectedColor = it }
++            })
++            action(R.string.hayai_novel_sheet_save, primary = true) { button ->
++                val noteText = note.text.toString()
++                button.isEnabled = false
+                 activity.scope.launch {
+-                    withContext(Dispatchers.IO) { highlightStore.update(highlight.id, colors[selectedColor], note.text.toString()) }
+-                    restoreHighlights()
++                    val result = withContext(Dispatchers.IO) { runCatching { highlightStore.update(highlight.id, colors[selectedColor], noteText) } }
++                    button.isEnabled = true
++                    result.fold(
++                        onSuccess = { restoreHighlights(); if (isShowing) showHighlights() },
++                        onFailure = { activity.toast(activity.novelFailureMessage(it, R.string.hayai_novel_reader_highlight_save_error)) },
++                    )
+                 }
+             }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
++        }
+     }
+-
+     private fun translateChapter() {
+         val current = content ?: return
+         activity.scope.launch {
+@@ -818,11 +804,9 @@ internal class NovelReaderAttachment(
+                             }
+                         }
+                     } else {
+-                        AlertDialog.Builder(activity)
+-                            .setTitle(R.string.hayai_novel_reader_translate)
+-                            .setMessage(translated.text)
+-                            .setPositiveButton(android.R.string.ok, null)
+-                            .show()
++                        readerSheet(activity.getString(R.string.hayai_novel_reader_translate)) {
++                            text(translated.text, selectable = true)
++                        }
+                     }
+                     Unit
+                 },
+@@ -960,43 +944,30 @@ internal class NovelReaderAttachment(
+ 
+     private fun showImportedFonts() {
+         val fonts = fontStore.fonts()
+-        if (fonts.isEmpty()) {
+-            AlertDialog.Builder(activity)
+-                .setTitle(R.string.hayai_novel_reader_imported_fonts)
+-                .setMessage(R.string.hayai_novel_reader_no_imported_fonts)
+-                .setPositiveButton(R.string.hayai_novel_reader_import) { _, _ ->
+-                    fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
+-                }
+-                .setNegativeButton(android.R.string.cancel, null)
+-                .show()
+-            return
+-        }
+         val selected = preferences.novelFontFamily.get()
+-        val labels = fonts.map { "${if (fontStore.token(it) == selected) "✓  " else ""}${it.name}" }.toTypedArray()
+-        AlertDialog.Builder(activity)
+-            .setTitle(R.string.hayai_novel_reader_imported_fonts)
+-            .setItems(labels) { _, index ->
+-                val font = fonts[index]
+-                AlertDialog.Builder(activity)
+-                    .setTitle(font.name)
+-                    .setItems(arrayOf(activity.getString(R.string.hayai_novel_reader_use_font), activity.getString(R.string.delete))) { _, action ->
+-                        if (action == 0) {
+-                            preferences.novelFontFamily.set(fontStore.token(font))
+-                        } else {
+-                            if (selected == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
+-                            fontStore.delete(font.id)
+-                        }
++        readerSheet(activity.getString(R.string.hayai_novel_reader_imported_fonts)) {
++            action(R.string.hayai_novel_reader_import, primary = true) {
++                dismiss()
++                fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
++            }
++            items(fonts, R.string.hayai_novel_reader_no_imported_fonts, { it.name }, { if (fontStore.token(it) == selected) activity.getString(R.string.hayai_novel_sheet_selected) else "" }) { font ->
++                readerSheet(font.name) {
++                    back(::showImportedFonts)
++                    action(R.string.hayai_novel_reader_use_font, primary = true) {
++                        preferences.novelFontFamily.set(fontStore.token(font))
+                         viewer.refreshStyle()
++                        showImportedFonts()
+                     }
+-                    .show()
+-            }
+-            .setPositiveButton(R.string.hayai_novel_reader_import) { _, _ ->
+-                fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
++                    overflow(R.string.hayai_novel_sheet_delete) {
++                        if (preferences.novelFontFamily.get() == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
++                        fontStore.delete(font.id)
++                        viewer.refreshStyle()
++                        showImportedFonts()
++                    }
++                }
+             }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
++        }
+     }
+-
+     private fun sourcePageUrl(): String? =
+         runCatching { (source as? HttpSource)?.getMangaUrl(manga) }.getOrNull()
+ 
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderContentSheet.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderContentSheet.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..98ed7e9d4a0dc8b24a964fcbecbf800ce3d753d7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderContentSheet.kt
+@@ -0,0 +1,138 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import android.app.Activity
++import android.view.LayoutInflater
++import android.view.MenuItem
++import android.view.View
++import android.view.ViewGroup
++import android.widget.LinearLayout
++import android.widget.TextView
++import androidx.annotation.StringRes
++import androidx.core.view.ViewCompat
++import androidx.core.view.WindowInsetsCompat
++import androidx.core.view.updatePadding
++import androidx.core.widget.NestedScrollView
++import androidx.recyclerview.widget.LinearLayoutManager
++import androidx.recyclerview.widget.RecyclerView
++import com.google.android.material.bottomsheet.BottomSheetBehavior
++import com.google.android.material.button.MaterialButton
++import com.google.android.material.textfield.TextInputEditText
++import com.google.android.material.textfield.TextInputLayout
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.databinding.HayaiNovelContentSheetBinding
++import eu.kanade.tachiyomi.widget.E2EBottomSheetDialog
++
++internal class NovelReaderContentSheet(private val activity: Activity, title: CharSequence) :
++    E2EBottomSheetDialog<HayaiNovelContentSheetBinding>(activity) {
++    override fun createBinding(inflater: LayoutInflater) = HayaiNovelContentSheetBinding.inflate(inflater)
++
++    val form = LinearLayout(context).apply {
++        orientation = LinearLayout.VERTICAL
++        setPadding(20.dp, 8.dp, 20.dp, 16.dp)
++    }
++
++    init {
++        binding.toolbar.title = title
++        binding.toolbar.setNavigationOnClickListener { dismiss() }
++        binding.content.addView(NestedScrollView(context).apply { addView(form) })
++        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
++            val bottom = maxOf(insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
++            view.updatePadding(bottom = bottom)
++            val height = if (insets.isVisible(WindowInsetsCompat.Type.ime())) {
++                activity.window.decorView.height - insets.getInsets(WindowInsetsCompat.Type.systemBars()).top
++            } else {
++                (activity.window.decorView.height * 0.8f).toInt()
++            }
++            if (view.layoutParams.height != height) view.layoutParams = view.layoutParams.apply { this.height = height }
++            insets
++        }
++    }
++
++    override fun onStart() {
++        super.onStart()
++        binding.root.layoutParams = binding.root.layoutParams.apply { height = (activity.window.decorView.height * 0.8f).toInt() }
++        sheetBehavior.skipCollapsed = true
++        sheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
++        ViewCompat.requestApplyInsets(binding.root)
++    }
++
++    fun back(action: () -> Unit) {
++        binding.toolbar.setNavigationIcon(R.drawable.ic_arrow_back_24dp)
++        binding.toolbar.setNavigationContentDescription(R.string.hayai_novel_sheet_back)
++        binding.toolbar.setNavigationOnClickListener { action() }
++    }
++
++    fun overflow(@StringRes label: Int, action: () -> Unit) {
++        binding.toolbar.menu.add(label).apply {
++            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
++            setOnMenuItemClickListener { action(); true }
++        }
++    }
++
++    fun text(value: CharSequence, selectable: Boolean = false) {
++        form.addView(TextView(context).apply {
++            text = value
++            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyLarge)
++            setTextIsSelectable(selectable)
++            setPadding(0, 8.dp, 0, 16.dp)
++        })
++    }
++
++    fun input(@StringRes label: Int, value: String, multiline: Boolean = false): TextInputEditText {
++        val field = TextInputEditText(context).apply {
++            setText(value)
++            setSingleLine(!multiline)
++            if (multiline) { minLines = 4; gravity = android.view.Gravity.TOP }
++        }
++        form.addView(TextInputLayout(context).apply {
++            hint = context.getString(label)
++            addView(field, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
++        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 12.dp })
++        return field
++    }
++
++    fun action(@StringRes label: Int, primary: Boolean = false, action: (MaterialButton) -> Unit) {
++        val button = MaterialButton(context, null, if (primary) com.google.android.material.R.attr.materialButtonStyle else com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
++            setText(label)
++            setOnClickListener { action(this) }
++        }
++        (if (primary) binding.actions else form).addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
++    }
++
++    fun <T> items(values: List<T>, @StringRes empty: Int, label: (T) -> CharSequence, detail: (T) -> CharSequence = { "" }, selected: (T) -> Unit) {
++        if (values.isEmpty()) { text(context.getString(empty)); return }
++        binding.content.removeAllViews()
++        val list = RecyclerView(context).apply { layoutManager = LinearLayoutManager(context); clipToPadding = false; setPadding(8.dp, 0, 8.dp, 16.dp) }
++        recyclerView = list
++        list.adapter = object : RecyclerView.Adapter<Row>() {
++            override fun getItemCount() = values.size
++            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Row = Row(
++                LayoutInflater.from(parent.context).inflate(android.R.layout.simple_list_item_2, parent, false).apply {
++                    minimumHeight = 64.dp
++                    setPadding(12.dp, 12.dp, 12.dp, 12.dp)
++                    val attributes = context.obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground))
++                    setBackgroundResource(attributes.getResourceId(0, 0))
++                    attributes.recycle()
++                },
++            )
++            override fun onBindViewHolder(holder: Row, position: Int) {
++                val item = values[position]
++                holder.title.text = label(item)
++                holder.title.maxLines = 2
++                holder.title.ellipsize = android.text.TextUtils.TruncateAt.END
++                holder.detail.text = detail(item)
++                holder.detail.maxLines = 3
++                holder.detail.ellipsize = android.text.TextUtils.TruncateAt.END
++                holder.itemView.setOnClickListener { selected(item) }
++            }
++        }
++        binding.content.addView(list)
++    }
++
++    private class Row(view: View) : RecyclerView.ViewHolder(view) {
++        val title: TextView = view.findViewById(android.R.id.text1)
++        val detail: TextView = view.findViewById(android.R.id.text2)
++    }
++
++    private val Int.dp: Int get() = (this * context.resources.displayMetrics.density).toInt()
++}
+diff --git a/app/src/main/res/layout/hayai_novel_content_sheet.xml b/app/src/main/res/layout/hayai_novel_content_sheet.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b30da01de44b41aa0945572caccefe011fb8df5
+--- /dev/null
++++ b/app/src/main/res/layout/hayai_novel_content_sheet.xml
+@@ -0,0 +1,30 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:background="@drawable/bottom_sheet_rounded_background"
++    android:backgroundTint="?attr/colorSurfaceContainer">
++
++    <com.google.android.material.appbar.MaterialToolbar
++        android:id="@+id/toolbar"
++        android:layout_width="match_parent"
++        android:layout_height="?attr/actionBarSize"
++        app:navigationIcon="@drawable/ic_close_24dp"
++        app:navigationContentDescription="@string/hayai_novel_sheet_close" />
++
++    <FrameLayout
++        android:id="@+id/content"
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_weight="1" />
++
++    <LinearLayout
++        android:id="@+id/actions"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="vertical"
++        android:paddingStart="20dp"
++        android:paddingEnd="20dp" />
++</LinearLayout>
+diff --git a/app/src/main/res/values-ar/strings_hayai_novel_sheets.xml b/app/src/main/res/values-ar/strings_hayai_novel_sheets.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..792c191ec738078aff6c431b44927490d92655b1
+--- /dev/null
++++ b/app/src/main/res/values-ar/strings_hayai_novel_sheets.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="hayai_novel_sheet_close">إغلاق</string>
++    <string name="hayai_novel_sheet_back">رجوع</string>
++    <string name="hayai_novel_sheet_save">حفظ</string>
++    <string name="hayai_novel_sheet_copy">نسخ النص</string>
++    <string name="hayai_novel_sheet_delete">حذف</string>
++    <string name="hayai_novel_sheet_selected">محدد</string>
++    <string name="hayai_novel_sheet_highlight_color">لون التظليل</string>
++    <string name="hayai_novel_sheet_quote_required">أدخل نصًا لهذا الاقتباس</string>
++</resources>
+diff --git a/app/src/main/res/values/strings_hayai_novel_reader.xml b/app/src/main/res/values/strings_hayai_novel_reader.xml
+index 93cd57a40ee7e64077c1b599065d2414eeb5fa67..6545e3e6852315a2652448dfba3bfdcba5529c35 100644
+--- a/app/src/main/res/values/strings_hayai_novel_reader.xml
++++ b/app/src/main/res/values/strings_hayai_novel_reader.xml
+@@ -1,5 +1,13 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
++    <string name="hayai_novel_sheet_close">Close</string>
++    <string name="hayai_novel_sheet_back">Back</string>
++    <string name="hayai_novel_sheet_save">Save</string>
++    <string name="hayai_novel_sheet_copy">Copy text</string>
++    <string name="hayai_novel_sheet_delete">Delete</string>
++    <string name="hayai_novel_sheet_selected">Selected</string>
++    <string name="hayai_novel_sheet_highlight_color">Highlight color</string>
++    <string name="hayai_novel_sheet_quote_required">Enter some text for this quote</string>
+     <!-- Novel reader settings and shared labels -->
+     <string name="hayai_novel_reader_typography">Typography</string>
+     <string name="hayai_novel_reader_renderer">Renderer</string>
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index f051490e5c160155a0d028741cbb3a25dc099fce..5e53ee64aec4f6611c3d15fb474f3297454cb0f1 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -146,6 +146,8 @@ TachiyomiSY and Tsundoku are feature references, not architectural parents. Port
+ 
+ ## Novel reading stability
+ 
++Reader quotes, highlight browsing/editing, chapter statistics, selected-text translation results, and imported fonts share a Hayai content-sheet assembly built from J2K's `E2EBottomSheetDialog`, Material toolbar/buttons/text fields, the existing `MaterialSpinnerView`, and Android's two-line RecyclerView rows. It reuses the existing rounded sheet surface, adds no J2K adapter, and leaves destructive confirmations as dialogs. Quote bodies remain selectable; save controls stay outside scrolling forms, and the sheet expands above an open keyboard using system insets. Legacy quote JSON recovery is retained only in the saved-quotes overflow menu. Storage, ordering, migration, and backup formats are unchanged.
++
+ The September 2026 reader corrections reference Tsundoku commit `fe54f05ae038cbc2ae72713c6ac68a2fbccb11af`, especially `textview/NovelViewer.kt` and its chapter containment, selectable text, and viewport preservation behavior. The Hayai viewer keeps existing chapter blocks across preload notifications. It inserts or removes adjacent blocks without replacing the visible document. J2K receives the selected chapter's `NovelProgressPage` through `onPageSelected`; scrolling across a boundary no longer invokes the menu-oriented chapter loader, which can restore a different saved position.
+ 
+ Chapter scroll mounts one chapter. Continuous scroll and paged reading mount the current chapter and its immediate neighbors in both directions. Native horizontal reading uses a selectable `TextView`; explicit editing temporarily uses `EditText`. WebView handles paged and vertical text. Native paragraph indent, paragraph spacing, and justification now apply to the displayed text. Paged movement snaps by viewport, and both renderers preserve the visible chapter offset when adjacent content changes size.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index a5d1fd4fc15dbb1ddb0f9f42535bc71ab94315ab..3260d5c426c0b4b88e08473b8f3631d786a48461 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -54,8 +54,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Typography, themes, spacing, navigation, presets, snippets, search/replace | Five Tsundoku icon tabs hosted from J2K's reader settings action; adjacent theme and text/background color controls; Tsundoku-style preset swatches plus synchronized hex/RGB picker; stable backend preference plus independent continuous/paginated layout and horizontal/vertical-rl writing direction; strict Japanese line breaking, mixed orientation, two-digit tate-chu-yoko, vertical font features, exact tap-zone tables, SAF-imported fonts, searchable full settings, ordered snippets and replacements; Library settings expose one-to-five title lines for novel cards | render-plan, column-fragment pagination, document-scroller ownership, vertical Japanese CSS, title policy, and preference wiring compile with focused HTML coverage; paginated gesture and vertical Japanese device flows remain pending |
+ | Translation, definition, search, and dictionary handoff | Bounded provider clients; a Hayai-owned durable completed-result store with stable chapter identity, hash-checked lookup, separate lease-based job state, legacy completed-cache promotion, source migration, and bounded backup; translated output is modeled as a target language plus distinct paragraphs before either renderer mutates its document; one reader action queues every chapter through a foreground WorkManager job; shared native/Web selection actions with retained Web anchors; Google Translate process-text/send routing; forced resizable Custom Tabs with browser login state; and a secure J2K bottom-sheet WebView fallback | paragraph presentation, completed-result storage, typed reader lookup, retry-safe bulk queueing, offline transport fallback, migration, and backup have focused tests; on-device provider translation and process-death lease recovery remain pending |
+ | TTS and playback controls | Foreground media-playback service, notification actions, Tsundoku transport actions surfaced through J2K's reader-sheet buttons, chapter handoff, highlight, and activity reattachment; TTS is initialized only after stored translation resolution, selects the displayed target locale when available, constrains an explicit voice to that locale, and atomically replaces paragraphs while preserving active playback position | active exact-shell transport was previously verified on emulator; translated-language selection compiles and paragraph presentation is unit-verified; background and restart recovery remain pending |
+-| Quotes | Typed `hayai_quotes`, versioned non-destructive replay of archived `series_quotes` and legacy `quotes/novel_<id>.json` files, multi-file SAF recovery for scoped-storage devices, visible semantic Quote action in native/Web selection, retained Web anchors, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI | exact archived/legacy JSON shapes, idempotent merge, unresolved-identity retry, and identity-collision remap are covered by focused tests; emulator displayed archived database and safely remapped JSON quotes together; Web selection lifecycle remains pending |
+-| Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, editing, schema, and backup | implemented unverified |
++| Quotes | Typed `hayai_quotes`, versioned non-destructive replay of archived `series_quotes` and legacy `quotes/novel_<id>.json` files, multi-file SAF recovery for scoped-storage devices, visible semantic Quote action in native/Web selection, retained Web anchors, duplicate-safe create, edit, attributed copy, reorder, browse, and confirmed delete UI; shared reader sheets with selectable quote text and legacy JSON import in overflow | exact archived/legacy JSON shapes, idempotent merge, unresolved-identity retry, and identity-collision remap are covered by focused tests; emulator displayed archived database and safely remapped JSON quotes together; two Android sheet checks verify long-list scrolling, overflow access, and save-button visibility above the keyboard; Web selection lifecycle remains pending |
++| Persistent highlights | Stable source/chapter anchors, bounded edit recovery, normalized cross-node rendering, navigation, sheet-based browsing and editing using existing Material controls, schema, and backup | implemented unverified |
+ | Word count, chapter stats, analytics | `hayai_novel_chapter_stats`, progress-aware J2K chapter rows, and library statistics | integration foundation verified; emulator presentation pending |
+ | Library content selector, shortcuts, and migration compatibility | One durable-evidence content policy with an always-visible All/Manga/Novels selector in the J2K Library toolbar; shared localized Manga/Novel migration sections; source-unavailable legacy identity recovery; catalogue-wide novel targets and shared source artwork; atomic progress, quote, word-count, and highlight transfer | selector persistence, stale-source classification, and migration mapping/copy/conflict behavior covered by focused tests; end-to-end library and migration emulator flows pending |
+ | Novel trackers | Concrete NovelUpdates, NovelList, and RanobeDB services through J2K tracking | implemented unverified |
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index 9e6b3a44e587374167f52c207adb8046c8b34168..bec853c06cc38c0b2e49d936dfc5ef523a1764e0 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1150 | 0.0% |
+-| `ar` | 31 / 1150 | 2.7% |
+-| `ars` | 0 / 1150 | 0.0% |
+-| `az` | 0 / 1150 | 0.0% |
+-| `bg` | 0 / 1150 | 0.0% |
+-| `bn` | 0 / 1150 | 0.0% |
+-| `ca` | 0 / 1150 | 0.0% |
+-| `ceb` | 0 / 1150 | 0.0% |
+-| `cs` | 0 / 1150 | 0.0% |
+-| `cv` | 0 / 1150 | 0.0% |
+-| `de` | 29 / 1150 | 2.5% |
+-| `el` | 0 / 1150 | 0.0% |
+-| `eo` | 0 / 1150 | 0.0% |
+-| `es` | 31 / 1150 | 2.7% |
+-| `eu` | 0 / 1150 | 0.0% |
+-| `fa` | 0 / 1150 | 0.0% |
+-| `fi` | 0 / 1150 | 0.0% |
+-| `fil` | 31 / 1150 | 2.7% |
+-| `fr` | 31 / 1150 | 2.7% |
+-| `gl` | 0 / 1150 | 0.0% |
+-| `ha` | 0 / 1150 | 0.0% |
+-| `hi` | 0 / 1150 | 0.0% |
+-| `hr` | 31 / 1150 | 2.7% |
+-| `hu` | 0 / 1150 | 0.0% |
+-| `in` | 31 / 1150 | 2.7% |
+-| `it` | 17 / 1150 | 1.5% |
+-| `iw` | 0 / 1150 | 0.0% |
+-| `ja` | 29 / 1150 | 2.5% |
+-| `jv` | 0 / 1150 | 0.0% |
+-| `ka` | 0 / 1150 | 0.0% |
+-| `kk` | 0 / 1150 | 0.0% |
+-| `km` | 0 / 1150 | 0.0% |
+-| `ko` | 7 / 1150 | 0.6% |
+-| `lt` | 0 / 1150 | 0.0% |
+-| `lv` | 0 / 1150 | 0.0% |
+-| `ml` | 0 / 1150 | 0.0% |
+-| `mn` | 0 / 1150 | 0.0% |
+-| `ms` | 0 / 1150 | 0.0% |
+-| `my` | 0 / 1150 | 0.0% |
+-| `nb-rNO` | 0 / 1150 | 0.0% |
+-| `ne` | 5 / 1150 | 0.4% |
+-| `nl` | 0 / 1150 | 0.0% |
+-| `nn` | 0 / 1150 | 0.0% |
+-| `om` | 0 / 1150 | 0.0% |
+-| `or` | 0 / 1150 | 0.0% |
+-| `pl` | 0 / 1150 | 0.0% |
+-| `pt` | 31 / 1150 | 2.7% |
+-| `pt-rBR` | 31 / 1150 | 2.7% |
+-| `ro` | 0 / 1150 | 0.0% |
+-| `ru` | 31 / 1150 | 2.7% |
+-| `sc` | 0 / 1150 | 0.0% |
+-| `si` | 0 / 1150 | 0.0% |
+-| `sk` | 0 / 1150 | 0.0% |
+-| `sq` | 0 / 1150 | 0.0% |
+-| `sr` | 0 / 1150 | 0.0% |
+-| `sv` | 0 / 1150 | 0.0% |
+-| `ta` | 31 / 1150 | 2.7% |
+-| `te` | 0 / 1150 | 0.0% |
+-| `th` | 0 / 1150 | 0.0% |
+-| `ti` | 0 / 1150 | 0.0% |
+-| `tl` | 0 / 1150 | 0.0% |
+-| `tr` | 31 / 1150 | 2.7% |
+-| `uk` | 7 / 1150 | 0.6% |
+-| `ur` | 0 / 1150 | 0.0% |
+-| `vi` | 5 / 1150 | 0.4% |
+-| `zh-rCN` | 31 / 1150 | 2.7% |
+-| `zh-rTW` | 31 / 1150 | 2.7% |
++| `ajp` | 0 / 1158 | 0.0% |
++| `ar` | 39 / 1158 | 3.4% |
++| `ars` | 0 / 1158 | 0.0% |
++| `az` | 0 / 1158 | 0.0% |
++| `bg` | 0 / 1158 | 0.0% |
++| `bn` | 0 / 1158 | 0.0% |
++| `ca` | 0 / 1158 | 0.0% |
++| `ceb` | 0 / 1158 | 0.0% |
++| `cs` | 0 / 1158 | 0.0% |
++| `cv` | 0 / 1158 | 0.0% |
++| `de` | 29 / 1158 | 2.5% |
++| `el` | 0 / 1158 | 0.0% |
++| `eo` | 0 / 1158 | 0.0% |
++| `es` | 31 / 1158 | 2.7% |
++| `eu` | 0 / 1158 | 0.0% |
++| `fa` | 0 / 1158 | 0.0% |
++| `fi` | 0 / 1158 | 0.0% |
++| `fil` | 31 / 1158 | 2.7% |
++| `fr` | 31 / 1158 | 2.7% |
++| `gl` | 0 / 1158 | 0.0% |
++| `ha` | 0 / 1158 | 0.0% |
++| `hi` | 0 / 1158 | 0.0% |
++| `hr` | 31 / 1158 | 2.7% |
++| `hu` | 0 / 1158 | 0.0% |
++| `in` | 31 / 1158 | 2.7% |
++| `it` | 17 / 1158 | 1.5% |
++| `iw` | 0 / 1158 | 0.0% |
++| `ja` | 29 / 1158 | 2.5% |
++| `jv` | 0 / 1158 | 0.0% |
++| `ka` | 0 / 1158 | 0.0% |
++| `kk` | 0 / 1158 | 0.0% |
++| `km` | 0 / 1158 | 0.0% |
++| `ko` | 7 / 1158 | 0.6% |
++| `lt` | 0 / 1158 | 0.0% |
++| `lv` | 0 / 1158 | 0.0% |
++| `ml` | 0 / 1158 | 0.0% |
++| `mn` | 0 / 1158 | 0.0% |
++| `ms` | 0 / 1158 | 0.0% |
++| `my` | 0 / 1158 | 0.0% |
++| `nb-rNO` | 0 / 1158 | 0.0% |
++| `ne` | 5 / 1158 | 0.4% |
++| `nl` | 0 / 1158 | 0.0% |
++| `nn` | 0 / 1158 | 0.0% |
++| `om` | 0 / 1158 | 0.0% |
++| `or` | 0 / 1158 | 0.0% |
++| `pl` | 0 / 1158 | 0.0% |
++| `pt` | 31 / 1158 | 2.7% |
++| `pt-rBR` | 31 / 1158 | 2.7% |
++| `ro` | 0 / 1158 | 0.0% |
++| `ru` | 31 / 1158 | 2.7% |
++| `sc` | 0 / 1158 | 0.0% |
++| `si` | 0 / 1158 | 0.0% |
++| `sk` | 0 / 1158 | 0.0% |
++| `sq` | 0 / 1158 | 0.0% |
++| `sr` | 0 / 1158 | 0.0% |
++| `sv` | 0 / 1158 | 0.0% |
++| `ta` | 31 / 1158 | 2.7% |
++| `te` | 0 / 1158 | 0.0% |
++| `th` | 0 / 1158 | 0.0% |
++| `ti` | 0 / 1158 | 0.0% |
++| `tl` | 0 / 1158 | 0.0% |
++| `tr` | 31 / 1158 | 2.7% |
++| `uk` | 7 / 1158 | 0.6% |
++| `ur` | 0 / 1158 | 0.0% |
++| `vi` | 5 / 1158 | 0.4% |
++| `zh-rCN` | 31 / 1158 | 2.7% |
++| `zh-rTW` | 31 / 1158 | 2.7% |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 0770f261e174925e54277cf31f07a0870379756f..46db871810bf5e6dafed3aae126b9e02bf60bfd8 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -2314,22 +2314,22 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val resolvedFontFamily = if (importedFontId != null) "'HayaiImported'" else fontFamily
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val selection = if (style.textSelectable) "text" else "none"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	?: error("Unable to read the selected quote file")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	.setItems(highlights.map { it.note?.let { note -> "$note · ${it.anchor.exact.take(100)}" } ?: it.anchor.exact.take(100) }.toTypedArray()) { _, index ->
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	"hayai-novel-font-${System.identityHashCode(this)}",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	"hayai-novel-quotes-${System.identityHashCode(this)}",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${Uri.encode(text)}")))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	displayedLanguageTag = settings.sourceLanguage.takeUnless { it == "auto" }.orEmpty()
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	if (selected == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	if (preferences.novelFontFamily.get() == fontStore.token(font)) preferences.novelFontFamily.set("sans-serif")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	items(fonts, R.string.hayai_novel_reader_no_imported_fonts, { it.name }, { if (fontStore.token(it) == selected) activity.getString(R.string.hayai_novel_sheet_selected) else "" }) { font ->
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	NovelReaderAction.ImportFont -> fontImportLauncher.launch(arrayOf("font/*", "application/font-sfnt", "application/octet-stream"))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	private var displayedLanguageTag = ""
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	quoteImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	type = "text/plain"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val labels = fonts.map { "${if (fontStore.token(it) == selected) "✓  " else ""}${it.name}" }.toTypedArray()
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val mangaId = requireNotNull(content.manga.id) { "Novel is missing its durable database identity" }
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val result = runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, input.text.toString(), "") }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val result = withContext(Dispatchers.IO) { runCatching { quoteStore.add(requireNotNull(current.manga.id), current.manga.title, current.chapter.name, value, "") } }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	val text = listOfNotNull(current.manga.title, current.chapter.name, sourcePageUrl()).joinToString("\n")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderContentSheet.kt	fun <T> items(values: List<T>, @StringRes empty: Int, label: (T) -> CharSequence, detail: (T) -> CharSequence = { "" }, selected: (T) -> Unit) {
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	AutoScroll("auto_scroll"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Battery("battery"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Chapter("chapter"),
+-- 
+2.54.0.windows.1
+
