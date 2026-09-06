@@ -55,7 +55,7 @@ class NovelHtmlDocumentBuilderTest {
         assertTrue(html.contains("const pageRects = block =>"))
         assertTrue(html.contains("return blockPageLocation(activeBlock())"))
         assertTrue(html.contains("const pageStride = () => Math.max(1, scroller().clientWidth || innerWidth)"))
-        assertTrue(html.contains("pageStride() * direction"))
+        assertTrue(html.contains("direction)*pageStride()"))
         assertFalse(html.contains("innerWidth * fraction * direction"))
         assertTrue(html.contains("column-gap:32px"))
         assertTrue(html.contains("break-before:column"))

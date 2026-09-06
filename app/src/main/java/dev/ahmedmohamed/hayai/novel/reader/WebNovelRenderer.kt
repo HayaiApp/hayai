@@ -39,6 +39,9 @@ internal class WebNovelRenderer(
     private var requestedProgress = 0
     private var editMode = false
     private var documentReady = false
+    private var destroyed = false
+    private var documentId = 0L
+    private var pendingFocus: Pair<Long, Int?>? = null
     private val pendingBlocks = mutableListOf<PendingBlock>()
     private var pendingRetainedIds: Set<Long>? = null
     private val webView = object : WebView(context) {
@@ -83,6 +86,7 @@ internal class WebNovelRenderer(
                 context,
                 object : GestureDetectorWithLongTap.Listener() {
                     override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+                        if (event.eventTime - event.downTime >= android.view.ViewConfiguration.getLongPressTimeout()) return true
                         val view = this@apply
                         evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
                             if (selected != "true") {
@@ -107,11 +111,13 @@ internal class WebNovelRenderer(
         val content = block.content
         if (placement == NovelBlockPlacement.ReplaceAll && content is NovelBlockContent.Ready) {
             documentReady = false
+            documentId += 1
             pendingBlocks.clear()
             pendingRetainedIds = null
+            pendingFocus = null
             requestedProgress = content.request.initialProgress.coerceIn(0, 100)
             val request = content.request
-            val html = NovelHtmlDocumentBuilder.build(request.content.scopeAssets(request.chapterId), request.chapterTitle, request.style, request.chapterId)
+            val html = NovelHtmlDocumentBuilder.build(request.content.scopeAssets(request.chapterId), request.chapterTitle, request.style, request.chapterId, documentId)
             val base = request.content.baseUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
             webView.loadDataWithBaseURL(base, html, "text/html", "UTF-8", null)
             return
@@ -158,6 +164,13 @@ internal class WebNovelRenderer(
     }
 
     override fun seek(progress: Int) = evaluate("window.hayaiReader.scrollToPercent(${progress.coerceIn(0, 100)})")
+    override fun focus(chapterId: Long, progress: Int?) {
+        if (!documentReady) {
+            pendingFocus = chapterId to progress
+            return
+        }
+        evaluate("window.hayaiReader.focusBlock(${json.encodeToString(chapterId.toString())},${progress?.coerceIn(0, 100) ?: "null"})")
+    }
     override fun step(direction: Int) = evaluate("window.hayaiReader.step(${direction.coerceIn(-1, 1)})")
     override fun stepPixels(pixels: Int) = evaluate("window.hayaiReader.stepPixels($pixels)")
     override fun scrollToTop() = seek(0)
@@ -229,12 +242,16 @@ internal class WebNovelRenderer(
     }
 
     override fun destroy() {
+        destroyed = true
+        pendingBlocks.clear()
         webView.removeJavascriptInterface(JS_INTERFACE)
         webView.stopLoading()
         webView.destroy()
     }
 
-    private fun evaluate(script: String) = webView.evaluateJavascript(script, null)
+    private fun evaluate(script: String) {
+        if (!destroyed) webView.evaluateJavascript(script, null)
+    }
 
     private fun setBlockState(chapterId: Long, html: String, placement: String, focus: Boolean) {
         evaluate(
@@ -277,15 +294,14 @@ internal class WebNovelRenderer(
 
     private inner class Bridge {
         @JavascriptInterface
-        fun onProgress(progress: Int) = webView.post { callbacks.onProgress(progress.coerceIn(0, 100)) }
-
-        @JavascriptInterface
-        fun onChapterProgress(chapterId: String, progress: Int) = webView.post {
+        fun onChapterProgress(chapterId: String, progress: Int, callbackDocumentId: String) = webView.post {
+            if (destroyed || !documentReady || callbackDocumentId.toLongOrNull() != documentId) return@post
             chapterId.toLongOrNull()?.let { callbacks.onVisibleChapter(it, progress.coerceIn(0, 100)) }
         }
 
         @JavascriptInterface
-        fun onPageLocation(chapterId: String, progress: Int, pageNumber: Int, pageCount: Int) = webView.post {
+        fun onPageLocation(chapterId: String, progress: Int, pageNumber: Int, pageCount: Int, callbackDocumentId: String) = webView.post {
+            if (destroyed || !documentReady || callbackDocumentId.toLongOrNull() != documentId) return@post
             val id = chapterId.toLongOrNull() ?: return@post
             callbacks.onPageLocation(
                 id,
@@ -299,11 +315,13 @@ internal class WebNovelRenderer(
         fun retryChapter(chapterId: String) = webView.post { chapterId.toLongOrNull()?.let(callbacks::onRetryChapter) }
 
         @JavascriptInterface
-        fun onReady(progress: Int) = webView.post {
+        fun onReady(progress: Int, readyDocumentId: String) = webView.post {
+            if (destroyed || documentReady || readyDocumentId.toLongOrNull() != documentId) return@post
             documentReady = true
             pendingBlocks.toList().also { pendingBlocks.clear() }.forEach { display(it.block, it.placement, it.focus) }
             pendingRetainedIds?.also { pendingRetainedIds = null; retain(it) }
             seek(requestedProgress)
+            pendingFocus?.also { pendingFocus = null; focus(it.first, it.second) }
             callbacks.onReady(requestedProgress)
         }
 

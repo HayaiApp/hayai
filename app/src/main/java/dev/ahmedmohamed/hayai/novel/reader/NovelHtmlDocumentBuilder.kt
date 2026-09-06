@@ -6,6 +6,7 @@ internal object NovelHtmlDocumentBuilder {
         chapterTitle: String,
         style: NovelReaderStyle,
         chapterId: Long = 0L,
+        documentId: Long = 0L,
     ): String {
         val readerCss = buildReaderCss(style)
         val styleBlocks =
@@ -15,12 +16,12 @@ internal object NovelHtmlDocumentBuilder {
                 "<style>${style.customCss.safeStyleText()}</style><style>$readerCss</style>"
             }
         val heading = if (style.hideChapterTitle) "" else "<h1 class=\"hayai-chapter-title\">${escape(chapterTitle)}</h1>"
-        val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
+        val renderingMode = style.renderingMode.takeIf { it in setOf("default", "scroll", "continuous", "paged") } ?: "scroll"
         val writingDirection = style.writingDirection.value
         val customizationScript = buildCustomizationScript(style.customJs)
         return """
             <!doctype html>
-            <html class="hayai-$renderingMode" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
+            <html class="hayai-$renderingMode" data-document-id="$documentId" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
               $styleBlocks
@@ -60,7 +61,7 @@ internal object NovelHtmlDocumentBuilder {
         return """
             $importedFontCss
             :root { color-scheme: ${if (isDark(style.backgroundColor)) "dark" else "light"}; }
-            html, body { margin:0; padding:0; min-height:100%; background:$backgroundColor; color:$textColor; }
+            html, body { margin:0; padding:0; min-height:100%; overflow-anchor:none; background:$backgroundColor; color:$textColor; }
             body {
               box-sizing:border-box;
               padding:${style.marginTop.coerceIn(0, 200)}px ${style.marginRight.coerceIn(0, 200)}px
@@ -69,10 +70,10 @@ internal object NovelHtmlDocumentBuilder {
               line-height:${style.lineHeight.coerceIn(0.8f, 3f)}; text-align:$align;
               overflow-wrap:anywhere; -webkit-user-select:$selection; user-select:$selection;
             }
-            html.hayai-paged { height:100%; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
+            html.hayai-paged { height:100%; overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; }
             html.hayai-paged body { height:100%; min-height:0; overflow:visible; }
             html.hayai-paged #hayai-reader { height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px; column-fill:auto; }
-            html.hayai-paged .hayai-chapter-block { scroll-snap-align:start; }
+            html.hayai-paged .hayai-chapter-block { min-height:0; }
             html.hayai-paged .hayai-chapter-block + .hayai-chapter-block { break-before:column; }
             html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; text-combine-upright:digits 2; line-break:strict; word-break:normal; overflow-wrap:normal; font-kerning:normal; font-feature-settings:"vert" 1,"vrt2" 1; hanging-punctuation:first last; }
             html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
@@ -83,7 +84,7 @@ internal object NovelHtmlDocumentBuilder {
             table { display:block; overflow-x:auto; border-collapse:collapse; }
             a { color:${color(style.linkColor)}; }
             .hayai-chapter-title { text-indent:0; line-height:1.25; margin:0 0 1em; font-size:1.5em; }
-            .hayai-chapter-block { position:relative; min-height:100vh; }
+            .hayai-chapter-block { position:relative; min-height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); display:flow-root; }
             .hayai-block-state { min-height:70vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1em; text-align:center; }
             .hayai-block-retry { padding:.7em 1.2em; font:inherit; }
             ${ttsHighlightCss(style.ttsHighlightStyle, highlightColor, highlightTextColor)}
@@ -135,8 +136,9 @@ internal object NovelHtmlDocumentBuilder {
           const reversePages = () => document.documentElement.dataset.writingDirection === 'vertical-rl';
           const blocks = () => [...document.querySelectorAll('.hayai-chapter-block')];
           const visibleBlock = () => {
-            const target = paged() ? pageStride() / 3 : innerHeight / 3;
-            return blocks().sort((a,b) => Math.abs((paged()?a.getBoundingClientRect().left:a.getBoundingClientRect().top)-target)-Math.abs((paged()?b.getBoundingClientRect().left:b.getBoundingClientRect().top)-target))[0] || null;
+            if (!paged()) return blocks().find(block => block.getBoundingClientRect().bottom > 1) || blocks().at(-1) || null;
+            const target = pageStride() / 2;
+            return blocks().find(block => pageRects(block).some(rect => rect.left <= target && rect.right > target)) || blocks().find(block => pageRects(block).some(rect => rect.right > 0 && rect.left < pageStride())) || blocks().at(-1) || null;
           };
           const pageRects = block => block ? [...block.getClientRects()].filter(rect => rect.width > 0 && rect.height > 0) : [];
           const blockPageLocation = block => {
@@ -147,6 +149,26 @@ internal object NovelHtmlDocumentBuilder {
           };
           const activeBlock = () => document.querySelector('.hayai-chapter-block[data-active="true"]') || visibleBlock();
           const activate = block => { blocks().forEach(it=>delete it.dataset.active); if(block)block.dataset.active='true'; return block; };
+          let viewportAnchor = null;
+          const captureAnchor = () => {
+            const block = activeBlock();
+            if (!block) return null;
+            const nodes = [...block.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,img')];
+            const node = nodes.find(node => [...node.getClientRects()].some(rect => paged() ? rect.right > 0 && rect.left < innerWidth : rect.bottom > 0 && rect.top < innerHeight)) || block;
+            const rect = node.getBoundingClientRect();
+            return {node, left:rect.left, top:rect.top};
+          };
+          const restoreAnchor = anchor => {
+            if (!anchor || !anchor.node.isConnected) return;
+            const rect = anchor.node.getBoundingClientRect();
+            scroller().scrollBy({left:paged()?rect.left-anchor.left:0, top:paged()?0:rect.top-anchor.top, behavior:'auto'});
+          };
+          const mutate = change => {
+            const anchor = captureAnchor();
+            change();
+            restoreAnchor(anchor);
+            viewportAnchor = captureAnchor();
+          };
           const originalHtml = new Map();
           const rememberOriginal = block => {
             if (block && !originalHtml.has(String(block.dataset.chapterId))) originalHtml.set(String(block.dataset.chapterId), block.innerHTML);
@@ -158,8 +180,9 @@ internal object NovelHtmlDocumentBuilder {
           const progress = () => {
             const block = activeBlock(); if(!block)return 0;
             if(paged()){const location=blockPageLocation(block);return location.count<=1?100:Math.round((location.number-1)*100/(location.count-1));}
-            const max = Math.max(1,block.offsetHeight-innerHeight);
-            const current = Math.max(0,scrollY-block.offsetTop);
+            const max = Math.max(0,block.offsetHeight-innerHeight);
+            if (max === 0) return 100;
+            const current = Math.max(0,-block.getBoundingClientRect().top);
             return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
           };
           const pageLocation = () => {
@@ -189,16 +212,28 @@ internal object NovelHtmlDocumentBuilder {
               const anchor = selectionAnchor();
               if (anchor) lastSelection = anchor;
           });
+          const reportLocation = () => {
+            const block=activate(visibleBlock()); const value=progress();
+            viewportAnchor = captureAnchor();
+            if (window.HayaiReader && block && block.dataset.state==='ready') {
+              if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(block.dataset.chapterId,value,location.number,location.count,document.documentElement.dataset.documentId); }
+              else HayaiReader.onChapterProgress(block.dataset.chapterId,value,document.documentElement.dataset.documentId);
+            }
+          };
+          let snapTimer = null;
+          const snapPage = () => {
+            if (!paged() || !getSelection().isCollapsed) return;
+            const stride=pageStride();
+            scroller().scrollTo({left:Math.round(scroller().scrollLeft/stride)*stride,behavior:'smooth'});
+          };
           addEventListener('scroll', () => {
             if (scheduled) return;
             scheduled = true;
             requestAnimationFrame(() => {
               scheduled = false;
-              const block=activate(visibleBlock()); const value=progress();
-              if (window.HayaiReader && block && block.dataset.state==='ready') {
-                 if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(block.dataset.chapterId,value,location.number,location.count); }
-                else HayaiReader.onChapterProgress(block.dataset.chapterId,value);
-              }
+              reportLocation();
+              clearTimeout(snapTimer);
+              if(paged()) snapTimer=setTimeout(snapPage,140);
             });
           }, {passive:true});
           window.hayaiReader = {
@@ -206,34 +241,37 @@ internal object NovelHtmlDocumentBuilder {
             prepareCustomization() { rememberOriginal(activeBlock()); },
             upsertBlock(id, html, placement, focus) {
               const root=document.querySelector('#hayai-reader'); if(!root)return false;
-              const key=String(id); let block=blocks().find(it=>it.dataset.chapterId===key); const beforeExtent=paged()?scroller().scrollWidth:scroller().scrollHeight; const beforeScroll=paged()?scroller().scrollLeft:scroller().scrollTop;
-              if(!block){block=document.createElement('article');block.className='hayai-chapter-block';block.dataset.chapterId=key;if(placement==='before')root.prepend(block);else root.append(block);}
-              block.innerHTML=html; block.dataset.state='ready';
-              if(placement==='before'&&!focus){const delta=Math.max(0,(paged()?scroller().scrollWidth:scroller().scrollHeight)-beforeExtent);if(paged())scroller().scrollTo({left:beforeScroll+(reversePages()?-delta:delta),behavior:'auto'});else scroller().scrollTo({top:beforeScroll+delta,behavior:'auto'});}
-              if(focus){activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});}
+              const key=String(id); let block=blocks().find(it=>it.dataset.chapterId===key);
+              mutate(() => {
+                if(!block){block=document.createElement('article');block.className='hayai-chapter-block';block.dataset.chapterId=key;if(placement==='before')root.prepend(block);else root.append(block);}
+                block.innerHTML=html; block.dataset.state='ready'; originalHtml.delete(key);
+              });
+              if(focus)this.focusBlock(id,0);
               return true;
             },
             setBlockState(id, html, placement, focus) {
-              const root=document.querySelector('#hayai-reader');if(!root)return false;const key=String(id);let block=blocks().find(it=>it.dataset.chapterId===key);const beforeExtent=paged()?scroller().scrollWidth:scroller().scrollHeight;const beforeScroll=paged()?scroller().scrollLeft:scroller().scrollTop;
-              if(!block){block=document.createElement('article');block.className='hayai-chapter-block';block.dataset.chapterId=key;if(placement==='before')root.prepend(block);else root.append(block);}
-              block.innerHTML=html;block.dataset.state='pending';if(placement==='before'&&!focus){const delta=Math.max(0,(paged()?scroller().scrollWidth:scroller().scrollHeight)-beforeExtent);if(paged())scroller().scrollTo({left:beforeScroll+(reversePages()?-delta:delta),behavior:'auto'});else scroller().scrollTo({top:beforeScroll+delta,behavior:'auto'});}if(focus){activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});}return true;
+              if(!this.upsertBlock(id,html,placement,focus))return false;
+              blocks().find(it=>it.dataset.chapterId===String(id)).dataset.state='pending';return true;
             },
-            retainBlocks(ids) { const keep=new Set(ids.map(String));const active=activeBlock();const before=active?active.getBoundingClientRect():null;blocks().forEach(block=>{if(!keep.has(block.dataset.chapterId))block.remove();});if(active&&active.isConnected&&before){const after=active.getBoundingClientRect();if(paged())scroller().scrollBy({left:after.left-before.left,behavior:'auto'});else scroller().scrollBy({top:after.top-before.top,behavior:'auto'});}activate(active&&active.isConnected?active:visibleBlock()); },
-            focusBlock(id,value=0) { const block=blocks().find(it=>it.dataset.chapterId===String(id));if(!block)return false;activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});this.scrollToPercent(value);return true; },
+            retainBlocks(ids) { const keep=new Set(ids.map(String));const active=activeBlock();mutate(()=>blocks().forEach(block=>{if(!keep.has(block.dataset.chapterId)){originalHtml.delete(block.dataset.chapterId);block.remove();}}));activate(active&&active.isConnected?active:visibleBlock()); },
+            focusBlock(id,value=null) { const block=blocks().find(it=>it.dataset.chapterId===String(id));if(!block)return false;activate(block);if(value!==null)this.scrollToPercent(value);viewportAnchor=captureAnchor();return true; },
             scrollToPercent(value) {
               const block=activeBlock();if(!block)return;
               const ratio = Math.max(0, Math.min(100, value)) / 100;
               if (paged()) {
                 const location=blockPageLocation(block);const target=Math.round((location.count-1)*ratio);
-                block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});
-                scroller().scrollBy({left:(reversePages()?-1:1)*pageStride()*target,behavior:'auto'});
+                const rect=pageRects(block)[target];if(!rect)return;
+                const inset=parseFloat(getComputedStyle(document.body)[reversePages()?'paddingRight':'paddingLeft'])||0;
+                const delta=reversePages()?rect.right-innerWidth+inset:rect.left-inset;
+                scroller().scrollBy({left:delta,behavior:'auto'});
               } else {
                 const max = Math.max(0, block.offsetHeight - innerHeight);
-                scrollTo({top:block.offsetTop+max * ratio, left:0, behavior:'auto'});
+                scrollTo({top:scrollY+block.getBoundingClientRect().top+max * ratio, left:0, behavior:'auto'});
               }
+              viewportAnchor=captureAnchor();
             },
             step(direction, fraction = .85) {
-               if (paged()) scroller().scrollBy({left:(reversePages()?-1:1)*pageStride() * direction, behavior:'smooth'});
+               if (paged()) scroller().scrollTo({left:(Math.round(scroller().scrollLeft/pageStride())+(reversePages()?-1:1)*direction)*pageStride(), behavior:'smooth'});
               else scrollBy({top:innerHeight * fraction * direction, behavior:'smooth'});
             },
             stepPixels(pixels) {
@@ -309,13 +347,20 @@ internal object NovelHtmlDocumentBuilder {
           };
           addEventListener('load', () => {
             const block=activate(visibleBlock());
+            viewportAnchor=captureAnchor();
             if (window.HayaiReader&&block) {
-              HayaiReader.onReady(progress());
-              if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(block.dataset.chapterId,progress(),location.number,location.count); }
+              HayaiReader.onReady(progress(),document.documentElement.dataset.documentId);
             }
-            if (window.ResizeObserver) new ResizeObserver(() => {
-              if (window.HayaiReader&&paged()) { const active=activeBlock();const location=pageLocation();if(active)HayaiReader.onPageLocation(active.dataset.chapterId,progress(),location.number,location.count); }
-            }).observe(document.querySelector('#hayai-reader'));
+            const restoreLayout = () => {
+              restoreAnchor(viewportAnchor);
+              viewportAnchor=captureAnchor();
+              if(paged())snapPage();
+              reportLocation();
+            };
+            if (window.ResizeObserver) new ResizeObserver(restoreLayout).observe(document.querySelector('#hayai-reader'));
+            document.addEventListener('load',event=>{if(event.target.tagName==='IMG')restoreLayout();},true);
+            document.fonts?.addEventListener('loadingdone',restoreLayout);
+            addEventListener('resize',restoreLayout);
           });
         })();
     """

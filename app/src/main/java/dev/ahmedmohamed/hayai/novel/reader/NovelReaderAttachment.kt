@@ -334,6 +334,9 @@ internal class NovelReaderAttachment(
     }
 
     fun onResume() {
+        viewer.refreshStyle()
+        applyWindowPreferences()
+        bindBottomActions()
         if (resumeAutoScrollAfterPause && !closed) {
             resumeAutoScrollAfterPause = false
             startAutoScroll()
@@ -417,7 +420,7 @@ internal class NovelReaderAttachment(
 
     private fun dispatch(action: NovelReaderAction) {
         when (action) {
-            is NovelReaderAction.Navigate -> if (action.direction > 0) viewer.moveToNext() else viewer.moveToPrevious()
+            is NovelReaderAction.Navigate -> viewer.navigateChapter(action.direction)
             is NovelReaderAction.Seek -> viewer.seek(action.progress)
             NovelReaderAction.ToggleChrome -> activity.toggleMenu()
             NovelReaderAction.ToggleTts -> toggleTts()

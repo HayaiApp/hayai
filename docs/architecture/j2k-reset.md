@@ -139,3 +139,19 @@ git rebase j2k/master
 ```
 
 TachiyomiSY and Tsundoku are feature references, not architectural parents. Ports are rebuilt behind Hayai contracts with provenance recorded in the feature audit.
+
+## Novel reading stability
+
+The September 2026 reader corrections reference Tsundoku commit `fe54f05ae038cbc2ae72713c6ac68a2fbccb11af`, especially `textview/NovelViewer.kt` and its chapter containment, selectable text, and viewport preservation behavior. The Hayai viewer keeps existing chapter blocks across preload notifications. It inserts or removes adjacent blocks without replacing the visible document. J2K receives the selected chapter's `NovelProgressPage` through `onPageSelected`; scrolling across a boundary no longer invokes the menu-oriented chapter loader, which can restore a different saved position.
+
+Chapter scroll mounts one chapter. Continuous scroll and paged reading mount the current chapter and its immediate neighbors in both directions. Native horizontal reading uses a selectable `TextView`; explicit editing temporarily uses `EditText`. WebView handles paged and vertical text. Native paragraph indent, paragraph spacing, and justification now apply to the displayed text. Paged movement snaps by viewport, and both renderers preserve the visible chapter offset when adjacent content changes size.
+
+`pref_novel_reading_mode` is the authoritative layout preference. Its default reads the old layout and infinite-scroll keys so existing installations and restored backups retain their chosen behavior. The redundant infinite-scroll and retention controls are removed from settings. No database migration or alternate chapter/progress storage is introduced.
+
+The Hayai viewer temporarily permits descendant focus in its J2K parent while attached, restoring the original focus policy when detached. This lets native text receive selection focus without changing the image reader activity or layout. Returning from full reader settings reapplies style, window preferences, and bottom actions to the mounted reader.
+
+`SourceArtwork.bindSourceIcon` fits APK and URL logos with the same rounding and placeholder behavior. The existing allowlisted `ExtensionHolder` adapter uses it, as do Browse and migration through `bindSourceArtwork`. This removes the novel-only cover target that cropped logos and left recycled rows in `CENTER_CROP`. No protected activity or new J2K seam changes are needed.
+
+`tools/verify-novel-web-reader.cjs` exercises the production embedded reader CSS and JavaScript in Chromium. Set `PLAYWRIGHT_MODULE` if Playwright is outside the normal Node module path. Native viewport geometry and legacy preference compatibility have focused unit tests. Android instrumentation covers actual native rendering and selection; live extension content and full reader lifecycle remain separate device checks.
+
+Validation on September 6 passed Kotlin compilation, 501 unit tests, debug and instrumentation APK assembly, Chromium regressions, and seven Android instrumentation tests. The five native tests cover touchscreen long-press selection and highlight preservation, editing, focus versus seek, chapter containment, and adjacent-block anchoring. Two artwork tests exercise Coil and fitted rounded outlines. The dedicated Android 37 emulator runs the existing APK in 16 KB compatibility mode. Initial device attempts exposed setup dialogs and incorrect synthetic touch coordinates/source; those fixture problems were corrected before the passing run. Localization, upstream boundary, and whitespace checks pass. Logs are under `artifacts/novel-reader/` in the local checkout.

@@ -55,6 +55,7 @@ internal interface NovelRenderer {
 
     fun display(block: NovelRenderBlock, placement: NovelBlockPlacement, focus: Boolean)
     fun retain(chapterIds: Set<Long>)
+    fun focus(chapterId: Long, progress: Int? = null)
     fun seek(progress: Int)
     fun step(direction: Int)
     fun stepPixels(pixels: Int)

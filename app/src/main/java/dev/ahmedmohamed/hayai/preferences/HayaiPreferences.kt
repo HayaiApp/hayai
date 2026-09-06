@@ -50,6 +50,15 @@ class HayaiPreferences(
     val novelGlobalPresets = store.getString("pref_novel_global_presets", "[]")
     val novelRegexReplacements = store.getString("pref_novel_regex_replacements", "[]")
     val novelInfiniteScroll = store.getBoolean("pref_novel_infinite_scroll", false)
+    val novelReadingMode: Preference<String>
+        get() = store.getString(
+            "pref_novel_reading_mode",
+            when {
+                novelLayoutMode.get() == "paged" -> "paged"
+                novelInfiniteScroll.get() -> "continuous"
+                else -> "scroll"
+            },
+        )
     val novelKeepChaptersLoaded = store.getInt("pref_novel_keep_chapters_loaded", 0)
     val novelCustomBrightness = store.getBoolean("pref_novel_custom_brightness", false)
     val novelCustomBrightnessValue = store.getInt("pref_novel_custom_brightness_value", 0)

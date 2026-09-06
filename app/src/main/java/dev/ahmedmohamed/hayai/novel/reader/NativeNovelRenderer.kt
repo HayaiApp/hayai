@@ -1,30 +1,34 @@
 package dev.ahmedmohamed.hayai.novel.reader
 
 import android.content.Context
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Build
 import android.text.Editable
+import android.text.Layout
 import android.text.Spannable
 import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.TextWatcher
-import android.text.method.ArrowKeyMovementMethod
 import android.text.style.BackgroundColorSpan
+import android.text.style.LeadingMarginSpan
+import android.text.style.LineHeightSpan
 import android.text.style.UnderlineSpan
 import android.view.ActionMode
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.textclassifier.TextClassifier
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.view.textclassifier.TextClassifier
 import androidx.core.text.HtmlCompat
+import androidx.core.view.doOnPreDraw
 import androidx.core.widget.NestedScrollView
-import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
 import org.jsoup.Jsoup
@@ -34,7 +38,7 @@ internal class NativeNovelRenderer(
     private val callbacks: NovelRenderer.Callbacks,
     private val fontStore: NovelFontStore,
 ) : NovelRenderer {
-    override val mode = NovelRenderingMode.Native
+    override val mode = NovelRenderingBackend.Native
     private val container = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val scroll = NestedScrollView(context).apply {
         isFillViewport = true
@@ -45,12 +49,19 @@ internal class NativeNovelRenderer(
     private var activeChapterId: Long? = null
     private var editMode = false
     private var applyingText = false
+    private var selectionModeActive = false
+    private var suppressTap = false
+    private var layoutPending = false
+    private var viewportAnchor: NovelViewportAnchor? = null
+    private var pendingFocus: Pair<Long, Int>? = null
+    private var pendingReady: Pair<Long, Int>? = null
+    private var destroyed = false
     private val gestureDetector =
         GestureDetectorWithLongTap(
             context,
             object : GestureDetectorWithLongTap.Listener() {
                 override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
-                    if (activeBlock()?.textView?.hasSelection() != true) {
+                    if (!editMode && !suppressTap && !selectionModeActive && blocks.values.none { it.textView?.hasSelection() == true }) {
                         callbacks.onTap(
                             event.x / scroll.width.coerceAtLeast(1),
                             event.y / scroll.height.coerceAtLeast(1),
@@ -64,61 +75,66 @@ internal class NativeNovelRenderer(
     init {
         scroll.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { _, _, _, _, _ -> reportVisibleBlock() })
         scroll.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
+            detectTap(scroll, event)
             false
+        }
+        scroll.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            val height = bottom - top
+            if (height > 0 && height != oldBottom - oldTop) {
+                preserveViewport()
+                blocks.values.forEach { it.root.minimumHeight = height }
+            }
         }
     }
 
     override fun display(block: NovelRenderBlock, placement: NovelBlockPlacement, focus: Boolean) {
+        preserveViewport()
         if (placement == NovelBlockPlacement.ReplaceAll) {
+            blocks.values.forEach { it.retryRunnable?.let(it.root::removeCallbacks) }
             container.removeAllViews()
             blocks.clear()
             activeChapterId = null
+            viewportAnchor = null
         }
         val existing = blocks[block.chapterId]
-        val anchor = activeBlock()?.root
-        val anchorTop = anchor?.top ?: 0
-        val anchorScroll = scroll.scrollY
         val native = existing ?: createBlock(block.chapterId).also { created ->
             blocks[block.chapterId] = created
-            val oldHeight = container.height
-            val oldScroll = scroll.scrollY
             val index = if (placement == NovelBlockPlacement.Before) 0 else container.childCount
             container.addView(created.root, index)
             rebuildBlockOrder()
-            if (placement == NovelBlockPlacement.Before) {
-                container.post {
-                    val insertedHeight = (container.height - oldHeight).coerceAtLeast(0)
-                    scroll.scrollTo(0, oldScroll + insertedHeight)
-                    if (focus) focusBlock(block.chapterId, block.readyProgress())
-                }
-            }
         }
         bind(native, block, focus)
-        if (!focus && placement == NovelBlockPlacement.Before && existing != null && anchor != null) {
-            container.post { scroll.scrollTo(0, anchorScroll + anchor.top - anchorTop) }
-        }
-        if (focus && !(existing == null && placement == NovelBlockPlacement.Before)) {
-            native.root.post { focusBlock(block.chapterId, block.readyProgress()) }
-        }
+        if (focus) this.focus(block.chapterId, block.readyProgress())
     }
 
     override fun retain(chapterIds: Set<Long>) {
+        if (blocks.keys.all(chapterIds::contains)) return
+        preserveViewport()
+        if (viewportAnchor?.chapterId !in chapterIds) {
+            blocks.values.firstOrNull { it.id in chapterIds }?.let {
+                viewportAnchor = NovelViewportAnchor(it.id, scroll.scrollY - it.root.top)
+            }
+        }
         blocks.keys.filterNot(chapterIds::contains).toList().forEach { id ->
             val block = blocks.remove(id) ?: return@forEach
-            val aboveViewport = block.root.bottom <= scroll.scrollY
-            val height = block.root.height
+            block.retryRunnable?.let(block.root::removeCallbacks)
             container.removeView(block.root)
-            if (aboveViewport) scroll.scrollBy(0, -height)
         }
         rebuildBlockOrder()
-        if (activeChapterId !in blocks) reportVisibleBlock()
+    }
+
+    override fun focus(chapterId: Long, progress: Int?) {
+        if (chapterId !in blocks) return
+        activeChapterId = chapterId
+        if (progress != null) {
+            preserveViewport()
+            pendingFocus = chapterId to progress.coerceIn(0, 100)
+        }
     }
 
     override fun seek(progress: Int) {
         val block = activeBlock() ?: return
-        val range = (block.root.height - scroll.height).coerceAtLeast(1)
-        scroll.scrollTo(0, block.root.top + range * progress.coerceIn(0, 100) / 100)
+        focus(block.id, progress)
     }
 
     override fun step(direction: Int) = scroll.smoothScrollBy(0, (scroll.height * 0.85f * direction.coerceIn(-1, 1)).toInt())
@@ -128,13 +144,13 @@ internal class NativeNovelRenderer(
     }
 
     override fun selection(callback: (NovelSelection?) -> Unit) {
-        val textView = activeBlock()?.textView ?: return callback(null)
+        val textView = blocks.values.firstOrNull { it.textView?.hasSelection() == true }?.textView ?: return callback(null)
         callback(textView.novelSelection())
     }
 
     private fun TextView.novelSelection(): NovelSelection? {
-        val start = selectionStart.coerceAtLeast(0)
-        val end = selectionEnd.coerceAtLeast(0)
+        val start = selectionStart.coerceIn(0, text.length)
+        val end = selectionEnd.coerceIn(0, text.length)
         if (start == end) return null
         val from = minOf(start, end)
         val to = maxOf(start, end)
@@ -156,8 +172,20 @@ internal class NativeNovelRenderer(
     override fun viewportParagraph(callback: (Int) -> Unit) {
         val block = activeBlock() ?: return callback(0)
         if (block.paragraphs.isEmpty()) return callback(0)
-        val local = (scroll.scrollY - block.root.top).toFloat() / block.root.height.coerceAtLeast(1)
-        callback((local * block.paragraphs.size).toInt().coerceIn(0, block.paragraphs.lastIndex))
+        val textView = block.textView ?: return callback(0)
+        val layout = textView.layout ?: return callback(0)
+        val line = layout.getLineForVertical((scroll.scrollY - block.root.top - textView.totalPaddingTop).coerceAtLeast(0))
+        val visibleOffset = layout.getLineStart(line)
+        var searchFrom = 0
+        var visibleParagraph = 0
+        block.paragraphs.forEachIndexed { index, paragraph ->
+            val start = textView.text.indexOf(paragraph, searchFrom)
+            if (start >= 0) {
+                if (start <= visibleOffset) visibleParagraph = index
+                searchFrom = start + paragraph.length
+            }
+        }
+        callback(visibleParagraph)
     }
 
     override fun showTranslation(paragraphs: List<String>, onComplete: () -> Unit) {
@@ -170,16 +198,14 @@ internal class NativeNovelRenderer(
 
     override fun showOriginal(onComplete: () -> Unit) {
         val block = activeBlock() ?: return
-        applyingText = true
-        block.textView?.text = SpannableStringBuilder(block.original)
+        setBlockText(block, SpannableStringBuilder(block.original))
         block.paragraphs = block.originalParagraphs
-        applyingText = false
         onComplete()
     }
 
     override fun applyHighlights(items: List<NovelPersistentHighlight>) {
         val block = activeBlock() ?: return
-        val content = SpannableStringBuilder(block.textView?.text ?: return)
+        val content = block.textView?.text as? Spannable ?: return
         content.getSpans(0, content.length, PersistentHighlightSpan::class.java).forEach(content::removeSpan)
         items.forEach { item ->
             var offset = -1
@@ -191,7 +217,6 @@ internal class NativeNovelRenderer(
             }
             if (offset >= 0) content.setSpan(PersistentHighlightSpan(item.color), offset, offset + item.exact.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        setBlockText(block, content)
     }
 
     override fun highlightSpokenParagraph(index: Int) {
@@ -218,21 +243,30 @@ internal class NativeNovelRenderer(
     }
 
     override fun setEditMode(enabled: Boolean) {
+        if (editMode == enabled) return
+        preserveViewport()
         editMode = enabled
         blocks.values.forEach { block ->
-            block.textView?.configureInteraction(enabled, block.style?.textSelectable == true)
+            val oldText = block.textView ?: return@forEach
+            val style = block.style ?: return@forEach
+            val content = SpannableStringBuilder(oldText.text)
+            block.root.removeView(oldText)
+            block.textView = createTextView(block, style)
+            setBlockText(block, content)
+            block.root.addView(block.textView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         if (enabled) activeBlock()?.textView?.requestFocus()
     }
 
     override fun destroy() {
+        destroyed = true
         blocks.values.forEach { it.retryRunnable?.let(it.root::removeCallbacks) }
         blocks.clear()
         container.removeAllViews()
     }
 
     private fun createBlock(id: Long): NativeBlock {
-        val root = FrameLayout(scroll.context).apply { tag = id; minimumHeight = scroll.resources.displayMetrics.heightPixels }
+        val root = FrameLayout(scroll.context).apply { tag = id; minimumHeight = scroll.height }
         return NativeBlock(id, root)
     }
 
@@ -281,47 +315,65 @@ internal class NativeNovelRenderer(
     }
 
     private fun bindReady(block: NativeBlock, request: NovelRenderRequest, notifyReady: Boolean) {
-        val textView = EditText(scroll.context).apply {
+        val textView = createTextView(block, request.style)
+        block.textView = textView
+        block.style = request.style
+        scroll.setBackgroundColor(request.style.backgroundColor)
+        container.setBackgroundColor(request.style.backgroundColor)
+        val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
+        val spanned = HtmlCompat.fromHtml(title + request.content.html, HtmlCompat.FROM_HTML_MODE_COMPACT)
+        block.original = SpannableStringBuilder(spanned)
+        block.paragraphs = Jsoup.parse(request.content.html).select("h1,h2,h3,h4,h5,h6,p,li,blockquote").map { it.text().trim() }.filter(String::isNotBlank)
+        block.originalParagraphs = block.paragraphs
+        setBlockText(block, SpannableStringBuilder(block.original))
+        block.root.addView(textView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        if (notifyReady) pendingReady = block.id to request.initialProgress
+    }
+
+    private fun createTextView(block: NativeBlock, readerStyle: NovelReaderStyle): TextView {
+        val textView = (if (editMode) EditText(scroll.context) else TextView(scroll.context)).apply {
             background = null
             gravity = Gravity.TOP or Gravity.START
             setPadding(0, 0, 0, 0)
-            configureInteraction(editMode, request.style.textSelectable)
+            if (this is EditText) {
+                showSoftInputOnFocus = true
+            } else {
+                setTextIsSelectable(readerStyle.textSelectable)
+            }
+            linksClickable = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
             val selectionTextView = this
             customSelectionActionModeCallback =
                 NovelSelectionActionModes.wrap(
                     context = context,
                     readOnly = { !editMode },
                     onAction = { action, mode -> dispatchSelectionAction(selectionTextView, action, mode) },
-                    onSelectionModeChanged = callbacks::onSelectionModeChanged,
+                    onSelectionModeChanged = { active ->
+                        selectionModeActive = active
+                        if (active) {
+                            activeChapterId = block.id
+                            callbacks.onVisibleChapter(block.id, blockProgress(block))
+                        }
+                        callbacks.onSelectionModeChanged(active)
+                    },
                 )
-            setOnTouchListener { _, event ->
-                gestureDetector.onTouchEvent(event)
+            setOnTouchListener { target, event ->
+                detectTap(target, event)
                 false
             }
         }
-        block.textView = textView
-        block.style = request.style
-        scroll.setBackgroundColor(request.style.backgroundColor)
-        container.setBackgroundColor(request.style.backgroundColor)
-        val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
-        val spanned = HtmlCompat.fromHtml(title + request.content.html, HtmlCompat.FROM_HTML_MODE_LEGACY)
-        block.original = SpannableStringBuilder(spanned)
-        block.paragraphs = Jsoup.parse(request.content.html).select("h1,h2,h3,h4,h5,h6,p,li,blockquote").map { it.text().trim() }.filter(String::isNotBlank)
-        block.originalParagraphs = block.paragraphs
-        style(textView, request.style)
-        setBlockText(block, SpannableStringBuilder(block.original))
-        textView.addTextChangedListener(
+        style(textView, readerStyle)
+        if (textView is EditText) textView.addTextChangedListener(
             object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
                 override fun afterTextChanged(s: Editable?) { if (editMode && !applyingText && activeChapterId == block.id) callbacks.onContentEdited(s?.toString().orEmpty()) }
             },
         )
-        block.root.addView(textView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        if (notifyReady) block.root.post { callbacks.onReady(request.initialProgress) }
+        return textView
     }
 
-    private fun style(textView: EditText, style: NovelReaderStyle) {
+    private fun style(textView: TextView, style: NovelReaderStyle) {
         textView.textSize = style.fontSize.toFloat()
         textView.setTextColor(style.textColor)
         textView.setBackgroundColor(style.backgroundColor)
@@ -333,12 +385,28 @@ internal class NativeNovelRenderer(
             }
         textView.setLineSpacing(0f, style.lineHeight.coerceIn(0.8f, 3f))
         textView.gravity = when (style.textAlign) { "center" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL; "right", "end" -> Gravity.TOP or Gravity.END; else -> Gravity.TOP or Gravity.START }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            textView.justificationMode = if (style.textAlign == "justify") Layout.JUSTIFICATION_MODE_INTER_WORD else Layout.JUSTIFICATION_MODE_NONE
+        }
         textView.setPadding((style.marginLeft * density).toInt(), (style.marginTop * density).toInt(), (style.marginRight * density).toInt(), (style.marginBottom * density).toInt())
     }
 
     private fun setBlockText(block: NativeBlock, text: CharSequence) {
+        preserveViewport()
         applyingText = true
-        block.textView?.setText(text, TextView.BufferType.SPANNABLE)
+        val content = SpannableStringBuilder(text)
+        content.getSpans(0, content.length, ParagraphIndentSpan::class.java).forEach(content::removeSpan)
+        content.getSpans(0, content.length, ParagraphSpacingSpan::class.java).forEach(content::removeSpan)
+        block.style?.let { style ->
+            val em = block.textView?.textSize ?: 0f
+            Regex("[^\\n]+(?:\\n|$)").findAll(content).forEach { paragraph ->
+                val start = paragraph.range.first
+                val end = paragraph.range.last + 1
+                content.setSpan(ParagraphIndentSpan((style.paragraphIndent.coerceIn(0f, 10f) * em).toInt()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                content.setSpan(ParagraphSpacingSpan((style.paragraphSpacing.coerceIn(0f, 5f) * em).toInt()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        block.textView?.setText(content, TextView.BufferType.SPANNABLE)
         applyingText = false
     }
 
@@ -355,21 +423,61 @@ internal class NativeNovelRenderer(
     private fun focusBlock(id: Long, progress: Int) {
         val block = blocks[id] ?: return
         activeChapterId = id
-        val range = (block.root.height - scroll.height).coerceAtLeast(1)
-        scroll.scrollTo(0, block.root.top + range * progress.coerceIn(0, 100) / 100)
-        callbacks.onVisibleChapter(id, progress.coerceIn(0, 100))
+        scroll.scrollTo(0, NovelViewportGeometry.offset(block.root.top, block.root.height, scroll.height, progress))
     }
 
     private fun reportVisibleBlock() {
-        if (blocks.isEmpty()) return
-        val marker = scroll.scrollY + scroll.height / 3
-        val block = blocks.values.minByOrNull { kotlin.math.abs((it.root.top + it.root.height / 2) - marker) } ?: return
+        if (layoutPending || destroyed || selectionModeActive || scroll.height <= 0) return
+        val block = visibleBlock() ?: return
         if (block.textView == null) return
         activeChapterId = block.id
-        val localRange = (block.root.height - scroll.height).coerceAtLeast(1)
-        val progress = ((scroll.scrollY - block.root.top).coerceAtLeast(0) * 100 / localRange).coerceIn(0, 100)
-        callbacks.onVisibleChapter(block.id, progress)
-        callbacks.onProgress(progress)
+        callbacks.onVisibleChapter(block.id, blockProgress(block))
+    }
+
+    private fun blockProgress(block: NativeBlock): Int =
+        NovelViewportGeometry.progress(block.root.top, block.root.height, scroll.height, scroll.scrollY)
+
+    private fun visibleBlock(): NativeBlock? = blocks.values.firstOrNull {
+        NovelViewportGeometry.contains(it.root.top, it.root.bottom, scroll.scrollY)
+    } ?: blocks.values.lastOrNull { it.root.top <= scroll.scrollY }
+
+    private fun preserveViewport() {
+        if (layoutPending || destroyed) return
+        layoutPending = true
+        viewportAnchor = visibleBlock()?.let { NovelViewportAnchor(it.id, scroll.scrollY - it.root.top) }
+        scroll.doOnPreDraw {
+            if (destroyed) return@doOnPreDraw
+            val focus = pendingFocus
+            pendingFocus = null
+            if (focus != null) {
+                focusBlock(focus.first, focus.second)
+            } else {
+                viewportAnchor?.let { anchor ->
+                    blocks[anchor.chapterId]?.let { scroll.scrollTo(0, it.root.top + anchor.offset) }
+                }
+            }
+            viewportAnchor = null
+            layoutPending = false
+            val ready = pendingReady
+            pendingReady = null
+            if (ready != null && activeChapterId == ready.first) callbacks.onReady(ready.second)
+            reportVisibleBlock()
+        }
+        scroll.invalidate()
+    }
+
+    private fun detectTap(target: View, event: MotionEvent) {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            suppressTap = editMode || selectionModeActive || blocks.values.any { it.textView?.hasSelection() == true }
+        }
+        val targetLocation = IntArray(2)
+        val viewportLocation = IntArray(2)
+        target.getLocationOnScreen(targetLocation)
+        scroll.getLocationOnScreen(viewportLocation)
+        val viewportEvent = MotionEvent.obtain(event)
+        viewportEvent.offsetLocation((targetLocation[0] - viewportLocation[0]).toFloat(), (targetLocation[1] - viewportLocation[1]).toFloat())
+        gestureDetector.onTouchEvent(viewportEvent)
+        viewportEvent.recycle()
     }
 
     private fun rebuildBlockOrder() {
@@ -387,17 +495,6 @@ internal class NativeNovelRenderer(
     private fun centeredParams() = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
     private val density get() = scroll.resources.displayMetrics.density
     private val Int.dp get() = (this * density).toInt()
-    private fun EditText.configureInteraction(editing: Boolean, selectable: Boolean) {
-        showSoftInputOnFocus = editing
-        setTextIsSelectable(selectable && !editing)
-        movementMethod = if (editing || selectable) ArrowKeyMovementMethod.getInstance() else null
-        linksClickable = false
-        isFocusable = editing || selectable
-        isFocusableInTouchMode = editing || selectable
-        isLongClickable = selectable && !editing
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
-        if (!editing) clearFocus()
-    }
     private fun occurrenceBefore(document: String, exact: String, end: Int): Int {
         var count = 0
         var cursor = 0
@@ -414,7 +511,7 @@ internal class NativeNovelRenderer(
         val id: Long,
         val root: FrameLayout,
         var title: String = "",
-        var textView: EditText? = null,
+        var textView: TextView? = null,
         var original: CharSequence = "",
         var paragraphs: List<String> = emptyList(),
         var originalParagraphs: List<String> = emptyList(),
@@ -424,4 +521,13 @@ internal class NativeNovelRenderer(
 
     private class PersistentHighlightSpan(color: Int) : BackgroundColorSpan(color)
     private class SpokenParagraphSpan : UnderlineSpan()
+    private class ParagraphIndentSpan(indent: Int) : LeadingMarginSpan.Standard(indent, 0)
+    private class ParagraphSpacingSpan(private val spacing: Int) : LineHeightSpan {
+        override fun chooseHeight(text: CharSequence, start: Int, end: Int, spanstartv: Int, v: Int, fm: Paint.FontMetricsInt) {
+            if (end >= (text as Spanned).getSpanEnd(this)) {
+                fm.descent += spacing
+                fm.bottom += spacing
+            }
+        }
+    }
 }
