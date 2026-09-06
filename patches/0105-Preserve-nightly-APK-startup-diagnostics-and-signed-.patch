@@ -1,0 +1,108 @@
+From fca1a42619953e6248008d4a1acb2a933352a8f2 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 6 Sep 2026 22:54:59 +0300
+Subject: [PATCH] Preserve nightly APK startup diagnostics and signed test
+ artifact
+
+
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index 7d132b578ac4b22498ae114f3623dedf14ec4fed..a1dfbd46da5c53f43ab73f845d4ba718daacaeb1 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -111,6 +111,16 @@ jobs:
+             -Apk app/build/outputs/apk/standard/nightly/app-standard-x86_64-nightly-unsigned-signed.apk
+             -PackageId dev.ahmedmohamed.hayai.nightly
+ 
++      - name: Upload startup diagnostics
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: nightly-startup-${{ github.sha }}-${{ github.run_attempt }}
++          path: |
++            artifacts/apk-startup/
++            app/build/outputs/apk/standard/nightly/app-standard-x86_64-nightly-unsigned-signed.apk
++          retention-days: 3
++
+       - name: Prepare release assets
+         shell: bash
+         run: |
+diff --git a/tools/verify-apk-startup.ps1 b/tools/verify-apk-startup.ps1
+index 261134ac555de906b09e6d642ba55d6bba4dce9d..96c3e09d072e0632b18471ebb646cb02cb782015 100644
+--- a/tools/verify-apk-startup.ps1
++++ b/tools/verify-apk-startup.ps1
+@@ -8,7 +8,9 @@ param(
+     [string] $Serial = "",
+ 
+     [ValidateRange(10, 60)]
+-    [int] $StartupWaitSeconds = 20
++    [int] $StartupWaitSeconds = 20,
++
++    [string] $DiagnosticsDirectory = "artifacts/apk-startup"
+ )
+ 
+ $ErrorActionPreference = "Stop"
+@@ -46,30 +48,38 @@ if (($install -join "`n") -notmatch "Success") {
+     throw "APK installation did not report success:`n$($install -join [Environment]::NewLine)"
+ }
+ 
+-Invoke-Adb -Arguments @("shell", "am", "force-stop", $PackageId) | Out-Null
+-Invoke-Adb -Arguments @("logcat", "-c") | Out-Null
+-Invoke-Adb -Arguments @("shell", "monkey", "-p", $PackageId, "-c", "android.intent.category.LAUNCHER", "1") | Out-Null
+-Start-Sleep -Seconds $StartupWaitSeconds
++New-Item -ItemType Directory -Path $DiagnosticsDirectory -Force | Out-Null
++try {
++    Invoke-Adb -Arguments @("shell", "am", "force-stop", $PackageId) | Out-Null
++    Invoke-Adb -Arguments @("logcat", "-c") | Out-Null
++    Invoke-Adb -Arguments @("shell", "monkey", "-p", $PackageId, "-c", "android.intent.category.LAUNCHER", "1") |
++        Tee-Object -FilePath (Join-Path $DiagnosticsDirectory "launch.txt")
++    Start-Sleep -Seconds $StartupWaitSeconds
+ 
+-$crashLog = Invoke-Adb -Arguments @("logcat", "-d", "-v", "brief", "AndroidRuntime:E", "*:S")
+-$crashText = $crashLog -join [Environment]::NewLine
+-if ($crashText -match "FATAL EXCEPTION" -and $crashText -match [regex]::Escape($PackageId)) {
+-    throw "APK crashed during startup:`n$crashText"
+-}
++    $crashLog = Invoke-Adb -Arguments @("logcat", "-d", "-v", "brief", "AndroidRuntime:E", "*:S")
++    $crashText = $crashLog -join [Environment]::NewLine
++    if ($crashText -match "FATAL EXCEPTION" -and $crashText -match [regex]::Escape($PackageId)) {
++        throw "APK crashed during startup:`n$crashText"
++    }
+ 
+-$activities = (Invoke-Adb -Arguments @("shell", "dumpsys", "activity", "activities")) -join [Environment]::NewLine
+-$packagePattern = [regex]::Escape($PackageId)
+-if ($activities -match "$packagePattern/eu\.kanade\.tachiyomi\.crash\.CrashActivity") {
+-    throw "Hayai redirected to CrashActivity during startup."
+-}
++    $activities = (Invoke-Adb -Arguments @("shell", "dumpsys", "activity", "activities")) -join [Environment]::NewLine
++    $packagePattern = [regex]::Escape($PackageId)
++    if ($activities -match "$packagePattern/eu\.kanade\.tachiyomi\.crash\.CrashActivity") {
++        throw "Hayai redirected to CrashActivity during startup."
++    }
+ 
+-$mainActivityPattern = "$packagePattern/eu\.kanade\.tachiyomi\.ui\.main\.MainActivity"
+-$mainProcess = (Invoke-Adb -Arguments @("shell", "pidof", $PackageId) | Select-Object -Last 1).Trim()
+-if (-not $mainProcess -or $activities -notmatch $mainActivityPattern) {
+-    $relevantActivities = $activities -split "`r?`n" | Where-Object {
+-        $_ -match "ResumedActivity|topResumedActivity|CrashActivity|$packagePattern"
+-    } | Select-Object -First 30
+-    throw "Hayai MainActivity or its main process did not survive startup:`n$($relevantActivities -join [Environment]::NewLine)"
+-}
++    $mainActivityPattern = "$packagePattern/eu\.kanade\.tachiyomi\.ui\.main\.MainActivity"
++    $mainProcess = (Invoke-Adb -Arguments @("shell", "pidof", $PackageId) | Select-Object -Last 1).Trim()
++    if (-not $mainProcess -or $activities -notmatch $mainActivityPattern) {
++        $relevantActivities = $activities -split "`r?`n" | Where-Object {
++            $_ -match "ResumedActivity|topResumedActivity|CrashActivity|$packagePattern"
++        } | Select-Object -First 30
++        throw "Hayai MainActivity or its main process did not survive startup:`n$($relevantActivities -join [Environment]::NewLine)"
++    }
+ 
+-Write-Output "Signed/minified APK startup verification passed for $PackageId."
++    Write-Output "Signed/minified APK startup verification passed for $PackageId."
++} finally {
++    & adb @adbPrefix logcat -d -v threadtime 2>&1 | Set-Content (Join-Path $DiagnosticsDirectory "logcat.txt")
++    & adb @adbPrefix shell dumpsys activity exit-info $PackageId 2>&1 | Set-Content (Join-Path $DiagnosticsDirectory "exit-info.txt")
++    & adb @adbPrefix shell dumpsys activity activities 2>&1 | Set-Content (Join-Path $DiagnosticsDirectory "activities.txt")
++}
+-- 
+2.54.0.windows.1
+
