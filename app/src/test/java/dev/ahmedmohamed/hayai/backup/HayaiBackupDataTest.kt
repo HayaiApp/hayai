@@ -1,6 +1,7 @@
 package dev.ahmedmohamed.hayai.backup
 
 import eu.kanade.tachiyomi.data.backup.models.Backup
+import eu.kanade.tachiyomi.data.backup.BackupConst
 import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightAnchor
 import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightBackup
 import dev.ahmedmohamed.hayai.novel.source.builder.NovelChapterSelectors
@@ -75,6 +76,24 @@ class HayaiBackupDataTest {
         val encoded = ProtoBuf.encodeToByteArray(HayaiBackupData.serializer(), data)
 
         assertEquals(data, ProtoBuf.decodeFromByteArray(HayaiBackupData.serializer(), encoded))
+        assertEquals(data, data.selectForRestore(BackupConst.RESTORE_ALL))
+        assertEquals(HayaiBackupData(version = data.version), data.selectForRestore(BackupConst.RESTORE_APP_PREFS))
+        assertEquals(
+            HayaiBackupData(version = data.version, novelRepositories = data.novelRepositories, novelApkRepositories = data.novelApkRepositories),
+            data.selectForRestore(BackupConst.RESTORE_EXTENSION_REPOS),
+        )
+        assertEquals(
+            HayaiBackupData(version = data.version, ehCategoryMappings = data.ehCategoryMappings),
+            data.selectForRestore(BackupConst.RESTORE_CATEGORY),
+        )
+        assertEquals(
+            HayaiBackupData(version = data.version, novelPlugins = data.novelPlugins, novelCustomSources = data.novelCustomSources),
+            data.selectForRestore(BackupConst.RESTORE_SOURCE_PREFS),
+        )
+        assertEquals(
+            data.copy(novelRepositories = emptyList(), novelApkRepositories = emptyList(), ehCategoryMappings = emptyList(), novelPlugins = emptyList(), novelCustomSources = emptyList()),
+            data.selectForRestore(BackupConst.RESTORE_LIBRARY),
+        )
     }
 
     @Test
