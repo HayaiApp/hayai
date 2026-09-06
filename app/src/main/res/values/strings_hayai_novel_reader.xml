@@ -8,6 +8,9 @@
     <string name="hayai_novel_reader_webview">WebView</string>
     <string name="hayai_novel_reader_layout_mode">Layout mode</string>
     <string name="hayai_novel_reader_continuous">Continuous</string>
+    <string name="hayai_novel_reader_scroll">Chapter scroll</string>
+    <string name="hayai_novel_reader_continuous_scroll">Continuous scroll</string>
+    <string name="hayai_novel_reader_engine_summary">Paged and vertical reading use WebView. Choose WebView for original book styling or custom CSS and JavaScript.</string>
     <string name="hayai_novel_reader_paginated">Paginated</string>
     <string name="hayai_novel_reader_writing_direction">Writing direction</string>
     <string name="hayai_novel_reader_vertical_japanese">Vertical Japanese</string>

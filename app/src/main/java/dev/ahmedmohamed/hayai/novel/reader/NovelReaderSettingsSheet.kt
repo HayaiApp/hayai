@@ -91,7 +91,8 @@ internal class NovelReaderSettingsSheet(
     private fun readerPage(page: LinearLayout) {
         page.heading(R.string.hayai_novel_reader_renderer)
         page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingBackend, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
-        page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelLayoutMode, listOf(R.string.hayai_novel_reader_continuous to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
+        page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelReadingMode, listOf(R.string.hayai_novel_reader_scroll to "scroll", R.string.hayai_novel_reader_continuous_scroll to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
+        page.addView(TextView(context).apply { setText(R.string.hayai_novel_reader_engine_summary); setPadding(0, 8.dp, 0, 8.dp) }, matchWrap())
         page.choice(R.string.hayai_novel_reader_writing_direction, preferences.novelWritingDirection, listOf(R.string.hayai_novel_reader_horizontal to "horizontal", R.string.hayai_novel_reader_vertical_japanese to "vertical-rl"), onStyleChanged)
         page.choice(
             R.string.tap_zones,
@@ -110,7 +111,6 @@ internal class NovelReaderSettingsSheet(
         page.toggle(R.string.hayai_novel_reader_volume_keys_scroll, preferences.novelVolumeKeysScroll)
         page.toggle(R.string.keep_screen_on, preferences.novelKeepScreenOn, onChromeChanged)
         page.toggle(R.string.fullscreen, preferences.novelFullscreen, onChromeChanged)
-        page.toggle(R.string.hayai_novel_reader_infinite_scroll, preferences.novelInfiniteScroll, onStyleChanged)
         page.slider(R.string.hayai_novel_reader_load_next_at, preferences.novelAutoLoadNextChapterAt, 50, 100, R.string.hayai_novel_reader_percent_value, onStyleChanged)
         page.slider(R.string.hayai_novel_reader_mark_read_at, preferences.novelMarkAsReadThreshold, 50, 100, R.string.hayai_novel_reader_percent_value)
         page.toggle(R.string.hayai_novel_reader_split_blocks, preferences.novelAutoSplitText, onStyleChanged)
@@ -166,7 +166,6 @@ internal class NovelReaderSettingsSheet(
         page.slider(R.string.hayai_novel_reader_top_margin, preferences.novelMarginTop, 0, 150, R.string.hayai_novel_reader_dp_value, onStyleChanged)
         page.slider(R.string.hayai_novel_reader_bottom_margin, preferences.novelMarginBottom, 0, 150, R.string.hayai_novel_reader_dp_value, onStyleChanged)
         progressMode(page)
-        page.choice(R.string.hayai_novel_reader_preload_chapters, preferences.novelKeepChaptersLoaded, listOf(R.string.hayai_novel_reader_current_only to 0, R.string.previous to 1, R.string.next to 2, R.string.hayai_novel_reader_both to 3), onStyleChanged)
         page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
         page.toggle(R.string.hayai_novel_reader_novel_status_bar, preferences.novelStatusBarEnabled, onChromeChanged)
         page.choice(R.string.hayai_novel_reader_status_position, preferences.novelStatusBarPosition, listOf(R.string.top to "top", R.string.bottom to "bottom"), onChromeChanged)

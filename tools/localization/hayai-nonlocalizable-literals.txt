@@ -2216,7 +2216,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	UpdateQu
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	val INSERT_QUERY = InsertQuery.builder().table("hayai_quotes").build()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	val normalized = value.replace("\r\n", "\n").replace('\r', '\n').trim()
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	block.paragraphs = Jsoup.parse(request.content.html).select("h1,h2,h3,h4,h5,h6,p,li,blockquote").map { it.text().trim() }.filter(String::isNotBlank)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	Regex("[^\\n]+(?:\\n|$)").findAll(content).forEach { paragraph ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	textView.gravity = when (style.textAlign) { "center" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL; "right", "end" -> Gravity.TOP or Gravity.END; else -> Gravity.TOP or Gravity.START }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	textView.justificationMode = if (style.textAlign == "justify") Layout.JUSTIFICATION_MODE_INTER_WORD else Layout.JUSTIFICATION_MODE_NONE
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	val text = paragraphs.joinToString("\n\n")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	var original: CharSequence = "",
@@ -2290,7 +2292,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"<style>$readerCss</style><style>${style.customCss.safeStyleText()}</style>"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"outline" -> ".hayai-tts-active { outline:2px solid $background; outline-offset:2px; border-radius:.2em; }"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"underline" -> ".hayai-tts-active { text-decoration:underline 3px $background; text-underline-offset:.18em; }"
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<html class="hayai-$renderingMode" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<html class="hayai-$renderingMode" data-document-id="$documentId" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<main id="hayai-reader"><article class="hayai-chapter-block" data-chapter-id="$chapterId" data-state="ready">$heading${content.html}</article></main>
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<meta charset="utf-8">
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
@@ -2308,7 +2310,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val fontFamily = if (style.useOriginalFonts) "inherit" else cssString(style.fontFamily)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val heading = if (style.hideChapterTitle) "" else "<h1 class=\"hayai-chapter-title\">${escape(chapterTitle)}</h1>"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val importedFontCss = importedFontId?.let { "@font-face { font-family:'HayaiImported'; src:url('${NovelFontStore.WEB_SCHEME}://$it'); font-display:swap; }" }.orEmpty()
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val renderingMode = style.renderingMode.takeIf { it in setOf("default", "scroll", "continuous", "paged") } ?: "scroll"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val resolvedFontFamily = if (importedFontId != null) "'HayaiImported'" else fontFamily
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val selection = if (style.textSelectable) "text" else "none"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	?: error("Unable to read the selected quote file")
@@ -2341,6 +2343,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Paged
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	PreviousChapter("prev_chapter"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Progress("progress"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Quotes("quotes"),
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Scroll("scroll"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	ScrollToTop("scroll_to_top"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Settings("settings"),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Time("time"),
@@ -2357,7 +2360,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.k
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_alignment, preferences.novelTextAlign, listOf(R.string.left to "left", R.string.hayai_novel_reader_justified to "justify", R.string.center to "center", R.string.right to "right"), onStyleChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_font, preferences.novelFontFamily, listOf(R.string.hayai_novel_reader_sans_serif to "sans-serif", R.string.hayai_novel_reader_serif to "serif", R.string.hayai_novel_reader_monospace to "monospace"), onStyleChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_highlight_style, preferences.novelTtsHighlightStyle, listOf(R.string.hayai_novel_reader_background to "background", R.string.hayai_novel_reader_underline to "underline", R.string.hayai_novel_reader_outline to "outline"), onStyleChanged)
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelLayoutMode, listOf(R.string.hayai_novel_reader_continuous to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelReadingMode, listOf(R.string.hayai_novel_reader_scroll to "scroll", R.string.hayai_novel_reader_continuous_scroll to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingBackend, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_position, preferences.novelStatusBarPosition, listOf(R.string.top to "top", R.string.bottom to "bottom"), onChromeChanged)
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_size, preferences.novelStatusBarSize, listOf(R.string.hayai_novel_reader_small to "small", R.string.hayai_novel_reader_medium to "medium"), onChromeChanged)
@@ -2413,6 +2416,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	docume
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	element.attr(attribute, "$value${if ('?' in value) '&' else '?'}hayaiChapterId=$chapterId")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("(()=>{${request.appendJavaScript}})()")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("window.hayaiReader.applyPersistentHighlights(${json.encodeToString(payload)})")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("window.hayaiReader.focusBlock(${json.encodeToString(chapterId.toString())},${progress?.coerceIn(0, 100) ?: "null"})")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("window.hayaiReader.retainBlocks(${json.encodeToString(chapterIds.map { it.toString() })})")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (focus) evaluate("window.hayaiReader.focusBlock(${json.encodeToString(block.chapterId.toString())},${request.initialProgress})")
@@ -2447,7 +2451,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelCustomizationStore.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelCustomizationStore.kt	val id: String = "",
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("app", "light", "dark", "sepia", "black", "grey", "custom")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("background", "underline", "outline")
-app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("continuous", "paged")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("default", "webview")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("half", "full")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("horizontal", "vertical-rl")
@@ -2455,6 +2458,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("left", "right")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("NONE", "HORIZONTAL", "VERTICAL", "BOTH")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("sans-serif", "serif", "monospace")
+app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("scroll", "continuous", "paged")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("small", "medium", "large")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("top", "bottom")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	if (activateCustomTheme) novel.novelTheme.set("custom")
@@ -2971,6 +2975,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.kt	val processed = NovelContentProcessor().process(document, chapterName = "", OPTIONS)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	"""[{"id":"prev_chapter","enabled":true},{"id":"scroll_to_top","enabled":true},{"id":"translate","enabled":false},{"id":"auto_scroll","enabled":false},{"id":"tts","enabled":true},{"id":"quotes","enabled":true},{"id":"orientation","enabled":false},{"id":"settings","enabled":true},{"id":"edit","enabled":false},{"id":"next_chapter","enabled":true}]""",
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	"novel_bottom_bar_items",
+app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	"pref_novel_reading_mode",
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_HENTAI_FEATURES = "eh_is_hentai_enabled"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_HIDDEN_SOURCES_IN_HISTORY = "hidden_sources_in_history"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_HIDDEN_SOURCES_IN_UPDATES = "hidden_sources_in_updates"
@@ -2978,6 +2983,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const v
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_NOVEL_LIBRARY_FILTER = "pref_filter_library_novel_v1"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_NOVEL_TITLE_MAX_LINES = "pref_novel_title_max_lines"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_PAGE_PREVIEW_ROWS = "pref_page_preview_rows"
+app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	else -> "scroll"
+app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	novelInfiniteScroll.get() -> "continuous"
+app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	novelLayoutMode.get() == "paged" -> "paged"
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelAutoLoadNextChapterAt = store.getInt("pref_novel_auto_load_next_at", 95)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelAutoScrollSpeed = store.getInt("pref_novel_auto_scroll_speed_half", 6)
 app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelAutoSplitText = store.getBoolean("pref_novel_auto_split_text", false)

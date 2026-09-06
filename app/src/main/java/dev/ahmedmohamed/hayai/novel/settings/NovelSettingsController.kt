@@ -110,12 +110,13 @@ class NovelSettingsController : SettingsController() {
                 title = context.getString(R.string.hayai_novel_reader_rendering_mode)
                 entries = listOf(R.string.hayai_novel_reader_native_text, R.string.hayai_novel_reader_webview).map(context::getString)
                 entryValues = listOf("default", "webview")
+                summary = context.getString(R.string.hayai_novel_reader_engine_summary)
             }
             listPreference(activity) {
-                bindTo(novel.novelLayoutMode)
+                bindTo(novel.novelReadingMode)
                 title = context.getString(R.string.hayai_novel_reader_layout_mode)
-                entries = listOf(R.string.hayai_novel_reader_continuous, R.string.hayai_novel_reader_paginated).map(context::getString)
-                entryValues = listOf("continuous", "paged")
+                entries = listOf(R.string.hayai_novel_reader_scroll, R.string.hayai_novel_reader_continuous_scroll, R.string.hayai_novel_reader_paginated).map(context::getString)
+                entryValues = listOf("scroll", "continuous", "paged")
             }
             listPreference(activity) {
                 bindTo(novel.novelWritingDirection)
@@ -127,17 +128,6 @@ class NovelSettingsController : SettingsController() {
 
         preferenceCategory {
             title = context.getString(R.string.hayai_novel_reader_reading_behavior)
-            switchPreference {
-                bindTo(novel.novelInfiniteScroll)
-                title = context.getString(R.string.hayai_novel_reader_infinite_scroll)
-                summary = context.getString(R.string.hayai_novel_reader_infinite_scroll_summary)
-            }
-            intListPreference(activity) {
-                bindTo(novel.novelKeepChaptersLoaded)
-                title = context.getString(R.string.hayai_novel_reader_keep_adjacent_loaded)
-                entries = listOf(R.string.hayai_novel_reader_current_only, R.string.previous, R.string.next, R.string.hayai_novel_reader_previous_and_next).map(context::getString)
-                entryValues = listOf(0, 1, 2, 3)
-            }
             sliderPreference { bindTo(novel.novelAutoLoadNextChapterAt); title = context.getString(R.string.hayai_novel_reader_load_next_at); entryValues = (50..100).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
             sliderPreference { bindTo(novel.novelMarkAsReadThreshold); title = context.getString(R.string.hayai_novel_reader_mark_as_read_at); entryValues = (50..100).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
             switchPreference { bindTo(novel.novelHideChapterTitle); title = context.getString(R.string.hayai_novel_reader_hide_chapter_title) }

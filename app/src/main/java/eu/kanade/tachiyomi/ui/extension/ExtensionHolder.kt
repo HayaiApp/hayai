@@ -9,13 +9,11 @@ import androidx.core.text.scale
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
-import coil.dispose
-import coil.load
 import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionBackend
 import dev.ahmedmohamed.hayai.extension.managed.ManagedHealth
 import dev.ahmedmohamed.hayai.extension.managed.ManagedInstallation
+import dev.ahmedmohamed.hayai.source.presentation.bindSourceIcon
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
 import eu.kanade.tachiyomi.databinding.ExtensionCardItemBinding
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
@@ -95,17 +93,14 @@ class ExtensionHolder(
         binding.cancelButton.isVisible = item.sessionProgress != null
         binding.webviewButton.isVisible = extension.websiteUrl != null && item.sessionProgress == null
 
-        binding.sourceImage.dispose()
-        binding.sourceImage.imageTintList = null
+        val iconFallback =
+            if (extension.backend == ManagedExtensionBackend.JavaScript) R.drawable.ic_code_24dp else R.mipmap.ic_launcher
         when {
             extension.installation == ManagedInstallation.Untrusted || extension.health is ManagedHealth.LoadFailed -> {
+                binding.sourceImage.bindSourceIcon(R.drawable.ic_app_untrusted_24dp, R.drawable.ic_app_untrusted_24dp)
                 binding.sourceImage.imageTintList = ColorStateList.valueOf(itemView.context.getResourceColor(R.attr.colorError))
-                binding.sourceImage.setImageResource(R.drawable.ic_app_untrusted_24dp)
             }
-            extension.installedIcon != null -> binding.sourceImage.load(extension.installedIcon)
-            extension.iconUrl != null -> binding.sourceImage.load(extension.iconUrl) { target(CoverViewTarget(binding.sourceImage)) }
-            extension.backend == ManagedExtensionBackend.JavaScript -> binding.sourceImage.setImageResource(R.drawable.ic_code_24dp)
-            else -> binding.sourceImage.setImageResource(R.mipmap.ic_launcher)
+            else -> binding.sourceImage.bindSourceIcon(extension.installedIcon ?: extension.iconUrl, iconFallback)
         }
         bindButton(item)
     }

@@ -29,6 +29,7 @@ internal enum class NovelRenderingBackend(val value: String) {
 internal typealias NovelRenderingMode = NovelRenderingBackend
 
 internal enum class NovelLayoutMode(val value: String) {
+    Scroll("scroll"),
     Continuous("continuous"),
     Paged("paged"),
     ;
@@ -54,10 +55,10 @@ internal sealed interface NovelRenderPlan {
     val writingDirection: NovelWritingDirection
 
     data class NativeContinuous(
+        override val layout: NovelLayoutMode = NovelLayoutMode.Continuous,
         override val writingDirection: NovelWritingDirection = NovelWritingDirection.Horizontal,
     ) : NovelRenderPlan {
         override val backend = NovelRenderingBackend.Native
-        override val layout = NovelLayoutMode.Continuous
     }
 
     data class Web(
@@ -73,8 +74,8 @@ internal sealed interface NovelRenderPlan {
             layout: NovelLayoutMode,
             writingDirection: NovelWritingDirection,
         ): NovelRenderPlan =
-            if (backend == NovelRenderingBackend.Native && layout == NovelLayoutMode.Continuous && writingDirection == NovelWritingDirection.Horizontal) {
-                NativeContinuous()
+            if (backend == NovelRenderingBackend.Native && layout != NovelLayoutMode.Paged && writingDirection == NovelWritingDirection.Horizontal) {
+                NativeContinuous(layout)
             } else {
                 Web(layout, writingDirection)
             }

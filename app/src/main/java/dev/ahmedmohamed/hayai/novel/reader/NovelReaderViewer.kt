@@ -6,10 +6,13 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import dev.ahmedmohamed.hayai.novel.settings.NovelCustomizationStore
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
 import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
@@ -23,6 +26,8 @@ import eu.kanade.tachiyomi.ui.reader.viewer.navigation.LNavigation
 import eu.kanade.tachiyomi.ui.reader.viewer.navigation.RightAndLeftNavigation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -41,13 +46,34 @@ internal class NovelReaderViewer(
     private val actions: NovelReaderActionHost,
 ) : BaseViewer,
     NovelRenderer.Callbacks {
-    private val root = FrameLayout(activity)
+    private val root = object : FrameLayout(activity) {
+        private var focusParent: ViewGroup? = null
+        private var parentFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            focusParent = parent as? ViewGroup
+            focusParent?.let {
+                parentFocusability = it.descendantFocusability
+                it.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            }
+        }
+
+        override fun onDetachedFromWindow() {
+            focusParent?.descendantFocusability = parentFocusability
+            focusParent = null
+            super.onDetachedFromWindow()
+        }
+    }
     private val contentProcessor = NovelContentProcessor()
     private val customization = NovelCustomizationStore(preferences)
     private val fontStore = NovelFontStore(activity, preferences)
-    private val contentByChapterId = linkedMapOf<Long, NovelChapterContent>()
-    private val chapterQueue = NovelChapterQueue<NovelChapterContent, Long>({ requireNotNull(it.chapter.id) }, 3)
-    private val requestedPreloads = mutableSetOf<Long>()
+    private val contentByChapterId = java.util.concurrent.ConcurrentHashMap<Long, NovelChapterContent>()
+    private val preloadJobs = mutableMapOf<Long, Job>()
+    private val renderedBlocks = linkedMapOf<Long, NovelRenderBlock>()
+    private val renderedContents = linkedMapOf<Long, NovelChapterContent>()
+    private var renderedStyle: NovelReaderStyle? = null
+    private var renderedOptions: NovelContentOptions? = null
     private val assetProvider =
         object : NovelAssetProvider {
             override suspend fun getChapterAsset(chapterUrl: String, assetPath: String) =
@@ -65,7 +91,10 @@ internal class NovelReaderViewer(
     private var currentPageCount: Int? = null
     private var destroyed = false
     private var transitioningChapterId: Long? = null
-    private var pendingChapterSeek: Pair<Long, Int>? = null
+    private var selectionActive = false
+    private var explicitNavigationJob: Job? = null
+    private var pendingRendererSeek: Pair<Long, Int>? = null
+    private var awaitingDocumentId: Long? = null
 
     val currentContent: NovelChapterContent?
         get() = activeContent
@@ -85,8 +114,9 @@ internal class NovelReaderViewer(
         viewerChapters = chapters
         val page = chapters.currChapter.pages?.filterIsInstance<NovelProgressPage>()?.firstOrNull() ?: return
         val chapterId = requireNotNull(page.content.chapter.id)
-        val progress = pendingChapterSeek?.takeIf { it.first == chapterId }?.second?.also { pendingChapterSeek = null }
-            ?: chapters.currChapter.requestedPage
+        if (transitioningChapterId != null && transitioningChapterId != chapterId) return
+        if (transitioningChapterId == chapterId) transitioningChapterId = null
+        val progress = if (chapterId == currentChapterId) currentProgress else chapters.currChapter.requestedPage
         showWindow(page.content, progress.coerceIn(NovelProgressPage.MIN_PROGRESS, NovelProgressPage.MAX_PROGRESS))
     }
 
@@ -94,15 +124,19 @@ internal class NovelReaderViewer(
         val novelPage = page as? NovelProgressPage ?: return
         val currentId = currentContent?.chapter?.id
         if (currentId != novelPage.content.chapter.id) {
-            showWindow(novelPage.content, novelPage.index)
+            explicitNavigationJob?.cancel()
+            transitioningChapterId = null
+            pendingRendererSeek = requireNotNull(novelPage.content.chapter.id) to novelPage.index
+            showWindow(novelPage.content, novelPage.index, requestedChapter = novelPage.chapter)
         } else {
             currentProgress = novelPage.index
-            renderer?.seek(currentProgress)
+            if (awaitingDocumentId == null) renderer?.seek(currentProgress)
             reportLocation(currentProgress, currentPageNumber, currentPageCount)
         }
     }
 
     override fun moveToNext() {
+        if (selectionActive) return
         val next = viewerChapters?.nextChapter
         val atPageEnd = currentPageNumber != null && currentPageNumber == currentPageCount
         if ((currentProgress >= NovelProgressPage.MAX_PROGRESS || atPageEnd) && next != null) {
@@ -113,6 +147,7 @@ internal class NovelReaderViewer(
     }
 
     override fun moveToPrevious() {
+        if (selectionActive) return
         val previous = viewerChapters?.prevChapter
         if (currentProgress <= NovelProgressPage.MIN_PROGRESS && previous != null) {
             transitionTo(previous, NovelProgressPage.MAX_PROGRESS)
@@ -170,7 +205,12 @@ internal class NovelReaderViewer(
         return false
     }
 
-    fun refreshStyle() { currentContent?.let { showWindow(it, currentProgress) } }
+    fun refreshStyle() { currentContent?.let { showWindow(it, currentProgress, styleChange = true) } }
+
+    fun navigateChapter(direction: Int) {
+        val chapter = if (direction > 0) viewerChapters?.nextChapter else viewerChapters?.prevChapter
+        chapter?.let { transitionTo(it, 0) }
+    }
 
     fun replaceContent(content: NovelChapterContent) = showWindow(content, currentProgress)
 
@@ -199,43 +239,68 @@ internal class NovelReaderViewer(
         if (destroyed) return
         destroyed = true
         renderJob?.cancel()
+        explicitNavigationJob?.cancel()
+        preloadJobs.values.toList().forEach(Job::cancel)
+        preloadJobs.clear()
         renderer?.destroy()
         renderer = null
         activeContent = null
-        chapterQueue.clear()
+        renderedBlocks.clear()
+        renderedContents.clear()
         contentByChapterId.clear()
         root.removeAllViews()
     }
 
-    private fun showWindow(content: NovelChapterContent, progress: Int) {
+    private fun showWindow(content: NovelChapterContent, progress: Int, styleChange: Boolean = false, requestedChapter: ReaderChapter? = null) {
         if (destroyed) return
         val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
+        val window = chapterWindow(content, requestedChapter)
+        if (window.isEmpty()) return
+        val previousContent = activeContent
         activeContent = content
-        val window = chapterWindow(content)
-        contentByChapterId.clear()
-        window.forEach { contentByChapterId[requireNotNull(it.chapter.id)] = it }
+        val contents = window.mapNotNull { chapter ->
+            if (chapter.chapter.id == chapterId) content else chapter.novelContent()
+        }
+        contents.forEach { contentByChapterId[requireNotNull(it.chapter.id)] = it }
         currentProgress = progress.coerceIn(0, 100)
-        currentPageNumber = null
-        currentPageCount = null
-        // Content can be replaced while the durable chapter identity stays the same,
-        // for example after an edit or an offline translation is refreshed.
-        actions.onChapterContent(content)
+        if (previousContent != content) {
+            currentPageNumber = null
+            currentPageCount = null
+            actions.onChapterContent(content)
+        }
         val options = contentOptions()
         val style = readerStyle(options)
         val plan = renderPlan()
+        awaitingDocumentId = chapterId.takeIf { renderedStyle != style || renderedBlocks[chapterId]?.content !is NovelBlockContent.Ready }
+        val cachedBlocks = renderedBlocks.toMap()
+        val cachedContents = renderedContents.toMap()
+        val cachedOptions = renderedOptions
         renderJob?.cancel()
         renderJob =
             activity.scope.launch {
+                if (styleChange) delay(120)
                 val processedByChapterId =
                     withContext(Dispatchers.Default) {
-                        window.associate { item ->
-                            requireNotNull(item.chapter.id) to contentProcessor.process(item.document, item.chapter.name, options)
+                        contents.associate { item ->
+                            val id = requireNotNull(item.chapter.id)
+                            val previous = (cachedBlocks[id]?.content as? NovelBlockContent.Ready)?.request
+                            val processed = if (cachedOptions == options && previous != null && cachedContents[id]?.document == item.document && previous.chapterTitle == item.chapter.name) {
+                                previous.content
+                            } else {
+                                contentProcessor.process(item.document, item.chapter.name, options)
+                            }
+                            id to processed
                         }
                     }
                 if (destroyed || currentContent?.chapter?.id != content.chapter.id) return@launch
                 val target = ensureRenderer(plan)
-                fun block(item: NovelChapterContent): NovelRenderBlock {
-                    val id = requireNotNull(item.chapter.id)
+                fun block(chapter: ReaderChapter): NovelRenderBlock {
+                    val id = requireNotNull(chapter.chapter.id)
+                    val item = contents.firstOrNull { it.chapter.id == id }
+                    if (item == null) {
+                        val error = chapter.state as? ReaderChapter.State.Error
+                        return NovelRenderBlock(id, chapter.chapter.name, if (error == null) NovelBlockContent.Loading else NovelBlockContent.Error(activity.novelFailureMessage(error.error, R.string.hayai_novel_reader_load_error), 0))
+                    }
                     return NovelRenderBlock(
                         id,
                         item.chapter.name,
@@ -245,75 +310,111 @@ internal class NovelReaderViewer(
                                 content = requireNotNull(processedByChapterId[id]),
                                 chapterTitle = item.chapter.name,
                                 style = style,
-                                initialProgress = if (id == chapterId) currentProgress else 0,
+                                initialProgress = 0,
                                 appendJavaScript = customization.enabledJs(runOnAppend = true),
                             ),
                         ),
                     )
                 }
-                target.display(
-                    block(content),
-                    NovelBlockPlacement.ReplaceAll,
-                    focus = true,
-                )
-                val currentIndex = window.indexOfFirst { it.chapter.id == chapterId }
-                window.take(currentIndex).asReversed().forEach {
-                    target.display(block(it), NovelBlockPlacement.Before, focus = false)
+                val blocks = window.map(::block)
+                val current = blocks.first { it.chapterId == chapterId }
+                val reset = renderedBlocks.isEmpty() || renderedStyle != style || renderedBlocks[chapterId]?.content !is NovelBlockContent.Ready
+                if (reset) {
+                    renderedBlocks.clear()
+                    val ready = (current.content as NovelBlockContent.Ready).request.copy(initialProgress = currentProgress)
+                    target.display(current.copy(content = NovelBlockContent.Ready(ready)), NovelBlockPlacement.ReplaceAll, focus = true)
+                    renderedBlocks[chapterId] = current
+                    pendingRendererSeek = null
                 }
-                window.drop(currentIndex + 1).forEach {
-                    target.display(block(it), NovelBlockPlacement.After, focus = false)
+                val currentIndex = blocks.indexOf(current)
+                val ordered = listOf(current) + blocks.take(currentIndex).asReversed() + blocks.drop(currentIndex + 1)
+                ordered.forEach { next ->
+                    if (renderedBlocks[next.chapterId] != next) {
+                        target.display(next, if (blocks.indexOf(next) < currentIndex) NovelBlockPlacement.Before else NovelBlockPlacement.After, focus = false)
+                        renderedBlocks[next.chapterId] = next
+                    }
                 }
-                target.retain(window.mapTo(linkedSetOf()) { requireNotNull(it.chapter.id) })
+                val ids = blocks.mapTo(linkedSetOf()) { it.chapterId }
+                target.retain(ids)
+                renderedBlocks.keys.retainAll(ids)
+                renderedContents.clear()
+                contents.forEach { renderedContents[requireNotNull(it.chapter.id)] = it }
+                contentByChapterId.keys.retainAll(ids)
+                renderedStyle = style
+                renderedOptions = options
+                if (!reset) {
+                    target.focus(chapterId, pendingRendererSeek?.takeIf { it.first == chapterId }?.second)
+                    pendingRendererSeek = null
+                    reportLocation(currentProgress, currentPageNumber, currentPageCount)
+                    if (previousContent != content) actions.onDocumentReady()
+                }
             }
     }
 
-    private fun chapterWindow(current: NovelChapterContent): List<NovelChapterContent> {
-        chapterQueue.clear()
-        chapterQueue.replaceCurrent(current)
-        if (!preferences.novelInfiniteScroll.get()) return chapterQueue.snapshot()
-        val keep = preferences.novelKeepChaptersLoaded.get().coerceIn(0, 3)
-        // Infinite reading always needs a following block. The retention preference decides
-        // whether the previous chapter also remains mounted after the boundary changes.
-        chapterQueue.capacity = 2 + (if (keep == 1 || keep == 3) 1 else 0)
-        if (keep == 1 || keep == 3) addAdjacent(viewerChapters?.prevChapter, before = true)
-        addAdjacent(viewerChapters?.nextChapter, before = false)
-        return chapterQueue.snapshot()
-    }
-
-    private fun addAdjacent(chapter: ReaderChapter?, before: Boolean) {
-        chapter ?: return
-        if (chapter.state is ReaderChapter.State.Error) requestedPreloads.remove(chapter.chapter.id)
-        val content = chapter.pages?.filterIsInstance<NovelProgressPage>()?.firstOrNull()?.content
-        if (content == null) {
-            requestPreload(chapter)
-        } else {
-            chapter.chapter.id?.let(requestedPreloads::remove)
-            if (before) chapterQueue.prepend(content) else chapterQueue.append(content)
-        }
+    private fun chapterWindow(current: NovelChapterContent, requestedChapter: ReaderChapter?): List<ReaderChapter> {
+        val chapters = viewerChapters ?: return emptyList()
+        val currentChapter = listOfNotNull(chapters.prevChapter, chapters.currChapter, chapters.nextChapter).firstOrNull { it.chapter.id == current.chapter.id }
+            ?: return listOfNotNull(requestedChapter)
+        if (renderPlan().layout == NovelLayoutMode.Scroll) return listOf(currentChapter)
+        val window = listOfNotNull(chapters.prevChapter, chapters.currChapter, chapters.nextChapter)
+        window.filter { it.chapter.id != current.chapter.id && it.state !is ReaderChapter.State.Error }.forEach(::requestPreload)
+        return window
     }
 
     private fun requestPreload(chapter: ReaderChapter) {
         val id = chapter.chapter.id ?: return
-        if (requestedPreloads.add(id)) activity.requestPreloadChapter(chapter)
+        if (chapter.pages != null || preloadJobs[id]?.isActive == true) return
+        if (chapter.state is ReaderChapter.State.Error) chapter.state = ReaderChapter.State.Wait
+        val job = activity.scope.launch {
+            activity.requestPreloadChapter(chapter)
+            chapter.stateFlow.first { it is ReaderChapter.State.Loaded || it is ReaderChapter.State.Error }
+            if (!destroyed) currentContent?.let { showWindow(it, currentProgress) }
+        }
+        preloadJobs[id] = job
+        job.invokeOnCompletion { if (preloadJobs[id] === job) preloadJobs.remove(id) }
     }
 
     private fun transitionTo(chapter: ReaderChapter, progress: Int) {
-        val id = chapter.chapter.id ?: return
-        if (transitioningChapterId != null) return
-        transitioningChapterId = id
-        pendingChapterSeek = id to progress.coerceIn(0, 100)
-        activity.scope.launch {
-            try {
-                activity.loadChapter(chapter.chapter)
-            } finally {
-                transitioningChapterId = null
+        if (transitioningChapterId != null || explicitNavigationJob?.isActive == true) return
+        val origin = currentChapterId
+        explicitNavigationJob = activity.scope.launch {
+            if (chapter.pages == null) {
+                requestPreload(chapter)
+                val state = chapter.stateFlow.first { it is ReaderChapter.State.Loaded || it is ReaderChapter.State.Error }
+                if (state is ReaderChapter.State.Error) {
+                    actions.onRendererError(activity.novelFailureMessage(state.error, R.string.hayai_novel_reader_load_error))
+                    return@launch
+                }
             }
+            if (!destroyed && currentChapterId == origin) selectChapter(chapter, progress, seek = true)
         }
+    }
+
+    private fun ReaderChapter.novelContent(): NovelChapterContent? = (pages?.firstOrNull() as? NovelProgressPage)?.content
+
+    private fun selectChapter(chapter: ReaderChapter, progress: Int, seek: Boolean) {
+        val page = chapter.pages?.getOrNull(progress.coerceIn(0, 100)) as? NovelProgressPage ?: return
+        val id = requireNotNull(chapter.chapter.id)
+        val changesJ2kChapter = viewerChapters?.currChapter?.chapter?.id != id
+        transitioningChapterId = id.takeIf { changesJ2kChapter }
+        activeContent = page.content
+        currentProgress = page.index
+        currentPageNumber = null
+        currentPageCount = null
+        actions.onChapterContent(page.content)
+        if (renderedBlocks[id]?.content is NovelBlockContent.Ready) {
+            renderer?.focus(id, if (seek) page.index else null)
+            actions.onDocumentReady()
+        } else if (seek) {
+            pendingRendererSeek = id to page.index
+        }
+        if (changesJ2kChapter) activity.onPageSelected(page, false)
     }
 
     private fun ensureRenderer(plan: NovelRenderPlan): NovelRenderer {
         renderer?.takeIf { it.mode == plan.backend }?.let { return it }
         renderer?.destroy()
+        renderedBlocks.clear()
         val created =
             when (plan.backend) {
                 NovelRenderingBackend.Native -> NativeNovelRenderer(activity, this, fontStore)
@@ -341,7 +442,7 @@ internal class NovelReaderViewer(
     private fun renderPlan(): NovelRenderPlan =
         NovelRenderPlan.resolve(
             NovelRenderingBackend.fromPreference(preferences.novelRenderingBackend.get()),
-            NovelLayoutMode.fromPreference(preferences.novelLayoutMode.get()),
+            NovelLayoutMode.fromPreference(preferences.novelReadingMode.get()),
             NovelWritingDirection.fromPreference(preferences.novelWritingDirection.get()),
         )
 
@@ -375,7 +476,7 @@ internal class NovelReaderViewer(
             textSelectable = preferences.novelTextSelectable.get(),
             hideChapterTitle = options.hideChapterTitle,
             sourceCssPriority = preferences.novelSourceCssPriority.get(),
-            renderingMode = preferences.novelLayoutMode.get(),
+            renderingMode = preferences.novelReadingMode.get(),
             customCss = listOf(preferences.novelCustomCss.get(), customization.enabledCss()).filter(String::isNotBlank).joinToString("\n"),
             customJs = listOf(preferences.novelCustomJs.get(), customization.enabledJs()).filter(String::isNotBlank).joinToString("\n"),
             ttsHighlightColor = preferences.novelTtsHighlightColor.get(),
@@ -387,7 +488,10 @@ internal class NovelReaderViewer(
     }
 
     private fun currentNovelPage(progress: Int): NovelProgressPage? =
-        viewerChapters?.currChapter?.pages?.getOrNull(progress.coerceIn(0, 100)) as? NovelProgressPage
+        viewerChapters?.let { chapters ->
+            listOfNotNull(chapters.currChapter, chapters.prevChapter, chapters.nextChapter)
+                .firstOrNull { it.chapter.id == currentChapterId }?.pages?.getOrNull(progress.coerceIn(0, 100)) as? NovelProgressPage
+        }
 
     private fun reportLocation(progress: Int, pageNumber: Int?, pageCount: Int?) {
         currentProgress = progress.coerceIn(0, 100)
@@ -395,6 +499,7 @@ internal class NovelReaderViewer(
         currentPageCount = pageCount
         val page = currentNovelPage(currentProgress) ?: return
         page.presentation = NovelPagePresentation(currentProgress, pageNumber, pageCount)
+        if (transitioningChapterId != null) return
         activity.onPageSelected(page, false)
         if (currentProgress >= preferences.novelAutoLoadNextChapterAt.get().coerceIn(50, 100)) {
             viewerChapters?.nextChapter?.let(::requestPreload)
@@ -418,31 +523,36 @@ internal class NovelReaderViewer(
     }
 
     override fun onReady(progress: Int) {
-        renderer?.seek(currentProgress)
+        awaitingDocumentId = null
+        if (progress != currentProgress) renderer?.seek(currentProgress)
         reportLocation(currentProgress, currentPageNumber, currentPageCount)
         actions.onDocumentReady()
     }
 
-    override fun onProgress(progress: Int) = reportLocation(progress, null, null)
+    override fun onProgress(progress: Int) {
+        if (awaitingDocumentId == null) reportLocation(progress, null, null)
+    }
 
     override fun onPageLocation(chapterId: Long, progress: Int, pageNumber: Int, pageCount: Int) {
+        if (awaitingDocumentId != null) return
         if (chapterId == currentChapterId) {
             reportLocation(progress, pageNumber, pageCount)
         } else {
-            adjacentChapter(chapterId)?.let { transitionTo(it, progress) }
+            if (transitioningChapterId == null && !selectionActive) adjacentChapter(chapterId)?.let { selectChapter(it, progress, seek = false) }
         }
     }
 
     override fun onVisibleChapter(chapterId: Long, progress: Int) {
+        if (awaitingDocumentId != null) return
         if (chapterId == currentChapterId) {
             reportLocation(progress, currentPageNumber, currentPageCount)
         } else {
-            adjacentChapter(chapterId)?.let { transitionTo(it, progress) }
+            if (transitioningChapterId == null && !selectionActive) adjacentChapter(chapterId)?.let { selectChapter(it, progress, seek = false) }
         }
     }
 
     override fun onRetryChapter(chapterId: Long) {
-        currentContent?.takeIf { it.chapter.id == chapterId }?.let { showWindow(it, currentProgress) }
+        adjacentChapter(chapterId)?.let(::requestPreload)
     }
 
     private fun adjacentChapter(chapterId: Long): ReaderChapter? =
@@ -450,6 +560,7 @@ internal class NovelReaderViewer(
             .firstOrNull { it.chapter.id == chapterId }
 
     override fun onTap(xFraction: Float, yFraction: Float) {
+        if (selectionActive || awaitingDocumentId != null) return
         when (navigator().getAction(PointF(xFraction, yFraction))) {
             ViewerNavigation.NavigationRegion.MENU -> activity.toggleMenu()
             ViewerNavigation.NavigationRegion.NEXT,
@@ -462,7 +573,10 @@ internal class NovelReaderViewer(
     }
 
     override fun onSelectionAction(action: NovelSelectionAction, selection: NovelSelection) = actions.onSelectionAction(action, selection)
-    override fun onSelectionModeChanged(active: Boolean) = actions.onSelectionModeChanged(active)
+    override fun onSelectionModeChanged(active: Boolean) {
+        selectionActive = active
+        actions.onSelectionModeChanged(active)
+    }
     override fun onContentEdited(content: String) = actions.onContentEdited(content)
     override fun onRendererError(message: String) = actions.onRendererError(message)
 }
