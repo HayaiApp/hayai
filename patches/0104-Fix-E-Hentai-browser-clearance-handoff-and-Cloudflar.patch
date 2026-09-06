@@ -1,0 +1,544 @@
+From e5ca508f9291ea05d968ecdd7762e0f309944521 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 6 Sep 2026 22:13:00 +0300
+Subject: [PATCH] Fix E-Hentai browser clearance handoff and Cloudflare
+ detection
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 7f79b6d6b29aa1e3b15ceccebd39341487b3f794..c03b5b8b431167dd1dff9ae914b4cc050a5d01da 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -161,3 +161,4 @@ ts	phase	decision	why	evidence	result
+ 2026-09-06T16:31:19.7593216+03:00	novel-reader-stability-verification	verified chapter modes, native selection and viewport anchors, browser pagination, and shared source logos	501 unit tests and 7 Android instrumentation tests passed; Chromium regressions passed; device uses Android 37 16 KB compatibility mode; live-extension and full lifecycle stress checks remain pending	artifacts/novel-reader/gradle-selection.log; gradle-touchscreen.log; instrumentation.log; docs/architecture/j2k-reset.md	VERIFIED_SCOPED
+ 2026-09-06T16:39:20.9088942+03:00	j2k-update-september-6	replayed 103 Hayai commits onto eight new J2K commits from e848fcebef to c88c8e1b3d	preserved upstream card containers and e-ink page flashing; filtered side-data restore by upstream selection; used compatible flash enum decoder; no schema change	BackupRestorer.kt; PreferencesHelper.kt; BrowseSourceListHolder.kt; manga_list_item.xml; existing ReaderActivity adapter; artifacts/novel-reader/j2k-gradle.log	COMPILE_UNIT_BOUNDARY_VERIFIED
+ 2026-09-06T17:02:55.6903785+03:00	reader-content-sheets	reused J2K E2E sheets and Material controls for quotes, highlights, statistics, translation results, and fonts; moved legacy JSON import into overflow	no J2K file or storage-schema changes; 501 unit tests passed; 2 Android sheet tests passed after correcting text-field layout params and keyboard expansion; localization and boundary passed	NovelReaderAttachment.kt; NovelReaderContentSheet.kt; artifacts/novel-reader/sheets-instrumentation.log	VERIFIED_SCOPED
++2026-09-06T22:12:59.8085941+03:00	cloudflare-eh-clearance	reused the Mihon solver with SY legacy challenge detection; shared browser clearance across EH verification browse favorites and settings; removed passive CDN false positives	504 unit tests and DevDebug compilation passed; real HTTP retry and cookie scoping verified; authenticated login remains pending; no schema change	EhBrowserCookies.kt; CloudflareHelpDetector.kt; existing CloudflareInterceptor adapter; artifacts/novel-reader/cloudflare-validation.log	HTTP_UNIT_BOUNDARY_VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesRemote.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesRemote.kt
+index 30301c0fc9964b059e900e63f3c4571d8c93fe15..9beb8e05f917c8e8b1e3cd49ce0510bb5e1a3ea3 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesRemote.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/favorites/EhFavoritesRemote.kt
+@@ -2,12 +2,12 @@ package dev.ahmedmohamed.hayai.adult.eh.favorites
+ 
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+ import dev.ahmedmohamed.hayai.adult.eh.network.EhHtmlParser
++import dev.ahmedmohamed.hayai.adult.eh.network.withEhBrowserCookies
+ import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
+ import eu.kanade.tachiyomi.network.awaitSuccess
+ import kotlinx.coroutines.CancellationException
+ import okhttp3.CacheControl
+-import okhttp3.CookieJar
+ import okhttp3.FormBody
+ import okhttp3.OkHttpClient
+ import okhttp3.Request
+@@ -43,7 +43,7 @@ class EhFavoritesHttpRemote(
+     private val sessions: EhSessionStore,
+     private val baseUrl: String = EhSite.ExHentai.baseUrl,
+ ) : EhFavoritesRemote {
+-    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
++    private val client = client.withEhBrowserCookies()
+ 
+     override suspend fun snapshot(): EhRemoteFavoritesSnapshot {
+         val favorites = linkedMapOf<EhGalleryIdentity, EhFavoriteState>()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b219a9f9d0de0059d0ea8ea32e8ca3d670f8a5d
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt
+@@ -0,0 +1,30 @@
++package dev.ahmedmohamed.hayai.adult.eh.network
++
++import okhttp3.Cookie
++import okhttp3.CookieJar
++import okhttp3.OkHttpClient
++
++/** Shares Cloudflare cookies with the upstream WebView jar without replacing typed EH credentials. */
++internal fun OkHttpClient.withEhBrowserCookies(): OkHttpClient {
++    val browserCookies = cookieJar
++    return newBuilder()
++        .cookieJar(CookieJar.NO_COOKIES)
++        .addNetworkInterceptor { chain ->
++            val request = chain.request()
++            val cookies = request.header("Cookie").orEmpty().split(';')
++                .map(String::trim).filter(String::isNotEmpty)
++                .filterNot { isCloudflareCookie(it.substringBefore('=')) }.toMutableList()
++            browserCookies.loadForRequest(request.url).filter { isCloudflareCookie(it.name) }
++                .forEach { cookies += "${it.name}=${it.value}" }
++            val outgoing = request.newBuilder().removeHeader("Cookie").apply {
++                if (cookies.isNotEmpty()) header("Cookie", cookies.joinToString("; "))
++            }.build()
++            chain.proceed(outgoing).also { response ->
++                val received = Cookie.parseAll(request.url, response.headers).filter { isCloudflareCookie(it.name) }
++                if (received.isNotEmpty()) browserCookies.saveFromResponse(request.url, received)
++            }
++        }
++        .build()
++}
++
++private fun isCloudflareCookie(name: String): Boolean = name == "cf_clearance" || name.startsWith("__cf")
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
+index 6543f5ada8a3e0abe2402a0347eab1e506bceb7b..0cd55b7ee4bd1ceb20ab68d567624a677d75faf4 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt
+@@ -18,6 +18,7 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhTag
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagWeight
+ import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryId
+ import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
++import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
+ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+ import org.jsoup.Jsoup
+ import org.jsoup.nodes.Document
+@@ -315,7 +316,8 @@ object EhHtmlParser {
+         when {
+             document.selectFirst("form[action*=Login] input[type=password], form[action*=login] input[type=password]") != null ->
+                 throw EhFailure.AuthenticationRequired()
+-            document.selectFirst("#challenge-form, script[src*=/cdn-cgi/]") != null || title.contains("just a moment") ->
++            document.selectFirst("#challenge-form") != null ||
++                CloudflareHelpDetector.isChallengeHtml(document.outerHtml()) || title.contains("just a moment") ->
+                 throw EhFailure.AccessDenied("E-Hentai access challenge blocked the request")
+             bodyText.contains("temporarily banned") || bodyText.contains("excessive pageloads") ->
+                 throw EhFailure.RateLimited("E-Hentai temporarily rate-limited this client")
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
+index a22b82807d99f54d49a09f80a46f35073822fc46..1d60a5ae523f3185c9dae51c8a0620b53a99dc45 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHttpGateway.kt
+@@ -17,7 +17,6 @@ import eu.kanade.tachiyomi.network.awaitSuccess
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.withContext
+ import okhttp3.CacheControl
+-import okhttp3.CookieJar
+ import okhttp3.OkHttpClient
+ import okhttp3.Request
+ import okhttp3.Response
+@@ -28,7 +27,7 @@ class EhHttpGateway(
+     client: OkHttpClient,
+     private val sessions: EhSessionStore,
+ ) {
+-    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
++    private val client = client.withEhBrowserCookies()
+ 
+     suspend fun browse(
+         site: EhSite,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt
+index c7bf82de414a5585aa75962f500dbccc93fe5ec0..da516c6a62066b1af29ae2a85b2cc8a5fc1b1d83 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt
+@@ -1,10 +1,11 @@
+ package dev.ahmedmohamed.hayai.adult.eh.session
+ 
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.network.withEhBrowserCookies
++import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.withContext
+ import okhttp3.CacheControl
+-import okhttp3.CookieJar
+ import okhttp3.OkHttpClient
+ import okhttp3.Request
+ import java.net.URI
+@@ -25,7 +26,7 @@ sealed interface EhVerificationResult {
+ class EhSessionVerifier(
+     client: OkHttpClient,
+ ) {
+-    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
++    private val client = client.withEhBrowserCookies()
+ 
+     suspend fun verify(sessionStore: EhSessionStore): EhVerificationResult =
+         withContext(Dispatchers.IO) {
+@@ -58,13 +59,8 @@ class EhSessionVerifier(
+             headers: Map<String, List<String>>,
+             body: String,
+         ): EhVerificationResult {
+-            val normalizedHeaders = headers.mapKeys { it.key.lowercase(Locale.ROOT) }
+             val normalizedBody = body.lowercase(Locale.ROOT)
+-            val cloudflare =
+-                "cf-ray" in normalizedHeaders ||
+-                    "/cdn-cgi/" in normalizedBody ||
+-                    "cloudflare" in normalizedBody && "attention required" in normalizedBody
+-            if (cloudflare) return EhVerificationResult.Cloudflare
++            if (CloudflareHelpDetector.isChallengeResponse(statusCode, headers, body)) return EhVerificationResult.Cloudflare
+ 
+             val host = runCatching { URI(finalUrl).host.orEmpty() }.getOrDefault("")
+             val loginPage =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt
+index d65e44b8c994c254543ade47e3e3566c67801122..ac620b732464f3d2a072a6c174732fed0ea929ec 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhRemoteSettingsRemote.kt
+@@ -1,13 +1,13 @@
+ package dev.ahmedmohamed.hayai.adult.eh.uconfig
+ 
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
++import dev.ahmedmohamed.hayai.adult.eh.network.withEhBrowserCookies
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieHeader
+ import dev.ahmedmohamed.hayai.adult.eh.settings.EhRemoteSettings
+ import eu.kanade.tachiyomi.network.awaitSuccess
+ import eu.kanade.tachiyomi.network.HttpException
+ import kotlinx.coroutines.CancellationException
+ import okhttp3.CacheControl
+-import okhttp3.CookieJar
+ import okhttp3.FormBody
+ import okhttp3.OkHttpClient
+ import okhttp3.Request
+@@ -41,7 +41,7 @@ class EhUConfigHttpRemote(
+     private val uconfigUrl: (EhSite) -> String = { it.baseUrl + "/uconfig.php" },
+     private val hathPerksUrl: String = "https://e-hentai.org/hathperks.php",
+ ) : EhRemoteSettingsRemote {
+-    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
++    private val client = client.withEhBrowserCookies()
+ 
+     override suspend fun fetchHathPerks(cookie: EhCookieHeader): EhHathPerks =
+         executeDocument(request(hathPerksUrl, cookieForSlot(cookie, EhProfileSlot(1))), EhUConfigHtmlParser::hathPerks)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt
+index 268fca9b9d37f0ff042213c0cb8d9e97304c3707..bd9dc897d73b4f92039665c3042468fcfcf10172 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt
+@@ -19,6 +19,7 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionMutationResult
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionVerifier
+ import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
++import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.kanade.tachiyomi.ui.webview.BaseWebViewActivity
+@@ -154,7 +155,8 @@ class EhLoginActivity : BaseWebViewActivity() {
+         url: String,
+     ) {
+         val host = Uri.parse(url).host.orEmpty()
+-        view.evaluateJavascript(CLOUDFLARE_CHECK_JS) { rawResult ->
++        view.evaluateJavascript(CloudflareHelpDetector.javascript) { rawResult ->
++            if (isFinishing || isDestroyed || view.url != url) return@evaluateJavascript
+             if (rawResult == "true") {
+                 lastOutcome = EhLoginOutcome.Cloudflare
+                 binding.toolbar.subtitle = getString(R.string.hayai_eh_cloudflare_detected)
+@@ -282,10 +284,6 @@ class EhLoginActivity : BaseWebViewActivity() {
+         private const val ACTION_SIMPLIFY = 0x484104
+         private const val ACTION_CANCEL = 0x484105
+ 
+-        private const val CLOUDFLARE_CHECK_JS =
+-            "(function(){return !!document.querySelector('[name=cf-turnstile-response], #challenge-form') || " +
+-                "document.documentElement.innerHTML.indexOf('/cdn-cgi/') >= 0;})()"
+-
+         private const val SIMPLIFY_LOGIN_JS =
+             "(function(){['#gfooter','.copyright','td[width=\"40%\"]'].forEach(function(s){" +
+                 "var e=document.querySelector(s);if(e)e.style.display='none';});})()"
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt b/app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt
+index b624345bf902ed0bd3f2090ccfe128a1ec4c77d0..2afa2d6f128eca0d6fab319b64fd798a66b560a0 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt
+@@ -1,16 +1,23 @@
+ package dev.ahmedmohamed.hayai.network
+ 
+-/** Mirrors Mihon's WebView Cloudflare challenge detection. */
++/** Challenge signals from Mihon 3a64c8d65cf9 and TachiyomiSY 14648c7cf0aa. */
+ internal object CloudflareHelpDetector {
+     private val markers = listOf("window._cf_chl_opt", "Ray ID is")
+ 
+     fun isChallengeHtml(html: String): Boolean = markers.any(html::contains)
+ 
++    fun isChallengeResponse(status: Int, headers: Map<String, List<String>>, body: String = ""): Boolean {
++        val normalized = headers.mapKeys { it.key.lowercase(java.util.Locale.ROOT) }
++        if (normalized["cf-mitigated"]?.any { it.equals("challenge", ignoreCase = true) } == true) return true
++        val cloudflareServer = normalized["server"]?.any { it.equals("cloudflare", true) || it.equals("cloudflare-nginx", true) } == true
++        return isChallengeHtml(body) || status in listOf(403, 503) && (cloudflareServer || "cf-ray" in normalized)
++    }
++
+     val javascript: String =
+         """
+         (() => {
+           const html = document.documentElement?.outerHTML || '';
+-          return html.includes('window._cf_chl_opt') || html.includes('Ray ID is');
++          return html.includes('window._cf_chl_opt') || html.includes('Ray ID is') || !!document.querySelector('#challenge-form');
+         })()
+         """.trimIndent()
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt b/app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt
+index b1bcd35522f8023cbaac442c4bb490e72fbd8aed..ddab927696e4d4d80849b7f210183dc1199e78fc 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/network/interceptor/CloudflareInterceptor.kt
+@@ -9,6 +9,7 @@ import android.webkit.WebView
+ import android.webkit.WebViewClient
+ import android.widget.Toast
+ import androidx.core.content.ContextCompat
++import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.network.AndroidCookieJar
+ import eu.kanade.tachiyomi.util.system.isOutdated
+@@ -130,7 +131,7 @@ class CloudflareInterceptor(
+                         errorResponse: WebResourceResponse?,
+                     ) {
+                         if (request?.isForMainFrame == true) {
+-                            if (errorResponse?.responseHeaders?.get("cf-mitigated") == "challenge") {
++                            if (errorResponse != null && CloudflareHelpDetector.isChallengeResponse(errorResponse.statusCode, errorResponse.responseHeaders.orEmpty().mapValues { listOf(it.value) })) {
+                                 challengeFound = true
+                             } else {
+                                 latch.countDown()
+@@ -168,9 +169,8 @@ class CloudflareInterceptor(
+ }
+ 
+ internal fun Response.isCloudflareChallenge(): Boolean =
+-    header("cf-mitigated") == "challenge" && header("Server") in SERVER_CHECK
++    CloudflareHelpDetector.isChallengeResponse(code, headers.toMultimap())
+ 
+-private val SERVER_CHECK = arrayOf("cloudflare-nginx", "cloudflare")
+ private val COOKIE_NAMES = listOf("cf_clearance")
+ 
+ private class CloudflareBypassException : Exception()
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookiesTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookiesTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..92ae7112914ec9eec5a4e5c1aab2b3ea19543b24
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookiesTest.kt
+@@ -0,0 +1,71 @@
++package dev.ahmedmohamed.hayai.adult.eh.network
++
++import okhttp3.Cookie
++import okhttp3.CookieJar
++import okhttp3.HttpUrl
++import okhttp3.OkHttpClient
++import okhttp3.Request
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class EhBrowserCookiesTest {
++    @Test
++    fun `retry reads fresh browser clearance while retaining typed account cookies`() {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse().setResponseCode(403))
++            server.enqueue(MockResponse().addHeader("Set-Cookie", "__cf_bm=renewed; Path=/"))
++            val url = server.url("/")
++            val jar = BrowserJar()
++            jar.saveFromResponse(url, listOf(cookie(url, "cf_clearance=old"), cookie(url, "ipb_member_id=browser")))
++            val client = OkHttpClient.Builder().cookieJar(jar).addInterceptor { chain ->
++                val response = chain.proceed(chain.request())
++                if (response.code == 403) {
++                    response.close()
++                    jar.saveFromResponse(url, listOf(cookie(url, "cf_clearance=solved")))
++                    chain.proceed(chain.request())
++                } else {
++                    response
++                }
++            }.build().withEhBrowserCookies()
++            client.newCall(Request.Builder().url(url).header("Cookie", "ipb_member_id=typed; sp=2").build())
++                .execute().use { assertEquals(200, it.code) }
++            assertEquals("ipb_member_id=typed; sp=2; cf_clearance=old", server.takeRequest().getHeader("Cookie"))
++            assertEquals("ipb_member_id=typed; sp=2; cf_clearance=solved", server.takeRequest().getHeader("Cookie"))
++            assertEquals("renewed", jar.loadForRequest(url).single { it.name == "__cf_bm" }.value)
++            assertEquals("browser", jar.loadForRequest(url).single { it.name == "ipb_member_id" }.value)
++        }
++    }
++
++    @Test
++    fun `clearance is scoped to the request host and secure transport`() {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse())
++            val url = server.url("/")
++            val jar = BrowserJar()
++            jar.saveFromResponse(url, listOf(
++                Cookie.Builder().name("cf_clearance").value("other-host").hostOnlyDomain("example.com").build(),
++                Cookie.Builder().name("__cf_bm").value("secure-only").hostOnlyDomain(url.host).secure().build(),
++            ))
++            val client = OkHttpClient.Builder().cookieJar(jar).build().withEhBrowserCookies()
++            client.newCall(Request.Builder().url(url).header("Cookie", "ipb_member_id=typed").build()).execute().close()
++            assertEquals("ipb_member_id=typed", server.takeRequest().getHeader("Cookie"))
++        }
++    }
++
++    private fun cookie(url: HttpUrl, value: String): Cookie = requireNotNull(Cookie.parse(url, "$value; Path=/"))
++
++    private class BrowserJar : CookieJar {
++        private val cookies = mutableListOf<Cookie>()
++
++        override fun loadForRequest(url: HttpUrl): List<Cookie> = cookies.filter { it.matches(url) }
++
++        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
++            for (cookie in cookies) {
++                this.cookies.removeAll { it.name == cookie.name && it.domain == cookie.domain && it.path == cookie.path }
++                this.cookies += cookie
++            }
++        }
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
+index 3ca26f77139c4bd472154366018cbd0016025ed0..786830fd51416969cbdb644769673fe016f89f1a 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParserTest.kt
+@@ -13,7 +13,7 @@ class EhHtmlParserTest {
+     @Test
+     fun `page previews parse direct and sprite thumbnail layouts`() {
+         val html = """
+-            <html><body><div id="gdt">
++            <html><script src="/cdn-cgi/scripts/email-decode.min.js"></script><body><div id="gdt">
+               <div class="gdtl"><a href="https://e-hentai.org/s/one/100-1"><img src="https://ehgt.org/direct.jpg"></a></div>
+               <div class="gdtm"><a href="https://e-hentai.org/s/two/100-2"><div style="width:100px;height:140px;background:transparent url(https://ehgt.org/sprite.jpg) -200px -5px no-repeat"></div></a></div>
+             </div></body></html>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifierTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifierTest.kt
+index 8c446c401f0a45433097f599ff6a089e66573a06..b13464e61e7847f8e33cf3575408e63e724f7d39 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifierTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifierTest.kt
+@@ -4,6 +4,17 @@ import org.junit.Assert.assertTrue
+ import org.junit.Test
+ 
+ class EhSessionVerifierTest {
++    @Test
++    fun `Cloudflare proxy headers and passive scripts do not reject a logged in gallery`() {
++        val result = EhSessionVerifier.classify(
++            200,
++            "https://exhentai.org/",
++            mapOf("CF-Ray" to listOf("request-id"), "Server" to listOf("cloudflare")),
++            "<html>Gallery List<script src='/cdn-cgi/scripts/email-decode.min.js'></script></html>",
++        )
++        assertTrue(result is EhVerificationResult.Verified)
++    }
++
+     @Test
+     fun `successful ExHentai response verifies the session`() {
+         val result = EhSessionVerifier.classify(200, "https://exhentai.org/", emptyMap(), "<html><body>Gallery List</body></html>")
+diff --git a/app/src/test/java/eu/kanade/tachiyomi/network/interceptor/CloudflareChallengeTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/network/CloudflareChallengeTest.kt
+similarity index 56%
+rename from app/src/test/java/eu/kanade/tachiyomi/network/interceptor/CloudflareChallengeTest.kt
+rename to app/src/test/java/dev/ahmedmohamed/hayai/network/CloudflareChallengeTest.kt
+index e90dc3d0c9f3cfad8b7cd65ddc00c4e703d0976e..45d0bee9ea08a6fccd401fc0ae4409bf4c124eae 100644
+--- a/app/src/test/java/eu/kanade/tachiyomi/network/interceptor/CloudflareChallengeTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/network/CloudflareChallengeTest.kt
+@@ -1,5 +1,6 @@
+-package eu.kanade.tachiyomi.network.interceptor
++package dev.ahmedmohamed.hayai.network
+ 
++import eu.kanade.tachiyomi.network.interceptor.isCloudflareChallenge
+ import okhttp3.Protocol
+ import okhttp3.Request
+ import okhttp3.Response
+@@ -14,13 +15,16 @@ class CloudflareChallengeTest {
+     }
+ 
+     @Test
+-    fun `legacy error code without official header is not treated as a challenge`() {
+-        assertFalse(response(503, null, "cloudflare").isCloudflareChallenge())
++    fun `SY legacy challenge responses trigger the existing solver`() {
++        assertTrue(response(503, null, "cloudflare").isCloudflareChallenge())
++        assertTrue(response(403, null, "Cloudflare-nginx").isCloudflareChallenge())
++        assertFalse(response(200, null, "cloudflare").isCloudflareChallenge())
+     }
+ 
+     @Test
+-    fun `non Cloudflare servers are ignored`() {
+-        assertFalse(response(403, "challenge", "origin").isCloudflareChallenge())
++    fun `ordinary origin errors are ignored but explicit challenges remain authoritative`() {
++        assertFalse(response(403, null, "origin").isCloudflareChallenge())
++        assertTrue(response(403, "challenge", "origin").isCloudflareChallenge())
+     }
+ 
+     private fun response(
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetectorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetectorTest.kt
+index fe264d8a83865f9d5e247cf4136150fa3d2b8dd4..816a70c1188db536f908786f5c2fcbafda7d5b42 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetectorTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetectorTest.kt
+@@ -13,6 +13,9 @@ class CloudflareHelpDetectorTest {
+ 
+     @Test
+     fun `does not flag an ordinary page`() {
++        assertFalse(CloudflareHelpDetector.isChallengeResponse(200, mapOf("CF-Ray" to listOf("abc"), "Server" to listOf("cloudflare")), "<script src='/cdn-cgi/scripts/email-decode.min.js'></script>"))
++        assertTrue(CloudflareHelpDetector.isChallengeResponse(403, mapOf("CF-Ray" to listOf("abc"))))
++        assertTrue(CloudflareHelpDetector.isChallengeResponse(200, mapOf("CF-Mitigated" to listOf("Challenge"))))
+         assertFalse(CloudflareHelpDetector.isChallengeHtml("<html><body>Gallery</body></html>"))
+         assertFalse(CloudflareHelpDetector.isChallengeResult("false"))
+         assertTrue(CloudflareHelpDetector.isChallengeResult("true"))
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 5e53ee64aec4f6611c3d15fb474f3297454cb0f1..2ff1c445b62d88926658120a5b74b91baef24679 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -144,6 +144,12 @@ git rebase j2k/master
+ 
+ TachiyomiSY and Tsundoku are feature references, not architectural parents. Ports are rebuilt behind Hayai contracts with provenance recorded in the feature audit.
+ 
++## Cloudflare clearance and E-Hentai login
++
++The September 6 repair compares Mihon `3a64c8d65cf9fe44346a5994642db440c73aa70a` and TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`. Hayai already uses Mihon's WebView solver and shared Android cookie jar. The existing allowlisted `CloudflareInterceptor` seam now delegates challenge classification to Hayai, combining explicit `cf-mitigated: challenge` with SY's legacy Cloudflare 403/503 responses. Normal successful responses with `CF-Ray` and passive `/cdn-cgi/` scripts no longer fail E-Hentai verification or parsing.
++
++E-Hentai verification, browsing, favorites, and remote settings use one Hayai network adapter. It keeps typed E-Hentai account and profile cookies authoritative while loading URL-scoped Cloudflare cookies from the existing browser jar on every network attempt, including the solver's retry. Response Cloudflare cookies return to the same jar. Login uses the shared page detector and ignores stale JavaScript callbacks after navigation. No account schema, migration, backup, or protected activity changes are introduced. Authenticated login and interactive challenges still require live device verification; HTTP regression tests do not prove those flows.
++
+ ## Novel reading stability
+ 
+ Reader quotes, highlight browsing/editing, chapter statistics, selected-text translation results, and imported fonts share a Hayai content-sheet assembly built from J2K's `E2EBottomSheetDialog`, Material toolbar/buttons/text fields, the existing `MaterialSpinnerView`, and Android's two-line RecyclerView rows. It reuses the existing rounded sheet surface, adds no J2K adapter, and leaves destructive confirmations as dialogs. Quote bodies remain selectable; save controls stay outside scrolling forms, and the sheet expands above an open keyboard using system insets. Legacy quote JSON recovery is retained only in the saved-quotes overflow menu. Storage, ordering, migration, and backup formats are unchanged.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 3260d5c426c0b4b88e08473b8f3631d786a48461..3df20b23c66d9c9f00733b061ab215039ae82774 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -76,7 +76,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ | Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
+ | Manga and novel extension management | J2K Extensions sheet with Manga, Novels, and Migration tabs; novel APK and JavaScript entries reuse the J2K row and action pipeline; both repository types reuse J2K's one-field inline repository UI; supplied Keiyoushi, Cursed Manga, and LNReader indexes seed once on first run and remain user-removable | port verified on emulator; Comikey 1.6.9 and Komga 1.0.2 installed and detected without false update or load-failed states |
+ | Custom application color | Hayai seed preference and picker in J2K Appearance settings; both base activity families apply Material's content-based color scheme after the selected base theme and before view inflation, with an explicit unsupported-device state | preference/policy/application seams covered by focused tests; live light/dark/AMOLED and unsupported-device verification pending |
+-| Cloudflare challenge bypass | J2K interceptor contract synchronized to Mihon commit `ac249e3668a57f24782a49218834064459ba2d09` with official challenge-header detection and interactive-challenge early exit | focused detector tests passed; authenticated Cloudflare emulator flow pending |
++| Cloudflare challenge bypass | Existing Mihon WebView solver with shared detection, SY legacy 403/503 recognition, and browser clearance handoff into typed EH clients; references Mihon `3a64c8d65cf9fe44346a5994642db440c73aa70a` and SY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42` | port of clearance handoff verified with real HTTP retry tests; successful proxied pages no longer rejected; authenticated Cloudflare emulator flow pending |
+ 
+ ## Completion rules
+ 
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 46db871810bf5e6dafed3aae126b9e02bf60bfd8..f9508130715caaa7d64419deb156a61f79cfc5cb 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -118,6 +118,11 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhApiCodec.kt	throw Eh
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhApiCodec.kt	val galleryToken = token["token"]?.jsonPrimitive?.contentOrNull
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhApiCodec.kt	val id = token["gid"]?.jsonPrimitive?.let { primitive ->
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhApiCodec.kt	val token = root["tokenlist"]?.jsonArray?.singleOrNull()?.jsonObject
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	.forEach { cookies += "${it.name}=${it.value}" }
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	if (cookies.isNotEmpty()) header("Cookie", cookies.joinToString("; "))
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	private fun isCloudflareCookie(name: String): Boolean = name == "cf_clearance" || name.startsWith("__cf")
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	val cookies = request.header("Cookie").orEmpty().split(';')
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	val outgoing = request.newBuilder().removeHeader("Cookie").apply {
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?: cell.selectFirst("[title^=Page]")?.attr("title")?.removePrefix("Page")?.trim()?.substringBefore(':')?.toIntOrNull()
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?: element?.text()?.trim()?.lowercase()?.replace(" ", "")?.takeIf(String::isNotEmpty)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?: link.selectFirst(".glink")?.text()?.trim()?.takeIf(String::isNotEmpty)
+@@ -143,10 +148,11 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	bodyTe
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	BORDER_COLOR.find(element.attr("style"))?.groupValues?.get(1)?.lowercase()?.let(::favoriteCategory)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	category = parseCategory(document.selectFirst(".cs")),
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	cell.selectFirst("img[alt]")?.attr("alt")?.trim()?.toIntOrNull()
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	CloudflareHelpDetector.isChallengeHtml(document.outerHtml()) || title.contains("just a moment") ->
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.select(".gdtm a[href]").forEach { link ->
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.select("#gdt > a[href]").forEach { link ->
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.selectFirst(".searchwarn")?.text()?.trim()?.takeIf(String::isNotEmpty)?.let {
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.selectFirst("#challenge-form, script[src*=/cdn-cgi/]") != null || title.contains("just a moment") ->
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.selectFirst("#challenge-form") != null ||
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.selectFirst("form[action*=Login] input[type=password], form[action*=login] input[type=password]") != null ->
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	element.selectFirst("a[href*=/g/]")?.attr("href")?.let(::parseGalleryKey)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	favoriteCount = fields["favorited"]?.text()?.let(::firstInteger),
+@@ -562,11 +568,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt	val
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt	values["nw"] = "1"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt	values["sl"] = "dm_2"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	.header("Cookie", sessionStore.cookieHeader(EhSite.ExHentai).value)
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"/cdn-cgi/" in normalizedBody ||
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"act=login" in normalizedBody ||
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"bounce_login.php" in normalizedBody ||
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"cf-ray" in normalizedHeaders ||
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"cloudflare" in normalizedBody && "attention required" in normalizedBody
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"sad panda" in normalizedBody
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	const val VERIFY_URL = "https://exhentai.org/"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	if (statusCode !in 200..299 || !host.equals("exhentai.org", ignoreCase = true) || loginPage) {
+@@ -743,8 +746,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigModels.kt	val
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigModels.kt	validate("settings key", settingsKey)
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt	@Suppress("DEPRECATION")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	"(function(){['#gfooter','.copyright','td[width=\"40%\"]'].forEach(function(s){" +
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	"(function(){return !!document.querySelector('[name=cf-turnstile-response], #challenge-form') || " +
+-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	"document.documentElement.innerHTML.indexOf('/cdn-cgi/') >= 0;})()"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	"var e=document.querySelector(s);if(e)e.style.display='none';});})()"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	const val EXTRA_MESSAGE = "hayai.eh.login.message"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	const val EXTRA_OUTCOME = "hayai.eh.login.outcome"
+@@ -1220,8 +1221,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigrati
+ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	Timber.w("Legacy translation promotion remains pending for %d row(s)", pending)
+ app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	"""
+ app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	""".trimIndent()
++app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	fun isChallengeResponse(status: Int, headers: Map<String, List<String>>, body: String = ""): Boolean {
+ app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	fun isChallengeResult(result: String?): Boolean = result == "true"
++app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	if (normalized["cf-mitigated"]?.any { it.equals("challenge", ignoreCase = true) } == true) return true
+ app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	private val markers = listOf("window._cf_chl_opt", "Ray ID is")
++app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	return isChallengeHtml(body) || status in listOf(403, 503) && (cloudflareServer || "cf-ray" in normalized)
++app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	val cloudflareServer = normalized["server"]?.any { it.equals("cloudflare", true) || it.equals("cloudflare-nginx", true) } == true
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.associateBy { it.attr("id") }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.filter { it.normalName() == "li" }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.filter { it.normalName() == "navpoint" }
+-- 
+2.54.0.windows.1
+
