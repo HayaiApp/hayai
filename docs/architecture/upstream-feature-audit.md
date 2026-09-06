@@ -1,6 +1,6 @@
 # TachiyomiSY and Tsundoku feature audit
 
-Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `4d744fc`, and J2K `e848fcebef2cdc157c531e1f4a5086665bcc9d73`.
+Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `4d744fc`, and J2K `c88c8e1b3d864268785f6a9655ee471e4cc368c1`.
 
 **Foundation** means a boundary or partial implementation exists. **Port** means the end-to-end production behavior is implemented and verified. **Audit** means upstream behavior is mapped but production work remains. This distinction prevents the clean baseline from being mistaken for the full multi-upstream port.
 

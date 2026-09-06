@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.data.backup
 
+import dev.ahmedmohamed.hayai.backup.selectForRestore
+
 import android.content.Context
 import android.net.Uri
 import dev.ahmedmohamed.hayai.backup.HayaiBackupService
@@ -145,7 +147,7 @@ class BackupRestorer(
                     context,
                     novelPluginManager,
                     Injekt.get<NovelApkRepositoryRegistry>(),
-                ).restore(backup.hayaiData)
+                ).restore(backup.hayaiData?.selectForRestore(flags))
             novelPluginManager.reloadLocalState()
             hayaiReport.errors.forEach { error -> errors.add(Date() to "Hayai data: $error") }
             restoreProgress += 1

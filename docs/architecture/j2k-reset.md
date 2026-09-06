@@ -132,6 +132,10 @@ Offline novel files are deliberately excluded, matching J2K's treatment of downl
 
 ## Updating upstreams
 
+The September 6, 2026 integration advances J2K from `e848fcebef2cdc157c531e1f4a5086665bcc9d73` to `c88c8e1b3d864268785f6a9655ee471e4cc368c1` (eight commits). J2K owns the new card containers, ripples, e-ink controls, and selective backup restore. Existing Hayai adapters retain rich source metadata inside the new card layout and novel progress presentation after J2K's page-flash call. No new protected activity seam is added.
+
+The backup adapter filters Hayai side data using J2K's restore selection: library data includes quotes, chapter statistics, highlights, translations, gallery aliases, favorites, and source metadata; categories include E-Hentai category mappings; extension repositories include novel repository lists; source settings include novel plugins and custom sources. Selecting only app settings restores no side data. The payload schema and database versions are unchanged. The new flash-color preference uses Hayai's existing compatible enum decoder. These changes remain within the existing `BackupRestorer`, `PreferencesHelper`, source-list, and reader adapter allowlist.
+
 ```powershell
 git fetch j2k sy tsundoku
 git rebase j2k/master

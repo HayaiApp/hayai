@@ -141,7 +141,7 @@ class PreferencesHelper(
 
     fun flashPageInterval() = flowPrefs.getInt(Keys.flashPageInterval, 1)
 
-    fun flashColor() = flowPrefs.getEnum(Keys.flashColor, FlashColor.BLACK)
+    fun flashColor() = flowPrefs.getCompatibleEnum(Keys.flashColor, FlashColor.BLACK)
 
     fun customBrightness() = flowPrefs.getBoolean(Keys.customBrightness, false)
 
