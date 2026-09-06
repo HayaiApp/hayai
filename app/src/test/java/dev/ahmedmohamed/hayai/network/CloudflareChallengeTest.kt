@@ -1,5 +1,6 @@
-package eu.kanade.tachiyomi.network.interceptor
+package dev.ahmedmohamed.hayai.network
 
+import eu.kanade.tachiyomi.network.interceptor.isCloudflareChallenge
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
@@ -14,13 +15,16 @@ class CloudflareChallengeTest {
     }
 
     @Test
-    fun `legacy error code without official header is not treated as a challenge`() {
-        assertFalse(response(503, null, "cloudflare").isCloudflareChallenge())
+    fun `SY legacy challenge responses trigger the existing solver`() {
+        assertTrue(response(503, null, "cloudflare").isCloudflareChallenge())
+        assertTrue(response(403, null, "Cloudflare-nginx").isCloudflareChallenge())
+        assertFalse(response(200, null, "cloudflare").isCloudflareChallenge())
     }
 
     @Test
-    fun `non Cloudflare servers are ignored`() {
-        assertFalse(response(403, "challenge", "origin").isCloudflareChallenge())
+    fun `ordinary origin errors are ignored but explicit challenges remain authoritative`() {
+        assertFalse(response(403, null, "origin").isCloudflareChallenge())
+        assertTrue(response(403, "challenge", "origin").isCloudflareChallenge())
     }
 
     private fun response(

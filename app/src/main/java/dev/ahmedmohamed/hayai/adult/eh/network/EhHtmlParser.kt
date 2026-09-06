@@ -18,6 +18,7 @@ import dev.ahmedmohamed.hayai.adult.eh.domain.EhTag
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagWeight
 import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryId
 import dev.ahmedmohamed.hayai.adult.eh.domain.GalleryKey
+import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -315,7 +316,8 @@ object EhHtmlParser {
         when {
             document.selectFirst("form[action*=Login] input[type=password], form[action*=login] input[type=password]") != null ->
                 throw EhFailure.AuthenticationRequired()
-            document.selectFirst("#challenge-form, script[src*=/cdn-cgi/]") != null || title.contains("just a moment") ->
+            document.selectFirst("#challenge-form") != null ||
+                CloudflareHelpDetector.isChallengeHtml(document.outerHtml()) || title.contains("just a moment") ->
                 throw EhFailure.AccessDenied("E-Hentai access challenge blocked the request")
             bodyText.contains("temporarily banned") || bodyText.contains("excessive pageloads") ->
                 throw EhFailure.RateLimited("E-Hentai temporarily rate-limited this client")

@@ -9,6 +9,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.AndroidCookieJar
 import eu.kanade.tachiyomi.util.system.isOutdated
@@ -130,7 +131,7 @@ class CloudflareInterceptor(
                         errorResponse: WebResourceResponse?,
                     ) {
                         if (request?.isForMainFrame == true) {
-                            if (errorResponse?.responseHeaders?.get("cf-mitigated") == "challenge") {
+                            if (errorResponse != null && CloudflareHelpDetector.isChallengeResponse(errorResponse.statusCode, errorResponse.responseHeaders.orEmpty().mapValues { listOf(it.value) })) {
                                 challengeFound = true
                             } else {
                                 latch.countDown()
@@ -168,9 +169,8 @@ class CloudflareInterceptor(
 }
 
 internal fun Response.isCloudflareChallenge(): Boolean =
-    header("cf-mitigated") == "challenge" && header("Server") in SERVER_CHECK
+    CloudflareHelpDetector.isChallengeResponse(code, headers.toMultimap())
 
-private val SERVER_CHECK = arrayOf("cloudflare-nginx", "cloudflare")
 private val COOKIE_NAMES = listOf("cf_clearance")
 
 private class CloudflareBypassException : Exception()

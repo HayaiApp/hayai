@@ -13,7 +13,7 @@ class EhHtmlParserTest {
     @Test
     fun `page previews parse direct and sprite thumbnail layouts`() {
         val html = """
-            <html><body><div id="gdt">
+            <html><script src="/cdn-cgi/scripts/email-decode.min.js"></script><body><div id="gdt">
               <div class="gdtl"><a href="https://e-hentai.org/s/one/100-1"><img src="https://ehgt.org/direct.jpg"></a></div>
               <div class="gdtm"><a href="https://e-hentai.org/s/two/100-2"><div style="width:100px;height:140px;background:transparent url(https://ehgt.org/sprite.jpg) -200px -5px no-repeat"></div></a></div>
             </div></body></html>

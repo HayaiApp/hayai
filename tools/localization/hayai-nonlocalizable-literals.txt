@@ -118,6 +118,11 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhApiCodec.kt	throw Eh
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhApiCodec.kt	val galleryToken = token["token"]?.jsonPrimitive?.contentOrNull
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhApiCodec.kt	val id = token["gid"]?.jsonPrimitive?.let { primitive ->
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhApiCodec.kt	val token = root["tokenlist"]?.jsonArray?.singleOrNull()?.jsonObject
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	.forEach { cookies += "${it.name}=${it.value}" }
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	if (cookies.isNotEmpty()) header("Cookie", cookies.joinToString("; "))
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	private fun isCloudflareCookie(name: String): Boolean = name == "cf_clearance" || name.startsWith("__cf")
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	val cookies = request.header("Cookie").orEmpty().split(';')
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhBrowserCookies.kt	val outgoing = request.newBuilder().removeHeader("Cookie").apply {
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?: cell.selectFirst("[title^=Page]")?.attr("title")?.removePrefix("Page")?.trim()?.substringBefore(':')?.toIntOrNull()
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?: element?.text()?.trim()?.lowercase()?.replace(" ", "")?.takeIf(String::isNotEmpty)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	?: link.selectFirst(".glink")?.text()?.trim()?.takeIf(String::isNotEmpty)
@@ -143,10 +148,11 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	bodyTe
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	BORDER_COLOR.find(element.attr("style"))?.groupValues?.get(1)?.lowercase()?.let(::favoriteCategory)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	category = parseCategory(document.selectFirst(".cs")),
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	cell.selectFirst("img[alt]")?.attr("alt")?.trim()?.toIntOrNull()
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	CloudflareHelpDetector.isChallengeHtml(document.outerHtml()) || title.contains("just a moment") ->
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.select(".gdtm a[href]").forEach { link ->
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.select("#gdt > a[href]").forEach { link ->
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.selectFirst(".searchwarn")?.text()?.trim()?.takeIf(String::isNotEmpty)?.let {
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.selectFirst("#challenge-form, script[src*=/cdn-cgi/]") != null || title.contains("just a moment") ->
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.selectFirst("#challenge-form") != null ||
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	document.selectFirst("form[action*=Login] input[type=password], form[action*=login] input[type=password]") != null ->
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	element.selectFirst("a[href*=/g/]")?.attr("href")?.let(::parseGalleryKey)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/network/EhHtmlParser.kt	favoriteCount = fields["favorited"]?.text()?.let(::firstInteger),
@@ -562,11 +568,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt	val 
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt	values["nw"] = "1"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionStore.kt	values["sl"] = "dm_2"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	.header("Cookie", sessionStore.cookieHeader(EhSite.ExHentai).value)
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"/cdn-cgi/" in normalizedBody ||
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"act=login" in normalizedBody ||
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"bounce_login.php" in normalizedBody ||
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"cf-ray" in normalizedHeaders ||
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"cloudflare" in normalizedBody && "attention required" in normalizedBody
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	"sad panda" in normalizedBody
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	const val VERIFY_URL = "https://exhentai.org/"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/session/EhSessionVerifier.kt	if (statusCode !in 200..299 || !host.equals("exhentai.org", ignoreCase = true) || loginPage) {
@@ -743,8 +746,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigModels.kt	val
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/uconfig/EhUConfigModels.kt	validate("settings key", settingsKey)
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhDetailsPreviewLoader.kt	@Suppress("DEPRECATION")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	"(function(){['#gfooter','.copyright','td[width=\"40%\"]'].forEach(function(s){" +
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	"(function(){return !!document.querySelector('[name=cf-turnstile-response], #challenge-form') || " +
-app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	"document.documentElement.innerHTML.indexOf('/cdn-cgi/') >= 0;})()"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	"var e=document.querySelector(s);if(e)e.style.display='none';});})()"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	const val EXTRA_MESSAGE = "hayai.eh.login.message"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/ui/EhLoginActivity.kt	const val EXTRA_OUTCOME = "hayai.eh.login.outcome"
@@ -1220,8 +1221,12 @@ app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigrati
 app/src/main/java/dev/ahmedmohamed/hayai/migration/LegacyTranslationCacheMigration.kt	Timber.w("Legacy translation promotion remains pending for %d row(s)", pending)
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	"""
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	""".trimIndent()
+app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	fun isChallengeResponse(status: Int, headers: Map<String, List<String>>, body: String = ""): Boolean {
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	fun isChallengeResult(result: String?): Boolean = result == "true"
+app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	if (normalized["cf-mitigated"]?.any { it.equals("challenge", ignoreCase = true) } == true) return true
 app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	private val markers = listOf("window._cf_chl_opt", "Ray ID is")
+app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	return isChallengeHtml(body) || status in listOf(403, 503) && (cloudflareServer || "cf-ray" in normalized)
+app/src/main/java/dev/ahmedmohamed/hayai/network/CloudflareHelpDetector.kt	val cloudflareServer = normalized["server"]?.any { it.equals("cloudflare", true) || it.equals("cloudflare-nginx", true) } == true
 app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.associateBy { it.attr("id") }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.filter { it.normalName() == "li" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/archive/EpubReader.kt	.filter { it.normalName() == "navpoint" }
