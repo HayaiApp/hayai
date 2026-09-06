@@ -144,6 +144,12 @@ git rebase j2k/master
 
 TachiyomiSY and Tsundoku are feature references, not architectural parents. Ports are rebuilt behind Hayai contracts with provenance recorded in the feature audit.
 
+## App update installation
+
+The app updater's `AppDownloadInstallJob` now stops after downloading and posts J2K's existing Install notification on every Android version. Its automatic `PackageInstaller` session and timeout fallback are removed. The existing work input keys remain compatible with already-enqueued requests; downloads no longer require package-install permission in advance. `SettingsGeneralController` calls the preference automatic downloading, retaining the same network policy key and values. These two allowlisted adapters add no installer, screen, database, or preference model. App installation requires a notification tap; extension installation behavior is unchanged.
+
+The existing `AppUpdateNotifier` adapter clears the ongoing flag when the download completes, so the ready-to-install notification can be dismissed. No package session begins until the user chooses Install.
+
 ## Cloudflare clearance and E-Hentai login
 
 The September 6 repair compares Mihon `3a64c8d65cf9fe44346a5994642db440c73aa70a` and TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`. Hayai already uses Mihon's WebView solver and shared Android cookie jar. The existing allowlisted `CloudflareInterceptor` seam now delegates challenge classification to Hayai, combining explicit `cf-mitigated: challenge` with SY's legacy Cloudflare 403/503 responses. Normal successful responses with `CF-Ray` and passive `/cdn-cgi/` scripts no longer fail E-Hentai verification or parsing.

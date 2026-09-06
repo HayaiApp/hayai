@@ -137,7 +137,10 @@ try {
         # Approved branding-only seams. Product identity notifications use the existing Hayai vector.
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupNotifier.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/library/LibraryUpdateNotifier.kt"
+        # Download completion reuses the Install notification; automatic package sessions are removed.
         "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateNotifier.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/data/updater/AppDownloadInstallJob.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsGeneralController.kt"
         "app/src/main/java/eu/kanade/tachiyomi/util/CrashLogUtil.kt"
     )
     $violations = $changed | Where-Object {
