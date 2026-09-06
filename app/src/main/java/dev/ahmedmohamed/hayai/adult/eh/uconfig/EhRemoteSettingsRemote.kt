@@ -1,13 +1,13 @@
 package dev.ahmedmohamed.hayai.adult.eh.uconfig
 
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.network.withEhBrowserCookies
 import dev.ahmedmohamed.hayai.adult.eh.session.EhCookieHeader
 import dev.ahmedmohamed.hayai.adult.eh.settings.EhRemoteSettings
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.HttpException
 import kotlinx.coroutines.CancellationException
 import okhttp3.CacheControl
-import okhttp3.CookieJar
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -41,7 +41,7 @@ class EhUConfigHttpRemote(
     private val uconfigUrl: (EhSite) -> String = { it.baseUrl + "/uconfig.php" },
     private val hathPerksUrl: String = "https://e-hentai.org/hathperks.php",
 ) : EhRemoteSettingsRemote {
-    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+    private val client = client.withEhBrowserCookies()
 
     override suspend fun fetchHathPerks(cookie: EhCookieHeader): EhHathPerks =
         executeDocument(request(hathPerksUrl, cookieForSlot(cookie, EhProfileSlot(1))), EhUConfigHtmlParser::hathPerks)

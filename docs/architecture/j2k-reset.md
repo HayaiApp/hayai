@@ -144,6 +144,12 @@ git rebase j2k/master
 
 TachiyomiSY and Tsundoku are feature references, not architectural parents. Ports are rebuilt behind Hayai contracts with provenance recorded in the feature audit.
 
+## Cloudflare clearance and E-Hentai login
+
+The September 6 repair compares Mihon `3a64c8d65cf9fe44346a5994642db440c73aa70a` and TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`. Hayai already uses Mihon's WebView solver and shared Android cookie jar. The existing allowlisted `CloudflareInterceptor` seam now delegates challenge classification to Hayai, combining explicit `cf-mitigated: challenge` with SY's legacy Cloudflare 403/503 responses. Normal successful responses with `CF-Ray` and passive `/cdn-cgi/` scripts no longer fail E-Hentai verification or parsing.
+
+E-Hentai verification, browsing, favorites, and remote settings use one Hayai network adapter. It keeps typed E-Hentai account and profile cookies authoritative while loading URL-scoped Cloudflare cookies from the existing browser jar on every network attempt, including the solver's retry. Response Cloudflare cookies return to the same jar. Login uses the shared page detector and ignores stale JavaScript callbacks after navigation. No account schema, migration, backup, or protected activity changes are introduced. Authenticated login and interactive challenges still require live device verification; HTTP regression tests do not prove those flows.
+
 ## Novel reading stability
 
 Reader quotes, highlight browsing/editing, chapter statistics, selected-text translation results, and imported fonts share a Hayai content-sheet assembly built from J2K's `E2EBottomSheetDialog`, Material toolbar/buttons/text fields, the existing `MaterialSpinnerView`, and Android's two-line RecyclerView rows. It reuses the existing rounded sheet surface, adds no J2K adapter, and leaves destructive confirmations as dialogs. Quote bodies remain selectable; save controls stay outside scrolling forms, and the sheet expands above an open keyboard using system insets. Legacy quote JSON recovery is retained only in the saved-quotes overflow menu. Storage, ordering, migration, and backup formats are unchanged.

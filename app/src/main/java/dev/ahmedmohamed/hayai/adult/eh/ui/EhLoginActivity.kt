@@ -19,6 +19,7 @@ import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionMutationResult
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionVerifier
 import dev.ahmedmohamed.hayai.adult.eh.session.EhVerificationResult
+import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.webview.BaseWebViewActivity
@@ -154,7 +155,8 @@ class EhLoginActivity : BaseWebViewActivity() {
         url: String,
     ) {
         val host = Uri.parse(url).host.orEmpty()
-        view.evaluateJavascript(CLOUDFLARE_CHECK_JS) { rawResult ->
+        view.evaluateJavascript(CloudflareHelpDetector.javascript) { rawResult ->
+            if (isFinishing || isDestroyed || view.url != url) return@evaluateJavascript
             if (rawResult == "true") {
                 lastOutcome = EhLoginOutcome.Cloudflare
                 binding.toolbar.subtitle = getString(R.string.hayai_eh_cloudflare_detected)
@@ -281,10 +283,6 @@ class EhLoginActivity : BaseWebViewActivity() {
         private const val ACTION_IGNEOUS = 0x484103
         private const val ACTION_SIMPLIFY = 0x484104
         private const val ACTION_CANCEL = 0x484105
-
-        private const val CLOUDFLARE_CHECK_JS =
-            "(function(){return !!document.querySelector('[name=cf-turnstile-response], #challenge-form') || " +
-                "document.documentElement.innerHTML.indexOf('/cdn-cgi/') >= 0;})()"
 
         private const val SIMPLIFY_LOGIN_JS =
             "(function(){['#gfooter','.copyright','td[width=\"40%\"]'].forEach(function(s){" +

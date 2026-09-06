@@ -1,10 +1,11 @@
 package dev.ahmedmohamed.hayai.adult.eh.session
 
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
+import dev.ahmedmohamed.hayai.adult.eh.network.withEhBrowserCookies
+import dev.ahmedmohamed.hayai.network.CloudflareHelpDetector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.CacheControl
-import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URI
@@ -25,7 +26,7 @@ sealed interface EhVerificationResult {
 class EhSessionVerifier(
     client: OkHttpClient,
 ) {
-    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+    private val client = client.withEhBrowserCookies()
 
     suspend fun verify(sessionStore: EhSessionStore): EhVerificationResult =
         withContext(Dispatchers.IO) {
@@ -58,13 +59,8 @@ class EhSessionVerifier(
             headers: Map<String, List<String>>,
             body: String,
         ): EhVerificationResult {
-            val normalizedHeaders = headers.mapKeys { it.key.lowercase(Locale.ROOT) }
             val normalizedBody = body.lowercase(Locale.ROOT)
-            val cloudflare =
-                "cf-ray" in normalizedHeaders ||
-                    "/cdn-cgi/" in normalizedBody ||
-                    "cloudflare" in normalizedBody && "attention required" in normalizedBody
-            if (cloudflare) return EhVerificationResult.Cloudflare
+            if (CloudflareHelpDetector.isChallengeResponse(statusCode, headers, body)) return EhVerificationResult.Cloudflare
 
             val host = runCatching { URI(finalUrl).host.orEmpty() }.getOrDefault("")
             val loginPage =

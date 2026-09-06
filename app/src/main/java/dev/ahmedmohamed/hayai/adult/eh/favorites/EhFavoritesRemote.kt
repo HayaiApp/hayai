@@ -2,12 +2,12 @@ package dev.ahmedmohamed.hayai.adult.eh.favorites
 
 import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
 import dev.ahmedmohamed.hayai.adult.eh.network.EhHtmlParser
+import dev.ahmedmohamed.hayai.adult.eh.network.withEhBrowserCookies
 import dev.ahmedmohamed.hayai.adult.eh.persistence.EhGalleryIdentity
 import dev.ahmedmohamed.hayai.adult.eh.session.EhSessionStore
 import eu.kanade.tachiyomi.network.awaitSuccess
 import kotlinx.coroutines.CancellationException
 import okhttp3.CacheControl
-import okhttp3.CookieJar
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -43,7 +43,7 @@ class EhFavoritesHttpRemote(
     private val sessions: EhSessionStore,
     private val baseUrl: String = EhSite.ExHentai.baseUrl,
 ) : EhFavoritesRemote {
-    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+    private val client = client.withEhBrowserCookies()
 
     override suspend fun snapshot(): EhRemoteFavoritesSnapshot {
         val favorites = linkedMapOf<EhGalleryIdentity, EhFavoriteState>()

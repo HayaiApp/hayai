@@ -17,7 +17,6 @@ import eu.kanade.tachiyomi.network.awaitSuccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.CacheControl
-import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -28,7 +27,7 @@ class EhHttpGateway(
     client: OkHttpClient,
     private val sessions: EhSessionStore,
 ) {
-    private val client = client.newBuilder().cookieJar(CookieJar.NO_COOKIES).build()
+    private val client = client.withEhBrowserCookies()
 
     suspend fun browse(
         site: EhSite,
