@@ -121,9 +121,9 @@ class SettingsGeneralController : SettingsController() {
 
                     intListPreference(activity) {
                         key = Keys.shouldAutoUpdate
-                        titleRes = R.string.auto_update_app
+                        titleRes = R.string.hayai_download_app_updates
                         entryRange = 0..2
-                        entriesRes = arrayOf(R.string.over_any_network, R.string.over_wifi_only, R.string.dont_auto_update)
+                        entriesRes = arrayOf(R.string.over_any_network, R.string.over_wifi_only, R.string.hayai_dont_download_updates)
                         defaultValue = AppDownloadInstallJob.ONLY_ON_UNMETERED
                     }
                 }

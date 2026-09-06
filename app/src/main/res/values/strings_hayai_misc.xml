@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="hayai_download_app_updates">Automatically download app updates</string>
+    <string name="hayai_dont_download_updates">Don\'t download automatically</string>
     <string name="hayai_library_scope">Library section</string>
     <string name="hayai_extension_apk">APK</string>
     <string name="hayai_extension_javascript">JavaScript</string>

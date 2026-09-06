@@ -170,6 +170,7 @@ internal class AppUpdateNotifier(
             setContentText(context.getString(R.string.download_complete))
             setSmallIcon(android.R.drawable.stat_sys_download_done)
             setAutoCancel(false)
+            setOngoing(false)
             setOnlyAlertOnce(false)
             setProgress(0, 0, false)
             // Install action
