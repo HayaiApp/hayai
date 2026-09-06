@@ -1,0 +1,27 @@
+From 98440595ce2ab102fc054997e6a726a80614e8c8 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 6 Sep 2026 17:02:56 +0300
+Subject: [PATCH] Record triage of current reader and translation issues
+
+
+diff --git a/docs/development/github-issue-review-2026-09-06.md b/docs/development/github-issue-review-2026-09-06.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..a73887d4712df3648171d70dce4a1339649673ab
+--- /dev/null
++++ b/docs/development/github-issue-review-2026-09-06.md
+@@ -0,0 +1,12 @@
++# GitHub issue review — September 6, 2026
++
++Reviewed all four open Hayai issues and their comments through the GitHub API. None had comments. This is code-based triage, not a claim that the reported device behavior has been reproduced. No issues were commented on or closed.
++
++| Priority | Issue | Current evidence | Next work |
++|---|---|---|---|
++| High | [#49 — The chapter reload](https://github.com/HayaiApp/hayai/issues/49) | The new viewer retains mounted blocks during preload updates, addressing one cause of reloads. Translations are still applied to the renderer after `onDocumentReady`; style/backend rebuilds can mount original content before stored translation resolves. | Reproduce with a translated chapter while preloading, changing settings, and resuming the reader. Preserve the displayed translation through document rebuilds and reject stale translation callbacks. Verify no original-language flash and uninterrupted TTS. |
++| High | [#50 — The tts doesn't autostart](https://github.com/HayaiApp/hayai/issues/50) | `NovelTtsChapterHandoff` already schedules the next chapter and resumes after its displayed paragraphs are configured. The `novelTtsAutoStartOnPanelOpen` switch is declared and shown in both settings surfaces, but has no playback consumer. | Wire the existing switch to the actual TTS panel action. Device-test chapter completion, cached/preloaded chapters, delayed translation, explicit pause, and manual navigation. Keep automatic continuation distinct from starting speech when opening controls. |
++| Medium | [#48 — Hayai tts](https://github.com/HayaiApp/hayai/issues/48) | Translated text now supplies its target language to TTS. Untranslated text with automatic source language passes an empty tag, causing `NovelTtsPlaybackService` to fall back to the device locale. Voice selection exists, but there is no explicit TTS language override. | Add an Auto/language choice using the existing settings spinner, prefer the displayed text language, and constrain voices to that language. Show a recoverable message if the engine lacks the requested language instead of silently using the device locale. |
++| Feature | [#51 — Translation](https://github.com/HayaiApp/hayai/issues/51) | Existing translation code handles chapter/selected text. Browse-title and description translation are not implemented in the source presentation layer. | Add an opt-in presentation feature with bounded cached requests keyed by source identity, original text, and target language. Keep source titles/descriptions authoritative in J2K, preserve original-text access, and avoid a network request per row bind. |
++
++The first follow-up should cover #49 and #50 together because document readiness, translation replacement, and TTS continuation share the same lifecycle. #48 is a smaller separate settings/playback change. #51 deserves its own vertical slice rather than changing stored source metadata during reader repairs.
+-- 
+2.54.0.windows.1
+
