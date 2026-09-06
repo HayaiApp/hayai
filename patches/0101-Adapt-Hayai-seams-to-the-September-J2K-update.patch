@@ -1,0 +1,156 @@
+From 0bf9f166d0bf03fce92198c322cc14cd78d7fbfe Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 6 Sep 2026 16:39:21 +0300
+Subject: [PATCH] Adapt Hayai seams to the September J2K update
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 64d8d499ea5f42a2d4a3d25aeb1bf1f0462c65a4..c4c7c53a8684e337fe68181d714210ccbbc5536f 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -159,3 +159,4 @@ ts	phase	decision	why	evidence	result
+ 2026-09-03T19:44:02+03:00	open-issue-batch-validation	passed localization boundary full DevDebug compile and unit tests APK assembly and emulator startup; the extended emulator flow reached migration reader TTS offline save and restart before its UI hierarchy dumper returned no root while MainActivity remained resumed	records successful production checks without misreporting the final harness infrastructure failure	tools/verify-localization.ps1; tools/verify-upstream-boundary.ps1; gradlew compileDevDebugKotlin testDevDebugUnitTest; gradlew assembleDevDebug; tools/verify-apk-startup.ps1; artifacts/emulator-verification/20260903-163423	PARTIAL_EMULATOR_VERIFIED
+ 2026-09-06T16:00:29.1228328+03:00	novel-reader-stability	kept chapter blocks across J2K preload and page-selection updates; added chapter scroll and bidirectional continuous or paged reading; restored native selection and typography; standardized source logos	preserves the visible text and routes progress through the selected J2K chapter; replaces conflicting layout controls with one backward-compatible preference	NovelReaderViewer.kt; NativeNovelRenderer.kt; NovelHtmlDocumentBuilder.kt; SourceArtwork.kt; tsundoku fe54f05ae038cbc2ae72713c6ac68a2fbccb11af; tools/verify-novel-web-reader.cjs	BROWSER_VERIFIED_ANDROID_PENDING
+ 2026-09-06T16:31:19.7593216+03:00	novel-reader-stability-verification	verified chapter modes, native selection and viewport anchors, browser pagination, and shared source logos	501 unit tests and 7 Android instrumentation tests passed; Chromium regressions passed; device uses Android 37 16 KB compatibility mode; live-extension and full lifecycle stress checks remain pending	artifacts/novel-reader/gradle-selection.log; gradle-touchscreen.log; instrumentation.log; docs/architecture/j2k-reset.md	VERIFIED_SCOPED
++2026-09-06T16:39:20.9088942+03:00	j2k-update-september-6	replayed 103 Hayai commits onto eight new J2K commits from e848fcebef to c88c8e1b3d	preserved upstream card containers and e-ink page flashing; filtered side-data restore by upstream selection; used compatible flash enum decoder; no schema change	BackupRestorer.kt; PreferencesHelper.kt; BrowseSourceListHolder.kt; manga_list_item.xml; existing ReaderActivity adapter; artifacts/novel-reader/j2k-gradle.log	COMPILE_UNIT_BOUNDARY_VERIFIED
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupRestoreSelection.kt b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupRestoreSelection.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..43cdc90a3404aca720d30fb46c16a69dbb93873e
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupRestoreSelection.kt
+@@ -0,0 +1,24 @@
++package dev.ahmedmohamed.hayai.backup
++
++import eu.kanade.tachiyomi.data.backup.BackupConst
++
++fun HayaiBackupData.selectForRestore(flags: Int): HayaiBackupData {
++    val library = flags and BackupConst.RESTORE_LIBRARY != 0
++    val categories = flags and BackupConst.RESTORE_CATEGORY != 0
++    val repositories = flags and BackupConst.RESTORE_EXTENSION_REPOS != 0
++    val sources = flags and BackupConst.RESTORE_SOURCE_PREFS != 0
++    return copy(
++        quotes = if (library) quotes else emptyList(),
++        chapterStats = if (library) chapterStats else emptyList(),
++        ehFavorites = if (library) ehFavorites else emptyList(),
++        ehGalleryAliases = if (library) ehGalleryAliases else emptyList(),
++        sourceMetadata = if (library) sourceMetadata else emptyList(),
++        novelHighlights = if (library) novelHighlights else emptyList(),
++        novelTranslations = if (library) novelTranslations else emptyList(),
++        ehCategoryMappings = if (categories) ehCategoryMappings else emptyList(),
++        novelRepositories = if (repositories) novelRepositories else emptyList(),
++        novelApkRepositories = if (repositories) novelApkRepositories else emptyList(),
++        novelPlugins = if (sources) novelPlugins else emptyList(),
++        novelCustomSources = if (sources) novelCustomSources else emptyList(),
++    )
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
+index 3fc77b5647f2e1bb2bd60bd1c696c87749155811..b49935dc87bdd8cf5fa44e4bd2c979a3d45eda30 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
+@@ -1,5 +1,7 @@
+ package eu.kanade.tachiyomi.data.backup
+ 
++import dev.ahmedmohamed.hayai.backup.selectForRestore
++
+ import android.content.Context
+ import android.net.Uri
+ import dev.ahmedmohamed.hayai.backup.HayaiBackupService
+@@ -145,7 +147,7 @@ class BackupRestorer(
+                     context,
+                     novelPluginManager,
+                     Injekt.get<NovelApkRepositoryRegistry>(),
+-                ).restore(backup.hayaiData)
++                ).restore(backup.hayaiData?.selectForRestore(flags))
+             novelPluginManager.reloadLocalState()
+             hayaiReport.errors.forEach { error -> errors.add(Date() to "Hayai data: $error") }
+             restoreProgress += 1
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
+index caefaf77269138e7f87145dae1fd42d1de910173..bc4c1c3cfdded1d379ae233949d062ac5d08f48b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
+@@ -141,7 +141,7 @@ class PreferencesHelper(
+ 
+     fun flashPageInterval() = flowPrefs.getInt(Keys.flashPageInterval, 1)
+ 
+-    fun flashColor() = flowPrefs.getEnum(Keys.flashColor, FlashColor.BLACK)
++    fun flashColor() = flowPrefs.getCompatibleEnum(Keys.flashColor, FlashColor.BLACK)
+ 
+     fun customBrightness() = flowPrefs.getBoolean(Keys.customBrightness, false)
+ 
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt
+index 40432e6a173e9fe2a28c90a79780cbde6ad9fe60..a384f52b199a8d6750fa2c0989ccb43207e5c115 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/backup/HayaiBackupDataTest.kt
+@@ -1,6 +1,7 @@
+ package dev.ahmedmohamed.hayai.backup
+ 
+ import eu.kanade.tachiyomi.data.backup.models.Backup
++import eu.kanade.tachiyomi.data.backup.BackupConst
+ import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightAnchor
+ import dev.ahmedmohamed.hayai.novel.highlight.NovelHighlightBackup
+ import dev.ahmedmohamed.hayai.novel.source.builder.NovelChapterSelectors
+@@ -75,6 +76,24 @@ class HayaiBackupDataTest {
+         val encoded = ProtoBuf.encodeToByteArray(HayaiBackupData.serializer(), data)
+ 
+         assertEquals(data, ProtoBuf.decodeFromByteArray(HayaiBackupData.serializer(), encoded))
++        assertEquals(data, data.selectForRestore(BackupConst.RESTORE_ALL))
++        assertEquals(HayaiBackupData(version = data.version), data.selectForRestore(BackupConst.RESTORE_APP_PREFS))
++        assertEquals(
++            HayaiBackupData(version = data.version, novelRepositories = data.novelRepositories, novelApkRepositories = data.novelApkRepositories),
++            data.selectForRestore(BackupConst.RESTORE_EXTENSION_REPOS),
++        )
++        assertEquals(
++            HayaiBackupData(version = data.version, ehCategoryMappings = data.ehCategoryMappings),
++            data.selectForRestore(BackupConst.RESTORE_CATEGORY),
++        )
++        assertEquals(
++            HayaiBackupData(version = data.version, novelPlugins = data.novelPlugins, novelCustomSources = data.novelCustomSources),
++            data.selectForRestore(BackupConst.RESTORE_SOURCE_PREFS),
++        )
++        assertEquals(
++            data.copy(novelRepositories = emptyList(), novelApkRepositories = emptyList(), ehCategoryMappings = emptyList(), novelPlugins = emptyList(), novelCustomSources = emptyList()),
++            data.selectForRestore(BackupConst.RESTORE_LIBRARY),
++        )
+     }
+ 
+     @Test
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 2eab10fd9856e9e18df48e3eec3f359907ed0752..f051490e5c160155a0d028741cbb3a25dc099fce 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -132,6 +132,10 @@ Offline novel files are deliberately excluded, matching J2K's treatment of downl
+ 
+ ## Updating upstreams
+ 
++The September 6, 2026 integration advances J2K from `e848fcebef2cdc157c531e1f4a5086665bcc9d73` to `c88c8e1b3d864268785f6a9655ee471e4cc368c1` (eight commits). J2K owns the new card containers, ripples, e-ink controls, and selective backup restore. Existing Hayai adapters retain rich source metadata inside the new card layout and novel progress presentation after J2K's page-flash call. No new protected activity seam is added.
++
++The backup adapter filters Hayai side data using J2K's restore selection: library data includes quotes, chapter statistics, highlights, translations, gallery aliases, favorites, and source metadata; categories include E-Hentai category mappings; extension repositories include novel repository lists; source settings include novel plugins and custom sources. Selecting only app settings restores no side data. The payload schema and database versions are unchanged. The new flash-color preference uses Hayai's existing compatible enum decoder. These changes remain within the existing `BackupRestorer`, `PreferencesHelper`, source-list, and reader adapter allowlist.
++
+ ```powershell
+ git fetch j2k sy tsundoku
+ git rebase j2k/master
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 45a68a14731fe99ab2f4a2ce2abd546e2fea70e5..a5d1fd4fc15dbb1ddb0f9f42535bc71ab94315ab 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -1,6 +1,6 @@
+ # TachiyomiSY and Tsundoku feature audit
+ 
+-Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `4d744fc`, and J2K `e848fcebef2cdc157c531e1f4a5086665bcc9d73`.
++Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `4d744fc`, and J2K `c88c8e1b3d864268785f6a9655ee471e4cc368c1`.
+ 
+ **Foundation** means a boundary or partial implementation exists. **Port** means the end-to-end production behavior is implemented and verified. **Audit** means upstream behavior is mapped but production work remains. This distinction prevents the clean baseline from being mistaken for the full multi-upstream port.
+ 
+diff --git a/tools/localization/upstream-hardcoded-ui.txt b/tools/localization/upstream-hardcoded-ui.txt
+index 1c73a10ec5b8fc86e089a5a6143cdfbd97a9cc06..163bcc72bc4244362825a49b347f779bc6a274fa 100644
+--- a/tools/localization/upstream-hardcoded-ui.txt
++++ b/tools/localization/upstream-hardcoded-ui.txt
+@@ -1,4 +1,4 @@
+-# J2K-owned hardcoded UI literals present at cdae5f2d77c055c95407a0d62345babd51f96b10.
++# J2K-owned hardcoded UI literals present at c88c8e1b3d864268785f6a9655ee471e4cc368c1.
+ # Regenerate only while rebasing onto a reviewed J2K baseline:
+ # .\tools\verify-localization.ps1 -WriteUpstreamBaseline -UpstreamRef j2k/master
+ app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadNotifier.kt	setContentTitle("$title - $chapter".chop(30))
+-- 
+2.54.0.windows.1
+

@@ -1,4 +1,4 @@
-From bbb14d7b8e0ba2ec9350192a6f9ebeab58875da4 Mon Sep 17 00:00:00 2001
+From b08d30b5dff7b6e408279ea3ef369656a00ce3ca Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 11:23:51 +0300
 Subject: [PATCH] Restore SY source metadata and preview surfaces
@@ -30448,7 +30448,7 @@ index ab49c4550580e5038a157fd76033db421c71e0bc..36825d884e9ca8cbd9a50f82b1a91aca
          addSingletonFactory { NovelMigrationPolicy(get(), get()) }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 60460d5ee63445fb1ddd71575fb50f756de27497..bab15801c8c6c4fc6be4b1ceed2527690efcf73d 100644
+index 734d09ecb7c6b371988962b86c86d98ccf963d17..3628721c740f6849a5eef140e89a67df7cb24e5f 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -63,6 +63,9 @@ import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
@@ -30461,7 +30461,7 @@ index 60460d5ee63445fb1ddd71575fb50f756de27497..bab15801c8c6c4fc6be4b1ceed252769
  import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
  import eu.kanade.tachiyomi.network.NetworkHelper
  import eu.davidea.flexibleadapter.FlexibleAdapter
-@@ -232,12 +235,14 @@ class MangaDetailsController :
+@@ -233,12 +236,14 @@ class MangaDetailsController :
      private var isPushing = true
      private val novelIntegration: NovelJ2kIntegration by injectLazy()
      private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
@@ -30476,7 +30476,7 @@ index 60460d5ee63445fb1ddd71575fb50f756de27497..bab15801c8c6c4fc6be4b1ceed252769
      private val sourceDetailsPreviewBitmaps = mutableListOf<Bitmap>()
      private val sourceDetailsImageJobs = mutableListOf<Job>()
  
-@@ -482,6 +487,7 @@ class MangaDetailsController :
+@@ -483,6 +488,7 @@ class MangaDetailsController :
      override fun onDestroyView(view: View) {
          novelPresentationJob?.cancel()
          sourceDetailsFeaturesJob?.cancel()
@@ -30484,7 +30484,7 @@ index 60460d5ee63445fb1ddd71575fb50f756de27497..bab15801c8c6c4fc6be4b1ceed252769
          releaseSourcePreviewImages()
          novelPresentationJob = null
          snack?.dismiss()
-@@ -1442,16 +1448,70 @@ class MangaDetailsController :
+@@ -1443,16 +1449,70 @@ class MangaDetailsController :
      override fun bindSourceDetailsFeatures(container: LinearLayout) {
          container.orientation = LinearLayout.VERTICAL
          val manga = presenter.manga
@@ -30558,7 +30558,7 @@ index 60460d5ee63445fb1ddd71575fb50f756de27497..bab15801c8c6c4fc6be4b1ceed252769
      }
  
      private fun loadSourceDetailsPreview(
-@@ -1533,7 +1593,12 @@ class MangaDetailsController :
+@@ -1534,7 +1594,12 @@ class MangaDetailsController :
              }
          }
          val image = ImageView(parent.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
@@ -30573,18 +30573,18 @@ index 60460d5ee63445fb1ddd71575fb50f756de27497..bab15801c8c6c4fc6be4b1ceed252769
          sourceDetailsImageJobs += viewScope.launchIO {
              val bitmap = runCatching {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceItem.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceItem.kt
-index 562108e7019d48a9f48bcbcb17925a024c98c228..78d54f6585625cb737000a1aad4bd6c6fc56ba7f 100644
+index b94f08e87f842db3743c50a4f7d56adbaaf51328..7efaf6145ce7204da6018b8a4730ace6d723b335 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceItem.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceItem.kt
-@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.databinding.MangaGridItemBinding
- import eu.kanade.tachiyomi.ui.library.LibraryItem
+@@ -19,6 +19,7 @@ import eu.kanade.tachiyomi.ui.library.LibraryItem
  import eu.kanade.tachiyomi.ui.library.setBGAndFG
+ import eu.kanade.tachiyomi.util.view.groupEdges
  import eu.kanade.tachiyomi.widget.AutofitRecyclerView
 +import dev.ahmedmohamed.hayai.source.presentation.SourceBrowsePresentation
  
  class BrowseSourceItem(
      val manga: Manga,
-@@ -25,9 +26,10 @@ class BrowseSourceItem(
+@@ -26,9 +27,10 @@ class BrowseSourceItem(
      private val catalogueListType: Preference<Int>,
      private val outlineOnCovers: Preference<Boolean>,
      private val isDuplicateInLibrary: Boolean = false,
@@ -30596,7 +30596,7 @@ index 562108e7019d48a9f48bcbcb17925a024c98c228..78d54f6585625cb737000a1aad4bd6c6
              R.layout.manga_list_item
          } else {
              R.layout.manga_grid_item
-@@ -38,7 +40,7 @@ class BrowseSourceItem(
+@@ -39,7 +41,7 @@ class BrowseSourceItem(
          adapter: FlexibleAdapter<IFlexible<RecyclerView.ViewHolder>>,
      ): BrowseSourceHolder {
          val parent = adapter.recyclerView
@@ -30605,16 +30605,16 @@ index 562108e7019d48a9f48bcbcb17925a024c98c228..78d54f6585625cb737000a1aad4bd6c6
              val listType = catalogueListType.get()
              view.apply {
                  val binding = MangaGridItemBinding.bind(this)
-@@ -79,6 +81,7 @@ class BrowseSourceItem(
+@@ -80,6 +82,7 @@ class BrowseSourceItem(
          payloads: MutableList<Any?>?,
      ) {
          holder.isDuplicateInLibrary = isDuplicateInLibrary
 +        (holder as? BrowseSourceListHolder)?.sourcePresentation = sourcePresentation
          holder.onSetValues(manga)
-     }
- 
+         if (holder is BrowseSourceListHolder) {
+             val (setTop, setBottom) = groupEdges(adapter, position) { it is BrowseSourceItem }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceListHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceListHolder.kt
-index 973c503e0f8852c2f78accda5a8bc98516bb5a1f..3b2b0a3853a4e7456f6c79e59eb6ae0f450e0bde 100644
+index ab0a81ceab6f9d1956f2684e412ddae43334d754..1cf506a824162ff782993456830cc3288e65de45 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceListHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceListHolder.kt
 @@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.source.browse
@@ -30625,10 +30625,10 @@ index 973c503e0f8852c2f78accda5a8bc98516bb5a1f..3b2b0a3853a4e7456f6c79e59eb6ae0f
  import androidx.recyclerview.widget.RecyclerView
  import coil.Coil
  import coil.dispose
-@@ -12,7 +13,16 @@ import eu.kanade.tachiyomi.data.database.models.Manga
- import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
+@@ -13,7 +14,16 @@ import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
  import eu.kanade.tachiyomi.data.image.coil.MangaCoverFetcher
  import eu.kanade.tachiyomi.databinding.MangaListItemBinding
+ import eu.kanade.tachiyomi.util.view.makeContainerShape
 +import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.util.view.setCards
 +import android.graphics.drawable.GradientDrawable
@@ -30642,7 +30642,7 @@ index 973c503e0f8852c2f78accda5a8bc98516bb5a1f..3b2b0a3853a4e7456f6c79e59eb6ae0f
  
  /**
   * Class used to hold the displayed data of a manga in the catalogue, like the cover or the title.
-@@ -28,6 +38,7 @@ class BrowseSourceListHolder(
+@@ -29,6 +39,7 @@ class BrowseSourceListHolder(
      showOutline: Boolean,
  ) : BrowseSourceHolder(view, adapter) {
      private val binding = MangaListItemBinding.bind(view)
@@ -30650,13 +30650,16 @@ index 973c503e0f8852c2f78accda5a8bc98516bb5a1f..3b2b0a3853a4e7456f6c79e59eb6ae0f
  
      init {
          setCards(showOutline, binding.card, binding.unreadDownloadBadge.badgeView)
-@@ -43,10 +54,56 @@ class BrowseSourceListHolder(
+@@ -44,6 +55,7 @@ class BrowseSourceListHolder(
          binding.title.text = manga.title
          binding.inLibraryBadge.badge.isVisible = manga.favorite
          binding.duplicateInLibraryBadge.duplicateBadge.isVisible = isDuplicateInLibrary
 +        bindSourcePresentation()
  
          setImage(manga)
+     }
+@@ -57,6 +69,51 @@ class BrowseSourceListHolder(
+             binding.listCard.makeContainerShape(top, bottom, clipContentTo = binding.constraintLayout)
      }
  
 +    private fun bindSourcePresentation() {
@@ -30876,105 +30879,96 @@ index 9e0fd289faf552617b93153cfea9ddd52afbff8d..6538aa4496eb8666c550d8a6d623013e
  
      <androidx.constraintlayout.widget.ConstraintLayout
 diff --git a/app/src/main/res/layout/manga_list_item.xml b/app/src/main/res/layout/manga_list_item.xml
-index d510c0ecdd8195f0f092e92d0893816edd994283..2c19d4c686bd7495ac1ed91fdde27a736c0398e6 100644
+index 062142ba11f6988124ebd17ea1976ae5b063564c..14578ffdc7bfa8ba90e6a25a61d04d293f55d910 100644
 --- a/app/src/main/res/layout/manga_list_item.xml
 +++ b/app/src/main/res/layout/manga_list_item.xml
-@@ -3,7 +3,8 @@
-     xmlns:app="http://schemas.android.com/apk/res-auto"
-     xmlns:tools="http://schemas.android.com/tools"
-     android:layout_width="match_parent"
--    android:layout_height="52dp"
-+    android:layout_height="wrap_content"
-+    android:minHeight="52dp"
-     android:layout_gravity="center_vertical"
-     android:id="@+id/constraint_layout"
-     android:background="@drawable/list_item_selector">
-@@ -109,6 +110,76 @@
-         app:layout_constraintVertical_bias="0.0"
-         tools:text="Manga artist" />
+@@ -156,6 +156,77 @@
+                     app:iconSize="22dp" />
+             </FrameLayout>
  
-+    <LinearLayout
-+        android:id="@+id/hayai_browse_metadata"
-+        android:layout_width="0dp"
-+        android:layout_height="wrap_content"
-+        android:layout_marginStart="12dp"
-+        android:layout_marginTop="4dp"
-+        android:layout_marginEnd="8dp"
-+        android:gravity="bottom"
-+        android:orientation="horizontal"
-+        android:visibility="gone"
-+        app:layout_constraintEnd_toStartOf="@id/unread_download_badge"
-+        app:layout_constraintStart_toEndOf="@id/card"
-+        app:layout_constraintTop_toBottomOf="@id/subtitle"
-+        tools:visibility="visible">
-+
-+        <LinearLayout
-+            android:layout_width="0dp"
-+            android:layout_height="wrap_content"
-+            android:layout_weight="1"
-+            android:orientation="vertical">
-+
-+            <RatingBar
-+                android:id="@+id/hayai_rating"
-+                style="?android:attr/ratingBarStyleSmall"
-+                android:layout_width="wrap_content"
++            <LinearLayout
++                android:id="@+id/hayai_browse_metadata"
++                android:layout_width="0dp"
 +                android:layout_height="wrap_content"
-+                android:isIndicator="true"
-+                android:numStars="5"
-+                android:stepSize="0.5" />
-+
-+            <com.google.android.material.textview.MaterialTextView
-+                android:id="@+id/hayai_type_badge"
-+                style="?textAppearanceLabelMedium"
-+                android:layout_width="wrap_content"
-+                android:layout_height="wrap_content"
++                android:layout_marginStart="12dp"
 +                android:layout_marginTop="4dp"
-+                android:paddingStart="8dp"
-+                android:paddingTop="4dp"
-+                android:paddingEnd="8dp"
-+                android:paddingBottom="4dp"
-+                tools:text="Doujinshi" />
-+        </LinearLayout>
++                android:layout_marginEnd="8dp"
++                android:gravity="bottom"
++                android:orientation="horizontal"
++                android:visibility="gone"
++                app:layout_constraintEnd_toStartOf="@id/unread_download_badge"
++                app:layout_constraintStart_toEndOf="@id/card"
++                app:layout_constraintTop_toBottomOf="@id/subtitle"
++                tools:visibility="visible">
 +
-+        <LinearLayout
-+            android:layout_width="wrap_content"
-+            android:layout_height="wrap_content"
-+            android:gravity="end"
-+            android:orientation="vertical">
++                <LinearLayout
++                    android:layout_width="0dp"
++                    android:layout_height="wrap_content"
++                    android:layout_weight="1"
++                    android:orientation="vertical">
 +
-+            <com.google.android.material.textview.MaterialTextView
-+                android:id="@+id/hayai_language_pages"
-+                style="?textAppearanceBodySmall"
-+                android:layout_width="wrap_content"
-+                android:layout_height="wrap_content"
-+                android:gravity="end"
-+                android:textColor="?android:attr/textColorSecondary"
-+                tools:text="EN · 42 pages" />
++                    <RatingBar
++                        android:id="@+id/hayai_rating"
++                        style="?android:attr/ratingBarStyleSmall"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:isIndicator="true"
++                        android:numStars="5"
++                        android:stepSize="0.5" />
 +
-+            <com.google.android.material.textview.MaterialTextView
-+                android:id="@+id/hayai_posted"
-+                style="?textAppearanceBodySmall"
-+                android:layout_width="wrap_content"
-+                android:layout_height="wrap_content"
-+                android:layout_marginTop="4dp"
-+                android:gravity="end"
-+                android:textColor="?android:attr/textColorSecondary"
-+                tools:text="2026-08-22 12:00" />
-+        </LinearLayout>
-+    </LinearLayout>
++                    <com.google.android.material.textview.MaterialTextView
++                        android:id="@+id/hayai_type_badge"
++                        style="?textAppearanceLabelMedium"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="4dp"
++                        android:paddingStart="8dp"
++                        android:paddingTop="4dp"
++                        android:paddingEnd="8dp"
++                        android:paddingBottom="4dp"
++                        tools:text="Doujinshi" />
++                </LinearLayout>
 +
-     <include layout="@layout/unread_download_badge"
-         android:id="@+id/unread_download_badge"
-         android:layout_width="wrap_content"
-@@ -127,7 +198,7 @@
-         android:layout_margin="6dp"
-         android:orientation="horizontal"
-         app:barrierDirection="bottom"
--        app:constraint_referenced_ids="card,subtitle" />
-+        app:constraint_referenced_ids="card,subtitle,hayai_browse_metadata" />
++                <LinearLayout
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:gravity="end"
++                    android:orientation="vertical">
++
++                    <com.google.android.material.textview.MaterialTextView
++                        android:id="@+id/hayai_language_pages"
++                        style="?textAppearanceBodySmall"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:gravity="end"
++                        android:textColor="?android:attr/textColorSecondary"
++                        tools:text="EN · 42 pages" />
++
++                    <com.google.android.material.textview.MaterialTextView
++                        android:id="@+id/hayai_posted"
++                        style="?textAppearanceBodySmall"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="4dp"
++                        android:gravity="end"
++                        android:textColor="?android:attr/textColorSecondary"
++                        tools:text="2026-08-22 12:00" />
++                </LinearLayout>
++            </LinearLayout>
++
++
+             <androidx.constraintlayout.widget.Barrier
+                 android:id="@+id/bottom_list_line"
+                 android:layout_width="wrap_content"
+@@ -163,7 +234,7 @@
+                 android:layout_margin="6dp"
+                 android:orientation="horizontal"
+                 app:barrierDirection="bottom"
+-                app:constraint_referenced_ids="card,subtitle" />
++                app:constraint_referenced_ids="card,subtitle,hayai_browse_metadata" />
  
-     <View
-         android:id="@+id/padding"
+             <View
+                 android:id="@+id/padding"
 diff --git a/app/src/main/res/values-ar/strings_hayai_sy.xml b/app/src/main/res/values-ar/strings_hayai_sy.xml
 index 77c0796d0849227f8ac7b2720ebd315d28eda8c1..572a8aa06c39a6200078a9611c92b410ed1994f4 100644
 --- a/app/src/main/res/values-ar/strings_hayai_sy.xml

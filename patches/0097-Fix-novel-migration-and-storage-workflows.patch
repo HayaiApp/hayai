@@ -1,4 +1,4 @@
-From 0e9ff4374dd292510dd8bab1c8bb489a2389b254 Mon Sep 17 00:00:00 2001
+From 67cb974faa20938cfb3ecabc7776a4ca8f310c52 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 30 Aug 2026 13:07:01 +0300
 Subject: [PATCH] Fix novel migration and storage workflows
@@ -688,7 +688,7 @@ index b8a698a82074c5f937f6b58b3a169898601cea9d..31c209c87d9a24f7f5171f89ef7429aa
          addSingletonFactory { DownloadManager(app) }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
-index 7a001e49fef06a28088b6a0f20e6d769c9a72ff7..437b0915790e23f4559b6608e5b96833bbadac2b 100644
+index 88c7f73939958a3c45c1f3ba9df3a6f4c0b22c61..816f2b08e40515283444b2e9b313b8c2f55a15c9 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
 @@ -4,6 +4,7 @@ import android.content.Context
@@ -699,7 +699,7 @@ index 7a001e49fef06a28088b6a0f20e6d769c9a72ff7..437b0915790e23f4559b6608e5b96833
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS
  import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS_MASK
-@@ -106,8 +107,9 @@ class BackupCreator(
+@@ -110,8 +111,9 @@ class BackupCreator(
              file = (
                  if (isAutoBackup) {
                      // Get dir of file and create
@@ -888,7 +888,7 @@ index e7a1bc6bd8082a90eba7dca188693ef38f9aec68..b2ebbee9d6606ad8511f5b5c59fa0384
          }
      }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-index b032afdd916cdd00efc41c0a0ecb25481a9fa752..3636bf3ec6ed069c9d695bde52a5584100d80ca6 100644
+index 0b223eb08eb433d8eeb3c1b6f46426bddf9d0de9..caefaf77269138e7f87145dae1fd42d1de910173 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 @@ -1,14 +1,13 @@
@@ -907,7 +907,7 @@ index b032afdd916cdd00efc41c0a0ecb25481a9fa752..3636bf3ec6ed069c9d695bde52a55841
  import dev.ahmedmohamed.hayai.preferences.getCompatibleEnum
  import eu.kanade.tachiyomi.BuildConfig
  import eu.kanade.tachiyomi.R
-@@ -36,7 +35,6 @@ import kotlinx.coroutines.flow.onEach
+@@ -37,7 +36,6 @@ import kotlinx.coroutines.flow.onEach
  import kotlinx.serialization.decodeFromString
  import kotlinx.serialization.encodeToString
  import kotlinx.serialization.json.Json
@@ -915,7 +915,7 @@ index b032afdd916cdd00efc41c0a0ecb25481a9fa752..3636bf3ec6ed069c9d695bde52a55841
  import java.text.DateFormat
  import java.text.SimpleDateFormat
  import java.util.Locale
-@@ -83,23 +81,9 @@ class PreferencesHelper(
+@@ -84,23 +82,9 @@ class PreferencesHelper(
      private val prefs = TypeSafeSharedPreferences(PreferenceManager.getDefaultSharedPreferences(context))
      private val flowPrefs = FlowSharedPreferences(prefs)
  
@@ -1199,7 +1199,7 @@ index 34eda00aa6574a221e272bee77fe963f5fc08684..c2df1bce48026fad4a3eec0bb16d0207
          val additionalString = if (mangaSkipped > 0) " $skipping" else ""
          val confirmString =
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt
-index 3d0f998a3dc247e63bf1fcd810629f49fbf83f98..69a9b448cd6637c3c3dcc515b606d8122bd29f38 100644
+index 06b07e4ecececffaabf9724e206dcbddfa3675a2..5c639aa2432431168f66a557162fb4016057649b 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBackupController.kt
 @@ -4,16 +4,13 @@ import android.app.Activity
@@ -1400,7 +1400,7 @@ index 24a47ef6d0988aef1a3dc434690abcd319c17954..ed6ea9a244cde59f86a44e2403fe4f29
      }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
-index b688c97f615517fdaee1cd5e530ef082a605f2c2..76befb0beee9ba26fce9b9a520b7b103a76f8021 100644
+index e1021aef4bd3db023fb11178a3338a90e5d67f51..a941419b25a307b57d912aae9b0f3941ce1d7523 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 @@ -3,16 +3,10 @@ package eu.kanade.tachiyomi.ui.source
@@ -1466,7 +1466,7 @@ index d24152e52c5ee331ed42d301c2b685a07115c8c7..b3236f460cceff39c1e6ad9395931b96
      fun migrateManga(
          mDialog: DialogInterface,
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index e004318aed2adea4baa19a8108ebf0f06fd7441f..7c3c025b94a5103055bc21d46dbb8ee9a0571b70 100644
+index 3be3ed9b130e1f0fb83f41ca78a7faf6da96e0c8..2b34f3c3b61bc5b508b18fd3ed34ceaa5f3bf61b 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -16,6 +16,25 @@

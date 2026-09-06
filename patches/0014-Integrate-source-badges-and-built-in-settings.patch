@@ -1,4 +1,4 @@
-From f263ff5a29e67ea538e0bc3dd68ad6abd036f405 Mon Sep 17 00:00:00 2001
+From e974c551d46f42669b6a9ba3b676ead491f11e61 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Fri, 21 Aug 2026 01:06:09 +0300
 Subject: [PATCH] Integrate source badges and built-in settings
@@ -527,7 +527,7 @@ index c91a4c5a44cbed784a18fcab55e621758bc2b1ca..826e8783ff32b8b91098f2d0a0641c56
          }
      }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
-index 184b9421a6052818313d265b86f5fe502930e14c..f58ad1ee6ab4536b6e3bca0a24ab1250055cb536 100644
+index c0643febedc6ff98443ac5e1c941a1f41d8f724a..6e422289641f031631705c8997396f0ae358c68b 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 @@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.source
@@ -548,10 +548,10 @@ index 184b9421a6052818313d265b86f5fe502930e14c..f58ad1ee6ab4536b6e3bca0a24ab1250
          binding.sourcePin.apply {
              iconTint =
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-index 08789f5eb4799ab7e59dce513d92fd2965b71684..f4ebf9f0cd8cecb259306ce59da2fb8054ac1455 100644
+index 4ddf91334008f09d7d62e101ecd2bfe58c19dfc0..d7dea028e23d8ce28d9b060a174dfc7c132e1847 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
+@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
  import eu.kanade.tachiyomi.source.pkgName
  import dev.ahmedmohamed.hayai.adult.eh.domain.EhSite
  import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsActivity

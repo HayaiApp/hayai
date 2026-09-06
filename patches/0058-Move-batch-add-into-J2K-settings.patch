@@ -1,4 +1,4 @@
-From f16bb0892672421f295266d2619844f3a01afd5f Mon Sep 17 00:00:00 2001
+From 3dd348c994454bf78312527632b6ceefdf9af8cd Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 13:11:27 +0300
 Subject: [PATCH] Move batch add into J2K settings

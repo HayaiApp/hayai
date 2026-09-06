@@ -1,4 +1,4 @@
-From c4732d5d056a94217b47747c6460564986122e65 Mon Sep 17 00:00:00 2001
+From 85d8df605dc890af84c42ef3e0c42fe7a60ccb39 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 13:20:06 +0300
 Subject: [PATCH] fix: close extension management review gaps

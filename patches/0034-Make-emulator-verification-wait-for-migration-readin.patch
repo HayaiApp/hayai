@@ -1,4 +1,4 @@
-From 506acf6678d6c9875cb60546e586defc7d1d9a51 Mon Sep 17 00:00:00 2001
+From a8ace11fbe11f9a3b8292bbb299f4848a25e7109 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 03:00:29 +0300
 Subject: [PATCH] Make emulator verification wait for migration readiness

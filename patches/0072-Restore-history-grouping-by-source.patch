@@ -1,4 +1,4 @@
-From 6ed3bb244538a8d78d15bbffa2ae1cfcaf1ab0ae Mon Sep 17 00:00:00 2001
+From 44af65e411586b137c083a4fefd755d75e030b32 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 09:09:00 +0300
 Subject: [PATCH] Restore history grouping by source
@@ -54,10 +54,10 @@ index 7ad84c10dcd0abb7bdab507170cfdbd54320e559..7a86ede285b761f0e1bd61c6b4be08ce
          combine(hiddenInHistory.changes(), hiddenInUpdates.changes()) { _, _ -> Unit }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-index 1e6859817854a4c680b6b60413d2611e7e2fe981..a8a3b3cd168e1496de13e3ac0dd1cb9fb6153005 100644
+index bf5802738013cdfa810d8404e1b0f573f361849b..c81e6df5c30f9717fa3af7e3829829b56885ee5e 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-@@ -448,7 +448,6 @@ class PreferencesHelper(
+@@ -460,7 +460,6 @@ class PreferencesHelper(
          flowPrefs.getCompatibleEnum(
              "group_chapters_history_type",
              RecentsPresenter.GroupType.ByWeek,
@@ -220,10 +220,10 @@ index 8d0ba47674f7070639b5380b072df8887beb5a37..fce9b31d2d1ae11cd2d87c6f72d0b0ff
      }
  }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
-index 0d46375862b0d5c8ac1a9a90a70cf5fc4afe7bc7..8e8a89f959cbc8373569ed56af954cff251af476 100644
+index 34dec90806da41d699901789861a5d24a6cb9ff4..5cdb173bdd61771f7b9cae34e9976a214382af72 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
-@@ -845,6 +845,14 @@ class RecentsController(
+@@ -852,6 +852,14 @@ class RecentsController(
          onItemLongClick(position)
      }
  
@@ -391,7 +391,7 @@ index 590484bfe400073001deb404009fb0f6ee8d2a97..d73b9045eea4754aa359631aca50efbe
  
      companion object {
 diff --git a/app/src/main/res/values/arrays.xml b/app/src/main/res/values/arrays.xml
-index 7f4a45c9081ed3380612d10d7b5a0729993ee543..f293ac5fd26935f6f57ddb14772769fba39cc696 100644
+index 6187f23a67277e57e965e6c5d2fd51a42c89b592..688ff91f4bf97b8a1526597bbdf90141cbad9d4c 100644
 --- a/app/src/main/res/values/arrays.xml
 +++ b/app/src/main/res/values/arrays.xml
 @@ -94,6 +94,7 @@
@@ -403,7 +403,7 @@ index 7f4a45c9081ed3380612d10d7b5a0729993ee543..f293ac5fd26935f6f57ddb14772769fb
      </string-array>
  
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index c0f7eb6765eaca0b281348b58bc0d47b770e3238..f43f9884eb54f06b71015c7c3a3fcb0969117c43 100644
+index c1ed735d4dae06da931461e3c789ee4d12abf1fa..c42175401cf5bd64ee6aeaf01cf80c5ed79623f2 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -312,6 +312,7 @@
