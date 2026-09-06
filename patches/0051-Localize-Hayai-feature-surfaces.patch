@@ -1,4 +1,4 @@
-From 39b5249912401bba2f6b8ab1ce4423ad814cd8b8 Mon Sep 17 00:00:00 2001
+From 16df54c6d47413ad7f8bd3c3fa1c070c5e609705 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 09:14:15 +0300
 Subject: [PATCH] Localize Hayai feature surfaces
@@ -8339,10 +8339,10 @@ index 32309337f5e67c3640e448bdfd5d919211726234..ab49c4550580e5038a157fd76033db42
          addSingletonFactory {
              SourceDetailsPreviewRegistry(
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index d8a1bec1b71d184e8f0ecf4b50655d778102e093..60460d5ee63445fb1ddd71575fb50f756de27497 100644
+index d390eb5ad8fa1eb45f400b104450eb8e30426863..734d09ecb7c6b371988962b86c86d98ccf963d17 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-@@ -1505,7 +1505,7 @@ class MangaDetailsController :
+@@ -1506,7 +1506,7 @@ class MangaDetailsController :
                          text = error?.message ?: context.getString(R.string.hayai_page_previews_failed)
                      })
                      container.addView(MaterialButton(container.context).apply {
@@ -8378,10 +8378,10 @@ index 826e8783ff32b8b91098f2d0a0641c56310a3e97..5d1e19459dfa6db49a9f51c5299312fc
          // Update circle letter image.
          itemView.post {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt
-index 5aa9fe89ef3430d3888b34448e1e1ab937687079..f80e24abffa641bb6899546d2d4d4fef793d15ed 100644
+index e61ebe2ae0dc2a4e8602bc33be833bfaaefb2a19..bb67bb33619ef518ac6dd9866df7cf33cdc98f8f 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt
-@@ -29,7 +29,7 @@ class SettingsReaderController : SettingsController() {
+@@ -30,7 +30,7 @@ class SettingsReaderController : SettingsController() {
              titleRes = R.string.reader
  
              preferenceCategory {
@@ -8391,7 +8391,7 @@ index 5aa9fe89ef3430d3888b34448e1e1ab937687079..f80e24abffa641bb6899546d2d4d4fef
                      titleRes = R.string.hayai_novel_reader_settings
                      summaryRes = R.string.hayai_novel_reader_settings_summary
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
-index 8819c6af245e85c916e0d71a0a646784b028089a..797bd435fce40afd601898ffe677d65954857734 100644
+index 6fd7a44c6b496809065b6bf70ea5dc85074bb8f6..6f81d84d479ffde6a30f3b8946f3cab1f62708f2 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 @@ -38,7 +38,7 @@ class SourceHolder(
@@ -8499,10 +8499,10 @@ index e3d67eac211f3a0887045bf12d9466aeae2baf14..05746c1bd4eef8ee842a159f692eeeaf
 \ No newline at end of file
 +</LinearLayout>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 09ecc188e5fd9208abc0ed7ce9a4de6b4918a032..c0f7eb6765eaca0b281348b58bc0d47b770e3238 100644
+index 74d469eaa75129fa3480fbfb6ebeacf2ec629b0c..c1ed735d4dae06da931461e3c789ee4d12abf1fa 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1273,15 +1273,12 @@
+@@ -1284,15 +1284,12 @@
      <string name="hayai_page_previews">Page previews</string>
      <string name="hayai_page_previews_position">Page previews · %1$d of %2$d</string>
      <string name="hayai_page_previews_position_unknown">Page previews · %1$d</string>

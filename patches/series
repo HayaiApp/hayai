@@ -97,3 +97,5 @@
 0097-Fix-novel-migration-and-storage-workflows.patch
 0098-Fix-novel-reader-regressions-and-offline-translation.patch
 0099-Complete-novel-reader-and-source-issue-fixes.patch
+0100-Stabilize-novel-reading-modes-selection-and-source-a.patch
+0101-Adapt-Hayai-seams-to-the-September-J2K-update.patch

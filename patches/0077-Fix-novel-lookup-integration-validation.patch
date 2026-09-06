@@ -1,4 +1,4 @@
-From b9bf605e66fd337e002af0a20552932fd7662f4b Mon Sep 17 00:00:00 2001
+From 223ea0b0451726bd6af68855b797238c13b34edc Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 10:44:29 +0300
 Subject: [PATCH] Fix novel lookup integration validation

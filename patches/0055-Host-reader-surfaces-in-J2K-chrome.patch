@@ -1,4 +1,4 @@
-From 86348aa643f5096637f5b046d597f23ab4fafb23 Mon Sep 17 00:00:00 2001
+From 74fb95eb722d87833627d94debbf2498a0020d80 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 12:40:57 +0300
 Subject: [PATCH] Host reader surfaces in J2K chrome
@@ -1007,7 +1007,7 @@ index 0000000000000000000000000000000000000000..7aeea15e719c1e6453abbb72b89e14ba
 +    }
 +}
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index bab15801c8c6c4fc6be4b1ceed2527690efcf73d..e03946523874af37a0d513872b905232642943cb 100644
+index 3628721c740f6849a5eef140e89a67df7cb24e5f..a5d47a4a585fe723057f8b3c5fd1d64078df729d 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -61,9 +61,9 @@ import dev.ahmedmohamed.hayai.novel.download.NovelOfflineManager
@@ -1022,7 +1022,7 @@ index bab15801c8c6c4fc6be4b1ceed2527690efcf73d..e03946523874af37a0d513872b905232
  import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataProviderRegistry
  import dev.ahmedmohamed.hayai.source.metadata.SourceMetadataUi
  import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
-@@ -1501,7 +1501,7 @@ class MangaDetailsController :
+@@ -1502,7 +1502,7 @@ class MangaDetailsController :
                          container = container,
                          document = document,
                          onMoreInfo = {
@@ -1031,7 +1031,7 @@ index bab15801c8c6c4fc6be4b1ceed2527690efcf73d..e03946523874af37a0d513872b905232
                          },
                          onSearch = ::sourceSearch,
                      )
-@@ -1552,13 +1552,18 @@ class MangaDetailsController :
+@@ -1553,13 +1553,18 @@ class MangaDetailsController :
                              },
                          )
                      }

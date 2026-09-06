@@ -1,4 +1,4 @@
-From a4c72a7fd4e520d130f9ba1322bf12a9239f66cb Mon Sep 17 00:00:00 2001
+From ae59aadc7afbba52cbee346fb937eca7d0a8e49a Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Fri, 21 Aug 2026 00:31:46 +0300
 Subject: [PATCH] Integrate novel workflows and E-Hentai source foundation
@@ -6134,7 +6134,7 @@ index db66b44b1bfd8c1bffd972cf83e913cacc637804..4183b808d3c552a982ee93cf78852699
      }
  }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798fdc5c5be 100644
+index 5f5a284f23c3962fca511c761769a80081b3f826..966860508326eb18d3fa8d00270cd36bef2a4929 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -23,6 +23,7 @@ import android.view.View
@@ -6156,7 +6156,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.davidea.flexibleadapter.SelectableAdapter
  import eu.kanade.tachiyomi.R
-@@ -137,10 +142,14 @@ import eu.kanade.tachiyomi.util.view.toolbarHeight
+@@ -138,10 +143,14 @@ import eu.kanade.tachiyomi.util.view.toolbarHeight
  import eu.kanade.tachiyomi.util.view.withFadeTransaction
  import eu.kanade.tachiyomi.widget.LinearLayoutManagerAccurateOffset
  import kotlinx.coroutines.runBlocking
@@ -6171,7 +6171,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
  import java.io.File
  import java.io.IOException
  import java.util.Locale
-@@ -213,6 +222,13 @@ class MangaDetailsController :
+@@ -214,6 +223,13 @@ class MangaDetailsController :
      var refreshTracker: Int? = null
      private var chapterPopupMenu: Pair<Int, PopupMenu>? = null
      private var isPushing = true
@@ -6185,7 +6185,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
  
      // Prevents the favorite button's drag-to-open popup from firing underneath
      // the categories sheet when a long press opens it mid-gesture
-@@ -453,6 +469,9 @@ class MangaDetailsController :
+@@ -454,6 +470,9 @@ class MangaDetailsController :
      }
  
      override fun onDestroyView(view: View) {
@@ -6195,7 +6195,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
          snack?.dismiss()
          adapter = null
          finishFloatingActionMode()
-@@ -875,6 +894,27 @@ class MangaDetailsController :
+@@ -876,6 +895,27 @@ class MangaDetailsController :
          updateMenuVisibility(activityBinding?.toolbar?.menu)
      }
  
@@ -6223,7 +6223,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
      private fun addMangaHeader() {
          if (tabletAdapter?.scrollableHeaders?.isEmpty() == true) {
              tabletAdapter?.removeAllScrollableHeaders()
-@@ -914,10 +954,14 @@ class MangaDetailsController :
+@@ -915,10 +955,14 @@ class MangaDetailsController :
                  when (rangeMode) {
                      RangeMode.Download -> downloadChapters(chapterList)
                      RangeMode.RemoveDownload ->
@@ -6242,7 +6242,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
                      RangeMode.Read -> markAsRead(chapterList)
                      RangeMode.Unread -> markAsUnread(chapterList)
                  }
-@@ -1087,7 +1131,11 @@ class MangaDetailsController :
+@@ -1088,7 +1132,11 @@ class MangaDetailsController :
                              super.onDismissed(transientBottomBar, event)
                              if (!undoing && !read) {
                                  if (preferences.removeAfterMarkedAsRead()) {
@@ -6255,7 +6255,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
                                  }
                                  updateTrackChapterMarkedAsRead(db, preferences, chapter, manga?.id) {
                                      presenter.fetchTracks()
-@@ -1368,6 +1416,61 @@ class MangaDetailsController :
+@@ -1369,6 +1417,61 @@ class MangaDetailsController :
          startActivity(intent)
      }
  
@@ -6317,7 +6317,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
      fun openChapterInWebView(item: ChapterItem) {
          if (isNotOnline()) return
          val source = presenter.source as? HttpSource ?: return
-@@ -1386,6 +1489,7 @@ class MangaDetailsController :
+@@ -1387,6 +1490,7 @@ class MangaDetailsController :
      }
  
      private fun massDeleteChapters(choice: Int) {
@@ -6325,7 +6325,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
          val chaptersToDelete =
              when (choice) {
                  R.id.remove_all -> presenter.allChapters
-@@ -1397,7 +1501,7 @@ class MangaDetailsController :
+@@ -1398,7 +1502,7 @@ class MangaDetailsController :
                      return
                  }
                  else -> emptyList()
@@ -6334,7 +6334,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
          if (chaptersToDelete.isNotEmpty() || choice == R.id.remove_all) {
              massDeleteChapters(chaptersToDelete, choice == R.id.remove_all)
          } else {
-@@ -1424,7 +1528,11 @@ class MangaDetailsController :
+@@ -1425,7 +1529,11 @@ class MangaDetailsController :
                      )
                  },
              ).setPositiveButton(R.string.remove) { _, _ ->
@@ -6347,7 +6347,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
              }.setNegativeButton(android.R.string.cancel, null)
              .show()
      }
-@@ -1510,6 +1618,10 @@ class MangaDetailsController :
+@@ -1511,6 +1619,10 @@ class MangaDetailsController :
  
      private fun downloadChapters(chapters: List<ChapterItem>) {
          val view = view ?: return
@@ -6358,7 +6358,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
          presenter.downloadChapters(chapters)
          val text =
              view.context.getString(
-@@ -1545,6 +1657,40 @@ class MangaDetailsController :
+@@ -1546,6 +1658,40 @@ class MangaDetailsController :
          }
      }
  
@@ -6399,7 +6399,7 @@ index ad2d3a726758b32dd088cb0072339783c9493f8b..aa6acc7225dcccd9ee8f322912633798
      override fun startDownloadRange(position: Int) {
          createActionModeIfNeeded()
          val chapterItem = (adapter?.getItem(position) as? ChapterItem) ?: return
-@@ -1601,6 +1747,10 @@ class MangaDetailsController :
+@@ -1602,6 +1748,10 @@ class MangaDetailsController :
              onItemClick(null, position)
              return
          }
@@ -6423,7 +6423,7 @@ index 0dce43fa43f0a93caa288d2f0915038fedc93751..a43f9aa5f73ca4ef4b7aa23b98419a27
          setGenreTags(binding, manga)
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt
-index c0203c82c51652c58d5ecd6468d309610a0ee6c7..6ff8bcd3cfb228141fdc9f1a19f5dfda817cce60 100644
+index 9e8ae5e990b199aa4810fb9620a7f1c94fa1a13a..327861dbbc0510380f97d23eb69e3be0ee6a8773 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/chapter/ChapterHolder.kt
 @@ -45,6 +45,8 @@ class ChapterHolder(
@@ -6676,10 +6676,10 @@ index 1becc381a1350892045cdaeec6f4d4ba037c78a1..5dfe938684ee53905423655cd42422f6
                      titleRes = R.string.hayai_retry_legacy_migration
                      summaryRes = R.string.hayai_retry_legacy_migration_summary
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt
-index 38f6abf2e5292916af4e266e4a7b0ca1b6b76b49..5aa9fe89ef3430d3888b34448e1e1ab937687079 100644
+index 34462c2777bf1754d75f7689677c5dfcdc8796fa..e61ebe2ae0dc2a4e8602bc33be833bfaaefb2a19 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsReaderController.kt
-@@ -18,6 +18,8 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
+@@ -19,6 +19,8 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
  import eu.kanade.tachiyomi.util.lang.addBetaTag
  import eu.kanade.tachiyomi.util.system.isTablet
  import eu.kanade.tachiyomi.util.view.activityBinding
@@ -6688,7 +6688,7 @@ index 38f6abf2e5292916af4e266e4a7b0ca1b6b76b49..5aa9fe89ef3430d3888b34448e1e1ab9
  import kotlinx.coroutines.flow.launchIn
  import eu.kanade.tachiyomi.data.preference.PreferenceKeys as Keys
  
-@@ -26,6 +28,16 @@ class SettingsReaderController : SettingsController() {
+@@ -27,6 +29,16 @@ class SettingsReaderController : SettingsController() {
          screen.apply {
              titleRes = R.string.reader
  
@@ -6706,7 +6706,7 @@ index 38f6abf2e5292916af4e266e4a7b0ca1b6b76b49..5aa9fe89ef3430d3888b34448e1e1ab9
                  titleRes = R.string.general
                  intListPreference(activity) {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-index 246154ac2472b8e5240a0712b046d000ffc82c9a..08789f5eb4799ab7e59dce513d92fd2965b71684 100644
+index e4eda61e943030d86d16baf5078db4212dfff643..4ddf91334008f09d7d62e101ecd2bfe58c19dfc0 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 @@ -1,5 +1,6 @@
@@ -6716,7 +6716,7 @@ index 246154ac2472b8e5240a0712b046d000ffc82c9a..08789f5eb4799ab7e59dce513d92fd29
  import android.os.Build
  import android.os.Bundle
  import android.view.Gravity
-@@ -34,6 +35,8 @@ import eu.kanade.tachiyomi.source.model.Filter
+@@ -33,6 +34,8 @@ import eu.kanade.tachiyomi.source.model.Filter
  import eu.kanade.tachiyomi.source.model.FilterList
  import eu.kanade.tachiyomi.source.online.HttpSource
  import eu.kanade.tachiyomi.source.pkgName
@@ -7002,10 +7002,10 @@ index d847df8dfb116b26281c77cd801991ec458978c4..76bf268f9b5057f060a2b282647324dd
 \ No newline at end of file
 +</eu.kanade.tachiyomi.widget.StatefulNestedScrollView>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 63a2e3e56f612faccf1c16c07891f654066e2f40..d8b88baa98dc349469acb65d7c5f5de3d5259645 100644
+index d81a8e3fe8253c5be5f87280364ba19c4b11a062..f4595fc7ae5e07aa7437b76ba3e384973659d5bc 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1261,6 +1261,34 @@
+@@ -1272,6 +1272,34 @@
      <string name="wifi">Wi-Fi</string>
      <string name="hayai_novel_plugins">Novel plugins</string>
      <string name="hayai_novel_plugins_summary">Manage LNReader-compatible novel repositories and sources</string>

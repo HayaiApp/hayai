@@ -1,4 +1,4 @@
-From ce991d7a07f5d06e58e6449ad99248758782cf13 Mon Sep 17 00:00:00 2001
+From 4dfd40a8d6437a21387f8b0fed96ff623bb615ee Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Fri, 21 Aug 2026 00:47:48 +0300
 Subject: [PATCH] Restore recents source visibility filters
@@ -480,7 +480,7 @@ index fbad31e3ac3dd12232db47fdde5986a3c68ed9af..6c2c645ab41e8aea7e1e6cb582f1d3bb
 \ No newline at end of file
 +</eu.kanade.tachiyomi.ui.recents.options.RecentsUpdatesView>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index d8b88baa98dc349469acb65d7c5f5de3d5259645..33abefa866366ea0767aa7817b3a3336e1916ecb 100644
+index f4595fc7ae5e07aa7437b76ba3e384973659d5bc..8555156fa690d523c3c0da23334d7bc8fbb0fdd4 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -318,6 +318,9 @@

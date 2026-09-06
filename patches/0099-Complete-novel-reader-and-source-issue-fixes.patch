@@ -1,4 +1,4 @@
-From 3c8190c33b5d485ff6c7a3afe13a9ed432b92018 Mon Sep 17 00:00:00 2001
+From eb767ba466014992d032bf899d3318c56c82fe6d Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 3 Sep 2026 19:46:09 +0300
 Subject: [PATCH] Complete novel reader and source issue fixes
@@ -1154,12 +1154,12 @@ index 86e809f11f48ce0cc16bf89bacd1df3f10760b8e..b759165da74af029ebe4cb0ea5c63fa4
          // Only the view that started a transition keeps a name, dropped once it shows another manga
          if (transitionMangaId != null && transitionMangaId != item.manga.id) {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryListHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryListHolder.kt
-index 678016c27fd054db565ba6f9db87ce7c39614e83..0ed75a95d21cf778f80be2273c6ea6186deee13a 100644
+index 19138a914633bd5f09388bd0673ca3a0080b880f..7398750869884d03728fb9f5755104043f555a8b 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryListHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryListHolder.kt
-@@ -11,6 +11,9 @@ import eu.kanade.tachiyomi.databinding.MangaListItemBinding
- import eu.kanade.tachiyomi.util.lang.highlightText
- import eu.kanade.tachiyomi.util.system.dpToPx
+@@ -14,6 +14,9 @@ import eu.kanade.tachiyomi.util.system.dpToPx
+ import eu.kanade.tachiyomi.util.system.getResourceColor
+ import eu.kanade.tachiyomi.util.view.makeContainerShape
  import eu.kanade.tachiyomi.util.view.setCards
 +import dev.ahmedmohamed.hayai.novel.integration.NovelTitlePresentation
 +import uy.kohesive.injekt.Injekt
@@ -1167,16 +1167,16 @@ index 678016c27fd054db565ba6f9db87ce7c39614e83..0ed75a95d21cf778f80be2273c6ea618
  
  /**
   * Class used to hold the displayed data of a manga in the library, like the cover or the binding.title.
-@@ -26,6 +29,7 @@ class LibraryListHolder(
+@@ -29,6 +32,7 @@ class LibraryListHolder(
      adapter: LibraryCategoryAdapter,
  ) : LibraryHolder(view, adapter) {
      private val binding = MangaListItemBinding.bind(view)
 +    private val novelTitles = Injekt.get<NovelTitlePresentation>()
  
-     init {
-         binding.unreadDownloadBadge.badgeView.libraryColors = adapter.colors
-@@ -66,8 +70,9 @@ class LibraryListHolder(
-             binding.subtitle.isVisible = false
+     private var transitionMangaId: Long? = null
+ 
+@@ -75,8 +79,9 @@ class LibraryListHolder(
+             binding.playLayout.isVisible = false
              return
          }
 +        val configuredMaxLines = novelTitles.maxLines(item.manga, authorMatched = false)
@@ -1186,7 +1186,7 @@ index 678016c27fd054db565ba6f9db87ce7c39614e83..0ed75a95d21cf778f80be2273c6ea618
          }
          binding.padding.isVisible = true
          binding.card.isVisible = true
-@@ -92,12 +97,12 @@ class LibraryListHolder(
+@@ -108,12 +113,12 @@ class LibraryListHolder(
              }
  
          binding.subtitle.text = authorArtist.highlightText(item.filter, color)
@@ -1229,7 +1229,7 @@ index 4336d981e087fbfa67d6d41ce397773abed85ff6..5e1744237c2224c42e97ea96c0526c3e
                      bindTo(preferences.markDuplicateReadChapterAsRead())
                      titleRes = R.string.pref_mark_duplicate_read_chapter_read
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-index 1fbbf143cbe6736cc57ee66bceb4295742287808..3a4e2055c5f4437361561f23acf8bde7c300cd5a 100644
+index a21121045258020c0eb219a4414cd3473e184187..56a763d4cf487ce4e9183128504969029795fcfc 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 @@ -9,6 +9,8 @@ import android.view.MenuInflater
@@ -1241,7 +1241,7 @@ index 1fbbf143cbe6736cc57ee66bceb4295742287808..3a4e2055c5f4437361561f23acf8bde7
  import androidx.appcompat.widget.PopupMenu
  import androidx.core.view.WindowInsetsCompat.Type.systemBars
  import androidx.core.view.isVisible
-@@ -27,11 +29,15 @@ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+@@ -26,11 +28,15 @@ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
  import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
  import dev.ahmedmohamed.hayai.source.presentation.SourceBrowseLayout
  import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
@@ -1435,10 +1435,10 @@ index 09f15541aedc9906b62dab9b36e22af1aa7e55c0..b31a5417830ed0857b25a38dfca0e813
          <View
              android:id="@+id/bottom_divider"
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 7c3c025b94a5103055bc21d46dbb8ee9a0571b70..9a3b4bcf9a6297c53507193923f90c6bfe930180 100644
+index 2b34f3c3b61bc5b508b18fd3ed34ceaa5f3bf61b..eae692c74b4e49d983d320b8c17106ecaf0ffa86 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1338,4 +1338,15 @@
+@@ -1349,4 +1349,15 @@
      <string name="hayai_novel_plugin_install_warning">This plugin can access websites and store source settings through Hayai’s restricted JavaScript bridge. Install only if you trust its repository.</string>
      <string name="hayai_remove_repository_confirmation">Remove %1$s? Installed plugins from this repository stay installed until you uninstall them.</string>
      <string name="refresh">Refresh</string>

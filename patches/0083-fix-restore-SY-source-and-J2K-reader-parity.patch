@@ -1,4 +1,4 @@
-From e5ee1ea739c567d05e4cf776a5f58eb88ddac95e Mon Sep 17 00:00:00 2001
+From 85b69bf3f21f74a5c2b1aca5d67a5b4a112bda60 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 17:14:45 +0300
 Subject: [PATCH] fix: restore SY source and J2K reader parity
@@ -1205,7 +1205,7 @@ index 0000000000000000000000000000000000000000..400d6a016e93efd2867ca30803ac3d63
 +        get() = totalPages?.let { arrayOf<Any>(page, it) } ?: arrayOf<Any>(page)
 +}
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index fbc8c65373ba0f5488c390daff51b4894791a072..1675db314221b92da76c87222dff0f2506799b2f 100644
+index 8e6738dca0ff9f7e5a495533104127bb078d8abf..a3998144d0467653763c98bc110b1fcdf0d33dc4 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -8,7 +8,6 @@ import android.content.ClipData
@@ -1248,7 +1248,7 @@ index fbc8c65373ba0f5488c390daff51b4894791a072..1675db314221b92da76c87222dff0f25
  import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
  import eu.kanade.tachiyomi.network.NetworkHelper
  import eu.davidea.flexibleadapter.FlexibleAdapter
-@@ -129,12 +126,14 @@ import eu.kanade.tachiyomi.util.system.isLandscape
+@@ -129,6 +126,7 @@ import eu.kanade.tachiyomi.util.system.isLandscape
  import eu.kanade.tachiyomi.util.system.isOnline
  import eu.kanade.tachiyomi.util.system.isPromptChecked
  import eu.kanade.tachiyomi.util.system.isTablet
@@ -1256,14 +1256,15 @@ index fbc8c65373ba0f5488c390daff51b4894791a072..1675db314221b92da76c87222dff0f25
  import eu.kanade.tachiyomi.util.system.launchUI
  import eu.kanade.tachiyomi.util.system.materialAlertDialog
  import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
- import eu.kanade.tachiyomi.util.system.setCustomTitleAndMessage
+@@ -136,6 +134,7 @@ import eu.kanade.tachiyomi.util.system.setCustomTitleAndMessage
  import eu.kanade.tachiyomi.util.system.timeSpanFromNow
  import eu.kanade.tachiyomi.util.system.toast
+ import eu.kanade.tachiyomi.util.view.GroupedRowDivider
 +import eu.kanade.tachiyomi.util.system.withUIContext
  import eu.kanade.tachiyomi.util.view.activityBinding
  import eu.kanade.tachiyomi.util.view.backgroundColor
  import eu.kanade.tachiyomi.util.view.copyToClipboard
-@@ -151,12 +150,9 @@ import eu.kanade.tachiyomi.util.view.setTextColorAlpha
+@@ -152,12 +151,9 @@ import eu.kanade.tachiyomi.util.view.setTextColorAlpha
  import eu.kanade.tachiyomi.util.view.snack
  import eu.kanade.tachiyomi.util.view.toolbarHeight
  import eu.kanade.tachiyomi.util.view.withFadeTransaction
@@ -1276,7 +1277,7 @@ index fbc8c65373ba0f5488c390daff51b4894791a072..1675db314221b92da76c87222dff0f25
  import kotlinx.coroutines.withTimeoutOrNull
  import timber.log.Timber
  import uy.kohesive.injekt.Injekt
-@@ -238,14 +234,13 @@ class MangaDetailsController :
+@@ -239,14 +235,13 @@ class MangaDetailsController :
      private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
      private val sourceMetadataRegistry: SourceMetadataProviderRegistry by injectLazy()
      private val hayaiPreferences by lazy { HayaiPreferences(Injekt.get()) }
@@ -1294,7 +1295,7 @@ index fbc8c65373ba0f5488c390daff51b4894791a072..1675db314221b92da76c87222dff0f25
  
      // Prevents the favorite button's drag-to-open popup from firing underneath
      // the categories sheet when a long press opens it mid-gesture
-@@ -487,9 +482,7 @@ class MangaDetailsController :
+@@ -488,9 +483,7 @@ class MangaDetailsController :
  
      override fun onDestroyView(view: View) {
          novelPresentationJob?.cancel()
@@ -1305,7 +1306,7 @@ index fbc8c65373ba0f5488c390daff51b4894791a072..1675db314221b92da76c87222dff0f25
          novelPresentationJob = null
          snack?.dismiss()
          adapter = null
-@@ -1445,215 +1438,39 @@ class MangaDetailsController :
+@@ -1446,215 +1439,39 @@ class MangaDetailsController :
      override fun bindSourceDetailsFeatures(container: LinearLayout) {
          container.orientation = LinearLayout.VERTICAL
          val manga = presenter.manga

@@ -1,4 +1,4 @@
-From f56e6748261dfb1495d559ecd58b870890b7a3ea Mon Sep 17 00:00:00 2001
+From 5bce9c14527ccca45a51e213b4e88c03fe5c7a75 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 18:32:48 +0300
 Subject: [PATCH] Back up and restore Hayai side data
@@ -420,7 +420,7 @@ index 0000000000000000000000000000000000000000..206c1b1d4a2abb4d5f5756574ea1bc08
 +    }
 +}
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
-index 4f747e4e4e8bfeece2d54dae5c38496dd0e79a84..ff15cbad819e569a9cea4a5da8ccd3d02491a27d 100644
+index c0fad5ddef379d3a4131a299d8a98503b2d465da..c0b5da3572166edd512fab6c54f9cad7a81f756b 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupCreator.kt
 @@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.backup
@@ -431,16 +431,16 @@ index 4f747e4e4e8bfeece2d54dae5c38496dd0e79a84..ff15cbad819e569a9cea4a5da8ccd3d0
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS
  import eu.kanade.tachiyomi.data.backup.BackupConst.BACKUP_APP_PREFS_MASK
-@@ -96,6 +97,7 @@ class BackupCreator(
+@@ -100,6 +101,7 @@ class BackupCreator(
                      backupExtensionInfo(databaseManga),
-                     backupAppPreferences(flags),
+                     backupAppPreferences(flags) + backupExtensionRepoPreferences(flags),
                      backupSourcePreferences(flags),
 +                    HayaiBackupService(db).create(databaseManga),
                  )
          }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
-index 3355a77e1cf160f260839167be1cf6e97f7d2d51..0a35b40ea6d143b3407eefa34d2091e00a867149 100644
+index f40dddba8bf01fdc1b3d7ef4d7a83bbb696ae06b..24dc5dff6190f42d0cfdb1a9efff7e244ff30a60 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
 @@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.backup
@@ -451,17 +451,17 @@ index 3355a77e1cf160f260839167be1cf6e97f7d2d51..0a35b40ea6d143b3407eefa34d2091e0
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.backup.models.BackupCategory
  import eu.kanade.tachiyomi.data.backup.models.BackupHistory
-@@ -87,7 +88,7 @@ class BackupRestorer(
-     private suspend fun performRestore(uri: Uri): Boolean {
-         val backup = BackupUtil.decodeBackup(context, uri)
- 
--        restoreAmount = backup.backupManga.size + 3 // +3 for categories, app prefs, source prefs
-+        restoreAmount = backup.backupManga.size + 4 // categories, app prefs, source prefs, Hayai side data
+@@ -104,7 +105,7 @@ class BackupRestorer(
+             (if (restoreCategories) 1 else 0) +
+             (if (restoreAppPrefs) 1 else 0) +
+             (if (restoreExtensionRepos) 1 else 0) +
+-            (if (restoreSourcePrefs) 1 else 0)
++            (if (restoreSourcePrefs) 1 else 0) + 1
  
          // Restore categories
-         if (backup.backupCategories.isNotEmpty()) {
-@@ -113,6 +114,10 @@ class BackupRestorer(
-                     mangaChunk.forEach { restoreManga(it, backup.backupCategories) }
+         if (restoreCategories && backup.backupCategories.isNotEmpty()) {
+@@ -135,6 +136,10 @@ class BackupRestorer(
+                     }
                  }
              }
 +            val hayaiReport = HayaiBackupService(db).restore(backup.hayaiData)

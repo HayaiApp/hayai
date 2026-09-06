@@ -1,4 +1,4 @@
-From a98a79252abe26744a34acc4ea62dad460ebd281 Mon Sep 17 00:00:00 2001
+From 0e59e969ae182dc7dc5d03c9faa5d909d1cab1dc Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 10:21:34 +0300
 Subject: [PATCH] Expose LNReader repository management
@@ -106,7 +106,7 @@ index 79fac5430548f4dd01130da7f6c3669902be693a..dbb48247c8429689904ca54e582a913e
                  if (ExtensionManager.canAutoInstallUpdates()) {
                      val intPref =
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-index bec8aa98f0cfec06a92e32f440667a252aa84941..9007c62e3c10a6a7464c765e5d3d9f5f0b16c155 100644
+index b22b06e479e028775729e5dbfc8cf3530f5b6dc5..29346c7774c5b831b7e52758d01902d8c7d01829 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 @@ -25,6 +25,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -117,7 +117,7 @@ index bec8aa98f0cfec06a92e32f440667a252aa84941..9007c62e3c10a6a7464c765e5d3d9f5f
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.davidea.flexibleadapter.items.IFlexible
  import eu.kanade.tachiyomi.R
-@@ -428,7 +429,13 @@ class BrowseController :
+@@ -429,7 +430,13 @@ class BrowseController :
                  }
                  R.id.action_ext_repos -> {
                      val kind = ContentKind.fromPosition(binding.bottomSheet.tabs.selectedTabPosition)

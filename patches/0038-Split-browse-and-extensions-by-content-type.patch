@@ -1,4 +1,4 @@
-From cc44d07c12c2f365b24ef5a14390a0794f6119c9 Mon Sep 17 00:00:00 2001
+From 2c1322ba104b101b4d52e167be2ea0a7fc952829 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 03:59:23 +0300
 Subject: [PATCH] Split browse and extensions by content type
@@ -558,7 +558,7 @@ index bcd738d89d1be22d29b907736f82ca50bec7e80a..79fac5430548f4dd01130da7f6c36699
                  if (ExtensionManager.canAutoInstallUpdates()) {
                      val intPref =
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9532951ba 100644
+index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5cea30639 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 @@ -23,6 +23,8 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
@@ -578,7 +578,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
  import eu.kanade.tachiyomi.ui.setting.SettingsBrowseController
  import eu.kanade.tachiyomi.ui.setting.SettingsSourcesController
  import eu.kanade.tachiyomi.ui.source.browse.BrowseSourceController
-@@ -86,6 +89,7 @@ class BrowseController :
+@@ -87,6 +90,7 @@ class BrowseController :
      SourceAdapter.SourceListener,
      RootSearchInterface,
      FloatingSearchInterface,
@@ -586,7 +586,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
      BottomSheetController {
      /**
       * Application preferences.
-@@ -126,6 +130,34 @@ class BrowseController :
+@@ -127,6 +131,34 @@ class BrowseController :
  
      val presenter = SourcePresenter(this)
  
@@ -621,7 +621,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
      override fun createBinding(inflater: LayoutInflater) = BrowseControllerBinding.inflate(inflater)
  
      override fun onViewCreated(view: View) {
-@@ -184,6 +216,7 @@ class BrowseController :
+@@ -185,6 +217,7 @@ class BrowseController :
  
          requestFilePermissionsSafe(301, preferences)
          binding.bottomSheet.root.onCreate(this)
@@ -629,7 +629,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
  
          preferences
              .extensionInstaller()
-@@ -304,14 +337,14 @@ class BrowseController :
+@@ -305,14 +338,14 @@ class BrowseController :
      }
  
      private fun updateSheetMenu() {
@@ -646,7 +646,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
          if (binding.bottomSheet.sheetToolbar.menu
                  .findItem(if (onExtensionTab) R.id.action_search else R.id.action_migration_guide) !=
              null
-@@ -326,7 +359,7 @@ class BrowseController :
+@@ -327,7 +360,7 @@ class BrowseController :
          binding.bottomSheet.sheetToolbar.menu
              .clear()
          binding.bottomSheet.sheetToolbar.inflateMenu(
@@ -655,7 +655,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
                  R.menu.extension_main
              } else {
                  R.menu.migration_main
-@@ -394,7 +427,8 @@ class BrowseController :
+@@ -395,7 +428,8 @@ class BrowseController :
                      router.pushController(SettingsBrowseController().withFadeTransaction())
                  }
                  R.id.action_ext_repos -> {
@@ -665,7 +665,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
                  }
              }
              return@setOnMenuItemClickListener true
-@@ -490,6 +524,9 @@ class BrowseController :
+@@ -491,6 +525,9 @@ class BrowseController :
          binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
              bottomMargin = -pad.toInt()
          }
@@ -675,7 +675,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
          binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
              bottomMargin = -pad.toInt()
          }
-@@ -607,7 +644,9 @@ class BrowseController :
+@@ -608,7 +645,9 @@ class BrowseController :
                  val searchView = searchItem.actionView as SearchView
                  searchView.clearFocus()
              }
@@ -685,7 +685,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
              binding.bottomSheet.root.presenter
                  .refreshMigrations()
              updateTitleAndMenu()
-@@ -768,7 +807,7 @@ class BrowseController :
+@@ -769,7 +808,7 @@ class BrowseController :
      }
  
      private fun performGlobalSearch(query: String) {
@@ -695,7 +695,7 @@ index 6e873253eeb5072ec87dd9f736f01d5fc7c6a5a3..b4f3bdfe3730b8e0651e0ac5e783cae9
  
      /**
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
-index f58ad1ee6ab4536b6e3bca0a24ab1250055cb536..8819c6af245e85c916e0d71a0a646784b028089a 100644
+index 6e422289641f031631705c8997396f0ae358c68b..6fd7a44c6b496809065b6bf70ea5dc85074bb8f6 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 @@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.source
@@ -715,7 +715,7 @@ index f58ad1ee6ab4536b6e3bca0a24ab1250055cb536..8819c6af245e85c916e0d71a0a646784
          }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt
-index 3b01f6c906044a337801aeb7fcf29afcbd556b0c..ac8079e72188ea598a79b9eea10e9cb628fb4714 100644
+index 590aca6bf4a1190e954fd455cb511fd1f4375ab6..74d7002afa258ebb9a511b173c8286af48885307 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt
 @@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.source
@@ -726,7 +726,7 @@ index 3b01f6c906044a337801aeb7fcf29afcbd556b0c..ac8079e72188ea598a79b9eea10e9cb6
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.davidea.flexibleadapter.items.AbstractSectionableItem
  import eu.davidea.flexibleadapter.items.IFlexible
-@@ -25,7 +26,11 @@ class SourceItem(
+@@ -26,7 +27,11 @@ class SourceItem(
       */
      override fun getLayoutRes(): Int = R.layout.source_item
  
@@ -1098,7 +1098,7 @@ index 0000000000000000000000000000000000000000..ee13fa6c2def6431ac8272ee69670391
 +        android:pathData="M12,12C16.8,11.2 20.6,12.2 24,15C27.4,12.2 31.2,11.2 36,12V34C31.5,33.3 27.7,34.4 24,37C20.3,34.4 16.5,33.3 12,34ZM15,16V30.7C18,30.6 20.5,31.3 22,32.3V18.1C20.2,16.5 17.9,15.8 15,16ZM33,16C30.1,15.8 27.8,16.5 26,18.1V32.3C27.5,31.3 30,30.6 33,30.7Z" />
 +</vector>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 33abefa866366ea0767aa7817b3a3336e1916ecb..d7b742a921977f72b82d0f1937a15ff877178f6f 100644
+index 8555156fa690d523c3c0da23334d7bc8fbb0fdd4..3d56a69f53d889009d68be9f6c90f3c25f8c07ff 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -328,6 +328,8 @@

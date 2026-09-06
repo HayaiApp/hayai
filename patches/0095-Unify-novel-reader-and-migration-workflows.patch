@@ -1,4 +1,4 @@
-From 7c0b39456ad049659b33c26877c7421e7fd2cade Mon Sep 17 00:00:00 2001
+From 707a74f782d2009a7ab31348535af73f0f4481ba Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 27 Aug 2026 00:45:11 +0300
 Subject: [PATCH] Unify novel reader and migration workflows
@@ -5061,7 +5061,7 @@ index c7d28ff12c544ce400c796c03717ca8ec85c7b7e..8edaffff858206c391a2c80608f723ff
      }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt
-index 419d42ccefa4b802ac5fa085a903d02f44660698..ec1d9fad0c76797f208942730d06d2ade68bc98c 100644
+index e74388b8072a2886d69244ec2712129dbf2de590..217098c07629c3c91f7b50cc41c8b330ba211d5b 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt
 @@ -59,6 +59,8 @@ import com.fredporciuncula.flow.preferences.Preference
@@ -5073,7 +5073,7 @@ index 419d42ccefa4b802ac5fa085a903d02f44660698..ec1d9fad0c76797f208942730d06d2ad
  import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.davidea.flexibleadapter.SelectableAdapter
-@@ -162,6 +164,8 @@ open class LibraryController(
+@@ -163,6 +165,8 @@ open class LibraryController(
      BottomSheetController,
      RootSearchInterface,
      FloatingSearchInterface {
@@ -5082,7 +5082,7 @@ index 419d42ccefa4b802ac5fa085a903d02f44660698..ec1d9fad0c76797f208942730d06d2ad
      init {
          setHasOptionsMenu(true)
          retainViewMode = RetainViewMode.RETAIN_DETACH
-@@ -632,6 +636,26 @@ open class LibraryController(
+@@ -636,6 +640,26 @@ open class LibraryController(
          }
      }
  
@@ -5109,7 +5109,7 @@ index 419d42ccefa4b802ac5fa085a903d02f44660698..ec1d9fad0c76797f208942730d06d2ad
      internal fun closeTip() {
          if (filterTooltip != null) {
              filterTooltip?.close()
-@@ -2361,6 +2385,7 @@ open class LibraryController(
+@@ -2383,6 +2407,7 @@ open class LibraryController(
                      showDisplayOptions()
                  }
              }
@@ -5537,7 +5537,7 @@ index 2c5801732dfa7cfad1995609418c592ff1370632..fb0f3c8f84da4c7a1862f6e73e08c1ed
              if (MigrationFlags.hasCategories(flags)) {
                  val categories = db.getCategoriesForManga(prevManga).executeAsBlocking()
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
-index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83e867b181 100644
+index 475a29b2ab425f626a486d43f3893a9b4e6ce75a..fa54127dc4d8ea743eea70a1bfc41f658751a6bc 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
 @@ -81,6 +81,9 @@ import com.google.android.material.slider.SliderOrientation
@@ -5550,7 +5550,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
  import dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher
  import eu.kanade.tachiyomi.BuildConfig
  import eu.kanade.tachiyomi.R
-@@ -187,6 +190,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -188,6 +191,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      var viewer: BaseViewer? = null
          private set
  
@@ -5559,7 +5559,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
      /**
       * Whether the menu is currently visible.
       */
-@@ -519,6 +524,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -523,6 +528,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
       * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
       */
      override fun onDestroy() {
@@ -5568,7 +5568,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
          super.onDestroy()
          viewer?.destroy()
          binding.chaptersSheet.chaptersBottomSheet.adapter = null
-@@ -556,7 +563,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -560,7 +567,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
       * Called when the options menu of the binding.toolbar is being created. It adds our custom menu.
       */
      override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -5578,7 +5578,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
          return true
      }
  
-@@ -800,6 +808,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -804,6 +812,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      }
  
      private fun updateBottomShortcuts() {
@@ -5590,7 +5590,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
          val enabledButtons = preferences.readerBottomButtons().get()
          with(binding.chaptersSheet) {
              readingMode.isVisible = ReaderBottomButton.ReadingMode.isIn(enabledButtons)
-@@ -851,6 +864,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -855,6 +868,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
       * entries.
       */
      override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -5600,7 +5600,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
          when (item.itemId) {
              R.id.action_shift_double_page -> {
                  shiftDoublePages()
-@@ -1126,11 +1142,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1130,11 +1146,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
              }
  
              displayOptions.setOnClickListener {
@@ -5614,7 +5614,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
                  true
              }
  
-@@ -1256,6 +1272,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1260,6 +1276,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
          }
  
          binding.readerNav.pageSeekbar.setLabelFormatter { value ->
@@ -5624,7 +5624,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              val pageNumber = (value + 1).roundToInt()
              (viewer as? PagerViewer)?.let {
                  if (it.config.doublePages || it.config.splitPages) {
-@@ -1297,7 +1316,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1301,7 +1320,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                  currentOrientation == Configuration.ORIENTATION_LANDSCAPE &&
                      (preferences.landscapeCutoutBehavior().get() == 1 || Build.VERSION.SDK_INT < Build.VERSION_CODES.P)
              val vis = insets.isVisible(statusBars())
@@ -5633,7 +5633,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              val systemCutoutInsets = insets.getInsetsIgnoringVisibility(systemBars() or displayCutout())
              val cutoutInsets = insets.getInsetsIgnoringVisibility(displayCutout())
              if (!firstPass && lastVis != vis && fullscreen && !isInMultiWindowMode) {
-@@ -1397,7 +1416,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1407,7 +1426,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
          }
          isScrollingThroughPagesOrChapters = true
          lifecycleScope.launch {
@@ -5642,7 +5642,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              val adjChapter = viewModel.adjacentChapter(getNextChapter)
              if (adjChapter != null) {
                  if (rightButton) {
-@@ -1551,7 +1570,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1561,7 +1580,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                      ?.collapse()
              }
          } else {
@@ -5651,7 +5651,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
                  wic.hide(systemBars())
                  wic.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
              } else {
-@@ -1584,18 +1603,26 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1594,18 +1613,26 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
       */
      private fun setManga(manga: Manga) {
          val prevViewer = viewer
@@ -5686,7 +5686,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              viewModel.manga?.readingModeType!! > 0 &&
              viewModel.manga?.readingModeType!! != preferences.defaultReadingMode()
          ) {
-@@ -1639,7 +1666,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1649,7 +1676,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
          viewer = newViewer
          binding.viewerContainer.addView(newViewer.getView())
  
@@ -5695,7 +5695,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              binding.readerNav.leftChapter.tooltipText = getString(R.string.next_chapter)
              binding.readerNav.rightChapter.tooltipText = getString(R.string.previous_chapter)
          } else {
-@@ -1655,7 +1682,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1665,7 +1692,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
              lastShiftDoubleState?.let { newViewer.config.shiftDoublePage = it }
          }
  
@@ -5704,7 +5704,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
          binding.viewerContainer.setBackgroundColor(
              if (viewer is WebtoonViewer) {
                  Color.BLACK
-@@ -1672,7 +1699,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1682,7 +1709,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                      binding.navLayout.layoutParams as CoordinatorLayout.LayoutParams
                  params.anchorGravity == Gravity.TOP or Gravity.END
              } else {
@@ -5713,7 +5713,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              }
          reapplyVerticalSeekbarLayout()
  
-@@ -1687,16 +1714,25 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1697,16 +1724,25 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                      ?.readingModeType ?: 0,
              )
          binding.chaptersSheet.readingMode.setIconResource(viewerMode.iconRes)
@@ -5739,7 +5739,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
          viewModel.setReadStartTime()
      }
  
-@@ -1709,7 +1745,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1719,7 +1755,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
          (viewer as? PagerViewer)?.refreshCutoutInsets()
          if (isInMultiWindowMode) {
              wic.show(systemBars())
@@ -5748,7 +5748,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              wic.hide(systemBars())
              wic.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
          }
-@@ -1800,7 +1836,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1810,7 +1846,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
          if (viewerChapters.nextChapter == null && viewerChapters.prevChapter == null) {
              binding.readerNav.startCell.isVisible = false
              binding.readerNav.endCell.isVisible = false
@@ -5757,10 +5757,10 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              binding.readerNav.leftChapter.alpha = if (viewerChapters.nextChapter != null) 1f else 0.5f
              binding.readerNav.rightChapter.alpha = if (viewerChapters.prevChapter != null) 1f else 0.5f
          } else {
-@@ -1910,6 +1946,35 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
-         hasExtraPage: Boolean,
+@@ -1951,6 +1987,35 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      ) {
          viewModel.onPageSelected(page, hasExtraPage)
+         flashPage()
 +        if (page is NovelProgressPage) {
 +            val presentation = page.presentation
 +            val currentPage =
@@ -5793,7 +5793,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
          val pages = page.chapter.pages ?: return
  
          val currentPage =
-@@ -1935,7 +2000,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -1976,7 +2041,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
              }
          }
          binding.pageNumber.text = if (resources.isLTR) "$currentPage/$totalPages" else "$totalPages/$currentPage"
@@ -5802,7 +5802,7 @@ index 78b95ebae863d22aae92eb027df1df834bed2a86..ec233b9cc559bb25aab0c0eecca13c83
              binding.readerNav.rightPageText.text = currentPage
              binding.readerNav.leftPageText.text = totalPages
          } else {
-@@ -2254,7 +2319,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -2295,7 +2360,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                          setMenuVisibility(false)
                      }
                  }
@@ -6016,7 +6016,7 @@ index 44ba1213bc132502cb7f5d3fb98fa6e34d70ddf3..3a38098ebf70480c56aea9bcd44b57be
          android:id="@+id/action_more"
          android:icon="@drawable/ic_more_vert_24dp"
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index f43f9884eb54f06b71015c7c3a3fcb0969117c43..e004318aed2adea4baa19a8108ebf0f06fd7441f 100644
+index c42175401cf5bd64ee6aeaf01cf80c5ed79623f2..3be3ed9b130e1f0fb83f41ca78a7faf6da96e0c8 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -330,6 +330,7 @@

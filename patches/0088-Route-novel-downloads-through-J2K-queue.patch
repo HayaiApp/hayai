@@ -1,4 +1,4 @@
-From ceb276a41336080d98f3f94b5d6d37c24b045717 Mon Sep 17 00:00:00 2001
+From a355eadb27b478d7d847dd7b12062552efb16fba Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 18:54:59 +0300
 Subject: [PATCH] Route novel downloads through J2K queue
@@ -349,10 +349,10 @@ index 4183b808d3c552a982ee93cf78852699c5404b71..9f8db0b45a61f739eaf1703a77014ff2
  
      fun indexOf(chapterId: Long): Int = currentItems.indexOfFirst { it is ChapterItem && it.id == chapterId }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 1675db314221b92da76c87222dff0f2506799b2f..9ebd9bcde844a3db2a61921650493c69755e6c06 100644
+index a3998144d0467653763c98bc110b1fcdf0d33dc4..5dcf5a011ddede96caa8d086b9f0d9813d7bf322 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-@@ -867,6 +867,9 @@ class MangaDetailsController :
+@@ -868,6 +868,9 @@ class MangaDetailsController :
  
      //region Recycler methods
      fun updateChapterDownload(download: Download) {
@@ -362,7 +362,7 @@ index 1675db314221b92da76c87222dff0f2506799b2f..9ebd9bcde844a3db2a61921650493c69
          getHolder(download.chapter)?.notifyStatus(
              download.status,
              presenter.isLockedFromSearch,
-@@ -1620,10 +1623,6 @@ class MangaDetailsController :
+@@ -1621,10 +1624,6 @@ class MangaDetailsController :
  
      private fun downloadChapters(chapters: List<ChapterItem>) {
          val view = view ?: return
@@ -373,7 +373,7 @@ index 1675db314221b92da76c87222dff0f2506799b2f..9ebd9bcde844a3db2a61921650493c69
          presenter.downloadChapters(chapters)
          val text =
              view.context.getString(
-@@ -1659,36 +1658,14 @@ class MangaDetailsController :
+@@ -1660,36 +1659,14 @@ class MangaDetailsController :
          }
      }
  
@@ -411,7 +411,7 @@ index 1675db314221b92da76c87222dff0f2506799b2f..9ebd9bcde844a3db2a61921650493c69
              }
          }
      }
-@@ -1749,8 +1726,8 @@ class MangaDetailsController :
+@@ -1750,8 +1727,8 @@ class MangaDetailsController :
              onItemClick(null, position)
              return
          }

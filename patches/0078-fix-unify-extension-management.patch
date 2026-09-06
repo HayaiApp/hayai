@@ -1,4 +1,4 @@
-From f8e26b3683ca3cda9c26d03faf85de96d243e2fc Mon Sep 17 00:00:00 2001
+From ba605d8079d692d148a9a7369112cbe8fcb12040 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 13:05:11 +0300
 Subject: [PATCH] fix: unify extension management
@@ -2899,7 +2899,7 @@ index 71ec32e8b51f3a59c0ace8a92fad642978505404..cabb3f39c83da943f808ef1fb9bf30f6
                      summaryRes = R.string.hayai_novel_repository_management_summary
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-index 9007c62e3c10a6a7464c765e5d3d9f5f0b16c155..b747b048231da2f8484eb2b7ec6004fda68217d6 100644
+index 29346c7774c5b831b7e52758d01902d8c7d01829..47908478cfa7382126b625cf6e9ef9d18bc60d2a 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 @@ -47,7 +47,6 @@ import eu.kanade.tachiyomi.ui.main.TabbedInterface
@@ -2910,7 +2910,7 @@ index 9007c62e3c10a6a7464c765e5d3d9f5f0b16c155..b747b048231da2f8484eb2b7ec6004fd
  import eu.kanade.tachiyomi.ui.source.globalsearch.GlobalSearchController
  import eu.kanade.tachiyomi.util.system.dpToPx
  import eu.kanade.tachiyomi.util.system.getBottomGestureInsets
-@@ -338,7 +337,7 @@ class BrowseController :
+@@ -339,7 +338,7 @@ class BrowseController :
      }
  
      private fun updateSheetMenu() {
@@ -2919,7 +2919,7 @@ index 9007c62e3c10a6a7464c765e5d3d9f5f0b16c155..b747b048231da2f8484eb2b7ec6004fd
          binding.bottomSheet.sheetToolbar.title =
              if (!onExtensionTab) {
                  binding.bottomSheet.root.currentSourceTitle
-@@ -428,14 +427,7 @@ class BrowseController :
+@@ -429,14 +428,7 @@ class BrowseController :
                      router.pushController(SettingsBrowseController().withFadeTransaction())
                  }
                  R.id.action_ext_repos -> {
@@ -2935,7 +2935,7 @@ index 9007c62e3c10a6a7464c765e5d3d9f5f0b16c155..b747b048231da2f8484eb2b7ec6004fd
                  }
              }
              return@setOnMenuItemClickListener true
-@@ -531,9 +523,6 @@ class BrowseController :
+@@ -532,9 +524,6 @@ class BrowseController :
          binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
              bottomMargin = -pad.toInt()
          }

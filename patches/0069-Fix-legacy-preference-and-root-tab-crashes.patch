@@ -1,4 +1,4 @@
-From 5cdd185e718558679590ea354df8c807289a28f8 Mon Sep 17 00:00:00 2001
+From 1ece6397585d1a4f0b7e43b0ed4e12ead37874ec Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 07:56:01 +0300
 Subject: [PATCH] Fix legacy preference and root tab crashes
@@ -53,7 +53,7 @@ index 0000000000000000000000000000000000000000..a0a82b5aa9cd2816223b49c0a3919e55
 +        defaultValue,
 +    )
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-index ece8ddc4e42059881a481c4a0f5e0bb1730fc578..1e6859817854a4c680b6b60413d2611e7e2fe981 100644
+index 973e1d62359971bc30b9c8dec6bb3668074d567e..bf5802738013cdfa810d8404e1b0f573f361849b 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 @@ -9,6 +9,7 @@ import com.fredporciuncula.flow.preferences.FlowSharedPreferences
@@ -64,7 +64,7 @@ index ece8ddc4e42059881a481c4a0f5e0bb1730fc578..1e6859817854a4c680b6b60413d2611e
  import eu.kanade.tachiyomi.BuildConfig
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.database.models.Manga
-@@ -131,9 +132,9 @@ class PreferencesHelper(
+@@ -132,9 +133,9 @@ class PreferencesHelper(
  
      private val supportsDynamic = DynamicColors.isDynamicColorAvailable()
  
@@ -76,7 +76,7 @@ index ece8ddc4e42059881a481c4a0f5e0bb1730fc578..1e6859817854a4c680b6b60413d2611e
  
      fun pageTransitions() = flowPrefs.getBoolean(Keys.enableTransitions, true)
  
-@@ -195,9 +196,9 @@ class PreferencesHelper(
+@@ -204,9 +205,9 @@ class PreferencesHelper(
  
      fun navigationModeWebtoon() = flowPrefs.getInt(Keys.navigationModeWebtoon, 0)
  
@@ -88,7 +88,7 @@ index ece8ddc4e42059881a481c4a0f5e0bb1730fc578..1e6859817854a4c680b6b60413d2611e
  
      fun pageLayout() = flowPrefs.getInt(Keys.pageLayout, PageLayout.AUTOMATIC.value)
  
-@@ -207,7 +208,8 @@ class PreferencesHelper(
+@@ -216,7 +217,8 @@ class PreferencesHelper(
  
      fun webtoonPageLayout() = flowPrefs.getInt(Keys.webtoonPageLayout, PageLayout.SINGLE_PAGE.value)
  
@@ -98,7 +98,7 @@ index ece8ddc4e42059881a481c4a0f5e0bb1730fc578..1e6859817854a4c680b6b60413d2611e
  
      fun webtoonInvertDoublePages() = flowPrefs.getBoolean(Keys.webtoonInvertDoublePages, false)
  
-@@ -404,7 +406,7 @@ class PreferencesHelper(
+@@ -416,7 +418,7 @@ class PreferencesHelper(
  
      fun lastUnlock() = flowPrefs.getLong(Keys.lastUnlock, 0)
  
@@ -107,7 +107,7 @@ index ece8ddc4e42059881a481c4a0f5e0bb1730fc578..1e6859817854a4c680b6b60413d2611e
  
      fun hideNotificationContent() = prefs.getBoolean(Keys.hideNotificationContent, false)
  
-@@ -429,7 +431,8 @@ class PreferencesHelper(
+@@ -441,7 +443,8 @@ class PreferencesHelper(
  
      fun recentsViewType() = flowPrefs.getInt("recents_view_type", 0)
  
@@ -117,7 +117,7 @@ index ece8ddc4e42059881a481c4a0f5e0bb1730fc578..1e6859817854a4c680b6b60413d2611e
  
      fun showRecentsRemHistory() = flowPrefs.getBoolean(Keys.showRemHistoryInRecents, true)
  
-@@ -441,7 +444,12 @@ class PreferencesHelper(
+@@ -453,7 +456,12 @@ class PreferencesHelper(
  
      fun collapseGroupedUpdates() = flowPrefs.getBoolean("group_chapters_updates", false)
  
@@ -132,10 +132,10 @@ index ece8ddc4e42059881a481c4a0f5e0bb1730fc578..1e6859817854a4c680b6b60413d2611e
      fun collapseGroupedHistory() = flowPrefs.getBoolean("collapse_group_history", true)
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
-index 9ae809fdb56a1df169ffb0a49f42877b8be88c83..0d46375862b0d5c8ac1a9a90a70cf5fc4afe7bc7 100644
+index 0c43404f7f6274613dba466690dc0017e9655a72..34dec90806da41d699901789861a5d24a6cb9ff4 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
-@@ -1099,7 +1099,7 @@ class RecentsController(
+@@ -1106,7 +1106,7 @@ class RecentsController(
              }
          } else {
              val lastController = router.backstack.lastOrNull()?.controller
@@ -144,7 +144,7 @@ index 9ae809fdb56a1df169ffb0a49f42877b8be88c83..0d46375862b0d5c8ac1a9a90a70cf5fc
                  (activity as? MainActivity)?.showTabBar(show = false, animate = lastController !is SmallToolbarInterface)
              }
              snack?.dismiss()
-@@ -1116,6 +1116,7 @@ class RecentsController(
+@@ -1123,6 +1123,7 @@ class RecentsController(
              setBottomPadding()
          }
          if (type.isEnter && isControllerVisible) {
@@ -153,10 +153,10 @@ index 9ae809fdb56a1df169ffb0a49f42877b8be88c83..0d46375862b0d5c8ac1a9a90a70cf5fc
          }
      }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-index b4f3bdfe3730b8e0651e0ac5e783cae9532951ba..bec8aa98f0cfec06a92e32f440667a252aa84941 100644
+index e199249fb6a9be65f61e8c37d8aa0de5cea30639..b22b06e479e028775729e5dbfc8cf3530f5b6dc5 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-@@ -644,7 +644,10 @@ class BrowseController :
+@@ -645,7 +645,10 @@ class BrowseController :
                  val searchView = searchItem.actionView as SearchView
                  searchView.clearFocus()
              }
@@ -168,7 +168,7 @@ index b4f3bdfe3730b8e0651e0ac5e783cae9532951ba..bec8aa98f0cfec06a92e32f440667a25
          } else {
              setupContentTabs(true)
              binding.bottomSheet.root.presenter
-@@ -659,7 +662,8 @@ class BrowseController :
+@@ -660,7 +663,8 @@ class BrowseController :
          type: ControllerChangeType,
      ) {
          super.onChangeEnded(handler, type)

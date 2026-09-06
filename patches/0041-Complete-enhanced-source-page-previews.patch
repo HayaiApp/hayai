@@ -1,4 +1,4 @@
-From 8caf740055e7a07e92e9e1828e8e6c1297ae9326 Mon Sep 17 00:00:00 2001
+From 8be0274f24d1e747973d9137a3ba1c44b5b451eb Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 04:09:33 +0300
 Subject: [PATCH] Complete enhanced source page previews
@@ -1240,7 +1240,7 @@ index 64de2217ec110cac66c0ce42557297b5c586049f..51974eaa04d3cc9e504974382f479073
  fun Source.pkgName() = Injekt.get<ExtensionManager>().getPackageName(id)
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 09bca1f2b575673941667389535186b75a545d04..d8a1bec1b71d184e8f0ecf4b50655d778102e093 100644
+index eb2aabec38edd82ab5101a68cd5e4bbc668be8fb..d390eb5ad8fa1eb45f400b104450eb8e30426863 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -8,6 +8,7 @@ import android.content.ClipData
@@ -1271,7 +1271,7 @@ index 09bca1f2b575673941667389535186b75a545d04..d8a1bec1b71d184e8f0ecf4b50655d77
  import eu.kanade.tachiyomi.network.NetworkHelper
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.davidea.flexibleadapter.SelectableAdapter
-@@ -227,12 +232,14 @@ class MangaDetailsController :
+@@ -228,12 +233,14 @@ class MangaDetailsController :
      private var isPushing = true
      private val novelIntegration: NovelJ2kIntegration by injectLazy()
      private val sourceDetailsPreviewRegistry: SourceDetailsPreviewRegistry by injectLazy()
@@ -1287,7 +1287,7 @@ index 09bca1f2b575673941667389535186b75a545d04..d8a1bec1b71d184e8f0ecf4b50655d77
  
      // Prevents the favorite button's drag-to-open popup from firing underneath
      // the categories sheet when a long press opens it mid-gesture
-@@ -475,8 +482,7 @@ class MangaDetailsController :
+@@ -476,8 +483,7 @@ class MangaDetailsController :
      override fun onDestroyView(view: View) {
          novelPresentationJob?.cancel()
          sourceDetailsFeaturesJob?.cancel()
@@ -1297,7 +1297,7 @@ index 09bca1f2b575673941667389535186b75a545d04..d8a1bec1b71d184e8f0ecf4b50655d77
          novelPresentationJob = null
          snack?.dismiss()
          adapter = null
-@@ -1434,13 +1440,13 @@ class MangaDetailsController :
+@@ -1435,13 +1441,13 @@ class MangaDetailsController :
      }
  
      override fun bindSourceDetailsFeatures(container: LinearLayout) {
@@ -1313,7 +1313,7 @@ index 09bca1f2b575673941667389535186b75a545d04..d8a1bec1b71d184e8f0ecf4b50655d77
              container.tag = null
              featureRoot.visibility = View.GONE
              return
-@@ -1458,72 +1464,101 @@ class MangaDetailsController :
+@@ -1459,72 +1465,101 @@ class MangaDetailsController :
          if (container.tag == identity) return
          container.tag = identity
          container.removeAllViews()
@@ -1462,7 +1462,7 @@ index 09bca1f2b575673941667389535186b75a545d04..d8a1bec1b71d184e8f0ecf4b50655d77
      }
  
      fun openChapterInWebView(item: ChapterItem) {
-@@ -2316,6 +2351,7 @@ class MangaDetailsController :
+@@ -2317,6 +2352,7 @@ class MangaDetailsController :
  
          private const val MENU_COPY_COVER = 1
          private const val MENU_PASTE_COVER = 2
@@ -1471,7 +1471,7 @@ index 09bca1f2b575673941667389535186b75a545d04..d8a1bec1b71d184e8f0ecf4b50655d77
          private enum class RangeMode {
              Download,
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
-index 673ee10e552ac21a376cbded71ea1ec950858b43..78b95ebae863d22aae92eb027df1df834bed2a86 100644
+index 08d16a0a4af9d1bec577caaaa29ea0dccc151af1..475a29b2ab425f626a486d43f3893a9b4e6ce75a 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderActivity.kt
 @@ -81,6 +81,7 @@ import com.google.android.material.slider.SliderOrientation
@@ -1482,7 +1482,7 @@ index 673ee10e552ac21a376cbded71ea1ec950858b43..78b95ebae863d22aae92eb027df1df83
  import eu.kanade.tachiyomi.BuildConfig
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.database.models.Chapter
-@@ -296,6 +297,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+@@ -300,6 +301,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
       * Called when the activity is created. Initializes the view model and configuration.
       */
      override fun onCreate(savedInstanceState: Bundle?) {

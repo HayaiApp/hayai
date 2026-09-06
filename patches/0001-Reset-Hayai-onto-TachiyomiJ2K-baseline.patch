@@ -1,4 +1,4 @@
-From b20d36899e19be9f7f46d5a887c1d179de6b25b7 Mon Sep 17 00:00:00 2001
+From 70d3015ab756ca9ff62f294308d64a1f46ddf047 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 16:48:42 +0300
 Subject: [PATCH] Reset Hayai onto TachiyomiJ2K baseline
@@ -1952,7 +1952,7 @@ index c764e0b0374b9259de97463e34f4d04011aaf3be..8d212d49db905fc2fc21e2f16501c981
  
  val RELEASE_URL = "https://github.com/$GITHUB_REPO/releases/tag/$RELEASE_TAG"
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt
-index 19f36eed0edbfc3eacc169eda06f49695e064625..419d42ccefa4b802ac5fa085a903d02f44660698 100644
+index 7b8a05fc30ed4611877026740c11b4d7130f1d2a..e74388b8072a2886d69244ec2712129dbf2de590 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt
 @@ -59,6 +59,7 @@ import com.fredporciuncula.flow.preferences.Preference
@@ -1963,7 +1963,7 @@ index 19f36eed0edbfc3eacc169eda06f49695e064625..419d42ccefa4b802ac5fa085a903d02f
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.davidea.flexibleadapter.SelectableAdapter
  import eu.davidea.flexibleadapter.items.IFlexible
-@@ -1666,13 +1667,15 @@ open class LibraryController(
+@@ -1688,13 +1689,15 @@ open class LibraryController(
          val activity = activity ?: return
          val chapter = presenter.getFirstUnread(manga) ?: return
          activity.apply {
@@ -2048,7 +2048,7 @@ index 384e99410bdc832b4b63507cfb1a32324b6cc4e1..a207173243ad6a712ff19a7d4a49964d
                                  finish()
                                  return true
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 63a9be59e8f55c77484c951d7a676283a51468d9..ad2d3a726758b32dd088cb0072339783c9493f8b 100644
+index bcbfada3e5fb70ff6a4fd3418cf9d658573bef2a..5f5a284f23c3962fca511c761769a80081b3f826 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -51,6 +51,7 @@ import com.google.android.material.chip.Chip
@@ -2059,7 +2059,7 @@ index 63a9be59e8f55c77484c951d7a676283a51468d9..ad2d3a726758b32dd088cb0072339783
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.davidea.flexibleadapter.SelectableAdapter
  import eu.kanade.tachiyomi.R
-@@ -1119,7 +1120,9 @@ class MangaDetailsController :
+@@ -1120,7 +1121,9 @@ class MangaDetailsController :
          sharedElement: View? = null,
      ) {
          (activity as? AppCompatActivity)?.apply {
@@ -2070,7 +2070,7 @@ index 63a9be59e8f55c77484c951d7a676283a51468d9..ad2d3a726758b32dd088cb0072339783
                  val (intent, bundle) =
                      ReaderActivity
                          .newIntentWithTransitionOptions(this, manga!!, chapter, sharedElement)
-@@ -1138,7 +1141,7 @@ class MangaDetailsController :
+@@ -1139,7 +1142,7 @@ class MangaDetailsController :
                  intent.putExtra(ReaderActivity.VISIBLE_CHAPTERS, chapterRange)
                  startActivity(intent, bundle)
              } else {
@@ -2080,7 +2080,7 @@ index 63a9be59e8f55c77484c951d7a676283a51468d9..ad2d3a726758b32dd088cb0072339783
          }
      }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
-index bc02acdf780acc5fb98129611ad628087c3ebdae..9ae809fdb56a1df169ffb0a49f42877b8be88c83 100644
+index f93935dc76ef35093a5c4cd60f10805ab12362a6..0c43404f7f6274613dba466690dc0017e9655a72 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/recents/RecentsController.kt
 @@ -29,6 +29,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -2091,7 +2091,7 @@ index bc02acdf780acc5fb98129611ad628087c3ebdae..9ae809fdb56a1df169ffb0a49f42877b
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.backup.BackupRestoreJob
-@@ -923,13 +924,15 @@ class RecentsController(
+@@ -930,13 +931,15 @@ class RecentsController(
      ) {
          val activity = activity ?: return
          activity.apply {
@@ -6252,7 +6252,7 @@ index 0000000000000000000000000000000000000000..3effc7aab9f1df77dcb18f21f50df5d9
 +    <color name="hayai_background_gray">#374151</color>
 +</resources>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 97ae8a4b2b9e23d2d6d246af10a621aa81586bea..fdf286fc41aaee66a931ded30d913542fe7ad3b3 100644
+index 6b6cff8a3868e227050e97cdcb0523f15fc74c37..4ebc6681d02f104cbb50903ad3e44bcb856fe419 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -1,11 +1,20 @@

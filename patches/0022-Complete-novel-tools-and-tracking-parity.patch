@@ -1,4 +1,4 @@
-From 3000a887e211850efc32a969f033132ba0d115ad Mon Sep 17 00:00:00 2001
+From b1cca528096974c923b8891e8dea83dd047cfe97 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Fri, 21 Aug 2026 21:48:11 +0300
 Subject: [PATCH] Complete novel tools and tracking parity
@@ -4846,7 +4846,7 @@ index a673a7f2a49ad2c1cd8d8cc85a142497e9a101fa..a19e21a87fce6f12f23f3a60e78a5930
          addSingletonFactory { EhSessionStore(get(), get()) }
          addSingletonFactory { HayaiEhPersistenceStore(get()) }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
-index a7ef457f81ed061600b83ff39d8d6b5e061df8b8..6586f1cd5c26d79a883e44e92b5a2171b494efe7 100644
+index f28f05ee7bc07f68aec643bae57eb822a9d64396..3fc77b5647f2e1bb2bd60bd1c696c87749155811 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/backup/BackupRestorer.kt
 @@ -4,6 +4,7 @@ import android.content.Context
@@ -4857,7 +4857,7 @@ index a7ef457f81ed061600b83ff39d8d6b5e061df8b8..6586f1cd5c26d79a883e44e92b5a2171
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.backup.models.BackupCategory
  import eu.kanade.tachiyomi.data.backup.models.BackupHistory
-@@ -116,7 +117,13 @@ class BackupRestorer(
+@@ -138,7 +139,13 @@ class BackupRestorer(
                  }
              }
              val novelPluginManager = Injekt.get<NovelPluginManager>()
@@ -4924,7 +4924,7 @@ index a92496d4a20b1c84b44a81c050581b53f8833c69..d6fa36ad15126291f01a249120df790d
  
      fun hasLoggedServices() = services.any { it.isLogged }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
-index 3cf4f714b3236145201774ff5642f06a5f784b71..09bca1f2b575673941667389535186b75a545d04 100644
+index e716f563b1323b8ca672344078a7138e75af97ec..eb2aabec38edd82ab5101a68cd5e4bbc668be8fb 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
 @@ -56,6 +56,7 @@ import com.google.android.material.snackbar.Snackbar
@@ -4935,7 +4935,7 @@ index 3cf4f714b3236145201774ff5642f06a5f784b71..09bca1f2b575673941667389535186b7
  import dev.ahmedmohamed.hayai.source.preview.SourceDetailsPreviewRegistry
  import dev.ahmedmohamed.hayai.source.preview.SourceRenderedPreviewPage
  import eu.kanade.tachiyomi.network.NetworkHelper
-@@ -1271,6 +1272,8 @@ class MangaDetailsController :
+@@ -1272,6 +1273,8 @@ class MangaDetailsController :
          menu.findItem(R.id.action_migrate)?.isVisible = !presenter.isLockedFromSearch &&
              !presenter.manga.isLocal() &&
              presenter.manga.favorite
@@ -4944,7 +4944,7 @@ index 3cf4f714b3236145201774ff5642f06a5f784b71..09bca1f2b575673941667389535186b7
      }
  
      override fun onOptionsItemSelected(item: MenuItem): Boolean {
-@@ -1278,6 +1281,15 @@ class MangaDetailsController :
+@@ -1279,6 +1282,15 @@ class MangaDetailsController :
              R.id.action_edit -> openEditMangaDialog()
              R.id.action_open_in_web_view -> openInWebView()
              R.id.action_refresh_tracking -> presenter.refreshTracking(true)

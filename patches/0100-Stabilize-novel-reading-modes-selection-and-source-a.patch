@@ -1,0 +1,2556 @@
+From a07a5eac179fb39b15ecb30e13cf6a1217364f0c Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sun, 6 Sep 2026 16:32:46 +0300
+Subject: [PATCH] Stabilize novel reading modes, selection, and source artwork
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 5c0269a874d276b4c3e6c2c3fe8985e59d49006b..64d8d499ea5f42a2d4a3d25aeb1bf1f0462c65a4 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -157,3 +157,5 @@ ts	phase	decision	why	evidence	result
+ 2026-09-03T19:35:00+03:00	upstream-rebase	replayed the complete Hayai patch series onto J2K e848fcebef	keeps current J2K master as the architectural parent and preserves the fork as a reviewable linear stack	j2k/master e848fcebef; codex/j2k-2026-09-03	COMPILE_VERIFIED
+ 2026-09-03T19:35:01+03:00	novel-reader-and-source-issue-adapters	used small J2K adapters for novel card title lines and saved source-filter controls while retaining J2K ownership of library cards source browsing preferences and reader chapter transitions	addresses issues 30 38 39 46 and 47 without creating duplicate screens models or persistence	AppModule.kt; LibraryGridHolder.kt; LibraryListHolder.kt; SettingsLibraryController.kt; BrowseSourceController.kt; SourceFilterSheet.kt; source_filter_sheet.xml	UNIT_VERIFIED
+ 2026-09-03T19:44:02+03:00	open-issue-batch-validation	passed localization boundary full DevDebug compile and unit tests APK assembly and emulator startup; the extended emulator flow reached migration reader TTS offline save and restart before its UI hierarchy dumper returned no root while MainActivity remained resumed	records successful production checks without misreporting the final harness infrastructure failure	tools/verify-localization.ps1; tools/verify-upstream-boundary.ps1; gradlew compileDevDebugKotlin testDevDebugUnitTest; gradlew assembleDevDebug; tools/verify-apk-startup.ps1; artifacts/emulator-verification/20260903-163423	PARTIAL_EMULATOR_VERIFIED
++2026-09-06T16:00:29.1228328+03:00	novel-reader-stability	kept chapter blocks across J2K preload and page-selection updates; added chapter scroll and bidirectional continuous or paged reading; restored native selection and typography; standardized source logos	preserves the visible text and routes progress through the selected J2K chapter; replaces conflicting layout controls with one backward-compatible preference	NovelReaderViewer.kt; NativeNovelRenderer.kt; NovelHtmlDocumentBuilder.kt; SourceArtwork.kt; tsundoku fe54f05ae038cbc2ae72713c6ac68a2fbccb11af; tools/verify-novel-web-reader.cjs	BROWSER_VERIFIED_ANDROID_PENDING
++2026-09-06T16:31:19.7593216+03:00	novel-reader-stability-verification	verified chapter modes, native selection and viewport anchors, browser pagination, and shared source logos	501 unit tests and 7 Android instrumentation tests passed; Chromium regressions passed; device uses Android 37 16 KB compatibility mode; live-extension and full lifecycle stress checks remain pending	artifacts/novel-reader/gradle-selection.log; gradle-touchscreen.log; instrumentation.log; docs/architecture/j2k-reset.md	VERIFIED_SCOPED
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 51de6ce353d9ae81a8fb19f0bcf621eb63a1417d..6eb0b8186f03359d443fb2a41a97ea1d329817db 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -310,6 +310,9 @@ dependencies {
+ 
+     testImplementation("junit:junit:4.13.2")
+     testImplementation("com.squareup.okhttp3:mockwebserver:$okhttpVersion")
++    androidTestImplementation("androidx.test:runner:1.5.0")
++    androidTestImplementation("androidx.test.ext:junit:1.3.0")
++    androidTestImplementation("androidx.test:core:1.7.0")
+ 
+     // Android Chart
+     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRendererInstrumentedTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRendererInstrumentedTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f68c3590fbfc8a84cce375b65b276ae69c031966
+--- /dev/null
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRendererInstrumentedTest.kt
+@@ -0,0 +1,281 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import android.content.Context
++import android.graphics.Color
++import android.graphics.Bitmap
++import android.os.SystemClock
++import android.util.Log
++import android.view.InputDevice
++import android.view.MotionEvent
++import android.view.ViewConfiguration
++import android.view.ViewGroup
++import android.widget.EditText
++import android.widget.FrameLayout
++import android.widget.TextView
++import androidx.core.widget.NestedScrollView
++import androidx.test.core.app.ActivityScenario
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import eu.kanade.tachiyomi.data.preference.AndroidPreferenceStore
++import eu.kanade.tachiyomi.ui.main.MainActivity
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import java.io.File
++
++@RunWith(AndroidJUnit4::class)
++class NativeNovelRendererInstrumentedTest {
++    private lateinit var scenario: ActivityScenario<MainActivity>
++    private lateinit var renderer: NativeNovelRenderer
++    private lateinit var scroll: NestedScrollView
++    private val events = ReaderEvents()
++    private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
++
++    @Before
++    fun attachReaderToActivity() {
++        scenario = ActivityScenario.launch(MainActivity::class.java)
++        scenario.onActivity { activity ->
++            val prefs = activity.getSharedPreferences("native-reader-instrumentation", Context.MODE_PRIVATE)
++            prefs.edit().clear().commit()
++            renderer = NativeNovelRenderer(activity, events, NovelFontStore(activity, HayaiPreferences(AndroidPreferenceStore(activity, prefs))))
++            scroll = renderer.view as NestedScrollView
++            activity.addContentView(scroll, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
++            renderer.display(chapter(2, 120), NovelBlockPlacement.ReplaceAll, focus = true)
++        }
++        await("initial chapter measured and ready") { events.ready > 0 && chapterView(2).height > scroll.height * 4 }
++    }
++
++    @After
++    fun closeReader() {
++        if (::renderer.isInitialized) scenario.onActivity { renderer.destroy() }
++        if (::scenario.isInitialized) scenario.close()
++    }
++
++    @Test
++    fun nativeLongPressSelectsTextWithoutNavigatingAndHighlightsPreserveSelection() {
++        var x = 0f
++        var y = 0f
++        await("reader window accepts touch input") { scroll.hasWindowFocus() && scroll.isShown }
++        onUi {
++            val text = textView(2)
++            assertFalse(text is EditText)
++            assertTrue(text.isTextSelectable)
++            val location = IntArray(2)
++            text.getLocationOnScreen(location)
++            val firstLine = text.layout.getLineForVertical(scroll.height / 3)
++            val line = (firstLine until text.layout.lineCount).first { candidate ->
++                Regex("\\p{L}{3,}").containsMatchIn(text.text.subSequence(text.layout.getLineStart(candidate), text.layout.getLineEnd(candidate)))
++            }
++            val lineStart = text.layout.getLineStart(line)
++            val lineText = text.text.subSequence(lineStart, text.layout.getLineEnd(line)).toString()
++            val word = requireNotNull(Regex("\\p{L}{3,}").find(lineText)) { "Touch target line has no word: $lineText" }
++            val offset = lineStart + word.range.first + 1
++            val localX = text.totalPaddingLeft + (text.layout.getPrimaryHorizontal(offset) + text.layout.getPrimaryHorizontal(offset + 1)) / 2f
++            val localY = text.totalPaddingTop + text.layout.getLineBaseline(line) + text.paint.fontMetrics.ascent / 2f
++            x = location[0] + localX
++            y = location[1] + localY
++            assertTrue(text.text[text.getOffsetForPosition(localX, localY)].isLetter())
++            Log.i("HayaiNativeTest", "Long press word=${word.value} at $x,$y; ${selectionDiagnostics()}")
++        }
++        val downTime = SystemClock.uptimeMillis()
++        pointer(downTime, MotionEvent.ACTION_DOWN, x, y)
++        SystemClock.sleep(ViewConfiguration.getLongPressTimeout().toLong() + 250)
++        pointer(downTime, MotionEvent.ACTION_UP, x, y)
++        try {
++            await("Android selection action mode") { events.selectionActive && textView(2).hasSelection() }
++        } catch (failure: AssertionError) {
++            val screenshot = instrumentation.uiAutomation.takeScreenshot()
++            if (screenshot != null) {
++                val file = File(instrumentation.targetContext.getExternalFilesDir(null), "native-selection-failure.png")
++                file.outputStream().use { screenshot.compress(Bitmap.CompressFormat.PNG, 100, it) }
++                screenshot.recycle()
++            }
++            var diagnostics = ""
++            onUi { diagnostics = selectionDiagnostics() }
++            throw AssertionError("${failure.message}; $diagnostics", failure)
++        }
++        onUi {
++            val text = textView(2)
++            val start = text.selectionStart
++            val end = text.selectionEnd
++            var selected: NovelSelection? = null
++            renderer.selection { selected = it }
++            assertNotNull(selected)
++            assertTrue(selected!!.selectedText.isNotBlank())
++            renderer.applyHighlights(emptyList())
++            assertEquals(start, text.selectionStart)
++            assertEquals(end, text.selectionEnd)
++            assertEquals(0, events.taps)
++        }
++    }
++
++    @Test
++    fun unequalChapterLengthsKeepTheTopVisibleChapterCurrentInBothDirections() {
++        onUi { renderer.display(chapter(3, 2), NovelBlockPlacement.After, focus = false) }
++        await("next chapter measured") { chapterView(3).top == chapterView(2).bottom }
++        onUi {
++            scroll.scrollTo(0, chapterView(2).bottom - scroll.height / 2)
++            assertEquals(2L, events.visibleChapter)
++            scroll.scrollTo(0, chapterView(3).top)
++            assertEquals(3L, events.visibleChapter)
++            scroll.scrollTo(0, chapterView(3).top - 1)
++            assertEquals(2L, events.visibleChapter)
++            assertEquals(0, events.unkeyedProgress)
++        }
++    }
++
++    @Test
++    fun prependingReplacingAndRetainingChaptersPreservesTheVisibleChapterOffset() {
++        onUi { renderer.focus(2, 50) }
++        await("seek to midpoint") { scroll.scrollY > 0 }
++        var localOffset = 0
++        onUi {
++            localOffset = scroll.scrollY - chapterView(2).top
++            renderer.display(NovelRenderBlock(1, "Previous", NovelBlockContent.Loading), NovelBlockPlacement.Before, focus = false)
++        }
++        await("loading predecessor preserves anchor") { chapterView(2).top > 0 && scroll.scrollY - chapterView(2).top == localOffset }
++        onUi { renderer.display(chapter(1, 70), NovelBlockPlacement.Before, focus = false) }
++        await("loaded predecessor preserves anchor") { chapterView(1).height > scroll.height * 3 && scroll.scrollY - chapterView(2).top == localOffset }
++        onUi { renderer.retain(setOf(2)) }
++        await("removing predecessor preserves anchor") { chapterView(2).top == 0 && scroll.scrollY == localOffset }
++        onUi { assertEquals(2L, events.visibleChapter) }
++    }
++
++    @Test
++    fun focusingMountedChapterDoesNotReplaceTextOrSeekUnlessRequested() {
++        onUi { renderer.display(chapter(3, 30), NovelBlockPlacement.After, focus = false) }
++        await("next chapter layout") { chapterView(3).height > scroll.height }
++        var offset = 0
++        lateinit var mountedText: TextView
++        onUi {
++            scroll.scrollTo(0, chapterView(2).height / 3)
++            offset = scroll.scrollY
++            mountedText = textView(3)
++            renderer.focus(3)
++            assertTrue(mountedText === textView(3))
++            assertEquals(offset, scroll.scrollY)
++            renderer.documentText { assertTrue(it.startsWith("Chapter 3 paragraph 0")) }
++            renderer.focus(3, 50)
++        }
++        await("explicit focus seeks within requested chapter") {
++            val chapter = chapterView(3)
++            scroll.scrollY == NovelViewportGeometry.offset(chapter.top, chapter.height, scroll.height, 50)
++        }
++        onUi {
++            assertTrue(mountedText === textView(3))
++            assertEquals(3L, events.visibleChapter)
++        }
++    }
++
++    @Test
++    fun returningFromEditingRestoresSelectableReadOnlyTextAndPreservesChanges() {
++        onUi {
++            renderer.setEditMode(true)
++            assertTrue(textView(2) is EditText)
++            (textView(2) as EditText).append("\nEdited ending")
++            assertTrue(events.editedContent.endsWith("Edited ending"))
++            renderer.setEditMode(false)
++            assertFalse(textView(2) is EditText)
++            assertTrue(textView(2).isTextSelectable)
++            renderer.documentText { assertTrue(it.endsWith("Edited ending")) }
++        }
++    }
++
++    private fun chapter(id: Long, paragraphs: Int): NovelRenderBlock = NovelRenderBlock(
++        id,
++        "Chapter $id",
++        NovelBlockContent.Ready(
++            NovelRenderRequest(
++                id,
++                ProcessedNovelContent((0 until paragraphs).joinToString("") { "<p>Chapter $id paragraph $it. This is selectable native text with enough words to wrap across several lines in the reader viewport.</p>" }, null),
++                "Chapter $id",
++                NovelReaderStyle(
++                    fontSize = 18,
++                    fontFamily = "sans-serif",
++                    lineHeight = 1.5f,
++                    textAlign = "justify",
++                    textColor = Color.BLACK,
++                    backgroundColor = Color.WHITE,
++                    linkColor = Color.BLUE,
++                    paragraphIndent = 1f,
++                    paragraphSpacing = 0.5f,
++                    marginLeft = 20,
++                    marginRight = 20,
++                    marginTop = 20,
++                    marginBottom = 20,
++                    useOriginalFonts = true,
++                    textSelectable = true,
++                    hideChapterTitle = true,
++                    sourceCssPriority = false,
++                    renderingMode = "continuous",
++                    customCss = "",
++                    customJs = "",
++                    ttsHighlightColor = Color.YELLOW,
++                    ttsHighlightTextColor = Color.BLACK,
++                    ttsHighlightStyle = "background",
++                    keepTtsHighlightInView = true,
++                ),
++                initialProgress = 0,
++            ),
++        ),
++    )
++
++    private fun chapterView(id: Long): FrameLayout = scroll.findViewWithTag(id)
++    private fun textView(id: Long): TextView = chapterView(id).getChildAt(0) as TextView
++    private fun onUi(action: () -> Unit) = scenario.onActivity { action() }
++
++    private fun selectionDiagnostics(): String {
++        val text = textView(2)
++        val parents = generateSequence(text.parent) { it.parent }.filterIsInstance<ViewGroup>()
++            .joinToString { "${it.javaClass.simpleName}=${it.descendantFocusability}" }
++        return "focused=${text.hasFocus()}, window=${text.hasWindowFocus()}, focusable=${text.isFocusable}, " +
++            "longClickable=${text.isLongClickable}, movement=${text.movementMethod?.javaClass?.simpleName}, " +
++            "selection=${text.selectionStart}..${text.selectionEnd}, actionMode=${events.selectionActive}, " +
++            "taps=${events.taps}, scrollY=${scroll.scrollY}, parents=[$parents]"
++    }
++
++    private fun await(description: String, condition: () -> Boolean) {
++        val deadline = SystemClock.uptimeMillis() + 5000
++        var matches = false
++        while (SystemClock.uptimeMillis() < deadline) {
++            instrumentation.waitForIdleSync()
++            onUi { matches = condition() }
++            if (matches) return
++            SystemClock.sleep(20)
++        }
++        assertTrue(description, matches)
++    }
++
++    private fun pointer(downTime: Long, action: Int, x: Float, y: Float) {
++        val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, x, y, 0)
++        event.source = InputDevice.SOURCE_TOUCHSCREEN
++        try {
++            instrumentation.sendPointerSync(event)
++        } finally {
++            event.recycle()
++        }
++    }
++
++    private class ReaderEvents : NovelRenderer.Callbacks {
++        var ready = 0
++        var visibleChapter: Long? = null
++        var selectionActive = false
++        var taps = 0
++        var unkeyedProgress = 0
++        var editedContent = ""
++        override fun onReady(progress: Int) { ready++ }
++        override fun onVisibleChapter(chapterId: Long, progress: Int) { visibleChapter = chapterId }
++        override fun onSelectionModeChanged(active: Boolean) { selectionActive = active }
++        override fun onProgress(progress: Int) { unkeyedProgress++ }
++        override fun onTap(xFraction: Float, yFraction: Float) { taps++ }
++        override fun onRetryChapter(chapterId: Long) = Unit
++        override fun onContentEdited(content: String) { editedContent = content }
++        override fun onRendererError(message: String) { throw AssertionError(message) }
++    }
++}
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtworkInstrumentedTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtworkInstrumentedTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..51246b9f24114dfe0cb3fdd4172f35c13eb506b4
+--- /dev/null
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtworkInstrumentedTest.kt
+@@ -0,0 +1,107 @@
++package dev.ahmedmohamed.hayai.source.presentation
++
++import android.content.res.ColorStateList
++import android.graphics.Bitmap
++import android.graphics.Color
++import android.graphics.Outline
++import android.graphics.Rect
++import android.graphics.RectF
++import android.graphics.drawable.BitmapDrawable
++import android.os.SystemClock
++import android.widget.FrameLayout
++import android.widget.ImageView
++import androidx.test.core.app.ActivityScenario
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import coil.dispose
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.ui.main.MainActivity
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++
++@RunWith(AndroidJUnit4::class)
++class SourceArtworkInstrumentedTest {
++    private lateinit var scenario: ActivityScenario<MainActivity>
++    private lateinit var image: ImageView
++    private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
++
++    @Before
++    fun attachImage() {
++        scenario = ActivityScenario.launch(MainActivity::class.java)
++        scenario.onActivity { activity ->
++            image = ImageView(activity).apply { setPadding(20, 20, 20, 20) }
++            activity.addContentView(image, FrameLayout.LayoutParams(160, 160))
++        }
++        await { image.width == 160 && image.height == 160 }
++    }
++
++    @After
++    fun closeImage() {
++        if (::image.isInitialized) scenario.onActivity { image.dispose() }
++        if (::scenario.isInitialized) scenario.close()
++    }
++
++    @Test
++    fun wideArtworkFitsInsidePaddingAndRoundsItsOwnBounds() {
++        bindBitmap(240, 120)
++        onUi { assertFittedOutline(Rect(20, 50, 140, 110)) }
++    }
++
++    @Test
++    fun recycledArtworkResetsCropAndTintAndRecomputesPortraitOutline() {
++        bindBitmap(240, 120)
++        onUi {
++            image.scaleType = ImageView.ScaleType.CENTER_CROP
++            image.imageTintList = ColorStateList.valueOf(Color.RED)
++        }
++        bindBitmap(120, 240)
++        onUi {
++            assertNull(image.imageTintList)
++            assertFittedOutline(Rect(50, 20, 110, 140))
++        }
++    }
++
++    private fun bindBitmap(width: Int, height: Int) {
++        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
++        onUi { image.bindSourceIcon(BitmapDrawable(image.resources, bitmap), R.drawable.ic_code_24dp) }
++        await { (image.drawable as? BitmapDrawable)?.bitmap === bitmap }
++    }
++
++    private fun assertFittedOutline(expected: Rect) {
++        assertEquals(ImageView.ScaleType.FIT_CENTER, image.scaleType)
++        assertTrue(image.clipToOutline)
++        val drawable = image.drawable
++        val displayed = RectF(0f, 0f, drawable.intrinsicWidth.toFloat(), drawable.intrinsicHeight.toFloat())
++        image.imageMatrix.mapRect(displayed)
++        displayed.offset(image.paddingLeft.toFloat(), image.paddingTop.toFloat())
++        assertEquals(expected.left.toFloat(), displayed.left, 0.01f)
++        assertEquals(expected.top.toFloat(), displayed.top, 0.01f)
++        assertEquals(expected.right.toFloat(), displayed.right, 0.01f)
++        assertEquals(expected.bottom.toFloat(), displayed.bottom, 0.01f)
++        val outline = Outline()
++        image.outlineProvider.getOutline(image, outline)
++        val bounds = Rect()
++        assertTrue(outline.getRect(bounds))
++        assertEquals(expected, bounds)
++        assertEquals(8f * image.resources.displayMetrics.density, outline.radius, 0.01f)
++    }
++
++    private fun await(condition: () -> Boolean) {
++        val deadline = SystemClock.uptimeMillis() + 5_000
++        do {
++            instrumentation.waitForIdleSync()
++            var satisfied = false
++            onUi { satisfied = condition() }
++            if (satisfied) return
++            SystemClock.sleep(25)
++        } while (SystemClock.uptimeMillis() < deadline)
++        throw AssertionError("Source artwork did not finish loading or layout")
++    }
++
++    private fun onUi(block: () -> Unit) = instrumentation.runOnMainSync(block)
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+index f463176747efd904dcc627ffe3702d1fa5a89f69..d0ae0069be652661f322fe8d14d292dbcaa930ca 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt
+@@ -1,30 +1,34 @@
+ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.content.Context
++import android.graphics.Paint
+ import android.graphics.Typeface
+ import android.os.Build
+ import android.text.Editable
++import android.text.Layout
+ import android.text.Spannable
+ import android.text.SpannableStringBuilder
++import android.text.Spanned
+ import android.text.TextWatcher
+-import android.text.method.ArrowKeyMovementMethod
+ import android.text.style.BackgroundColorSpan
++import android.text.style.LeadingMarginSpan
++import android.text.style.LineHeightSpan
+ import android.text.style.UnderlineSpan
+ import android.view.ActionMode
+ import android.view.Gravity
+ import android.view.MotionEvent
+ import android.view.View
+ import android.view.ViewGroup
++import android.view.textclassifier.TextClassifier
+ import android.widget.Button
+ import android.widget.EditText
+ import android.widget.FrameLayout
+ import android.widget.LinearLayout
+ import android.widget.ProgressBar
+ import android.widget.TextView
+-import android.view.textclassifier.TextClassifier
+ import androidx.core.text.HtmlCompat
++import androidx.core.view.doOnPreDraw
+ import androidx.core.widget.NestedScrollView
+-import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
+ import org.jsoup.Jsoup
+@@ -34,7 +38,7 @@ internal class NativeNovelRenderer(
+     private val callbacks: NovelRenderer.Callbacks,
+     private val fontStore: NovelFontStore,
+ ) : NovelRenderer {
+-    override val mode = NovelRenderingMode.Native
++    override val mode = NovelRenderingBackend.Native
+     private val container = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+     private val scroll = NestedScrollView(context).apply {
+         isFillViewport = true
+@@ -45,12 +49,19 @@ internal class NativeNovelRenderer(
+     private var activeChapterId: Long? = null
+     private var editMode = false
+     private var applyingText = false
++    private var selectionModeActive = false
++    private var suppressTap = false
++    private var layoutPending = false
++    private var viewportAnchor: NovelViewportAnchor? = null
++    private var pendingFocus: Pair<Long, Int>? = null
++    private var pendingReady: Pair<Long, Int>? = null
++    private var destroyed = false
+     private val gestureDetector =
+         GestureDetectorWithLongTap(
+             context,
+             object : GestureDetectorWithLongTap.Listener() {
+                 override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+-                    if (activeBlock()?.textView?.hasSelection() != true) {
++                    if (!editMode && !suppressTap && !selectionModeActive && blocks.values.none { it.textView?.hasSelection() == true }) {
+                         callbacks.onTap(
+                             event.x / scroll.width.coerceAtLeast(1),
+                             event.y / scroll.height.coerceAtLeast(1),
+@@ -64,61 +75,66 @@ internal class NativeNovelRenderer(
+     init {
+         scroll.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { _, _, _, _, _ -> reportVisibleBlock() })
+         scroll.setOnTouchListener { _, event ->
+-            gestureDetector.onTouchEvent(event)
++            detectTap(scroll, event)
+             false
+         }
++        scroll.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
++            val height = bottom - top
++            if (height > 0 && height != oldBottom - oldTop) {
++                preserveViewport()
++                blocks.values.forEach { it.root.minimumHeight = height }
++            }
++        }
+     }
+ 
+     override fun display(block: NovelRenderBlock, placement: NovelBlockPlacement, focus: Boolean) {
++        preserveViewport()
+         if (placement == NovelBlockPlacement.ReplaceAll) {
++            blocks.values.forEach { it.retryRunnable?.let(it.root::removeCallbacks) }
+             container.removeAllViews()
+             blocks.clear()
+             activeChapterId = null
++            viewportAnchor = null
+         }
+         val existing = blocks[block.chapterId]
+-        val anchor = activeBlock()?.root
+-        val anchorTop = anchor?.top ?: 0
+-        val anchorScroll = scroll.scrollY
+         val native = existing ?: createBlock(block.chapterId).also { created ->
+             blocks[block.chapterId] = created
+-            val oldHeight = container.height
+-            val oldScroll = scroll.scrollY
+             val index = if (placement == NovelBlockPlacement.Before) 0 else container.childCount
+             container.addView(created.root, index)
+             rebuildBlockOrder()
+-            if (placement == NovelBlockPlacement.Before) {
+-                container.post {
+-                    val insertedHeight = (container.height - oldHeight).coerceAtLeast(0)
+-                    scroll.scrollTo(0, oldScroll + insertedHeight)
+-                    if (focus) focusBlock(block.chapterId, block.readyProgress())
+-                }
+-            }
+         }
+         bind(native, block, focus)
+-        if (!focus && placement == NovelBlockPlacement.Before && existing != null && anchor != null) {
+-            container.post { scroll.scrollTo(0, anchorScroll + anchor.top - anchorTop) }
+-        }
+-        if (focus && !(existing == null && placement == NovelBlockPlacement.Before)) {
+-            native.root.post { focusBlock(block.chapterId, block.readyProgress()) }
+-        }
++        if (focus) this.focus(block.chapterId, block.readyProgress())
+     }
+ 
+     override fun retain(chapterIds: Set<Long>) {
++        if (blocks.keys.all(chapterIds::contains)) return
++        preserveViewport()
++        if (viewportAnchor?.chapterId !in chapterIds) {
++            blocks.values.firstOrNull { it.id in chapterIds }?.let {
++                viewportAnchor = NovelViewportAnchor(it.id, scroll.scrollY - it.root.top)
++            }
++        }
+         blocks.keys.filterNot(chapterIds::contains).toList().forEach { id ->
+             val block = blocks.remove(id) ?: return@forEach
+-            val aboveViewport = block.root.bottom <= scroll.scrollY
+-            val height = block.root.height
++            block.retryRunnable?.let(block.root::removeCallbacks)
+             container.removeView(block.root)
+-            if (aboveViewport) scroll.scrollBy(0, -height)
+         }
+         rebuildBlockOrder()
+-        if (activeChapterId !in blocks) reportVisibleBlock()
++    }
++
++    override fun focus(chapterId: Long, progress: Int?) {
++        if (chapterId !in blocks) return
++        activeChapterId = chapterId
++        if (progress != null) {
++            preserveViewport()
++            pendingFocus = chapterId to progress.coerceIn(0, 100)
++        }
+     }
+ 
+     override fun seek(progress: Int) {
+         val block = activeBlock() ?: return
+-        val range = (block.root.height - scroll.height).coerceAtLeast(1)
+-        scroll.scrollTo(0, block.root.top + range * progress.coerceIn(0, 100) / 100)
++        focus(block.id, progress)
+     }
+ 
+     override fun step(direction: Int) = scroll.smoothScrollBy(0, (scroll.height * 0.85f * direction.coerceIn(-1, 1)).toInt())
+@@ -128,13 +144,13 @@ internal class NativeNovelRenderer(
+     }
+ 
+     override fun selection(callback: (NovelSelection?) -> Unit) {
+-        val textView = activeBlock()?.textView ?: return callback(null)
++        val textView = blocks.values.firstOrNull { it.textView?.hasSelection() == true }?.textView ?: return callback(null)
+         callback(textView.novelSelection())
+     }
+ 
+     private fun TextView.novelSelection(): NovelSelection? {
+-        val start = selectionStart.coerceAtLeast(0)
+-        val end = selectionEnd.coerceAtLeast(0)
++        val start = selectionStart.coerceIn(0, text.length)
++        val end = selectionEnd.coerceIn(0, text.length)
+         if (start == end) return null
+         val from = minOf(start, end)
+         val to = maxOf(start, end)
+@@ -156,8 +172,20 @@ internal class NativeNovelRenderer(
+     override fun viewportParagraph(callback: (Int) -> Unit) {
+         val block = activeBlock() ?: return callback(0)
+         if (block.paragraphs.isEmpty()) return callback(0)
+-        val local = (scroll.scrollY - block.root.top).toFloat() / block.root.height.coerceAtLeast(1)
+-        callback((local * block.paragraphs.size).toInt().coerceIn(0, block.paragraphs.lastIndex))
++        val textView = block.textView ?: return callback(0)
++        val layout = textView.layout ?: return callback(0)
++        val line = layout.getLineForVertical((scroll.scrollY - block.root.top - textView.totalPaddingTop).coerceAtLeast(0))
++        val visibleOffset = layout.getLineStart(line)
++        var searchFrom = 0
++        var visibleParagraph = 0
++        block.paragraphs.forEachIndexed { index, paragraph ->
++            val start = textView.text.indexOf(paragraph, searchFrom)
++            if (start >= 0) {
++                if (start <= visibleOffset) visibleParagraph = index
++                searchFrom = start + paragraph.length
++            }
++        }
++        callback(visibleParagraph)
+     }
+ 
+     override fun showTranslation(paragraphs: List<String>, onComplete: () -> Unit) {
+@@ -170,16 +198,14 @@ internal class NativeNovelRenderer(
+ 
+     override fun showOriginal(onComplete: () -> Unit) {
+         val block = activeBlock() ?: return
+-        applyingText = true
+-        block.textView?.text = SpannableStringBuilder(block.original)
++        setBlockText(block, SpannableStringBuilder(block.original))
+         block.paragraphs = block.originalParagraphs
+-        applyingText = false
+         onComplete()
+     }
+ 
+     override fun applyHighlights(items: List<NovelPersistentHighlight>) {
+         val block = activeBlock() ?: return
+-        val content = SpannableStringBuilder(block.textView?.text ?: return)
++        val content = block.textView?.text as? Spannable ?: return
+         content.getSpans(0, content.length, PersistentHighlightSpan::class.java).forEach(content::removeSpan)
+         items.forEach { item ->
+             var offset = -1
+@@ -191,7 +217,6 @@ internal class NativeNovelRenderer(
+             }
+             if (offset >= 0) content.setSpan(PersistentHighlightSpan(item.color), offset, offset + item.exact.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+         }
+-        setBlockText(block, content)
+     }
+ 
+     override fun highlightSpokenParagraph(index: Int) {
+@@ -218,21 +243,30 @@ internal class NativeNovelRenderer(
+     }
+ 
+     override fun setEditMode(enabled: Boolean) {
++        if (editMode == enabled) return
++        preserveViewport()
+         editMode = enabled
+         blocks.values.forEach { block ->
+-            block.textView?.configureInteraction(enabled, block.style?.textSelectable == true)
++            val oldText = block.textView ?: return@forEach
++            val style = block.style ?: return@forEach
++            val content = SpannableStringBuilder(oldText.text)
++            block.root.removeView(oldText)
++            block.textView = createTextView(block, style)
++            setBlockText(block, content)
++            block.root.addView(block.textView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+         }
+         if (enabled) activeBlock()?.textView?.requestFocus()
+     }
+ 
+     override fun destroy() {
++        destroyed = true
+         blocks.values.forEach { it.retryRunnable?.let(it.root::removeCallbacks) }
+         blocks.clear()
+         container.removeAllViews()
+     }
+ 
+     private fun createBlock(id: Long): NativeBlock {
+-        val root = FrameLayout(scroll.context).apply { tag = id; minimumHeight = scroll.resources.displayMetrics.heightPixels }
++        val root = FrameLayout(scroll.context).apply { tag = id; minimumHeight = scroll.height }
+         return NativeBlock(id, root)
+     }
+ 
+@@ -281,47 +315,65 @@ internal class NativeNovelRenderer(
+     }
+ 
+     private fun bindReady(block: NativeBlock, request: NovelRenderRequest, notifyReady: Boolean) {
+-        val textView = EditText(scroll.context).apply {
++        val textView = createTextView(block, request.style)
++        block.textView = textView
++        block.style = request.style
++        scroll.setBackgroundColor(request.style.backgroundColor)
++        container.setBackgroundColor(request.style.backgroundColor)
++        val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
++        val spanned = HtmlCompat.fromHtml(title + request.content.html, HtmlCompat.FROM_HTML_MODE_COMPACT)
++        block.original = SpannableStringBuilder(spanned)
++        block.paragraphs = Jsoup.parse(request.content.html).select("h1,h2,h3,h4,h5,h6,p,li,blockquote").map { it.text().trim() }.filter(String::isNotBlank)
++        block.originalParagraphs = block.paragraphs
++        setBlockText(block, SpannableStringBuilder(block.original))
++        block.root.addView(textView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
++        if (notifyReady) pendingReady = block.id to request.initialProgress
++    }
++
++    private fun createTextView(block: NativeBlock, readerStyle: NovelReaderStyle): TextView {
++        val textView = (if (editMode) EditText(scroll.context) else TextView(scroll.context)).apply {
+             background = null
+             gravity = Gravity.TOP or Gravity.START
+             setPadding(0, 0, 0, 0)
+-            configureInteraction(editMode, request.style.textSelectable)
++            if (this is EditText) {
++                showSoftInputOnFocus = true
++            } else {
++                setTextIsSelectable(readerStyle.textSelectable)
++            }
++            linksClickable = false
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
+             val selectionTextView = this
+             customSelectionActionModeCallback =
+                 NovelSelectionActionModes.wrap(
+                     context = context,
+                     readOnly = { !editMode },
+                     onAction = { action, mode -> dispatchSelectionAction(selectionTextView, action, mode) },
+-                    onSelectionModeChanged = callbacks::onSelectionModeChanged,
++                    onSelectionModeChanged = { active ->
++                        selectionModeActive = active
++                        if (active) {
++                            activeChapterId = block.id
++                            callbacks.onVisibleChapter(block.id, blockProgress(block))
++                        }
++                        callbacks.onSelectionModeChanged(active)
++                    },
+                 )
+-            setOnTouchListener { _, event ->
+-                gestureDetector.onTouchEvent(event)
++            setOnTouchListener { target, event ->
++                detectTap(target, event)
+                 false
+             }
+         }
+-        block.textView = textView
+-        block.style = request.style
+-        scroll.setBackgroundColor(request.style.backgroundColor)
+-        container.setBackgroundColor(request.style.backgroundColor)
+-        val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
+-        val spanned = HtmlCompat.fromHtml(title + request.content.html, HtmlCompat.FROM_HTML_MODE_LEGACY)
+-        block.original = SpannableStringBuilder(spanned)
+-        block.paragraphs = Jsoup.parse(request.content.html).select("h1,h2,h3,h4,h5,h6,p,li,blockquote").map { it.text().trim() }.filter(String::isNotBlank)
+-        block.originalParagraphs = block.paragraphs
+-        style(textView, request.style)
+-        setBlockText(block, SpannableStringBuilder(block.original))
+-        textView.addTextChangedListener(
++        style(textView, readerStyle)
++        if (textView is EditText) textView.addTextChangedListener(
+             object : TextWatcher {
+                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                 override fun afterTextChanged(s: Editable?) { if (editMode && !applyingText && activeChapterId == block.id) callbacks.onContentEdited(s?.toString().orEmpty()) }
+             },
+         )
+-        block.root.addView(textView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+-        if (notifyReady) block.root.post { callbacks.onReady(request.initialProgress) }
++        return textView
+     }
+ 
+-    private fun style(textView: EditText, style: NovelReaderStyle) {
++    private fun style(textView: TextView, style: NovelReaderStyle) {
+         textView.textSize = style.fontSize.toFloat()
+         textView.setTextColor(style.textColor)
+         textView.setBackgroundColor(style.backgroundColor)
+@@ -333,12 +385,28 @@ internal class NativeNovelRenderer(
+             }
+         textView.setLineSpacing(0f, style.lineHeight.coerceIn(0.8f, 3f))
+         textView.gravity = when (style.textAlign) { "center" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL; "right", "end" -> Gravity.TOP or Gravity.END; else -> Gravity.TOP or Gravity.START }
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
++            textView.justificationMode = if (style.textAlign == "justify") Layout.JUSTIFICATION_MODE_INTER_WORD else Layout.JUSTIFICATION_MODE_NONE
++        }
+         textView.setPadding((style.marginLeft * density).toInt(), (style.marginTop * density).toInt(), (style.marginRight * density).toInt(), (style.marginBottom * density).toInt())
+     }
+ 
+     private fun setBlockText(block: NativeBlock, text: CharSequence) {
++        preserveViewport()
+         applyingText = true
+-        block.textView?.setText(text, TextView.BufferType.SPANNABLE)
++        val content = SpannableStringBuilder(text)
++        content.getSpans(0, content.length, ParagraphIndentSpan::class.java).forEach(content::removeSpan)
++        content.getSpans(0, content.length, ParagraphSpacingSpan::class.java).forEach(content::removeSpan)
++        block.style?.let { style ->
++            val em = block.textView?.textSize ?: 0f
++            Regex("[^\\n]+(?:\\n|$)").findAll(content).forEach { paragraph ->
++                val start = paragraph.range.first
++                val end = paragraph.range.last + 1
++                content.setSpan(ParagraphIndentSpan((style.paragraphIndent.coerceIn(0f, 10f) * em).toInt()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
++                content.setSpan(ParagraphSpacingSpan((style.paragraphSpacing.coerceIn(0f, 5f) * em).toInt()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
++            }
++        }
++        block.textView?.setText(content, TextView.BufferType.SPANNABLE)
+         applyingText = false
+     }
+ 
+@@ -355,21 +423,61 @@ internal class NativeNovelRenderer(
+     private fun focusBlock(id: Long, progress: Int) {
+         val block = blocks[id] ?: return
+         activeChapterId = id
+-        val range = (block.root.height - scroll.height).coerceAtLeast(1)
+-        scroll.scrollTo(0, block.root.top + range * progress.coerceIn(0, 100) / 100)
+-        callbacks.onVisibleChapter(id, progress.coerceIn(0, 100))
++        scroll.scrollTo(0, NovelViewportGeometry.offset(block.root.top, block.root.height, scroll.height, progress))
+     }
+ 
+     private fun reportVisibleBlock() {
+-        if (blocks.isEmpty()) return
+-        val marker = scroll.scrollY + scroll.height / 3
+-        val block = blocks.values.minByOrNull { kotlin.math.abs((it.root.top + it.root.height / 2) - marker) } ?: return
++        if (layoutPending || destroyed || selectionModeActive || scroll.height <= 0) return
++        val block = visibleBlock() ?: return
+         if (block.textView == null) return
+         activeChapterId = block.id
+-        val localRange = (block.root.height - scroll.height).coerceAtLeast(1)
+-        val progress = ((scroll.scrollY - block.root.top).coerceAtLeast(0) * 100 / localRange).coerceIn(0, 100)
+-        callbacks.onVisibleChapter(block.id, progress)
+-        callbacks.onProgress(progress)
++        callbacks.onVisibleChapter(block.id, blockProgress(block))
++    }
++
++    private fun blockProgress(block: NativeBlock): Int =
++        NovelViewportGeometry.progress(block.root.top, block.root.height, scroll.height, scroll.scrollY)
++
++    private fun visibleBlock(): NativeBlock? = blocks.values.firstOrNull {
++        NovelViewportGeometry.contains(it.root.top, it.root.bottom, scroll.scrollY)
++    } ?: blocks.values.lastOrNull { it.root.top <= scroll.scrollY }
++
++    private fun preserveViewport() {
++        if (layoutPending || destroyed) return
++        layoutPending = true
++        viewportAnchor = visibleBlock()?.let { NovelViewportAnchor(it.id, scroll.scrollY - it.root.top) }
++        scroll.doOnPreDraw {
++            if (destroyed) return@doOnPreDraw
++            val focus = pendingFocus
++            pendingFocus = null
++            if (focus != null) {
++                focusBlock(focus.first, focus.second)
++            } else {
++                viewportAnchor?.let { anchor ->
++                    blocks[anchor.chapterId]?.let { scroll.scrollTo(0, it.root.top + anchor.offset) }
++                }
++            }
++            viewportAnchor = null
++            layoutPending = false
++            val ready = pendingReady
++            pendingReady = null
++            if (ready != null && activeChapterId == ready.first) callbacks.onReady(ready.second)
++            reportVisibleBlock()
++        }
++        scroll.invalidate()
++    }
++
++    private fun detectTap(target: View, event: MotionEvent) {
++        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
++            suppressTap = editMode || selectionModeActive || blocks.values.any { it.textView?.hasSelection() == true }
++        }
++        val targetLocation = IntArray(2)
++        val viewportLocation = IntArray(2)
++        target.getLocationOnScreen(targetLocation)
++        scroll.getLocationOnScreen(viewportLocation)
++        val viewportEvent = MotionEvent.obtain(event)
++        viewportEvent.offsetLocation((targetLocation[0] - viewportLocation[0]).toFloat(), (targetLocation[1] - viewportLocation[1]).toFloat())
++        gestureDetector.onTouchEvent(viewportEvent)
++        viewportEvent.recycle()
+     }
+ 
+     private fun rebuildBlockOrder() {
+@@ -387,17 +495,6 @@ internal class NativeNovelRenderer(
+     private fun centeredParams() = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+     private val density get() = scroll.resources.displayMetrics.density
+     private val Int.dp get() = (this * density).toInt()
+-    private fun EditText.configureInteraction(editing: Boolean, selectable: Boolean) {
+-        showSoftInputOnFocus = editing
+-        setTextIsSelectable(selectable && !editing)
+-        movementMethod = if (editing || selectable) ArrowKeyMovementMethod.getInstance() else null
+-        linksClickable = false
+-        isFocusable = editing || selectable
+-        isFocusableInTouchMode = editing || selectable
+-        isLongClickable = selectable && !editing
+-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
+-        if (!editing) clearFocus()
+-    }
+     private fun occurrenceBefore(document: String, exact: String, end: Int): Int {
+         var count = 0
+         var cursor = 0
+@@ -414,7 +511,7 @@ internal class NativeNovelRenderer(
+         val id: Long,
+         val root: FrameLayout,
+         var title: String = "",
+-        var textView: EditText? = null,
++        var textView: TextView? = null,
+         var original: CharSequence = "",
+         var paragraphs: List<String> = emptyList(),
+         var originalParagraphs: List<String> = emptyList(),
+@@ -424,4 +521,13 @@ internal class NativeNovelRenderer(
+ 
+     private class PersistentHighlightSpan(color: Int) : BackgroundColorSpan(color)
+     private class SpokenParagraphSpan : UnderlineSpan()
++    private class ParagraphIndentSpan(indent: Int) : LeadingMarginSpan.Standard(indent, 0)
++    private class ParagraphSpacingSpan(private val spacing: Int) : LineHeightSpan {
++        override fun chooseHeight(text: CharSequence, start: Int, end: Int, spanstartv: Int, v: Int, fm: Paint.FontMetricsInt) {
++            if (end >= (text as Spanned).getSpanEnd(this)) {
++                fm.descent += spacing
++                fm.bottom += spacing
++            }
++        }
++    }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+index 77d677c500aacfb2cf888eb0152641f89620f858..287a83e8f76c822252510493705fd2e94e23a590 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt
+@@ -6,6 +6,7 @@ internal object NovelHtmlDocumentBuilder {
+         chapterTitle: String,
+         style: NovelReaderStyle,
+         chapterId: Long = 0L,
++        documentId: Long = 0L,
+     ): String {
+         val readerCss = buildReaderCss(style)
+         val styleBlocks =
+@@ -15,12 +16,12 @@ internal object NovelHtmlDocumentBuilder {
+                 "<style>${style.customCss.safeStyleText()}</style><style>$readerCss</style>"
+             }
+         val heading = if (style.hideChapterTitle) "" else "<h1 class=\"hayai-chapter-title\">${escape(chapterTitle)}</h1>"
+-        val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
++        val renderingMode = style.renderingMode.takeIf { it in setOf("default", "scroll", "continuous", "paged") } ?: "scroll"
+         val writingDirection = style.writingDirection.value
+         val customizationScript = buildCustomizationScript(style.customJs)
+         return """
+             <!doctype html>
+-            <html class="hayai-$renderingMode" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
++            <html class="hayai-$renderingMode" data-document-id="$documentId" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
+               <meta charset="utf-8">
+               <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
+               $styleBlocks
+@@ -60,7 +61,7 @@ internal object NovelHtmlDocumentBuilder {
+         return """
+             $importedFontCss
+             :root { color-scheme: ${if (isDark(style.backgroundColor)) "dark" else "light"}; }
+-            html, body { margin:0; padding:0; min-height:100%; background:$backgroundColor; color:$textColor; }
++            html, body { margin:0; padding:0; min-height:100%; overflow-anchor:none; background:$backgroundColor; color:$textColor; }
+             body {
+               box-sizing:border-box;
+               padding:${style.marginTop.coerceIn(0, 200)}px ${style.marginRight.coerceIn(0, 200)}px
+@@ -69,10 +70,10 @@ internal object NovelHtmlDocumentBuilder {
+               line-height:${style.lineHeight.coerceIn(0.8f, 3f)}; text-align:$align;
+               overflow-wrap:anywhere; -webkit-user-select:$selection; user-select:$selection;
+             }
+-            html.hayai-paged { height:100%; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
++            html.hayai-paged { height:100%; overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; }
+             html.hayai-paged body { height:100%; min-height:0; overflow:visible; }
+             html.hayai-paged #hayai-reader { height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); column-width:calc(100vw - ${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px); column-gap:${style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)}px; column-fill:auto; }
+-            html.hayai-paged .hayai-chapter-block { scroll-snap-align:start; }
++            html.hayai-paged .hayai-chapter-block { min-height:0; }
+             html.hayai-paged .hayai-chapter-block + .hayai-chapter-block { break-before:column; }
+             html[data-writing-direction="vertical-rl"] body { writing-mode:vertical-rl; text-orientation:mixed; text-combine-upright:digits 2; line-break:strict; word-break:normal; overflow-wrap:normal; font-kerning:normal; font-feature-settings:"vert" 1,"vrt2" 1; hanging-punctuation:first last; }
+             html[data-writing-direction="vertical-rl"] .hayai-chapter-title { writing-mode:vertical-rl; }
+@@ -83,7 +84,7 @@ internal object NovelHtmlDocumentBuilder {
+             table { display:block; overflow-x:auto; border-collapse:collapse; }
+             a { color:${color(style.linkColor)}; }
+             .hayai-chapter-title { text-indent:0; line-height:1.25; margin:0 0 1em; font-size:1.5em; }
+-            .hayai-chapter-block { position:relative; min-height:100vh; }
++            .hayai-chapter-block { position:relative; min-height:calc(100vh - ${style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)}px); display:flow-root; }
+             .hayai-block-state { min-height:70vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1em; text-align:center; }
+             .hayai-block-retry { padding:.7em 1.2em; font:inherit; }
+             ${ttsHighlightCss(style.ttsHighlightStyle, highlightColor, highlightTextColor)}
+@@ -135,8 +136,9 @@ internal object NovelHtmlDocumentBuilder {
+           const reversePages = () => document.documentElement.dataset.writingDirection === 'vertical-rl';
+           const blocks = () => [...document.querySelectorAll('.hayai-chapter-block')];
+           const visibleBlock = () => {
+-            const target = paged() ? pageStride() / 3 : innerHeight / 3;
+-            return blocks().sort((a,b) => Math.abs((paged()?a.getBoundingClientRect().left:a.getBoundingClientRect().top)-target)-Math.abs((paged()?b.getBoundingClientRect().left:b.getBoundingClientRect().top)-target))[0] || null;
++            if (!paged()) return blocks().find(block => block.getBoundingClientRect().bottom > 1) || blocks().at(-1) || null;
++            const target = pageStride() / 2;
++            return blocks().find(block => pageRects(block).some(rect => rect.left <= target && rect.right > target)) || blocks().find(block => pageRects(block).some(rect => rect.right > 0 && rect.left < pageStride())) || blocks().at(-1) || null;
+           };
+           const pageRects = block => block ? [...block.getClientRects()].filter(rect => rect.width > 0 && rect.height > 0) : [];
+           const blockPageLocation = block => {
+@@ -147,6 +149,26 @@ internal object NovelHtmlDocumentBuilder {
+           };
+           const activeBlock = () => document.querySelector('.hayai-chapter-block[data-active="true"]') || visibleBlock();
+           const activate = block => { blocks().forEach(it=>delete it.dataset.active); if(block)block.dataset.active='true'; return block; };
++          let viewportAnchor = null;
++          const captureAnchor = () => {
++            const block = activeBlock();
++            if (!block) return null;
++            const nodes = [...block.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,img')];
++            const node = nodes.find(node => [...node.getClientRects()].some(rect => paged() ? rect.right > 0 && rect.left < innerWidth : rect.bottom > 0 && rect.top < innerHeight)) || block;
++            const rect = node.getBoundingClientRect();
++            return {node, left:rect.left, top:rect.top};
++          };
++          const restoreAnchor = anchor => {
++            if (!anchor || !anchor.node.isConnected) return;
++            const rect = anchor.node.getBoundingClientRect();
++            scroller().scrollBy({left:paged()?rect.left-anchor.left:0, top:paged()?0:rect.top-anchor.top, behavior:'auto'});
++          };
++          const mutate = change => {
++            const anchor = captureAnchor();
++            change();
++            restoreAnchor(anchor);
++            viewportAnchor = captureAnchor();
++          };
+           const originalHtml = new Map();
+           const rememberOriginal = block => {
+             if (block && !originalHtml.has(String(block.dataset.chapterId))) originalHtml.set(String(block.dataset.chapterId), block.innerHTML);
+@@ -158,8 +180,9 @@ internal object NovelHtmlDocumentBuilder {
+           const progress = () => {
+             const block = activeBlock(); if(!block)return 0;
+             if(paged()){const location=blockPageLocation(block);return location.count<=1?100:Math.round((location.number-1)*100/(location.count-1));}
+-            const max = Math.max(1,block.offsetHeight-innerHeight);
+-            const current = Math.max(0,scrollY-block.offsetTop);
++            const max = Math.max(0,block.offsetHeight-innerHeight);
++            if (max === 0) return 100;
++            const current = Math.max(0,-block.getBoundingClientRect().top);
+             return Math.max(0, Math.min(100, Math.round(current * 100 / max)));
+           };
+           const pageLocation = () => {
+@@ -189,16 +212,28 @@ internal object NovelHtmlDocumentBuilder {
+               const anchor = selectionAnchor();
+               if (anchor) lastSelection = anchor;
+           });
++          const reportLocation = () => {
++            const block=activate(visibleBlock()); const value=progress();
++            viewportAnchor = captureAnchor();
++            if (window.HayaiReader && block && block.dataset.state==='ready') {
++              if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(block.dataset.chapterId,value,location.number,location.count,document.documentElement.dataset.documentId); }
++              else HayaiReader.onChapterProgress(block.dataset.chapterId,value,document.documentElement.dataset.documentId);
++            }
++          };
++          let snapTimer = null;
++          const snapPage = () => {
++            if (!paged() || !getSelection().isCollapsed) return;
++            const stride=pageStride();
++            scroller().scrollTo({left:Math.round(scroller().scrollLeft/stride)*stride,behavior:'smooth'});
++          };
+           addEventListener('scroll', () => {
+             if (scheduled) return;
+             scheduled = true;
+             requestAnimationFrame(() => {
+               scheduled = false;
+-              const block=activate(visibleBlock()); const value=progress();
+-              if (window.HayaiReader && block && block.dataset.state==='ready') {
+-                 if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(block.dataset.chapterId,value,location.number,location.count); }
+-                else HayaiReader.onChapterProgress(block.dataset.chapterId,value);
+-              }
++              reportLocation();
++              clearTimeout(snapTimer);
++              if(paged()) snapTimer=setTimeout(snapPage,140);
+             });
+           }, {passive:true});
+           window.hayaiReader = {
+@@ -206,34 +241,37 @@ internal object NovelHtmlDocumentBuilder {
+             prepareCustomization() { rememberOriginal(activeBlock()); },
+             upsertBlock(id, html, placement, focus) {
+               const root=document.querySelector('#hayai-reader'); if(!root)return false;
+-              const key=String(id); let block=blocks().find(it=>it.dataset.chapterId===key); const beforeExtent=paged()?scroller().scrollWidth:scroller().scrollHeight; const beforeScroll=paged()?scroller().scrollLeft:scroller().scrollTop;
+-              if(!block){block=document.createElement('article');block.className='hayai-chapter-block';block.dataset.chapterId=key;if(placement==='before')root.prepend(block);else root.append(block);}
+-              block.innerHTML=html; block.dataset.state='ready';
+-              if(placement==='before'&&!focus){const delta=Math.max(0,(paged()?scroller().scrollWidth:scroller().scrollHeight)-beforeExtent);if(paged())scroller().scrollTo({left:beforeScroll+(reversePages()?-delta:delta),behavior:'auto'});else scroller().scrollTo({top:beforeScroll+delta,behavior:'auto'});}
+-              if(focus){activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});}
++              const key=String(id); let block=blocks().find(it=>it.dataset.chapterId===key);
++              mutate(() => {
++                if(!block){block=document.createElement('article');block.className='hayai-chapter-block';block.dataset.chapterId=key;if(placement==='before')root.prepend(block);else root.append(block);}
++                block.innerHTML=html; block.dataset.state='ready'; originalHtml.delete(key);
++              });
++              if(focus)this.focusBlock(id,0);
+               return true;
+             },
+             setBlockState(id, html, placement, focus) {
+-              const root=document.querySelector('#hayai-reader');if(!root)return false;const key=String(id);let block=blocks().find(it=>it.dataset.chapterId===key);const beforeExtent=paged()?scroller().scrollWidth:scroller().scrollHeight;const beforeScroll=paged()?scroller().scrollLeft:scroller().scrollTop;
+-              if(!block){block=document.createElement('article');block.className='hayai-chapter-block';block.dataset.chapterId=key;if(placement==='before')root.prepend(block);else root.append(block);}
+-              block.innerHTML=html;block.dataset.state='pending';if(placement==='before'&&!focus){const delta=Math.max(0,(paged()?scroller().scrollWidth:scroller().scrollHeight)-beforeExtent);if(paged())scroller().scrollTo({left:beforeScroll+(reversePages()?-delta:delta),behavior:'auto'});else scroller().scrollTo({top:beforeScroll+delta,behavior:'auto'});}if(focus){activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});}return true;
++              if(!this.upsertBlock(id,html,placement,focus))return false;
++              blocks().find(it=>it.dataset.chapterId===String(id)).dataset.state='pending';return true;
+             },
+-            retainBlocks(ids) { const keep=new Set(ids.map(String));const active=activeBlock();const before=active?active.getBoundingClientRect():null;blocks().forEach(block=>{if(!keep.has(block.dataset.chapterId))block.remove();});if(active&&active.isConnected&&before){const after=active.getBoundingClientRect();if(paged())scroller().scrollBy({left:after.left-before.left,behavior:'auto'});else scroller().scrollBy({top:after.top-before.top,behavior:'auto'});}activate(active&&active.isConnected?active:visibleBlock()); },
+-            focusBlock(id,value=0) { const block=blocks().find(it=>it.dataset.chapterId===String(id));if(!block)return false;activate(block);block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});this.scrollToPercent(value);return true; },
++            retainBlocks(ids) { const keep=new Set(ids.map(String));const active=activeBlock();mutate(()=>blocks().forEach(block=>{if(!keep.has(block.dataset.chapterId)){originalHtml.delete(block.dataset.chapterId);block.remove();}}));activate(active&&active.isConnected?active:visibleBlock()); },
++            focusBlock(id,value=null) { const block=blocks().find(it=>it.dataset.chapterId===String(id));if(!block)return false;activate(block);if(value!==null)this.scrollToPercent(value);viewportAnchor=captureAnchor();return true; },
+             scrollToPercent(value) {
+               const block=activeBlock();if(!block)return;
+               const ratio = Math.max(0, Math.min(100, value)) / 100;
+               if (paged()) {
+                 const location=blockPageLocation(block);const target=Math.round((location.count-1)*ratio);
+-                block.scrollIntoView({block:'start',inline:'start',behavior:'auto'});
+-                scroller().scrollBy({left:(reversePages()?-1:1)*pageStride()*target,behavior:'auto'});
++                const rect=pageRects(block)[target];if(!rect)return;
++                const inset=parseFloat(getComputedStyle(document.body)[reversePages()?'paddingRight':'paddingLeft'])||0;
++                const delta=reversePages()?rect.right-innerWidth+inset:rect.left-inset;
++                scroller().scrollBy({left:delta,behavior:'auto'});
+               } else {
+                 const max = Math.max(0, block.offsetHeight - innerHeight);
+-                scrollTo({top:block.offsetTop+max * ratio, left:0, behavior:'auto'});
++                scrollTo({top:scrollY+block.getBoundingClientRect().top+max * ratio, left:0, behavior:'auto'});
+               }
++              viewportAnchor=captureAnchor();
+             },
+             step(direction, fraction = .85) {
+-               if (paged()) scroller().scrollBy({left:(reversePages()?-1:1)*pageStride() * direction, behavior:'smooth'});
++               if (paged()) scroller().scrollTo({left:(Math.round(scroller().scrollLeft/pageStride())+(reversePages()?-1:1)*direction)*pageStride(), behavior:'smooth'});
+               else scrollBy({top:innerHeight * fraction * direction, behavior:'smooth'});
+             },
+             stepPixels(pixels) {
+@@ -309,13 +347,20 @@ internal object NovelHtmlDocumentBuilder {
+           };
+           addEventListener('load', () => {
+             const block=activate(visibleBlock());
++            viewportAnchor=captureAnchor();
+             if (window.HayaiReader&&block) {
+-              HayaiReader.onReady(progress());
+-              if (paged()) { const location=pageLocation(); HayaiReader.onPageLocation(block.dataset.chapterId,progress(),location.number,location.count); }
++              HayaiReader.onReady(progress(),document.documentElement.dataset.documentId);
+             }
+-            if (window.ResizeObserver) new ResizeObserver(() => {
+-              if (window.HayaiReader&&paged()) { const active=activeBlock();const location=pageLocation();if(active)HayaiReader.onPageLocation(active.dataset.chapterId,progress(),location.number,location.count); }
+-            }).observe(document.querySelector('#hayai-reader'));
++            const restoreLayout = () => {
++              restoreAnchor(viewportAnchor);
++              viewportAnchor=captureAnchor();
++              if(paged())snapPage();
++              reportLocation();
++            };
++            if (window.ResizeObserver) new ResizeObserver(restoreLayout).observe(document.querySelector('#hayai-reader'));
++            document.addEventListener('load',event=>{if(event.target.tagName==='IMG')restoreLayout();},true);
++            document.fonts?.addEventListener('loadingdone',restoreLayout);
++            addEventListener('resize',restoreLayout);
+           });
+         })();
+     """
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt
+index e3434f626b697c17da08ef45444f885ddc8524bd..96b643ba3c3f6a0b2c63c541874356dc3a84fe66 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt
+@@ -334,6 +334,9 @@ internal class NovelReaderAttachment(
+     }
+ 
+     fun onResume() {
++        viewer.refreshStyle()
++        applyWindowPreferences()
++        bindBottomActions()
+         if (resumeAutoScrollAfterPause && !closed) {
+             resumeAutoScrollAfterPause = false
+             startAutoScroll()
+@@ -417,7 +420,7 @@ internal class NovelReaderAttachment(
+ 
+     private fun dispatch(action: NovelReaderAction) {
+         when (action) {
+-            is NovelReaderAction.Navigate -> if (action.direction > 0) viewer.moveToNext() else viewer.moveToPrevious()
++            is NovelReaderAction.Navigate -> viewer.navigateChapter(action.direction)
+             is NovelReaderAction.Seek -> viewer.seek(action.progress)
+             NovelReaderAction.ToggleChrome -> activity.toggleMenu()
+             NovelReaderAction.ToggleTts -> toggleTts()
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt
+index 9219675ecfde710948199fe119646d22afe0df99..155c48f6e4c23aa4baa459cbf1e7d9c4ff2a8f3e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt
+@@ -29,6 +29,7 @@ internal enum class NovelRenderingBackend(val value: String) {
+ internal typealias NovelRenderingMode = NovelRenderingBackend
+ 
+ internal enum class NovelLayoutMode(val value: String) {
++    Scroll("scroll"),
+     Continuous("continuous"),
+     Paged("paged"),
+     ;
+@@ -54,10 +55,10 @@ internal sealed interface NovelRenderPlan {
+     val writingDirection: NovelWritingDirection
+ 
+     data class NativeContinuous(
++        override val layout: NovelLayoutMode = NovelLayoutMode.Continuous,
+         override val writingDirection: NovelWritingDirection = NovelWritingDirection.Horizontal,
+     ) : NovelRenderPlan {
+         override val backend = NovelRenderingBackend.Native
+-        override val layout = NovelLayoutMode.Continuous
+     }
+ 
+     data class Web(
+@@ -73,8 +74,8 @@ internal sealed interface NovelRenderPlan {
+             layout: NovelLayoutMode,
+             writingDirection: NovelWritingDirection,
+         ): NovelRenderPlan =
+-            if (backend == NovelRenderingBackend.Native && layout == NovelLayoutMode.Continuous && writingDirection == NovelWritingDirection.Horizontal) {
+-                NativeContinuous()
++            if (backend == NovelRenderingBackend.Native && layout != NovelLayoutMode.Paged && writingDirection == NovelWritingDirection.Horizontal) {
++                NativeContinuous(layout)
+             } else {
+                 Web(layout, writingDirection)
+             }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
+index df04f62e6cbc3339f4bdd34c3e7b7e36cda63de7..62be26e08799af5188b03378a21573eff31d7bb2 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt
+@@ -91,7 +91,8 @@ internal class NovelReaderSettingsSheet(
+     private fun readerPage(page: LinearLayout) {
+         page.heading(R.string.hayai_novel_reader_renderer)
+         page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingBackend, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
+-        page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelLayoutMode, listOf(R.string.hayai_novel_reader_continuous to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
++        page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelReadingMode, listOf(R.string.hayai_novel_reader_scroll to "scroll", R.string.hayai_novel_reader_continuous_scroll to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
++        page.addView(TextView(context).apply { setText(R.string.hayai_novel_reader_engine_summary); setPadding(0, 8.dp, 0, 8.dp) }, matchWrap())
+         page.choice(R.string.hayai_novel_reader_writing_direction, preferences.novelWritingDirection, listOf(R.string.hayai_novel_reader_horizontal to "horizontal", R.string.hayai_novel_reader_vertical_japanese to "vertical-rl"), onStyleChanged)
+         page.choice(
+             R.string.tap_zones,
+@@ -110,7 +111,6 @@ internal class NovelReaderSettingsSheet(
+         page.toggle(R.string.hayai_novel_reader_volume_keys_scroll, preferences.novelVolumeKeysScroll)
+         page.toggle(R.string.keep_screen_on, preferences.novelKeepScreenOn, onChromeChanged)
+         page.toggle(R.string.fullscreen, preferences.novelFullscreen, onChromeChanged)
+-        page.toggle(R.string.hayai_novel_reader_infinite_scroll, preferences.novelInfiniteScroll, onStyleChanged)
+         page.slider(R.string.hayai_novel_reader_load_next_at, preferences.novelAutoLoadNextChapterAt, 50, 100, R.string.hayai_novel_reader_percent_value, onStyleChanged)
+         page.slider(R.string.hayai_novel_reader_mark_read_at, preferences.novelMarkAsReadThreshold, 50, 100, R.string.hayai_novel_reader_percent_value)
+         page.toggle(R.string.hayai_novel_reader_split_blocks, preferences.novelAutoSplitText, onStyleChanged)
+@@ -166,7 +166,6 @@ internal class NovelReaderSettingsSheet(
+         page.slider(R.string.hayai_novel_reader_top_margin, preferences.novelMarginTop, 0, 150, R.string.hayai_novel_reader_dp_value, onStyleChanged)
+         page.slider(R.string.hayai_novel_reader_bottom_margin, preferences.novelMarginBottom, 0, 150, R.string.hayai_novel_reader_dp_value, onStyleChanged)
+         progressMode(page)
+-        page.choice(R.string.hayai_novel_reader_preload_chapters, preferences.novelKeepChaptersLoaded, listOf(R.string.hayai_novel_reader_current_only to 0, R.string.previous to 1, R.string.next to 2, R.string.hayai_novel_reader_both to 3), onStyleChanged)
+         page.choice(R.string.hayai_novel_reader_vertical_progress_size, preferences.novelVerticalProgressSliderSize, listOf(R.string.hayai_novel_reader_half_screen to "half", R.string.hayai_novel_reader_full_screen to "full"), onChromeChanged)
+         page.toggle(R.string.hayai_novel_reader_novel_status_bar, preferences.novelStatusBarEnabled, onChromeChanged)
+         page.choice(R.string.hayai_novel_reader_status_position, preferences.novelStatusBarPosition, listOf(R.string.top to "top", R.string.bottom to "bottom"), onChromeChanged)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderViewer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderViewer.kt
+index ac3ac513284ef1c0e26f7a629485471f41506d55..b08f3f3db6881cd482ef1fb444c65765a012144d 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderViewer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderViewer.kt
+@@ -6,10 +6,13 @@ import android.view.InputDevice
+ import android.view.KeyEvent
+ import android.view.MotionEvent
+ import android.view.View
++import android.view.ViewGroup
+ import android.widget.FrameLayout
+ import dev.ahmedmohamed.hayai.novel.settings.NovelCustomizationStore
++import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+@@ -23,6 +26,8 @@ import eu.kanade.tachiyomi.ui.reader.viewer.navigation.LNavigation
+ import eu.kanade.tachiyomi.ui.reader.viewer.navigation.RightAndLeftNavigation
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withContext
+ 
+@@ -41,13 +46,34 @@ internal class NovelReaderViewer(
+     private val actions: NovelReaderActionHost,
+ ) : BaseViewer,
+     NovelRenderer.Callbacks {
+-    private val root = FrameLayout(activity)
++    private val root = object : FrameLayout(activity) {
++        private var focusParent: ViewGroup? = null
++        private var parentFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
++
++        override fun onAttachedToWindow() {
++            super.onAttachedToWindow()
++            focusParent = parent as? ViewGroup
++            focusParent?.let {
++                parentFocusability = it.descendantFocusability
++                it.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
++            }
++        }
++
++        override fun onDetachedFromWindow() {
++            focusParent?.descendantFocusability = parentFocusability
++            focusParent = null
++            super.onDetachedFromWindow()
++        }
++    }
+     private val contentProcessor = NovelContentProcessor()
+     private val customization = NovelCustomizationStore(preferences)
+     private val fontStore = NovelFontStore(activity, preferences)
+-    private val contentByChapterId = linkedMapOf<Long, NovelChapterContent>()
+-    private val chapterQueue = NovelChapterQueue<NovelChapterContent, Long>({ requireNotNull(it.chapter.id) }, 3)
+-    private val requestedPreloads = mutableSetOf<Long>()
++    private val contentByChapterId = java.util.concurrent.ConcurrentHashMap<Long, NovelChapterContent>()
++    private val preloadJobs = mutableMapOf<Long, Job>()
++    private val renderedBlocks = linkedMapOf<Long, NovelRenderBlock>()
++    private val renderedContents = linkedMapOf<Long, NovelChapterContent>()
++    private var renderedStyle: NovelReaderStyle? = null
++    private var renderedOptions: NovelContentOptions? = null
+     private val assetProvider =
+         object : NovelAssetProvider {
+             override suspend fun getChapterAsset(chapterUrl: String, assetPath: String) =
+@@ -65,7 +91,10 @@ internal class NovelReaderViewer(
+     private var currentPageCount: Int? = null
+     private var destroyed = false
+     private var transitioningChapterId: Long? = null
+-    private var pendingChapterSeek: Pair<Long, Int>? = null
++    private var selectionActive = false
++    private var explicitNavigationJob: Job? = null
++    private var pendingRendererSeek: Pair<Long, Int>? = null
++    private var awaitingDocumentId: Long? = null
+ 
+     val currentContent: NovelChapterContent?
+         get() = activeContent
+@@ -85,8 +114,9 @@ internal class NovelReaderViewer(
+         viewerChapters = chapters
+         val page = chapters.currChapter.pages?.filterIsInstance<NovelProgressPage>()?.firstOrNull() ?: return
+         val chapterId = requireNotNull(page.content.chapter.id)
+-        val progress = pendingChapterSeek?.takeIf { it.first == chapterId }?.second?.also { pendingChapterSeek = null }
+-            ?: chapters.currChapter.requestedPage
++        if (transitioningChapterId != null && transitioningChapterId != chapterId) return
++        if (transitioningChapterId == chapterId) transitioningChapterId = null
++        val progress = if (chapterId == currentChapterId) currentProgress else chapters.currChapter.requestedPage
+         showWindow(page.content, progress.coerceIn(NovelProgressPage.MIN_PROGRESS, NovelProgressPage.MAX_PROGRESS))
+     }
+ 
+@@ -94,15 +124,19 @@ internal class NovelReaderViewer(
+         val novelPage = page as? NovelProgressPage ?: return
+         val currentId = currentContent?.chapter?.id
+         if (currentId != novelPage.content.chapter.id) {
+-            showWindow(novelPage.content, novelPage.index)
++            explicitNavigationJob?.cancel()
++            transitioningChapterId = null
++            pendingRendererSeek = requireNotNull(novelPage.content.chapter.id) to novelPage.index
++            showWindow(novelPage.content, novelPage.index, requestedChapter = novelPage.chapter)
+         } else {
+             currentProgress = novelPage.index
+-            renderer?.seek(currentProgress)
++            if (awaitingDocumentId == null) renderer?.seek(currentProgress)
+             reportLocation(currentProgress, currentPageNumber, currentPageCount)
+         }
+     }
+ 
+     override fun moveToNext() {
++        if (selectionActive) return
+         val next = viewerChapters?.nextChapter
+         val atPageEnd = currentPageNumber != null && currentPageNumber == currentPageCount
+         if ((currentProgress >= NovelProgressPage.MAX_PROGRESS || atPageEnd) && next != null) {
+@@ -113,6 +147,7 @@ internal class NovelReaderViewer(
+     }
+ 
+     override fun moveToPrevious() {
++        if (selectionActive) return
+         val previous = viewerChapters?.prevChapter
+         if (currentProgress <= NovelProgressPage.MIN_PROGRESS && previous != null) {
+             transitionTo(previous, NovelProgressPage.MAX_PROGRESS)
+@@ -170,7 +205,12 @@ internal class NovelReaderViewer(
+         return false
+     }
+ 
+-    fun refreshStyle() { currentContent?.let { showWindow(it, currentProgress) } }
++    fun refreshStyle() { currentContent?.let { showWindow(it, currentProgress, styleChange = true) } }
++
++    fun navigateChapter(direction: Int) {
++        val chapter = if (direction > 0) viewerChapters?.nextChapter else viewerChapters?.prevChapter
++        chapter?.let { transitionTo(it, 0) }
++    }
+ 
+     fun replaceContent(content: NovelChapterContent) = showWindow(content, currentProgress)
+ 
+@@ -199,43 +239,68 @@ internal class NovelReaderViewer(
+         if (destroyed) return
+         destroyed = true
+         renderJob?.cancel()
++        explicitNavigationJob?.cancel()
++        preloadJobs.values.toList().forEach(Job::cancel)
++        preloadJobs.clear()
+         renderer?.destroy()
+         renderer = null
+         activeContent = null
+-        chapterQueue.clear()
++        renderedBlocks.clear()
++        renderedContents.clear()
+         contentByChapterId.clear()
+         root.removeAllViews()
+     }
+ 
+-    private fun showWindow(content: NovelChapterContent, progress: Int) {
++    private fun showWindow(content: NovelChapterContent, progress: Int, styleChange: Boolean = false, requestedChapter: ReaderChapter? = null) {
+         if (destroyed) return
+         val chapterId = requireNotNull(content.chapter.id) { "Novel chapter is missing its durable database identity" }
++        val window = chapterWindow(content, requestedChapter)
++        if (window.isEmpty()) return
++        val previousContent = activeContent
+         activeContent = content
+-        val window = chapterWindow(content)
+-        contentByChapterId.clear()
+-        window.forEach { contentByChapterId[requireNotNull(it.chapter.id)] = it }
++        val contents = window.mapNotNull { chapter ->
++            if (chapter.chapter.id == chapterId) content else chapter.novelContent()
++        }
++        contents.forEach { contentByChapterId[requireNotNull(it.chapter.id)] = it }
+         currentProgress = progress.coerceIn(0, 100)
+-        currentPageNumber = null
+-        currentPageCount = null
+-        // Content can be replaced while the durable chapter identity stays the same,
+-        // for example after an edit or an offline translation is refreshed.
+-        actions.onChapterContent(content)
++        if (previousContent != content) {
++            currentPageNumber = null
++            currentPageCount = null
++            actions.onChapterContent(content)
++        }
+         val options = contentOptions()
+         val style = readerStyle(options)
+         val plan = renderPlan()
++        awaitingDocumentId = chapterId.takeIf { renderedStyle != style || renderedBlocks[chapterId]?.content !is NovelBlockContent.Ready }
++        val cachedBlocks = renderedBlocks.toMap()
++        val cachedContents = renderedContents.toMap()
++        val cachedOptions = renderedOptions
+         renderJob?.cancel()
+         renderJob =
+             activity.scope.launch {
++                if (styleChange) delay(120)
+                 val processedByChapterId =
+                     withContext(Dispatchers.Default) {
+-                        window.associate { item ->
+-                            requireNotNull(item.chapter.id) to contentProcessor.process(item.document, item.chapter.name, options)
++                        contents.associate { item ->
++                            val id = requireNotNull(item.chapter.id)
++                            val previous = (cachedBlocks[id]?.content as? NovelBlockContent.Ready)?.request
++                            val processed = if (cachedOptions == options && previous != null && cachedContents[id]?.document == item.document && previous.chapterTitle == item.chapter.name) {
++                                previous.content
++                            } else {
++                                contentProcessor.process(item.document, item.chapter.name, options)
++                            }
++                            id to processed
+                         }
+                     }
+                 if (destroyed || currentContent?.chapter?.id != content.chapter.id) return@launch
+                 val target = ensureRenderer(plan)
+-                fun block(item: NovelChapterContent): NovelRenderBlock {
+-                    val id = requireNotNull(item.chapter.id)
++                fun block(chapter: ReaderChapter): NovelRenderBlock {
++                    val id = requireNotNull(chapter.chapter.id)
++                    val item = contents.firstOrNull { it.chapter.id == id }
++                    if (item == null) {
++                        val error = chapter.state as? ReaderChapter.State.Error
++                        return NovelRenderBlock(id, chapter.chapter.name, if (error == null) NovelBlockContent.Loading else NovelBlockContent.Error(activity.novelFailureMessage(error.error, R.string.hayai_novel_reader_load_error), 0))
++                    }
+                     return NovelRenderBlock(
+                         id,
+                         item.chapter.name,
+@@ -245,75 +310,111 @@ internal class NovelReaderViewer(
+                                 content = requireNotNull(processedByChapterId[id]),
+                                 chapterTitle = item.chapter.name,
+                                 style = style,
+-                                initialProgress = if (id == chapterId) currentProgress else 0,
++                                initialProgress = 0,
+                                 appendJavaScript = customization.enabledJs(runOnAppend = true),
+                             ),
+                         ),
+                     )
+                 }
+-                target.display(
+-                    block(content),
+-                    NovelBlockPlacement.ReplaceAll,
+-                    focus = true,
+-                )
+-                val currentIndex = window.indexOfFirst { it.chapter.id == chapterId }
+-                window.take(currentIndex).asReversed().forEach {
+-                    target.display(block(it), NovelBlockPlacement.Before, focus = false)
++                val blocks = window.map(::block)
++                val current = blocks.first { it.chapterId == chapterId }
++                val reset = renderedBlocks.isEmpty() || renderedStyle != style || renderedBlocks[chapterId]?.content !is NovelBlockContent.Ready
++                if (reset) {
++                    renderedBlocks.clear()
++                    val ready = (current.content as NovelBlockContent.Ready).request.copy(initialProgress = currentProgress)
++                    target.display(current.copy(content = NovelBlockContent.Ready(ready)), NovelBlockPlacement.ReplaceAll, focus = true)
++                    renderedBlocks[chapterId] = current
++                    pendingRendererSeek = null
+                 }
+-                window.drop(currentIndex + 1).forEach {
+-                    target.display(block(it), NovelBlockPlacement.After, focus = false)
++                val currentIndex = blocks.indexOf(current)
++                val ordered = listOf(current) + blocks.take(currentIndex).asReversed() + blocks.drop(currentIndex + 1)
++                ordered.forEach { next ->
++                    if (renderedBlocks[next.chapterId] != next) {
++                        target.display(next, if (blocks.indexOf(next) < currentIndex) NovelBlockPlacement.Before else NovelBlockPlacement.After, focus = false)
++                        renderedBlocks[next.chapterId] = next
++                    }
++                }
++                val ids = blocks.mapTo(linkedSetOf()) { it.chapterId }
++                target.retain(ids)
++                renderedBlocks.keys.retainAll(ids)
++                renderedContents.clear()
++                contents.forEach { renderedContents[requireNotNull(it.chapter.id)] = it }
++                contentByChapterId.keys.retainAll(ids)
++                renderedStyle = style
++                renderedOptions = options
++                if (!reset) {
++                    target.focus(chapterId, pendingRendererSeek?.takeIf { it.first == chapterId }?.second)
++                    pendingRendererSeek = null
++                    reportLocation(currentProgress, currentPageNumber, currentPageCount)
++                    if (previousContent != content) actions.onDocumentReady()
+                 }
+-                target.retain(window.mapTo(linkedSetOf()) { requireNotNull(it.chapter.id) })
+             }
+     }
+ 
+-    private fun chapterWindow(current: NovelChapterContent): List<NovelChapterContent> {
+-        chapterQueue.clear()
+-        chapterQueue.replaceCurrent(current)
+-        if (!preferences.novelInfiniteScroll.get()) return chapterQueue.snapshot()
+-        val keep = preferences.novelKeepChaptersLoaded.get().coerceIn(0, 3)
+-        // Infinite reading always needs a following block. The retention preference decides
+-        // whether the previous chapter also remains mounted after the boundary changes.
+-        chapterQueue.capacity = 2 + (if (keep == 1 || keep == 3) 1 else 0)
+-        if (keep == 1 || keep == 3) addAdjacent(viewerChapters?.prevChapter, before = true)
+-        addAdjacent(viewerChapters?.nextChapter, before = false)
+-        return chapterQueue.snapshot()
+-    }
+-
+-    private fun addAdjacent(chapter: ReaderChapter?, before: Boolean) {
+-        chapter ?: return
+-        if (chapter.state is ReaderChapter.State.Error) requestedPreloads.remove(chapter.chapter.id)
+-        val content = chapter.pages?.filterIsInstance<NovelProgressPage>()?.firstOrNull()?.content
+-        if (content == null) {
+-            requestPreload(chapter)
+-        } else {
+-            chapter.chapter.id?.let(requestedPreloads::remove)
+-            if (before) chapterQueue.prepend(content) else chapterQueue.append(content)
+-        }
++    private fun chapterWindow(current: NovelChapterContent, requestedChapter: ReaderChapter?): List<ReaderChapter> {
++        val chapters = viewerChapters ?: return emptyList()
++        val currentChapter = listOfNotNull(chapters.prevChapter, chapters.currChapter, chapters.nextChapter).firstOrNull { it.chapter.id == current.chapter.id }
++            ?: return listOfNotNull(requestedChapter)
++        if (renderPlan().layout == NovelLayoutMode.Scroll) return listOf(currentChapter)
++        val window = listOfNotNull(chapters.prevChapter, chapters.currChapter, chapters.nextChapter)
++        window.filter { it.chapter.id != current.chapter.id && it.state !is ReaderChapter.State.Error }.forEach(::requestPreload)
++        return window
+     }
+ 
+     private fun requestPreload(chapter: ReaderChapter) {
+         val id = chapter.chapter.id ?: return
+-        if (requestedPreloads.add(id)) activity.requestPreloadChapter(chapter)
++        if (chapter.pages != null || preloadJobs[id]?.isActive == true) return
++        if (chapter.state is ReaderChapter.State.Error) chapter.state = ReaderChapter.State.Wait
++        val job = activity.scope.launch {
++            activity.requestPreloadChapter(chapter)
++            chapter.stateFlow.first { it is ReaderChapter.State.Loaded || it is ReaderChapter.State.Error }
++            if (!destroyed) currentContent?.let { showWindow(it, currentProgress) }
++        }
++        preloadJobs[id] = job
++        job.invokeOnCompletion { if (preloadJobs[id] === job) preloadJobs.remove(id) }
+     }
+ 
+     private fun transitionTo(chapter: ReaderChapter, progress: Int) {
+-        val id = chapter.chapter.id ?: return
+-        if (transitioningChapterId != null) return
+-        transitioningChapterId = id
+-        pendingChapterSeek = id to progress.coerceIn(0, 100)
+-        activity.scope.launch {
+-            try {
+-                activity.loadChapter(chapter.chapter)
+-            } finally {
+-                transitioningChapterId = null
++        if (transitioningChapterId != null || explicitNavigationJob?.isActive == true) return
++        val origin = currentChapterId
++        explicitNavigationJob = activity.scope.launch {
++            if (chapter.pages == null) {
++                requestPreload(chapter)
++                val state = chapter.stateFlow.first { it is ReaderChapter.State.Loaded || it is ReaderChapter.State.Error }
++                if (state is ReaderChapter.State.Error) {
++                    actions.onRendererError(activity.novelFailureMessage(state.error, R.string.hayai_novel_reader_load_error))
++                    return@launch
++                }
+             }
++            if (!destroyed && currentChapterId == origin) selectChapter(chapter, progress, seek = true)
++        }
++    }
++
++    private fun ReaderChapter.novelContent(): NovelChapterContent? = (pages?.firstOrNull() as? NovelProgressPage)?.content
++
++    private fun selectChapter(chapter: ReaderChapter, progress: Int, seek: Boolean) {
++        val page = chapter.pages?.getOrNull(progress.coerceIn(0, 100)) as? NovelProgressPage ?: return
++        val id = requireNotNull(chapter.chapter.id)
++        val changesJ2kChapter = viewerChapters?.currChapter?.chapter?.id != id
++        transitioningChapterId = id.takeIf { changesJ2kChapter }
++        activeContent = page.content
++        currentProgress = page.index
++        currentPageNumber = null
++        currentPageCount = null
++        actions.onChapterContent(page.content)
++        if (renderedBlocks[id]?.content is NovelBlockContent.Ready) {
++            renderer?.focus(id, if (seek) page.index else null)
++            actions.onDocumentReady()
++        } else if (seek) {
++            pendingRendererSeek = id to page.index
+         }
++        if (changesJ2kChapter) activity.onPageSelected(page, false)
+     }
+ 
+     private fun ensureRenderer(plan: NovelRenderPlan): NovelRenderer {
+         renderer?.takeIf { it.mode == plan.backend }?.let { return it }
+         renderer?.destroy()
++        renderedBlocks.clear()
+         val created =
+             when (plan.backend) {
+                 NovelRenderingBackend.Native -> NativeNovelRenderer(activity, this, fontStore)
+@@ -341,7 +442,7 @@ internal class NovelReaderViewer(
+     private fun renderPlan(): NovelRenderPlan =
+         NovelRenderPlan.resolve(
+             NovelRenderingBackend.fromPreference(preferences.novelRenderingBackend.get()),
+-            NovelLayoutMode.fromPreference(preferences.novelLayoutMode.get()),
++            NovelLayoutMode.fromPreference(preferences.novelReadingMode.get()),
+             NovelWritingDirection.fromPreference(preferences.novelWritingDirection.get()),
+         )
+ 
+@@ -375,7 +476,7 @@ internal class NovelReaderViewer(
+             textSelectable = preferences.novelTextSelectable.get(),
+             hideChapterTitle = options.hideChapterTitle,
+             sourceCssPriority = preferences.novelSourceCssPriority.get(),
+-            renderingMode = preferences.novelLayoutMode.get(),
++            renderingMode = preferences.novelReadingMode.get(),
+             customCss = listOf(preferences.novelCustomCss.get(), customization.enabledCss()).filter(String::isNotBlank).joinToString("\n"),
+             customJs = listOf(preferences.novelCustomJs.get(), customization.enabledJs()).filter(String::isNotBlank).joinToString("\n"),
+             ttsHighlightColor = preferences.novelTtsHighlightColor.get(),
+@@ -387,7 +488,10 @@ internal class NovelReaderViewer(
+     }
+ 
+     private fun currentNovelPage(progress: Int): NovelProgressPage? =
+-        viewerChapters?.currChapter?.pages?.getOrNull(progress.coerceIn(0, 100)) as? NovelProgressPage
++        viewerChapters?.let { chapters ->
++            listOfNotNull(chapters.currChapter, chapters.prevChapter, chapters.nextChapter)
++                .firstOrNull { it.chapter.id == currentChapterId }?.pages?.getOrNull(progress.coerceIn(0, 100)) as? NovelProgressPage
++        }
+ 
+     private fun reportLocation(progress: Int, pageNumber: Int?, pageCount: Int?) {
+         currentProgress = progress.coerceIn(0, 100)
+@@ -395,6 +499,7 @@ internal class NovelReaderViewer(
+         currentPageCount = pageCount
+         val page = currentNovelPage(currentProgress) ?: return
+         page.presentation = NovelPagePresentation(currentProgress, pageNumber, pageCount)
++        if (transitioningChapterId != null) return
+         activity.onPageSelected(page, false)
+         if (currentProgress >= preferences.novelAutoLoadNextChapterAt.get().coerceIn(50, 100)) {
+             viewerChapters?.nextChapter?.let(::requestPreload)
+@@ -418,31 +523,36 @@ internal class NovelReaderViewer(
+     }
+ 
+     override fun onReady(progress: Int) {
+-        renderer?.seek(currentProgress)
++        awaitingDocumentId = null
++        if (progress != currentProgress) renderer?.seek(currentProgress)
+         reportLocation(currentProgress, currentPageNumber, currentPageCount)
+         actions.onDocumentReady()
+     }
+ 
+-    override fun onProgress(progress: Int) = reportLocation(progress, null, null)
++    override fun onProgress(progress: Int) {
++        if (awaitingDocumentId == null) reportLocation(progress, null, null)
++    }
+ 
+     override fun onPageLocation(chapterId: Long, progress: Int, pageNumber: Int, pageCount: Int) {
++        if (awaitingDocumentId != null) return
+         if (chapterId == currentChapterId) {
+             reportLocation(progress, pageNumber, pageCount)
+         } else {
+-            adjacentChapter(chapterId)?.let { transitionTo(it, progress) }
++            if (transitioningChapterId == null && !selectionActive) adjacentChapter(chapterId)?.let { selectChapter(it, progress, seek = false) }
+         }
+     }
+ 
+     override fun onVisibleChapter(chapterId: Long, progress: Int) {
++        if (awaitingDocumentId != null) return
+         if (chapterId == currentChapterId) {
+             reportLocation(progress, currentPageNumber, currentPageCount)
+         } else {
+-            adjacentChapter(chapterId)?.let { transitionTo(it, progress) }
++            if (transitioningChapterId == null && !selectionActive) adjacentChapter(chapterId)?.let { selectChapter(it, progress, seek = false) }
+         }
+     }
+ 
+     override fun onRetryChapter(chapterId: Long) {
+-        currentContent?.takeIf { it.chapter.id == chapterId }?.let { showWindow(it, currentProgress) }
++        adjacentChapter(chapterId)?.let(::requestPreload)
+     }
+ 
+     private fun adjacentChapter(chapterId: Long): ReaderChapter? =
+@@ -450,6 +560,7 @@ internal class NovelReaderViewer(
+             .firstOrNull { it.chapter.id == chapterId }
+ 
+     override fun onTap(xFraction: Float, yFraction: Float) {
++        if (selectionActive || awaitingDocumentId != null) return
+         when (navigator().getAction(PointF(xFraction, yFraction))) {
+             ViewerNavigation.NavigationRegion.MENU -> activity.toggleMenu()
+             ViewerNavigation.NavigationRegion.NEXT,
+@@ -462,7 +573,10 @@ internal class NovelReaderViewer(
+     }
+ 
+     override fun onSelectionAction(action: NovelSelectionAction, selection: NovelSelection) = actions.onSelectionAction(action, selection)
+-    override fun onSelectionModeChanged(active: Boolean) = actions.onSelectionModeChanged(active)
++    override fun onSelectionModeChanged(active: Boolean) {
++        selectionActive = active
++        actions.onSelectionModeChanged(active)
++    }
+     override fun onContentEdited(content: String) = actions.onContentEdited(content)
+     override fun onRendererError(message: String) = actions.onRendererError(message)
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt
+index 26afb13ae9ea9246f3f3a162d8f70df23d34fb1e..03402e0c1dc00353678f2894cc6d04561f604768 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelRenderer.kt
+@@ -55,6 +55,7 @@ internal interface NovelRenderer {
+ 
+     fun display(block: NovelRenderBlock, placement: NovelBlockPlacement, focus: Boolean)
+     fun retain(chapterIds: Set<Long>)
++    fun focus(chapterId: Long, progress: Int? = null)
+     fun seek(progress: Int)
+     fun step(direction: Int)
+     fun stepPixels(pixels: Int)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelViewportGeometry.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelViewportGeometry.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..12f9ec1090120af949fb71a7ea5f9aa05e9ebf1e
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelViewportGeometry.kt
+@@ -0,0 +1,16 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++internal data class NovelViewportAnchor(val chapterId: Long, val offset: Int)
++
++internal object NovelViewportGeometry {
++    fun contains(top: Int, bottom: Int, scrollY: Int): Boolean = scrollY >= top && scrollY < bottom
++
++    fun offset(top: Int, height: Int, viewportHeight: Int, progress: Int): Int =
++        top + ((height - viewportHeight).coerceAtLeast(0).toLong() * progress.coerceIn(0, 100) / 100).toInt()
++
++    fun progress(top: Int, height: Int, viewportHeight: Int, scrollY: Int): Int {
++        val range = (height - viewportHeight).coerceAtLeast(0)
++        if (range == 0) return 100
++        return (((scrollY - top).toLong() * 100 / range).toInt()).coerceIn(0, 100)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
+index de48c287781bfbc7033664b623b46145d89cb9a8..10639050ca7449598da7d2438defabc0c4dece6d 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt
+@@ -39,6 +39,9 @@ internal class WebNovelRenderer(
+     private var requestedProgress = 0
+     private var editMode = false
+     private var documentReady = false
++    private var destroyed = false
++    private var documentId = 0L
++    private var pendingFocus: Pair<Long, Int?>? = null
+     private val pendingBlocks = mutableListOf<PendingBlock>()
+     private var pendingRetainedIds: Set<Long>? = null
+     private val webView = object : WebView(context) {
+@@ -83,6 +86,7 @@ internal class WebNovelRenderer(
+                 context,
+                 object : GestureDetectorWithLongTap.Listener() {
+                     override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
++                        if (event.eventTime - event.downTime >= android.view.ViewConfiguration.getLongPressTimeout()) return true
+                         val view = this@apply
+                         evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
+                             if (selected != "true") {
+@@ -107,11 +111,13 @@ internal class WebNovelRenderer(
+         val content = block.content
+         if (placement == NovelBlockPlacement.ReplaceAll && content is NovelBlockContent.Ready) {
+             documentReady = false
++            documentId += 1
+             pendingBlocks.clear()
+             pendingRetainedIds = null
++            pendingFocus = null
+             requestedProgress = content.request.initialProgress.coerceIn(0, 100)
+             val request = content.request
+-            val html = NovelHtmlDocumentBuilder.build(request.content.scopeAssets(request.chapterId), request.chapterTitle, request.style, request.chapterId)
++            val html = NovelHtmlDocumentBuilder.build(request.content.scopeAssets(request.chapterId), request.chapterTitle, request.style, request.chapterId, documentId)
+             val base = request.content.baseUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+             webView.loadDataWithBaseURL(base, html, "text/html", "UTF-8", null)
+             return
+@@ -158,6 +164,13 @@ internal class WebNovelRenderer(
+     }
+ 
+     override fun seek(progress: Int) = evaluate("window.hayaiReader.scrollToPercent(${progress.coerceIn(0, 100)})")
++    override fun focus(chapterId: Long, progress: Int?) {
++        if (!documentReady) {
++            pendingFocus = chapterId to progress
++            return
++        }
++        evaluate("window.hayaiReader.focusBlock(${json.encodeToString(chapterId.toString())},${progress?.coerceIn(0, 100) ?: "null"})")
++    }
+     override fun step(direction: Int) = evaluate("window.hayaiReader.step(${direction.coerceIn(-1, 1)})")
+     override fun stepPixels(pixels: Int) = evaluate("window.hayaiReader.stepPixels($pixels)")
+     override fun scrollToTop() = seek(0)
+@@ -229,12 +242,16 @@ internal class WebNovelRenderer(
+     }
+ 
+     override fun destroy() {
++        destroyed = true
++        pendingBlocks.clear()
+         webView.removeJavascriptInterface(JS_INTERFACE)
+         webView.stopLoading()
+         webView.destroy()
+     }
+ 
+-    private fun evaluate(script: String) = webView.evaluateJavascript(script, null)
++    private fun evaluate(script: String) {
++        if (!destroyed) webView.evaluateJavascript(script, null)
++    }
+ 
+     private fun setBlockState(chapterId: Long, html: String, placement: String, focus: Boolean) {
+         evaluate(
+@@ -277,15 +294,14 @@ internal class WebNovelRenderer(
+ 
+     private inner class Bridge {
+         @JavascriptInterface
+-        fun onProgress(progress: Int) = webView.post { callbacks.onProgress(progress.coerceIn(0, 100)) }
+-
+-        @JavascriptInterface
+-        fun onChapterProgress(chapterId: String, progress: Int) = webView.post {
++        fun onChapterProgress(chapterId: String, progress: Int, callbackDocumentId: String) = webView.post {
++            if (destroyed || !documentReady || callbackDocumentId.toLongOrNull() != documentId) return@post
+             chapterId.toLongOrNull()?.let { callbacks.onVisibleChapter(it, progress.coerceIn(0, 100)) }
+         }
+ 
+         @JavascriptInterface
+-        fun onPageLocation(chapterId: String, progress: Int, pageNumber: Int, pageCount: Int) = webView.post {
++        fun onPageLocation(chapterId: String, progress: Int, pageNumber: Int, pageCount: Int, callbackDocumentId: String) = webView.post {
++            if (destroyed || !documentReady || callbackDocumentId.toLongOrNull() != documentId) return@post
+             val id = chapterId.toLongOrNull() ?: return@post
+             callbacks.onPageLocation(
+                 id,
+@@ -299,11 +315,13 @@ internal class WebNovelRenderer(
+         fun retryChapter(chapterId: String) = webView.post { chapterId.toLongOrNull()?.let(callbacks::onRetryChapter) }
+ 
+         @JavascriptInterface
+-        fun onReady(progress: Int) = webView.post {
++        fun onReady(progress: Int, readyDocumentId: String) = webView.post {
++            if (destroyed || documentReady || readyDocumentId.toLongOrNull() != documentId) return@post
+             documentReady = true
+             pendingBlocks.toList().also { pendingBlocks.clear() }.forEach { display(it.block, it.placement, it.focus) }
+             pendingRetainedIds?.also { pendingRetainedIds = null; retain(it) }
+             seek(requestedProgress)
++            pendingFocus?.also { pendingFocus = null; focus(it.first, it.second) }
+             callbacks.onReady(requestedProgress)
+         }
+ 
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+index 1d1591453c253de8f000d2ffe231a099942e0906..b2ff19f2b63603c1378fdb1ec59bdc66dc7fe1dc 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt
+@@ -110,12 +110,13 @@ class NovelSettingsController : SettingsController() {
+                 title = context.getString(R.string.hayai_novel_reader_rendering_mode)
+                 entries = listOf(R.string.hayai_novel_reader_native_text, R.string.hayai_novel_reader_webview).map(context::getString)
+                 entryValues = listOf("default", "webview")
++                summary = context.getString(R.string.hayai_novel_reader_engine_summary)
+             }
+             listPreference(activity) {
+-                bindTo(novel.novelLayoutMode)
++                bindTo(novel.novelReadingMode)
+                 title = context.getString(R.string.hayai_novel_reader_layout_mode)
+-                entries = listOf(R.string.hayai_novel_reader_continuous, R.string.hayai_novel_reader_paginated).map(context::getString)
+-                entryValues = listOf("continuous", "paged")
++                entries = listOf(R.string.hayai_novel_reader_scroll, R.string.hayai_novel_reader_continuous_scroll, R.string.hayai_novel_reader_paginated).map(context::getString)
++                entryValues = listOf("scroll", "continuous", "paged")
+             }
+             listPreference(activity) {
+                 bindTo(novel.novelWritingDirection)
+@@ -127,17 +128,6 @@ class NovelSettingsController : SettingsController() {
+ 
+         preferenceCategory {
+             title = context.getString(R.string.hayai_novel_reader_reading_behavior)
+-            switchPreference {
+-                bindTo(novel.novelInfiniteScroll)
+-                title = context.getString(R.string.hayai_novel_reader_infinite_scroll)
+-                summary = context.getString(R.string.hayai_novel_reader_infinite_scroll_summary)
+-            }
+-            intListPreference(activity) {
+-                bindTo(novel.novelKeepChaptersLoaded)
+-                title = context.getString(R.string.hayai_novel_reader_keep_adjacent_loaded)
+-                entries = listOf(R.string.hayai_novel_reader_current_only, R.string.previous, R.string.next, R.string.hayai_novel_reader_previous_and_next).map(context::getString)
+-                entryValues = listOf(0, 1, 2, 3)
+-            }
+             sliderPreference { bindTo(novel.novelAutoLoadNextChapterAt); title = context.getString(R.string.hayai_novel_reader_load_next_at); entryValues = (50..100).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
+             sliderPreference { bindTo(novel.novelMarkAsReadThreshold); title = context.getString(R.string.hayai_novel_reader_mark_as_read_at); entryValues = (50..100).toList(); valueFormatter = { context.getString(R.string.hayai_novel_reader_percent_value, it) } }
+             switchPreference { bindTo(novel.novelHideChapterTitle); title = context.getString(R.string.hayai_novel_reader_hide_chapter_title) }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt b/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
+index 83f48acb3631832ae7dad666ffa26c7c1ec0d2b1..f220b3b1b8af07173457a49b991578af6b4a899e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt
+@@ -50,6 +50,15 @@ class HayaiPreferences(
+     val novelGlobalPresets = store.getString("pref_novel_global_presets", "[]")
+     val novelRegexReplacements = store.getString("pref_novel_regex_replacements", "[]")
+     val novelInfiniteScroll = store.getBoolean("pref_novel_infinite_scroll", false)
++    val novelReadingMode: Preference<String>
++        get() = store.getString(
++            "pref_novel_reading_mode",
++            when {
++                novelLayoutMode.get() == "paged" -> "paged"
++                novelInfiniteScroll.get() -> "continuous"
++                else -> "scroll"
++            },
++        )
+     val novelKeepChaptersLoaded = store.getInt("pref_novel_keep_chapters_loaded", 0)
+     val novelCustomBrightness = store.getBoolean("pref_novel_custom_brightness", false)
+     val novelCustomBrightnessValue = store.getInt("pref_novel_custom_brightness_value", 0)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtwork.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtwork.kt
+index 1397d37dd8e25c33dc859d322e938456461382eb..dc876c4ea0abc3a80dbd8c49c2010de04648e857 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtwork.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/presentation/SourceArtwork.kt
+@@ -1,28 +1,87 @@
+ package dev.ahmedmohamed.hayai.source.presentation
+ 
++import android.graphics.Outline
++import android.graphics.drawable.Drawable
++import android.view.View
++import android.view.ViewOutlineProvider
+ import android.widget.ImageView
++import androidx.annotation.DrawableRes
+ import coil.dispose
+ import coil.load
++import coil.size.Scale
++import coil.target.ImageViewTarget
+ import dev.ahmedmohamed.hayai.novel.plugin.source.NovelPluginSource
+ import dev.ahmedmohamed.hayai.novel.source.local.LocalNovelSource
+ import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
+ import eu.kanade.tachiyomi.source.LocalSource
+ import eu.kanade.tachiyomi.source.Source
+ import eu.kanade.tachiyomi.source.icon
++import kotlin.math.min
++import kotlin.math.roundToInt
+ 
+ /** Binds the same source artwork on Browse, migration, and source selection surfaces. */
+ fun ImageView.bindSourceArtwork(source: Source) {
++    val artwork =
++        when {
++            source is NovelPluginSource -> source.iconUrl.takeIf(String::isNotBlank)
++            source.id == LocalSource.ID -> R.mipmap.ic_local_source
++            source.id == LocalNovelSource.ID -> R.drawable.ic_local_novel_source
++            else -> source.icon()
++        }
++    bindSourceIcon(artwork, if (source is NovelPluginSource) R.drawable.ic_code_24dp else R.mipmap.ic_launcher)
++}
++
++fun ImageView.bindSourceIcon(artwork: Any?, @DrawableRes fallback: Int) {
+     dispose()
++    imageTintList = null
++    scaleType = ImageView.ScaleType.FIT_CENTER
+     setImageDrawable(null)
+-    when {
+-        source is NovelPluginSource && source.iconUrl.isNotBlank() -> {
+-            load(source.iconUrl) {
+-                target(CoverViewTarget(this@bindSourceArtwork))
+-            }
++    outlineProvider = SourceIconOutline
++    clipToOutline = true
++    load(artwork) {
++        scale(Scale.FIT)
++        placeholder(fallback)
++        error(fallback)
++        fallback(fallback)
++        crossfade(false)
++        target(SourceIconTarget(this@bindSourceIcon))
++    }
++}
++
++private class SourceIconTarget(view: ImageView) : ImageViewTarget(view) {
++    override fun onStart(placeholder: Drawable?) {
++        super.onStart(placeholder)
++        view.invalidateOutline()
++    }
++
++    override fun onSuccess(result: Drawable) {
++        super.onSuccess(result)
++        view.invalidateOutline()
++    }
++
++    override fun onError(error: Drawable?) {
++        super.onError(error)
++        view.invalidateOutline()
++    }
++}
++
++private object SourceIconOutline : ViewOutlineProvider() {
++    override fun getOutline(view: View, outline: Outline) {
++        val image = view as ImageView
++        val drawable = image.drawable
++        val width = image.width - image.paddingLeft - image.paddingRight
++        val height = image.height - image.paddingTop - image.paddingBottom
++        if (drawable == null || width <= 0 || height <= 0) {
++            outline.setEmpty()
++            return
+         }
+-        source.id == LocalSource.ID -> setImageResource(R.mipmap.ic_local_source)
+-        source.id == LocalNovelSource.ID -> setImageResource(R.drawable.ic_local_novel_source)
+-        else -> source.icon()?.let(::setImageDrawable)
++        val intrinsicWidth = drawable.intrinsicWidth.takeIf { it > 0 } ?: width
++        val intrinsicHeight = drawable.intrinsicHeight.takeIf { it > 0 } ?: height
++        val scale = min(width.toFloat() / intrinsicWidth, height.toFloat() / intrinsicHeight)
++        val fittedWidth = (intrinsicWidth * scale).roundToInt()
++        val fittedHeight = (intrinsicHeight * scale).roundToInt()
++        val left = image.paddingLeft + (width - fittedWidth) / 2
++        val top = image.paddingTop + (height - fittedHeight) / 2
++        outline.setRoundRect(left, top, left + fittedWidth, top + fittedHeight, 8f * image.resources.displayMetrics.density)
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
+index 75cd8de8c03d4105b7de49105e42dee464d995a9..7a94fc309e9224b9d8def13ed81427841cd5f876 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
+@@ -9,13 +9,11 @@ import androidx.core.text.scale
+ import androidx.core.view.isGone
+ import androidx.core.view.isVisible
+ import androidx.core.view.updateLayoutParams
+-import coil.dispose
+-import coil.load
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionBackend
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedHealth
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedInstallation
++import dev.ahmedmohamed.hayai.source.presentation.bindSourceIcon
+ import eu.kanade.tachiyomi.R
+-import eu.kanade.tachiyomi.data.image.coil.CoverViewTarget
+ import eu.kanade.tachiyomi.databinding.ExtensionCardItemBinding
+ import eu.kanade.tachiyomi.extension.model.InstallStep
+ import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
+@@ -95,17 +93,14 @@ class ExtensionHolder(
+         binding.cancelButton.isVisible = item.sessionProgress != null
+         binding.webviewButton.isVisible = extension.websiteUrl != null && item.sessionProgress == null
+ 
+-        binding.sourceImage.dispose()
+-        binding.sourceImage.imageTintList = null
++        val iconFallback =
++            if (extension.backend == ManagedExtensionBackend.JavaScript) R.drawable.ic_code_24dp else R.mipmap.ic_launcher
+         when {
+             extension.installation == ManagedInstallation.Untrusted || extension.health is ManagedHealth.LoadFailed -> {
++                binding.sourceImage.bindSourceIcon(R.drawable.ic_app_untrusted_24dp, R.drawable.ic_app_untrusted_24dp)
+                 binding.sourceImage.imageTintList = ColorStateList.valueOf(itemView.context.getResourceColor(R.attr.colorError))
+-                binding.sourceImage.setImageResource(R.drawable.ic_app_untrusted_24dp)
+             }
+-            extension.installedIcon != null -> binding.sourceImage.load(extension.installedIcon)
+-            extension.iconUrl != null -> binding.sourceImage.load(extension.iconUrl) { target(CoverViewTarget(binding.sourceImage)) }
+-            extension.backend == ManagedExtensionBackend.JavaScript -> binding.sourceImage.setImageResource(R.drawable.ic_code_24dp)
+-            else -> binding.sourceImage.setImageResource(R.mipmap.ic_launcher)
++            else -> binding.sourceImage.bindSourceIcon(extension.installedIcon ?: extension.iconUrl, iconFallback)
+         }
+         bindButton(item)
+     }
+diff --git a/app/src/main/res/values/strings_hayai_novel_reader.xml b/app/src/main/res/values/strings_hayai_novel_reader.xml
+index 2ee0f277c3689f140125da5f436792614af41954..93cd57a40ee7e64077c1b599065d2414eeb5fa67 100644
+--- a/app/src/main/res/values/strings_hayai_novel_reader.xml
++++ b/app/src/main/res/values/strings_hayai_novel_reader.xml
+@@ -8,6 +8,9 @@
+     <string name="hayai_novel_reader_webview">WebView</string>
+     <string name="hayai_novel_reader_layout_mode">Layout mode</string>
+     <string name="hayai_novel_reader_continuous">Continuous</string>
++    <string name="hayai_novel_reader_scroll">Chapter scroll</string>
++    <string name="hayai_novel_reader_continuous_scroll">Continuous scroll</string>
++    <string name="hayai_novel_reader_engine_summary">Paged and vertical reading use WebView. Choose WebView for original book styling or custom CSS and JavaScript.</string>
+     <string name="hayai_novel_reader_paginated">Paginated</string>
+     <string name="hayai_novel_reader_writing_direction">Writing direction</string>
+     <string name="hayai_novel_reader_vertical_japanese">Vertical Japanese</string>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
+index 4c63c4279bd4d0197b9bde09177fea7076d80555..c9c38f02c12799b9d2ba49c5f1d6243501d61f55 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilderTest.kt
+@@ -55,7 +55,7 @@ class NovelHtmlDocumentBuilderTest {
+         assertTrue(html.contains("const pageRects = block =>"))
+         assertTrue(html.contains("return blockPageLocation(activeBlock())"))
+         assertTrue(html.contains("const pageStride = () => Math.max(1, scroller().clientWidth || innerWidth)"))
+-        assertTrue(html.contains("pageStride() * direction"))
++        assertTrue(html.contains("direction)*pageStride()"))
+         assertFalse(html.contains("innerWidth * fraction * direction"))
+         assertTrue(html.contains("column-gap:32px"))
+         assertTrue(html.contains("break-before:column"))
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelReadingModeTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelReadingModeTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4c9834dadb9128c2eb00ff70b9cf1afb06d8698e
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelReadingModeTest.kt
+@@ -0,0 +1,49 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
++import dev.ahmedmohamed.hayai.testing.MemoryPreferenceStore
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelReadingModeTest {
++    @Test
++    fun `existing scroll and infinite preferences retain their behavior`() {
++        assertEquals("scroll", HayaiPreferences(MemoryPreferenceStore()).novelReadingMode.get())
++        assertEquals(
++            "continuous",
++            HayaiPreferences(MemoryPreferenceStore("pref_novel_infinite_scroll" to true)).novelReadingMode.get(),
++        )
++        assertEquals(
++            "paged",
++            HayaiPreferences(MemoryPreferenceStore("pref_novel_layout_mode" to "paged", "pref_novel_infinite_scroll" to true)).novelReadingMode.get(),
++        )
++    }
++
++    @Test
++    fun `explicit reading mode wins over restored legacy flags`() {
++        val store = MemoryPreferenceStore("pref_novel_layout_mode" to "paged", "pref_novel_infinite_scroll" to true)
++        HayaiPreferences(store).novelReadingMode.set("scroll")
++        assertEquals("scroll", HayaiPreferences(store).novelReadingMode.get())
++        HayaiPreferences(store).novelReadingMode.set("continuous")
++        assertEquals("continuous", HayaiPreferences(store).novelReadingMode.get())
++    }
++
++    @Test
++    fun `both horizontal scroll modes support native selectable text`() {
++        listOf(NovelLayoutMode.Scroll, NovelLayoutMode.Continuous).forEach { layout ->
++            val plan = NovelRenderPlan.resolve(NovelRenderingBackend.Native, layout, NovelWritingDirection.Horizontal)
++            assertTrue(plan is NovelRenderPlan.NativeContinuous)
++            assertEquals(layout, plan.layout)
++        }
++    }
++
++    @Test
++    fun `paged and vertical plans preserve layout with web rendering`() {
++        NovelLayoutMode.entries.forEach { layout ->
++            val plan = NovelRenderPlan.resolve(NovelRenderingBackend.Native, layout, NovelWritingDirection.VerticalRl)
++            assertTrue(plan is NovelRenderPlan.Web)
++            assertEquals(layout, plan.layout)
++        }
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelViewportGeometryTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelViewportGeometryTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..25a3e664dd7047e56afe35d89962e307c0bcf7d8
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/reader/NovelViewportGeometryTest.kt
+@@ -0,0 +1,42 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelViewportGeometryTest {
++    @Test
++    fun `long chapter remains current until its trailing boundary reaches the viewport top`() {
++        assertTrue(NovelViewportGeometry.contains(0, 10000, 9000))
++        assertFalse(NovelViewportGeometry.contains(10000, 11000, 9000))
++        assertFalse(NovelViewportGeometry.contains(0, 10000, 10000))
++        assertTrue(NovelViewportGeometry.contains(10000, 11000, 10000))
++    }
++
++    @Test
++    fun `chapter progress uses viewport height and stays at the end during chapter transition`() {
++        assertEquals(50, NovelViewportGeometry.progress(1000, 3000, 1000, 2000))
++        assertEquals(100, NovelViewportGeometry.progress(1000, 3000, 1000, 3500))
++        assertEquals(0, NovelViewportGeometry.progress(1000, 3000, 1000, 0))
++    }
++
++    @Test
++    fun `short chapter is fully visible without a synthetic one pixel scroll range`() {
++        assertEquals(1000, NovelViewportGeometry.offset(1000, 600, 1000, 100))
++        assertEquals(100, NovelViewportGeometry.progress(1000, 600, 1000, 1000))
++    }
++
++    @Test
++    fun `seeking a chapter uses its local range and clamps external progress`() {
++        assertEquals(2000, NovelViewportGeometry.offset(1000, 3000, 1000, 50))
++        assertEquals(1000, NovelViewportGeometry.offset(1000, 3000, 1000, -10))
++        assertEquals(3000, NovelViewportGeometry.offset(1000, 3000, 1000, 150))
++    }
++
++    @Test
++    fun `large chapters do not overflow when computing progress`() {
++        assertEquals(50, NovelViewportGeometry.progress(0, 60000000, 1000, 29999500))
++        assertEquals(29999500, NovelViewportGeometry.offset(0, 60000000, 1000, 50))
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index c054f48a2a87e3b1a03948099fa33d400fe536dd..2eab10fd9856e9e18df48e3eec3f359907ed0752 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -139,3 +139,19 @@ git rebase j2k/master
+ ```
+ 
+ TachiyomiSY and Tsundoku are feature references, not architectural parents. Ports are rebuilt behind Hayai contracts with provenance recorded in the feature audit.
++
++## Novel reading stability
++
++The September 2026 reader corrections reference Tsundoku commit `fe54f05ae038cbc2ae72713c6ac68a2fbccb11af`, especially `textview/NovelViewer.kt` and its chapter containment, selectable text, and viewport preservation behavior. The Hayai viewer keeps existing chapter blocks across preload notifications. It inserts or removes adjacent blocks without replacing the visible document. J2K receives the selected chapter's `NovelProgressPage` through `onPageSelected`; scrolling across a boundary no longer invokes the menu-oriented chapter loader, which can restore a different saved position.
++
++Chapter scroll mounts one chapter. Continuous scroll and paged reading mount the current chapter and its immediate neighbors in both directions. Native horizontal reading uses a selectable `TextView`; explicit editing temporarily uses `EditText`. WebView handles paged and vertical text. Native paragraph indent, paragraph spacing, and justification now apply to the displayed text. Paged movement snaps by viewport, and both renderers preserve the visible chapter offset when adjacent content changes size.
++
++`pref_novel_reading_mode` is the authoritative layout preference. Its default reads the old layout and infinite-scroll keys so existing installations and restored backups retain their chosen behavior. The redundant infinite-scroll and retention controls are removed from settings. No database migration or alternate chapter/progress storage is introduced.
++
++The Hayai viewer temporarily permits descendant focus in its J2K parent while attached, restoring the original focus policy when detached. This lets native text receive selection focus without changing the image reader activity or layout. Returning from full reader settings reapplies style, window preferences, and bottom actions to the mounted reader.
++
++`SourceArtwork.bindSourceIcon` fits APK and URL logos with the same rounding and placeholder behavior. The existing allowlisted `ExtensionHolder` adapter uses it, as do Browse and migration through `bindSourceArtwork`. This removes the novel-only cover target that cropped logos and left recycled rows in `CENTER_CROP`. No protected activity or new J2K seam changes are needed.
++
++`tools/verify-novel-web-reader.cjs` exercises the production embedded reader CSS and JavaScript in Chromium. Set `PLAYWRIGHT_MODULE` if Playwright is outside the normal Node module path. Native viewport geometry and legacy preference compatibility have focused unit tests. Android instrumentation covers actual native rendering and selection; live extension content and full reader lifecycle remain separate device checks.
++
++Validation on September 6 passed Kotlin compilation, 501 unit tests, debug and instrumentation APK assembly, Chromium regressions, and seven Android instrumentation tests. The five native tests cover touchscreen long-press selection and highlight preservation, editing, focus versus seek, chapter containment, and adjacent-block anchoring. Two artwork tests exercise Coil and fitted rounded outlines. The dedicated Android 37 emulator runs the existing APK in 16 KB compatibility mode. Initial device attempts exposed setup dialogs and incorrect synthetic touch coordinates/source; those fixture problems were corrected before the passing run. Localization, upstream boundary, and whitespace checks pass. Logs are under `artifacts/novel-reader/` in the local checkout.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index f8455ef73475d8c78c6aa1160d017198c6d96d96..45a68a14731fe99ab2f4a2ce2abd546e2fea70e5 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -42,7 +42,8 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+-| One J2K reader, central routing, and J2K history | The actual J2K `ReaderActivity`, `ReaderViewModel`, `ReaderChapter`, `ViewerChapters`, toolbar, navigation overlay, slider, chapter sheet, preload request, and chapter loading path; Hayai adds only a `BaseViewer`, bounded adjacent-document window, normalized progress loader, and novel-action attachment. Native `TextView` and isolated `WebView` renderers remain document surfaces; the duplicate activity/chrome/chapter adapter are removed. | port; page counts are measured per chapter from real column fragments, page movement uses the document scroller and one viewport, and continuous mode mounts the configured adjacent window through J2K preloading; focused tests and compilation pass, with a new long-source Android gesture pass still pending |
++| One J2K reader, central routing, and J2K history | The actual J2K `ReaderActivity`, `ReaderViewModel`, `ReaderChapter`, `ViewerChapters`, toolbar, navigation overlay, slider, chapter sheet, preload request, and chapter loading path; Hayai adds only a `BaseViewer`, bounded adjacent-document window, normalized progress loader, and novel-action attachment. Native `TextView` and isolated `WebView` renderers remain document surfaces; the duplicate activity/chrome/chapter adapter are removed. | port; page counts are measured per chapter from real column fragments, page movement uses the document scroller and one viewport, and chapter scroll is separate from bidirectional continuous and paged reading; window updates preserve mounted text, and chapter crossings use J2K page selection; the September stability changes pass browser regressions and five native Android renderer checks, including real touchscreen selection; live-extension stress and full reader lifecycle checks remain pending |
++| Source and extension artwork | Shared fitted, rounded icon binding for APK and URL artwork in Extensions, Browse, and migration; existing J2K row dimensions retained | Port; two Android checks verify Coil fit, rounded artwork bounds, and recycled crop/tint reset for wide and tall logos |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+ | Remote novel extension catalogs and installation | A Novels tab beside Manga and Migration over J2K APK authority and Hayai JavaScript authority; namespaced identities; explicit load failures; consistent duplicate reconciliation; shared-safe tagged repository ownership; and J2K's inline repository editor reused for both backends | port verified on emulator with a checksum-verified Keiyoushi Comikey APK and the production LNReader v3 repository; install, detection, settings, and source registration passed |
+ | LNReader JavaScript repository sources | Novels-tab J2K cards, explicit application-context runtime construction, construction and warm-up error retention, version-tolerant v3/legacy repository boundary, bounded trusted repositories with idempotent repair for persisted repositories missing trust, isolated QuickJS sources, relative repository icon resolution, and full catalogue/chapter bridge | port verified on emulator by installing production Komga 1.0.2, initializing QuickJS, evaluating filters/settings, registering the source, and loading its remote icon in Browse without a raw-Context DI lookup; deleting only the trust preference while retaining two configured repositories recreated both trust records on startup |
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index 978986190a9f33b1583223b8b8430909b1ab601a..9e6b3a44e587374167f52c207adb8046c8b34168 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1147 | 0.0% |
+-| `ar` | 31 / 1147 | 2.7% |
+-| `ars` | 0 / 1147 | 0.0% |
+-| `az` | 0 / 1147 | 0.0% |
+-| `bg` | 0 / 1147 | 0.0% |
+-| `bn` | 0 / 1147 | 0.0% |
+-| `ca` | 0 / 1147 | 0.0% |
+-| `ceb` | 0 / 1147 | 0.0% |
+-| `cs` | 0 / 1147 | 0.0% |
+-| `cv` | 0 / 1147 | 0.0% |
+-| `de` | 29 / 1147 | 2.5% |
+-| `el` | 0 / 1147 | 0.0% |
+-| `eo` | 0 / 1147 | 0.0% |
+-| `es` | 31 / 1147 | 2.7% |
+-| `eu` | 0 / 1147 | 0.0% |
+-| `fa` | 0 / 1147 | 0.0% |
+-| `fi` | 0 / 1147 | 0.0% |
+-| `fil` | 31 / 1147 | 2.7% |
+-| `fr` | 31 / 1147 | 2.7% |
+-| `gl` | 0 / 1147 | 0.0% |
+-| `ha` | 0 / 1147 | 0.0% |
+-| `hi` | 0 / 1147 | 0.0% |
+-| `hr` | 31 / 1147 | 2.7% |
+-| `hu` | 0 / 1147 | 0.0% |
+-| `in` | 31 / 1147 | 2.7% |
+-| `it` | 17 / 1147 | 1.5% |
+-| `iw` | 0 / 1147 | 0.0% |
+-| `ja` | 29 / 1147 | 2.5% |
+-| `jv` | 0 / 1147 | 0.0% |
+-| `ka` | 0 / 1147 | 0.0% |
+-| `kk` | 0 / 1147 | 0.0% |
+-| `km` | 0 / 1147 | 0.0% |
+-| `ko` | 7 / 1147 | 0.6% |
+-| `lt` | 0 / 1147 | 0.0% |
+-| `lv` | 0 / 1147 | 0.0% |
+-| `ml` | 0 / 1147 | 0.0% |
+-| `mn` | 0 / 1147 | 0.0% |
+-| `ms` | 0 / 1147 | 0.0% |
+-| `my` | 0 / 1147 | 0.0% |
+-| `nb-rNO` | 0 / 1147 | 0.0% |
+-| `ne` | 5 / 1147 | 0.4% |
+-| `nl` | 0 / 1147 | 0.0% |
+-| `nn` | 0 / 1147 | 0.0% |
+-| `om` | 0 / 1147 | 0.0% |
+-| `or` | 0 / 1147 | 0.0% |
+-| `pl` | 0 / 1147 | 0.0% |
+-| `pt` | 31 / 1147 | 2.7% |
+-| `pt-rBR` | 31 / 1147 | 2.7% |
+-| `ro` | 0 / 1147 | 0.0% |
+-| `ru` | 31 / 1147 | 2.7% |
+-| `sc` | 0 / 1147 | 0.0% |
+-| `si` | 0 / 1147 | 0.0% |
+-| `sk` | 0 / 1147 | 0.0% |
+-| `sq` | 0 / 1147 | 0.0% |
+-| `sr` | 0 / 1147 | 0.0% |
+-| `sv` | 0 / 1147 | 0.0% |
+-| `ta` | 31 / 1147 | 2.7% |
+-| `te` | 0 / 1147 | 0.0% |
+-| `th` | 0 / 1147 | 0.0% |
+-| `ti` | 0 / 1147 | 0.0% |
+-| `tl` | 0 / 1147 | 0.0% |
+-| `tr` | 31 / 1147 | 2.7% |
+-| `uk` | 7 / 1147 | 0.6% |
+-| `ur` | 0 / 1147 | 0.0% |
+-| `vi` | 5 / 1147 | 0.4% |
+-| `zh-rCN` | 31 / 1147 | 2.7% |
+-| `zh-rTW` | 31 / 1147 | 2.7% |
++| `ajp` | 0 / 1150 | 0.0% |
++| `ar` | 31 / 1150 | 2.7% |
++| `ars` | 0 / 1150 | 0.0% |
++| `az` | 0 / 1150 | 0.0% |
++| `bg` | 0 / 1150 | 0.0% |
++| `bn` | 0 / 1150 | 0.0% |
++| `ca` | 0 / 1150 | 0.0% |
++| `ceb` | 0 / 1150 | 0.0% |
++| `cs` | 0 / 1150 | 0.0% |
++| `cv` | 0 / 1150 | 0.0% |
++| `de` | 29 / 1150 | 2.5% |
++| `el` | 0 / 1150 | 0.0% |
++| `eo` | 0 / 1150 | 0.0% |
++| `es` | 31 / 1150 | 2.7% |
++| `eu` | 0 / 1150 | 0.0% |
++| `fa` | 0 / 1150 | 0.0% |
++| `fi` | 0 / 1150 | 0.0% |
++| `fil` | 31 / 1150 | 2.7% |
++| `fr` | 31 / 1150 | 2.7% |
++| `gl` | 0 / 1150 | 0.0% |
++| `ha` | 0 / 1150 | 0.0% |
++| `hi` | 0 / 1150 | 0.0% |
++| `hr` | 31 / 1150 | 2.7% |
++| `hu` | 0 / 1150 | 0.0% |
++| `in` | 31 / 1150 | 2.7% |
++| `it` | 17 / 1150 | 1.5% |
++| `iw` | 0 / 1150 | 0.0% |
++| `ja` | 29 / 1150 | 2.5% |
++| `jv` | 0 / 1150 | 0.0% |
++| `ka` | 0 / 1150 | 0.0% |
++| `kk` | 0 / 1150 | 0.0% |
++| `km` | 0 / 1150 | 0.0% |
++| `ko` | 7 / 1150 | 0.6% |
++| `lt` | 0 / 1150 | 0.0% |
++| `lv` | 0 / 1150 | 0.0% |
++| `ml` | 0 / 1150 | 0.0% |
++| `mn` | 0 / 1150 | 0.0% |
++| `ms` | 0 / 1150 | 0.0% |
++| `my` | 0 / 1150 | 0.0% |
++| `nb-rNO` | 0 / 1150 | 0.0% |
++| `ne` | 5 / 1150 | 0.4% |
++| `nl` | 0 / 1150 | 0.0% |
++| `nn` | 0 / 1150 | 0.0% |
++| `om` | 0 / 1150 | 0.0% |
++| `or` | 0 / 1150 | 0.0% |
++| `pl` | 0 / 1150 | 0.0% |
++| `pt` | 31 / 1150 | 2.7% |
++| `pt-rBR` | 31 / 1150 | 2.7% |
++| `ro` | 0 / 1150 | 0.0% |
++| `ru` | 31 / 1150 | 2.7% |
++| `sc` | 0 / 1150 | 0.0% |
++| `si` | 0 / 1150 | 0.0% |
++| `sk` | 0 / 1150 | 0.0% |
++| `sq` | 0 / 1150 | 0.0% |
++| `sr` | 0 / 1150 | 0.0% |
++| `sv` | 0 / 1150 | 0.0% |
++| `ta` | 31 / 1150 | 2.7% |
++| `te` | 0 / 1150 | 0.0% |
++| `th` | 0 / 1150 | 0.0% |
++| `ti` | 0 / 1150 | 0.0% |
++| `tl` | 0 / 1150 | 0.0% |
++| `tr` | 31 / 1150 | 2.7% |
++| `uk` | 7 / 1150 | 0.6% |
++| `ur` | 0 / 1150 | 0.0% |
++| `vi` | 5 / 1150 | 0.4% |
++| `zh-rCN` | 31 / 1150 | 2.7% |
++| `zh-rTW` | 31 / 1150 | 2.7% |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 8d22ad05bf2dc4ed6c4f44ed62f6b98eb35503b6..0770f261e174925e54277cf31f07a0870379756f 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -2216,7 +2216,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	UpdateQu
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	val INSERT_QUERY = InsertQuery.builder().table("hayai_quotes").build()
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/quote/NovelQuoteStore.kt	val normalized = value.replace("\r\n", "\n").replace('\r', '\n').trim()
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	block.paragraphs = Jsoup.parse(request.content.html).select("h1,h2,h3,h4,h5,h6,p,li,blockquote").map { it.text().trim() }.filter(String::isNotBlank)
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	Regex("[^\\n]+(?:\\n|$)").findAll(content).forEach { paragraph ->
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	textView.gravity = when (style.textAlign) { "center" -> Gravity.TOP or Gravity.CENTER_HORIZONTAL; "right", "end" -> Gravity.TOP or Gravity.END; else -> Gravity.TOP or Gravity.START }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	textView.justificationMode = if (style.textAlign == "justify") Layout.JUSTIFICATION_MODE_INTER_WORD else Layout.JUSTIFICATION_MODE_NONE
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	val text = paragraphs.joinToString("\n\n")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NativeNovelRenderer.kt	var original: CharSequence = "",
+@@ -2290,7 +2292,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"<style>$readerCss</style><style>${style.customCss.safeStyleText()}</style>"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"outline" -> ".hayai-tts-active { outline:2px solid $background; outline-offset:2px; border-radius:.2em; }"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	"underline" -> ".hayai-tts-active { text-decoration:underline 3px $background; text-underline-offset:.18em; }"
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<html class="hayai-$renderingMode" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<html class="hayai-$renderingMode" data-document-id="$documentId" data-writing-direction="$writingDirection" data-keep-highlight="${style.keepTtsHighlightInView}"><head>
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<main id="hayai-reader"><article class="hayai-chapter-block" data-chapter-id="$chapterId" data-state="ready">$heading${content.html}</article></main>
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<meta charset="utf-8">
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
+@@ -2308,7 +2310,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val fontFamily = if (style.useOriginalFonts) "inherit" else cssString(style.fontFamily)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val heading = if (style.hideChapterTitle) "" else "<h1 class=\"hayai-chapter-title\">${escape(chapterTitle)}</h1>"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val importedFontCss = importedFontId?.let { "@font-face { font-family:'HayaiImported'; src:url('${NovelFontStore.WEB_SCHEME}://$it'); font-display:swap; }" }.orEmpty()
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val renderingMode = style.renderingMode.takeIf { it in setOf("default", "continuous", "paged") } ?: "default"
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val renderingMode = style.renderingMode.takeIf { it in setOf("default", "scroll", "continuous", "paged") } ?: "scroll"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val resolvedFontFamily = if (importedFontId != null) "'HayaiImported'" else fontFamily
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt	val selection = if (style.textSelectable) "text" else "none"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderAttachment.kt	?: error("Unable to read the selected quote file")
+@@ -2341,6 +2343,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Paged
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	PreviousChapter("prev_chapter"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Progress("progress"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Quotes("quotes"),
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Scroll("scroll"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	ScrollToTop("scroll_to_top"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Settings("settings"),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderModels.kt	Time("time"),
+@@ -2357,7 +2360,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.k
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_alignment, preferences.novelTextAlign, listOf(R.string.left to "left", R.string.hayai_novel_reader_justified to "justify", R.string.center to "center", R.string.right to "right"), onStyleChanged)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_font, preferences.novelFontFamily, listOf(R.string.hayai_novel_reader_sans_serif to "sans-serif", R.string.hayai_novel_reader_serif to "serif", R.string.hayai_novel_reader_monospace to "monospace"), onStyleChanged)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_highlight_style, preferences.novelTtsHighlightStyle, listOf(R.string.hayai_novel_reader_background to "background", R.string.hayai_novel_reader_underline to "underline", R.string.hayai_novel_reader_outline to "outline"), onStyleChanged)
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelLayoutMode, listOf(R.string.hayai_novel_reader_continuous to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_layout_mode, preferences.novelReadingMode, listOf(R.string.hayai_novel_reader_scroll to "scroll", R.string.hayai_novel_reader_continuous_scroll to "continuous", R.string.hayai_novel_reader_paginated to "paged"), onStyleChanged)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_reading_engine, preferences.novelRenderingBackend, listOf(R.string.hayai_novel_reader_native_text to "default", R.string.hayai_novel_reader_webview to "webview"), onStyleChanged)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_position, preferences.novelStatusBarPosition, listOf(R.string.top to "top", R.string.bottom to "bottom"), onChromeChanged)
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSettingsSheet.kt	page.choice(R.string.hayai_novel_reader_status_size, preferences.novelStatusBarSize, listOf(R.string.hayai_novel_reader_small to "small", R.string.hayai_novel_reader_medium to "medium"), onChromeChanged)
+@@ -2413,6 +2416,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	docume
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	element.attr(attribute, "$value${if ('?' in value) '&' else '?'}hayaiChapterId=$chapterId")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("(()=>{${request.appendJavaScript}})()")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("window.hayaiReader.applyPersistentHighlights(${json.encodeToString(payload)})")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("window.hayaiReader.focusBlock(${json.encodeToString(chapterId.toString())},${progress?.coerceIn(0, 100) ?: "null"})")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluate("window.hayaiReader.retainBlocks(${json.encodeToString(chapterIds.map { it.toString() })})")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	if (focus) evaluate("window.hayaiReader.focusBlock(${json.encodeToString(block.chapterId.toString())},${request.initialProgress})")
+@@ -2447,7 +2451,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelCustomizationStore.
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelCustomizationStore.kt	val id: String = "",
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("app", "light", "dark", "sepia", "black", "grey", "custom")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("background", "underline", "outline")
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("continuous", "paged")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("default", "webview")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("half", "full")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("horizontal", "vertical-rl")
+@@ -2455,6 +2458,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("left", "right")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("NONE", "HORIZONTAL", "VERTICAL", "BOTH")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("sans-serif", "serif", "monospace")
++app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("scroll", "continuous", "paged")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("small", "medium", "large")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	entryValues = listOf("top", "bottom")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/settings/NovelSettingsController.kt	if (activateCustomTheme) novel.novelTheme.set("custom")
+@@ -2971,6 +2975,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/translation/NovelTranslationText.kt	val processed = NovelContentProcessor().process(document, chapterName = "", OPTIONS)
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	"""[{"id":"prev_chapter","enabled":true},{"id":"scroll_to_top","enabled":true},{"id":"translate","enabled":false},{"id":"auto_scroll","enabled":false},{"id":"tts","enabled":true},{"id":"quotes","enabled":true},{"id":"orientation","enabled":false},{"id":"settings","enabled":true},{"id":"edit","enabled":false},{"id":"next_chapter","enabled":true}]""",
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	"novel_bottom_bar_items",
++app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	"pref_novel_reading_mode",
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_HENTAI_FEATURES = "eh_is_hentai_enabled"
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_HIDDEN_SOURCES_IN_HISTORY = "hidden_sources_in_history"
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_HIDDEN_SOURCES_IN_UPDATES = "hidden_sources_in_updates"
+@@ -2978,6 +2983,9 @@ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const v
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_NOVEL_LIBRARY_FILTER = "pref_filter_library_novel_v1"
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_NOVEL_TITLE_MAX_LINES = "pref_novel_title_max_lines"
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	const val KEY_PAGE_PREVIEW_ROWS = "pref_page_preview_rows"
++app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	else -> "scroll"
++app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	novelInfiniteScroll.get() -> "continuous"
++app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	novelLayoutMode.get() == "paged" -> "paged"
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelAutoLoadNextChapterAt = store.getInt("pref_novel_auto_load_next_at", 95)
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelAutoScrollSpeed = store.getInt("pref_novel_auto_scroll_speed_half", 6)
+ app/src/main/java/dev/ahmedmohamed/hayai/preferences/HayaiPreferences.kt	val novelAutoSplitText = store.getBoolean("pref_novel_auto_split_text", false)
+diff --git a/tools/verify-novel-web-reader.cjs b/tools/verify-novel-web-reader.cjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..6d802b7e0ff856bbdc491efaa32d6cd1f67fc929
+--- /dev/null
++++ b/tools/verify-novel-web-reader.cjs
+@@ -0,0 +1,101 @@
++const fs = require('node:fs');
++const path = require('node:path');
++const assert = require('node:assert/strict');
++const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
++
++const source = fs.readFileSync(path.join(__dirname, '../app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelHtmlDocumentBuilder.kt'), 'utf8');
++const script = source.match(/private const val BRIDGE_SCRIPT = """([\s\S]*?)"""/)[1];
++const cssSource = source.slice(source.indexOf('private fun buildReaderCss')).match(/return """([\s\S]*?)"""/)[1];
++const values = {
++    'if (isDark(style.backgroundColor)) "dark" else "light"': 'light',
++    'style.marginTop.coerceIn(0, 200)': '16',
++    'style.marginRight.coerceIn(0, 200)': '16',
++    'style.marginBottom.coerceIn(0, 200)': '16',
++    'style.marginLeft.coerceIn(0, 200)': '16',
++    'style.marginTop.coerceIn(0, 200) + style.marginBottom.coerceIn(0, 200)': '32',
++    'style.marginLeft.coerceIn(0, 200) + style.marginRight.coerceIn(0, 200)': '32',
++    'style.fontSize.coerceIn(8, 72)': '18',
++    'style.lineHeight.coerceIn(0.8f, 3f)': '1.5',
++    'style.paragraphSpacing.coerceIn(0f, 5f)': '0.5',
++    'style.paragraphIndent.coerceIn(0f, 10f)': '0',
++    'color(style.linkColor)': '#0000ff',
++    'ttsHighlightCss(style.ttsHighlightStyle, highlightColor, highlightTextColor)': '',
++    importedFontCss: '', backgroundColor: '#ffffff', textColor: '#111111', resolvedFontFamily: 'sans-serif', align: 'left', selection: 'text',
++};
++const css = cssSource.replace(/\$\{([^}]+)\}|\$(\w+)/g, (_, expression, name) => {
++    assert.ok(Object.hasOwn(values, expression || name), `Fixture value missing for ${expression || name}`);
++    return values[expression || name];
++});
++const chapter = (id, count) => `<article class="hayai-chapter-block" data-chapter-id="${id}" data-state="ready">${Array.from({ length: count }, (_, index) => `<p>Chapter ${id}, paragraph ${index}. ${'A readable sentence with selectable text. '.repeat(12)}</p>`).join('')}</article>`;
++const html = (mode, chapters) => `<!doctype html><html class="hayai-${mode}" data-document-id="1" data-writing-direction="horizontal"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><main id="hayai-reader">${chapters}</main><script>window.locations=[];window.HayaiReader={onReady(){},onChapterProgress(id,progress){locations.push({id,progress})},onPageLocation(id,progress,number,count){locations.push({id,progress,number,count})}};</script><script>${script}</script></body></html>`;
++
++(async () => {
++    const browser = await chromium.launch({ headless: true });
++    try {
++        const page = await browser.newPage({ viewport: { width: 412, height: 800 } });
++        const errors = [];
++        page.on('pageerror', error => errors.push(error.message));
++        await page.setContent(html('continuous', chapter(2, 45) + chapter(3, 2)));
++        await page.evaluate(() => hayaiReader.focusBlock('2', 60));
++        await page.waitForTimeout(200);
++        assert.equal(await page.evaluate(() => locations.at(-1).id), '2', 'A short next chapter must not steal the active chapter');
++        const before = await page.evaluate(() => ({ y: scrollY, top: document.querySelector('[data-chapter-id="2"]').getBoundingClientRect().top }));
++        await page.evaluate(content => hayaiReader.upsertBlock('1', content, 'before', false), chapter(1, 8).replace(/^<article[^>]*>|<\/article>$/g, ''));
++        await page.waitForTimeout(200);
++        const insertedTop = await page.evaluate(() => document.querySelector('[data-chapter-id="2"]').getBoundingClientRect().top);
++        assert.ok(Math.abs(insertedTop - before.top) <= 1, 'Prepending preserves the visible chapter position');
++        await page.evaluate(() => hayaiReader.retainBlocks(['2', '3']));
++        await page.waitForTimeout(200);
++        assert.ok(Math.abs(await page.evaluate(() => scrollY) - before.y) <= 1, 'Removing the preceding chapter preserves position');
++        const noScroll = await page.evaluate(() => { const y = scrollY; hayaiReader.focusBlock('3', null); return scrollY === y; });
++        assert.ok(noScroll, 'Focus without a position must not scroll');
++        await page.evaluate(() => { hayaiReader.focusBlock('3', 0); });
++        await page.waitForTimeout(200);
++        await page.evaluate(() => scrollBy(0, -150));
++        await page.waitForTimeout(200);
++        assert.equal(await page.evaluate(() => locations.at(-1).id), '2', 'Scrolling backwards enters the previous chapter');
++        await page.evaluate(() => hayaiReader.focusBlock('2', 45));
++        await page.waitForTimeout(200);
++        const anchor = await page.evaluate(() => { const p = [...document.querySelectorAll('[data-chapter-id="2"] p')].find(p => p.getBoundingClientRect().bottom > 0); return {text:p.textContent,top:p.getBoundingClientRect().top}; });
++        await page.evaluate(() => { const p = document.querySelector('[data-chapter-id="2"] p'); p.style.height = `${p.offsetHeight + 400}px`; });
++        await page.waitForTimeout(200);
++        const afterGrowth = await page.evaluate(text => [...document.querySelectorAll('p')].find(p => p.textContent === text).getBoundingClientRect().top, anchor.text);
++        assert.ok(Math.abs(afterGrowth - anchor.top) <= 1, 'Layout growth above the viewport preserves the text anchor');
++        await page.setContent(html('paged', chapter(1, 30) + chapter(2, 12)));
++        await page.evaluate(() => hayaiReader.focusBlock('1', 0));
++        await page.waitForTimeout(200);
++        assert.ok(await page.evaluate(() => document.scrollingElement.scrollHeight <= innerHeight + 1), 'Paged text stays within the viewport height');
++        await page.evaluate(() => hayaiReader.step(1));
++        await page.waitForTimeout(700);
++        assert.ok(Math.abs(await page.evaluate(() => scrollX) - 412) <= 1, 'Next moves by one full page');
++        await page.evaluate(() => scrollTo(412 * 2.4, 0));
++        await page.waitForTimeout(700);
++        assert.ok(Math.abs(await page.evaluate(() => scrollX) - 824) <= 1, 'Swipe stopping between columns snaps to a page');
++        await page.evaluate(() => hayaiReader.focusBlock('1', 100));
++        await page.waitForTimeout(250);
++        const lastCurrentPage = await page.evaluate(() => scrollX);
++        await page.evaluate(() => scrollBy(innerWidth * 0.8, 0));
++        await page.waitForTimeout(700);
++        assert.equal(await page.evaluate(() => locations.at(-1).id), '2', 'A swipe beyond the last page enters the next chapter');
++        assert.ok(Math.abs(await page.evaluate(() => scrollX) - lastCurrentPage - 412) <= 1, 'The chapter boundary is one page wide');
++        await page.evaluate(() => scrollBy(-innerWidth * 0.8, 0));
++        await page.waitForTimeout(700);
++        assert.equal(await page.evaluate(() => locations.at(-1).id), '1', 'A swipe before the first page enters the previous chapter');
++        await page.evaluate(() => hayaiReader.focusBlock('2', 0));
++        await page.waitForTimeout(250);
++        assert.equal(await page.evaluate(() => locations.at(-1).id), '2', 'Paged chapter seeking activates the requested chapter');
++        const selected = await page.evaluate(() => { const text = document.querySelector('[data-chapter-id="2"] p').firstChild; const range = document.createRange(); range.setStart(text,0);range.setEnd(text,12);getSelection().addRange(range); return hayaiReader.takeSelectionAnchor()?.selectedText; });
++        assert.equal(selected, 'Chapter 2, p', 'Selection exposes the exact selected text');
++        await page.evaluate(() => { getSelection().removeAllRanges(); hayaiReader.step(-1); });
++        await page.waitForTimeout(700);
++        assert.equal(await page.evaluate(() => locations.at(-1).id), '1', 'Paging backwards enters the preceding chapter');
++        await page.setContent(html('paged', chapter(1, 1)));
++        await page.evaluate(() => hayaiReader.focusBlock('1', 0));
++        await page.waitForTimeout(250);
++        assert.ok(await page.evaluate(() => document.scrollingElement.scrollWidth <= innerWidth + 1), 'A short chapter has no artificial blank page');
++        assert.deepEqual(errors, [], 'Production bridge must not throw');
++        console.log('Novel web reader browser regressions passed (containment, bidirectional navigation, prepend/remove, focus, relayout, pagination, snap, selection).');
++    } finally {
++        await browser.close();
++    }
++})().catch(error => { console.error(error); process.exitCode = 1; });
+-- 
+2.54.0.windows.1
+
