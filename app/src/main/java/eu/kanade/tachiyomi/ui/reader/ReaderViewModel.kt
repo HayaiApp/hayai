@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import dev.ahmedmohamed.hayai.novel.reader.NovelProgressPage
 import dev.ahmedmohamed.hayai.novel.reader.NovelReaderProgress
+import dev.ahmedmohamed.hayai.reader.ReadChapterDeletionPolicy
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.settings.OrientationType
 import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
@@ -609,22 +610,17 @@ class ReaderViewModel(
             chapterToDownload = null
         }
         // Check if deleting option is enabled and chapter exists
-        if (removeAfterReadSlots != -1 && chapterToDelete != null) {
-            val excludedCategories = preferences.removeExcludeCategories().get().map(String::toInt)
-            if (excludedCategories.any()) {
-                val categories =
-                    db
-                        .getCategoriesForManga(manga!!)
-                        .executeAsBlocking()
-                        .mapNotNull { it.id }
-                        .ifEmpty { listOf(0) }
-
-                if (categories.any { it in excludedCategories }) return
-            }
-
+        if (chapterToDelete != null && canDeleteReadChapters(removeAfterReadSlots)) {
             enqueueDeleteReadChapters(chapterToDelete)
         }
     }
+
+    private fun canDeleteReadChapters(removeAfterReadSlots: Int): Boolean =
+        ReadChapterDeletionPolicy.allowsDeletion(
+            removeAfterReadSlots,
+            preferences.removeExcludeCategories().get().map(String::toInt).toSet(),
+            { db.getCategoriesForManga(manga!!).executeAsBlocking().mapNotNull { it.id } },
+        )
 
     /**
      * Marks other unread chapters sharing the same chapter number as [readerChapter] as read,
@@ -650,7 +646,7 @@ class ReaderViewModel(
         duplicateUnreadChapters.forEach { it.read = true }
         db.updateChaptersProgress(duplicateUnreadChapters).executeAsBlocking()
 
-        if (preferences.removeAfterReadSlots().get() != -1) {
+        if (canDeleteReadChapters(preferences.removeAfterReadSlots().get())) {
             val downloadedDuplicates = duplicateUnreadChapters.filter { downloadManager.isChapterDownloaded(it, manga) }
             if (downloadedDuplicates.isNotEmpty()) {
                 downloadManager.enqueueDeleteChapters(downloadedDuplicates, manga)
