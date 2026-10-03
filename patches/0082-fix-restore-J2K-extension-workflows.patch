@@ -1,4 +1,4 @@
-From 97972d5f33f478b05da60bf5b80f91f1249c9642 Mon Sep 17 00:00:00 2001
+From 07f86da55321ae37507bb40c8c9e310011c8d122 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 15:43:17 +0300
 Subject: [PATCH] fix: restore J2K extension workflows
@@ -291,10 +291,10 @@ index bec4471b80da00d5aa79e09267197f4cc2eecfa8..71a214dce4bf11ff614a1ee23541e7f5
  }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-index c81e6df5c30f9717fa3af7e3829829b56885ee5e..0b223eb08eb433d8eeb3c1b6f46426bddf9d0de9 100644
+index 6fcb399cf02763543c9f18beeea29036475d8eb8..6e68061b71ad34c8c3e05fd97220746cffb12a1f 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-@@ -350,7 +350,11 @@ class PreferencesHelper(
+@@ -351,7 +351,11 @@ class PreferencesHelper(
  
      fun automaticExtUpdates() = flowPrefs.getBoolean(Keys.automaticExtUpdates, true)
  
@@ -1040,10 +1040,10 @@ index beb6a3aa28efab6dc63f9a8550a885e9b282a217..8d7c192c68c53d94a142df359df134f4
      val sessionProgress: Int?
          get() = (session?.progress?.times(100)?.toInt())
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-index 47908478cfa7382126b625cf6e9ef9d18bc60d2a..d4af3e1ca42f287ba5d1f7c19a6fb4dd3fb70aab 100644
+index 8f43af6096f59796aa9ad2235a22a797605d57d9..044741962a27d6981ad9984162c5f1105ff706f3 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-@@ -338,7 +338,7 @@ class BrowseController :
+@@ -364,7 +364,7 @@ class BrowseController :
      }
  
      private fun updateSheetMenu() {
@@ -1052,7 +1052,7 @@ index 47908478cfa7382126b625cf6e9ef9d18bc60d2a..d4af3e1ca42f287ba5d1f7c19a6fb4dd
          binding.bottomSheet.sheetToolbar.title =
              if (!onExtensionTab) {
                  binding.bottomSheet.root.currentSourceTitle
-@@ -524,6 +524,9 @@ class BrowseController :
+@@ -550,6 +550,9 @@ class BrowseController :
          binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
              bottomMargin = -pad.toInt()
          }

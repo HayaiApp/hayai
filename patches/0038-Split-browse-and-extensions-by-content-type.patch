@@ -1,4 +1,4 @@
-From 2c1322ba104b101b4d52e167be2ea0a7fc952829 Mon Sep 17 00:00:00 2001
+From 91ff86be2e643faee9a097d62ba61a93eb105118 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 03:59:23 +0300
 Subject: [PATCH] Split browse and extensions by content type
@@ -514,7 +514,7 @@ index 6254d5a0e8a1419e2161eb0f3b377627d0bf3c51..74faa5455f78a106ae3640dd9f65a3e8
 +        private fun selectedExtensionAdapter(): ExtensionAdapter? = selectedContentKind()?.let(::extensionAdapter)
      }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
-index bcd738d89d1be22d29b907736f82ca50bec7e80a..79fac5430548f4dd01130da7f6c3669902be693a 100644
+index 1943ddae6a204fdd2ad64a25c80b579d22ece6e8..df881ccfd1013fbf6d5275c3f0a27b315586bfb3 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
 @@ -5,6 +5,8 @@ import android.content.Intent
@@ -526,7 +526,7 @@ index bcd738d89d1be22d29b907736f82ca50bec7e80a..79fac5430548f4dd01130da7f6c36699
  import eu.kanade.tachiyomi.BuildConfig
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.notification.Notifications
-@@ -24,6 +26,7 @@ import uy.kohesive.injekt.injectLazy
+@@ -25,6 +27,7 @@ import uy.kohesive.injekt.injectLazy
  
  class SettingsBrowseController : SettingsController() {
      val sourceManager: SourceManager by injectLazy()
@@ -534,7 +534,7 @@ index bcd738d89d1be22d29b907736f82ca50bec7e80a..79fac5430548f4dd01130da7f6c36699
      var updatedExtNotifPref: SwitchPreferenceCompat? = null
  
      override fun setupPreferenceScreen(screen: PreferenceScreen) =
-@@ -58,11 +61,20 @@ class SettingsBrowseController : SettingsController() {
+@@ -59,11 +62,20 @@ class SettingsBrowseController : SettingsController() {
                  preference {
                      key = "pref_edit_extension_repos"
  
@@ -558,7 +558,7 @@ index bcd738d89d1be22d29b907736f82ca50bec7e80a..79fac5430548f4dd01130da7f6c36699
                  if (ExtensionManager.canAutoInstallUpdates()) {
                      val intPref =
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5cea30639 100644
+index 4a1cbb0c6f3c88aeb1dce336be88e0c18beb7ad6..a4e5a2c5fd5107be508d9b0b5cabaa1902da2dbc 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 @@ -23,6 +23,8 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
@@ -578,7 +578,7 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
  import eu.kanade.tachiyomi.ui.setting.SettingsBrowseController
  import eu.kanade.tachiyomi.ui.setting.SettingsSourcesController
  import eu.kanade.tachiyomi.ui.source.browse.BrowseSourceController
-@@ -87,6 +90,7 @@ class BrowseController :
+@@ -91,6 +94,7 @@ class BrowseController :
      SourceAdapter.SourceListener,
      RootSearchInterface,
      FloatingSearchInterface,
@@ -586,7 +586,7 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
      BottomSheetController {
      /**
       * Application preferences.
-@@ -127,6 +131,34 @@ class BrowseController :
+@@ -151,6 +155,34 @@ class BrowseController :
  
      val presenter = SourcePresenter(this)
  
@@ -621,7 +621,7 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
      override fun createBinding(inflater: LayoutInflater) = BrowseControllerBinding.inflate(inflater)
  
      override fun onViewCreated(view: View) {
-@@ -185,6 +217,7 @@ class BrowseController :
+@@ -211,6 +243,7 @@ class BrowseController :
  
          requestFilePermissionsSafe(301, preferences)
          binding.bottomSheet.root.onCreate(this)
@@ -629,7 +629,7 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
  
          preferences
              .extensionInstaller()
-@@ -305,14 +338,14 @@ class BrowseController :
+@@ -331,14 +364,14 @@ class BrowseController :
      }
  
      private fun updateSheetMenu() {
@@ -646,7 +646,7 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
          if (binding.bottomSheet.sheetToolbar.menu
                  .findItem(if (onExtensionTab) R.id.action_search else R.id.action_migration_guide) !=
              null
-@@ -327,7 +360,7 @@ class BrowseController :
+@@ -353,7 +386,7 @@ class BrowseController :
          binding.bottomSheet.sheetToolbar.menu
              .clear()
          binding.bottomSheet.sheetToolbar.inflateMenu(
@@ -655,7 +655,7 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
                  R.menu.extension_main
              } else {
                  R.menu.migration_main
-@@ -395,7 +428,8 @@ class BrowseController :
+@@ -421,7 +454,8 @@ class BrowseController :
                      router.pushController(SettingsBrowseController().withFadeTransaction())
                  }
                  R.id.action_ext_repos -> {
@@ -665,7 +665,7 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
                  }
              }
              return@setOnMenuItemClickListener true
-@@ -491,6 +525,9 @@ class BrowseController :
+@@ -517,6 +551,9 @@ class BrowseController :
          binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
              bottomMargin = -pad.toInt()
          }
@@ -675,7 +675,7 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
          binding.bottomSheet.root.migrationFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
              bottomMargin = -pad.toInt()
          }
-@@ -608,7 +645,9 @@ class BrowseController :
+@@ -635,7 +672,9 @@ class BrowseController :
                  val searchView = searchItem.actionView as SearchView
                  searchView.clearFocus()
              }
@@ -685,15 +685,15 @@ index 4383df3cc3d3e18173f5677eba8105616e45954c..e199249fb6a9be65f61e8c37d8aa0de5
              binding.bottomSheet.root.presenter
                  .refreshMigrations()
              updateTitleAndMenu()
-@@ -769,7 +808,7 @@ class BrowseController :
-     }
- 
-     private fun performGlobalSearch(query: String) {
--        router.pushController(GlobalSearchController(query).withFadeTransaction())
-+        router.pushController(GlobalSearchController(query, contentKind = presenter.contentKind).withFadeTransaction())
-     }
- 
-     /**
+@@ -813,7 +852,7 @@ class BrowseController :
+         query: String,
+         entry: SearchHistoryEntry? = null,
+     ) {
+-        val controller = GlobalSearchController(query)
++        val controller = GlobalSearchController(query, contentKind = presenter.contentKind)
+         if (entry != null && entry.filters.isNotEmpty()) {
+             controller.presenter.stageFilters(entry.filters, entry.sourceId)
+         }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
 index 6e422289641f031631705c8997396f0ae358c68b..6fd7a44c6b496809065b6bf70ea5dc85074bb8f6 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt
@@ -1001,10 +1001,10 @@ index 6abf504cf9c6f8c86ea5f7e7b14f2f331fd572ac..c23b5878d9ee8f65b5d5c3cab2ff6309
  
      /**
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt
-index 47de489372e3c276aa89a2a39b03023206cbecda..3143e6f276350daa0a753f360d9db0e956318c4f 100644
+index d1c8728e901bf1ae39c7dcc2a28a6242748af949..f98f84551b541bee55eec482d36b51ab86a1dce7 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchController.kt
-@@ -11,6 +11,7 @@ import androidx.core.view.updatePaddingRelative
+@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.RecyclerView
  import com.bluelinelabs.conductor.ControllerChangeHandler
  import com.bluelinelabs.conductor.ControllerChangeType
  import com.google.android.material.snackbar.Snackbar
@@ -1012,7 +1012,7 @@ index 47de489372e3c276aa89a2a39b03023206cbecda..3143e6f276350daa0a753f360d9db0e9
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.database.models.Manga
  import eu.kanade.tachiyomi.data.preference.PreferencesHelper
-@@ -41,6 +42,7 @@ import uy.kohesive.injekt.injectLazy
+@@ -46,6 +47,7 @@ import uy.kohesive.injekt.injectLazy
  open class GlobalSearchController(
      protected val initialQuery: String? = null,
      val extensionFilter: String? = null,
@@ -1020,17 +1020,17 @@ index 47de489372e3c276aa89a2a39b03023206cbecda..3143e6f276350daa0a753f360d9db0e9
      bundle: Bundle? = null,
  ) : BaseCoroutineController<SourceGlobalSearchControllerBinding, GlobalSearchPresenter>(bundle),
      SearchControllerInterface,
-@@ -75,7 +77,7 @@ open class GlobalSearchController(
- 
-     override fun getSearchTitle(): String? = customTitle ?: presenter.query
+@@ -116,7 +118,7 @@ open class GlobalSearchController(
+     override fun getSearchTitle(): String? =
+         customTitle ?: presenter.query.ifBlank { view?.context?.getString(R.string.label_global_search) }
  
 -    override val presenter = GlobalSearchPresenter(initialQuery, extensionFilter)
 +    override val presenter = GlobalSearchPresenter(initialQuery, extensionFilter, contentKind = contentKind)
  
      override fun onTitleClick(position: Int) {
-         val source = adapter?.getItem(position)?.source ?: return
+         val source = (adapter?.getItem(position) as? GlobalSearchItem)?.source ?: return
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
-index 734a6f437e2f7d9a690c9b546e9f8990b578f2f4..34692a4cc92dec9f3ed861d6007b423a3b320f01 100644
+index 51585a629e4ced23449c5da0005ac949eaa15ea8..5de45a54084848a25b75468802745696209966bc 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
 @@ -1,5 +1,7 @@
@@ -1052,7 +1052,7 @@ index 734a6f437e2f7d9a690c9b546e9f8990b578f2f4..34692a4cc92dec9f3ed861d6007b423a
  import eu.kanade.tachiyomi.source.model.MangasPage
  import eu.kanade.tachiyomi.source.model.SManga
  import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
-@@ -42,6 +46,7 @@ open class GlobalSearchPresenter(
+@@ -45,6 +49,7 @@ open class GlobalSearchPresenter(
      private val initialQuery: String? = "",
      private val initialExtensionFilter: String? = null,
      private val sourcesToUse: List<CatalogueSource>? = null,
@@ -1060,7 +1060,7 @@ index 734a6f437e2f7d9a690c9b546e9f8990b578f2f4..34692a4cc92dec9f3ed861d6007b423a
      val sourceManager: SourceManager = Injekt.get(),
      val db: DatabaseHelper = Injekt.get(),
      private val preferences: PreferencesHelper = Injekt.get(),
-@@ -97,7 +102,8 @@ open class GlobalSearchPresenter(
+@@ -130,7 +135,8 @@ open class GlobalSearchPresenter(
          val list =
              sourceManager
                  .getDiscoverableCatalogueSources()
@@ -1070,7 +1070,7 @@ index 734a6f437e2f7d9a690c9b546e9f8990b578f2f4..34692a4cc92dec9f3ed861d6007b423a
                  .filterNot { it.id.toString() in hiddenCatalogues }
                  .sortedBy { "(${it.lang}) ${it.name}" }
  
-@@ -123,6 +129,7 @@ open class GlobalSearchPresenter(
+@@ -156,6 +162,7 @@ open class GlobalSearchPresenter(
                  .flatMap { it.sources }
                  .filter { it.lang in languages }
                  .filterIsInstance<CatalogueSource>()
@@ -1098,7 +1098,7 @@ index 0000000000000000000000000000000000000000..ee13fa6c2def6431ac8272ee69670391
 +        android:pathData="M12,12C16.8,11.2 20.6,12.2 24,15C27.4,12.2 31.2,11.2 36,12V34C31.5,33.3 27.7,34.4 24,37C20.3,34.4 16.5,33.3 12,34ZM15,16V30.7C18,30.6 20.5,31.3 22,32.3V18.1C20.2,16.5 17.9,15.8 15,16ZM33,16C30.1,15.8 27.8,16.5 26,18.1V32.3C27.5,31.3 30,30.6 33,30.7Z" />
 +</vector>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 8555156fa690d523c3c0da23334d7bc8fbb0fdd4..3d56a69f53d889009d68be9f6c90f3c25f8c07ff 100644
+index 454a10037bfc6b3e025bb58f4d8f3cea8c5678dd..525af237d2a2f2d5ac7b3f2f34b263117f4aba01 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -328,6 +328,8 @@

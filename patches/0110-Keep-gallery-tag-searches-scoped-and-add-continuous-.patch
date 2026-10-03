@@ -1,0 +1,1964 @@
+From c4bec08a2db5fd22ec91c3e74c56fe192bd81f05 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 07:23:49 +0300
+Subject: [PATCH] Keep gallery tag searches scoped and add continuous source
+ previews
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 4e50bcf3b9dab0bf52ad8c6d38f921c79de0108b..35184cfe779dcd5e9eeaf204ca7dc538154a97cf 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -163,7 +163,9 @@ ts	phase	decision	why	evidence	result
+ 2026-09-06T17:02:55.6903785+03:00	reader-content-sheets	reused J2K E2E sheets and Material controls for quotes, highlights, statistics, translation results, and fonts; moved legacy JSON import into overflow	no J2K file or storage-schema changes; 501 unit tests passed; 2 Android sheet tests passed after correcting text-field layout params and keyboard expansion; localization and boundary passed	NovelReaderAttachment.kt; NovelReaderContentSheet.kt; artifacts/novel-reader/sheets-instrumentation.log	VERIFIED_SCOPED
+ 2026-09-06T22:12:59.8085941+03:00	cloudflare-eh-clearance	reused the Mihon solver with SY legacy challenge detection; shared browser clearance across EH verification browse favorites and settings; removed passive CDN false positives	504 unit tests and DevDebug compilation passed; real HTTP retry and cookie scoping verified; authenticated login remains pending; no schema change	EhBrowserCookies.kt; CloudflareHelpDetector.kt; existing CloudflareInterceptor adapter; artifacts/novel-reader/cloudflare-validation.log	HTTP_UNIT_BOUNDARY_VERIFIED
+ 2026-09-06T22:55:53.6040369+03:00	manual-app-update-installation	removed automatic PackageInstaller sessions; reuse existing Install notification and clarify automatic download settings; keep work input and network preference compatibility	DevDebug compilation and 504 unit tests passed; localization boundary and whitespace passed; Xiaomi verification pending; no schema change; nightly startup diagnostics added after two missing-process failures	AppDownloadInstallJob.kt; AppUpdateNotifier.kt; SettingsGeneralController.kt; tools/verify-apk-startup.ps1; artifacts/novel-reader/manual-update-validation.log	COMPILE_UNIT_VERIFIED
++2026-10-03T06:30:26.2456950+03:00	saved-search-migration	Moved legacy presets into J2K saved filters and removed the old active writer	One authoritative UI and storage path; retain entries that current filters cannot represent	SavedSourceSearchMigration.kt; SavedSourceSearchMigrationTest.kt	IMPLEMENTED_VALIDATION_PENDING
+ 2026-10-03T06:30:26.2477346+03:00	novel-identity	Added Novel to existing editors and shared routing and download identity	Old text entries can opt into reading without duplicating J2K metadata	NovelSeriesType.kt; NovelContentIdentity.kt; ReaderLauncher.kt; NovelDocumentLoaderTest.kt	IMPLEMENTED_VALIDATION_PENDING
++2026-10-03T06:30:26.2503029+03:00	previews-and-tags	Reused the preview grid for continuous windows and seeking; kept gallery genres within their source	Preserve visible image anchors and SY tag semantics	SourcePreviewWindow.kt; SourcePreviewController.kt; SourceGenreSearch.kt; SourceTagCompletionFilter.kt	IMPLEMENTED_VALIDATION_PENDING
+ 2026-10-03T06:30:26.2528148+03:00	review-preview-route	Removed the image-index exception for manually classified Novel preview handoff	Independent review found both preview callers could throw after the type changed	ReaderLauncher.kt; ReaderLauncherInstrumentedTest.kt; NovelDocumentLoaderTest.kt	FIXED_VALIDATION_PENDING
+ 2026-10-03T06:42:20.7884232+03:00	dependency-publication	Replaced unavailable arkon JitPack artifacts with the published FlexibleAdapter core and UI used by Tsundoku	The first build failed before Kotlin; the initial equivalent mapping was incomplete when caches expired	artifacts/j2k-update-2026-10-03/gradle-validation.log; flexibleadapter-jitpack.log; tsundoku 775508f3c6; app/build.gradle.kts	CORRECTED_VALIDATION_PENDING
+ 2026-10-03T06:56:20.6835174+03:00	dependency-source-audit	Reviewed canonical FlexibleAdapter source differences and preserved J2K prefiltered datasets	Supersedes the earlier unqualified JitPack-log reference; synchronous guard retains same-query refresh, headers and placeholders	artifacts/j2k-update-2026-10-03/flexibleadapter-jitpack.log; artifacts/j2k-update-2026-10-03/flexibleadapter-source-audit.md; PrefilteredAdapterInstrumentedTest.kt	SOURCE_REVIEWED_RUNTIME_PENDING
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt
+index cc3574a01e8dcb5a23eb061d2f98ae33f4835771..c6a32a390c939e9230a6b8c8f9952ea6951f25d6 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt
+@@ -2,23 +2,21 @@ package dev.ahmedmohamed.hayai.adult.eh.source
+ 
+ import android.content.Context
+ 
+-class EhTagCatalog(
+-    context: Context,
+-) {
+-    private val applicationContext = context.applicationContext
+-    private val tags: List<String> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+-        applicationContext.assets.open(ASSET_PATH).bufferedReader().useLines { lines ->
+-            lines.map(String::trim).filter(String::isNotBlank).distinct().toList()
+-        }
+-    }
++// Matching and namespace drill-down follow SY 14648c7cf0aa84e5a35d48de9dbf1386df6cca42.
++class EhTagCatalog private constructor(private val loadTags: () -> List<String>) {
++    constructor(context: Context) : this(sharedLoader(context.applicationContext))
++
++    internal constructor(tags: List<String>) : this({ tags })
++
++    private val tags: List<String> by lazy(LazyThreadSafetyMode.SYNCHRONIZED, loadTags)
+ 
+     fun suggest(input: String, limit: Int): List<String> {
+         require(limit in 1..MAXIMUM_RESULTS)
+         val trimmed = input.trim()
+         val prefix = trimmed.firstOrNull()?.takeIf { it == '-' || it == '~' }
+         val query = prefix?.let { trimmed.drop(1) } ?: trimmed
+-        if (query.length < MINIMUM_QUERY_LENGTH) return emptyList()
+-        return tags.asSequence()
++        if (trimmed.length < MINIMUM_QUERY_LENGTH || query.isBlank()) return emptyList()
++        return (NAMESPACES.asSequence().map { "$it:" } + tags.asSequence())
+             .filter { it.contains(query, ignoreCase = true) }
+             .map { tag -> prefix?.let { "$it$tag" } ?: tag }
+             .take(limit)
+@@ -29,5 +27,19 @@ class EhTagCatalog(
+         const val ASSET_PATH = "hayai/eh_tags.txt"
+         private const val MINIMUM_QUERY_LENGTH = 3
+         private const val MAXIMUM_RESULTS = 100
++        private val NAMESPACES = listOf(
++            "reclass", "language", "parody", "character", "group", "artist", "cosplayer",
++            "male", "female", "mixed", "location", "other",
++        )
++        private val catalogLock = Any()
++        @Volatile private var cachedTags: List<String>? = null
++
++        private fun sharedLoader(context: Context): () -> List<String> = {
++            cachedTags ?: synchronized(catalogLock) {
++                cachedTags ?: context.assets.open(ASSET_PATH).bufferedReader().useLines { lines ->
++                    lines.map(String::trim).filter(String::isNotBlank).distinct().toList()
++                }.also { cachedTags = it }
++            }
++        }
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceGenreSearch.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceGenreSearch.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4647696ab983d04dd0ce185cc190ec567e4ae4a4
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceGenreSearch.kt
+@@ -0,0 +1,32 @@
++package dev.ahmedmohamed.hayai.source.filter
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
++import dev.ahmedmohamed.hayai.adult.eh.source.EhCategoriesFilter
++import dev.ahmedmohamed.hayai.source.SourceCapabilityRegistry
++import dev.ahmedmohamed.hayai.source.SourceFamily
++import eu.kanade.tachiyomi.source.Source
++import eu.kanade.tachiyomi.source.model.FilterList
++import java.util.Locale
++
++object SourceGenreSearch {
++    fun usesGalleryTags(source: Source): Boolean =
++        SourceCapabilityRegistry.descriptor(source).family in galleryFamilies
++
++    fun apply(source: Source, filters: FilterList, tags: List<String>): Boolean {
++        if (!usesGalleryTags(source) || tags.isEmpty()) return false
++        category(tags)?.let { category ->
++            val categories = filters.filterIsInstance<EhCategoriesFilter>().firstOrNull() ?: return false
++            categories.state.forEach { it.state = it.category != category }
++            return true
++        }
++        val completion = filters.filterIsInstance<SourceTagCompletionFilter>().firstOrNull() ?: return false
++        return runCatching { completion.setSelections(tags); true }.getOrDefault(false)
++    }
++
++    internal fun category(tags: List<String>): EhCategory? {
++        val value = tags.singleOrNull()?.trim()?.lowercase(Locale.ROOT)?.replace(" ", "")?.replace("-", "") ?: return null
++        return EhCategory.entries.firstOrNull { it.name.lowercase(Locale.ROOT) == value }
++    }
++
++    private val galleryFamilies = setOf(SourceFamily.EHentai, SourceFamily.ExHentai)
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilter.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilter.kt
+index bfe91416b84addf13fa5609bfc401090a220909a..c115505b025b15a9835240401174820a13c7db47 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilter.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilter.kt
+@@ -5,9 +5,19 @@ interface SourceTagCompletionFilter {
+     val maximumSelections: Int
+     val validPrefixes: Set<Char>
+ 
++    fun isNamespaceSuggestion(value: String): Boolean {
++        val trimmed = value.trim()
++        val tag = if (trimmed.firstOrNull() in validPrefixes) trimmed.drop(1).trim() else trimmed
++        return NAMESPACE.matches(tag)
++    }
++
+     fun selections(): List<String>
+ 
+     fun setSelections(values: List<String>)
+ 
+     fun suggestions(input: String, limit: Int = 100): List<String>
++
++    companion object {
++        private val NAMESPACE = Regex("[a-z][a-z0-9_-]{0,31}:", RegexOption.IGNORE_CASE)
++    }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt
+index 99fa09f22f63294cba4e1907cd72022c9b03413a..40c9c746e1f0c9753a1682b134ce898d88339712 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt
+@@ -1,5 +1,6 @@
+ package dev.ahmedmohamed.hayai.source.filter
+ 
++import android.content.Context
+ import android.view.KeyEvent
+ import android.view.View
+ import android.view.inputmethod.EditorInfo
+@@ -37,7 +38,23 @@ class SourceTagCompletionItem(
+         holder.wrapper.hint = filter.name
+         holder.wrapper.helperText = completion.hint
+         holder.wrapper.error = null
++        holder.inputWatcher?.let(holder.input::removeTextChangedListener)
++        val bindingGeneration = ++holder.bindingGeneration
+         holder.input.setText("", false)
++        holder.input.threshold = MINIMUM_QUERY_LENGTH
++        val suggestionAdapter = TagSuggestionAdapter(
++            holder.itemView.context,
++            completion,
++            isCurrentQuery = { query ->
++                holder.bindingGeneration == bindingGeneration && holder.input.text?.toString().orEmpty() == query
++            },
++            onPublished = { hasSuggestions ->
++                if (hasSuggestions && holder.input.hasFocus() && holder.itemView.isAttachedToWindow) {
++                    holder.input.showDropDown()
++                }
++            },
++        )
++        holder.input.setAdapter(suggestionAdapter)
+ 
+         fun renderSelections() {
+             holder.chips.removeAllViews()
+@@ -50,6 +67,7 @@ class SourceTagCompletionItem(
+                         contentDescription = selection
+                         setOnCloseIconClickListener {
+                             completion.setSelections(completion.selections() - selection)
++                            holder.wrapper.error = null
+                             renderSelections()
+                         }
+                     },
+@@ -60,11 +78,18 @@ class SourceTagCompletionItem(
+         fun submit(raw: String): Boolean {
+             val candidate = raw.trim()
+             if (candidate.isBlank()) return false
++            if (completion.isNamespaceSuggestion(candidate)) {
++                holder.wrapper.error = null
++                holder.input.setText(candidate)
++                holder.input.setSelection(candidate.length)
++                return true
++            }
++            val current = completion.selections()
++            if (current.none { it.equals(candidate, ignoreCase = true) } && current.size >= completion.maximumSelections) {
++                holder.wrapper.error = holder.itemView.context.getString(R.string.hayai_eh_filter_too_many_tags)
++                return false
++            }
+             return runCatching {
+-                val current = completion.selections()
+-                if (candidate !in current && current.size >= completion.maximumSelections) {
+-                    throw IllegalArgumentException(holder.itemView.context.getString(R.string.hayai_eh_filter_too_many_tags))
+-                }
+                 completion.setSelections(current + candidate)
+                 holder.wrapper.error = null
+                 holder.input.setText("", false)
+@@ -76,20 +101,16 @@ class SourceTagCompletionItem(
+             }
+         }
+ 
+-        holder.inputWatcher?.let(holder.input::removeTextChangedListener)
+         holder.inputWatcher = holder.input.doAfterTextChanged { editable ->
+-            val query = editable?.toString().orEmpty()
+-            val suggestions = completion.suggestions(query)
+-            holder.suggestionAdapter.clear()
+-            holder.suggestionAdapter.addAll(suggestions)
+-            holder.suggestionAdapter.notifyDataSetChanged()
+-            if (suggestions.isNotEmpty() && holder.input.hasFocus()) holder.input.showDropDown()
++            holder.wrapper.error = null
++            if ((editable?.length ?: 0) < MINIMUM_QUERY_LENGTH) suggestionAdapter.clearSuggestions()
+         }
+         holder.input.setOnItemClickListener { parent, _, itemPosition, _ ->
+-            submit(parent.getItemAtPosition(itemPosition).toString())
++            (parent.getItemAtPosition(itemPosition) as? String)?.let(::submit)
+         }
+         holder.input.setOnEditorActionListener { _, actionId, event ->
+-            val submitted = actionId == EditorInfo.IME_ACTION_DONE || event?.keyCode == KeyEvent.KEYCODE_ENTER
++            val submitted = actionId == EditorInfo.IME_ACTION_DONE ||
++                (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
+             submitted && submit(holder.input.text?.toString().orEmpty())
+         }
+         renderSelections()
+@@ -106,7 +127,54 @@ class SourceTagCompletionItem(
+         val wrapper: TextInputLayout = itemView.findViewById(R.id.hayai_tag_input_wrapper)
+         val input: MaterialAutoCompleteTextView = itemView.findViewById(R.id.hayai_tag_input)
+         val chips: ChipGroup = itemView.findViewById(R.id.hayai_tag_chips)
+-        val suggestionAdapter = ArrayAdapter<String>(itemView.context, android.R.layout.simple_dropdown_item_1line).also(input::setAdapter)
++        var bindingGeneration = 0
+         var inputWatcher: android.text.TextWatcher? = null
+     }
++
++    /** ArrayAdapter's default prefix filter would hide the catalog's substring and prefixed matches. */
++    private class TagSuggestionAdapter(
++        context: Context,
++        private val completion: SourceTagCompletionFilter,
++        private val isCurrentQuery: (String) -> Boolean,
++        private val onPublished: (Boolean) -> Unit,
++    ) : ArrayAdapter<String>(context, android.R.layout.simple_dropdown_item_1line) {
++        private var suggestions = emptyList<String>()
++        private val catalogFilter = object : android.widget.Filter() {
++            override fun performFiltering(constraint: CharSequence?): FilterResults {
++                val query = constraint?.toString().orEmpty()
++                val matches = if (query.length < MINIMUM_QUERY_LENGTH) emptyList() else {
++                    runCatching { completion.suggestions(query) }.getOrDefault(emptyList())
++                }
++                return FilterResults().apply {
++                    values = MatchingSuggestions(query, matches)
++                    count = matches.size
++                }
++            }
++
++            override fun publishResults(constraint: CharSequence?, results: FilterResults) {
++                val matches = results.values as? MatchingSuggestions ?: return
++                if (!isCurrentQuery(matches.query)) return
++                suggestions = matches.values
++                if (suggestions.isEmpty()) notifyDataSetInvalidated() else notifyDataSetChanged()
++                onPublished(suggestions.isNotEmpty())
++            }
++        }
++
++        override fun getCount(): Int = suggestions.size
++
++        override fun getItem(position: Int): String? = suggestions.getOrNull(position)
++
++        override fun getFilter(): android.widget.Filter = catalogFilter
++
++        fun clearSuggestions() {
++            suggestions = emptyList()
++            notifyDataSetInvalidated()
++        }
++
++        private data class MatchingSuggestions(val query: String, val values: List<String>)
++    }
++
++    private companion object {
++        const val MINIMUM_QUERY_LENGTH = 3
++    }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
+index 052919c7e551bc54f35d53b59c3b777c4c54688e..0601695c5a63e2a584b6831995c3953a56dacec1 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataUi.kt
+@@ -188,6 +188,7 @@ object SourceMetadataUi {
+         genre.text = typeLabel(context, category)
+         genre.setTextColor(contrastingTextColor(categoryColor))
+         genreCard.setCardBackgroundColor(categoryColor)
++        genre.setOnClickListener { category.takeIf(String::isNotBlank)?.let(onSearch) }
+ 
+         val pageCount = document.value(SourceMetadataKey.Pages)?.toIntOrNull() ?: 0
+         pages.text = context.resources.getQuantityString(R.plurals.num_pages, pageCount, pageCount)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+index e5f03692ade11f303d0a0cf424f543900305391c..a609cd8038f49100515ddb55a7c33eb210b00ad0 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt
+@@ -14,7 +14,9 @@ import android.widget.FrameLayout
+ import android.widget.ImageView
+ import android.widget.LinearLayout
+ import android.widget.TextView
++import androidx.core.view.doOnNextLayout
+ import androidx.core.view.isVisible
++import androidx.recyclerview.widget.DiffUtil
+ import androidx.recyclerview.widget.GridLayoutManager
+ import androidx.recyclerview.widget.RecyclerView
+ import com.google.android.material.loadingindicator.LoadingIndicator
+@@ -31,8 +33,11 @@ import eu.kanade.tachiyomi.util.system.launchIO
+ import eu.kanade.tachiyomi.util.system.materialAlertDialog
+ import eu.kanade.tachiyomi.util.system.withUIContext
+ import eu.kanade.tachiyomi.util.view.scrollViewWith
++import eu.kanade.tachiyomi.util.view.snack
+ import eu.kanade.tachiyomi.util.view.withFadeTransaction
+ import eu.kanade.tachiyomi.widget.EmptyView
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Job
+ import okhttp3.CacheControl
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+@@ -48,17 +53,23 @@ class SourcePreviewController(
+     private val adapter = PreviewAdapter(::openPage)
+     private lateinit var loading: LoadingIndicator
+     private lateinit var emptyView: EmptyView
+-    private var navigation = SourcePreviewNavigation()
++    private var navigation = SourcePreviewNavigation(args.getInt(CURRENT_PAGE, 1))
++    private val window = SourcePreviewWindow()
++    private var continuous = args.getBoolean(CONTINUOUS, false)
+     private var loadGeneration = 0
++    private var loadJob: Job? = null
++    private var failedPage: Int? = null
++    private var viewAlive = false
+ 
+     constructor(mangaId: Long) : this(Bundle().apply { putLong(MANGA_ID, mangaId) })
+ 
+-    override fun getTitle(): String? = resources?.getString(R.string.hayai_page_previews)
++    override fun getTitle(): String? = resources?.getString(navigation.titleResource, *navigation.titleArguments)
+ 
+     override fun createBinding(inflater: LayoutInflater) = SubDebugControllerBinding.inflate(inflater)
+ 
+     override fun onViewCreated(view: View) {
+         super.onViewCreated(view)
++        viewAlive = true
+         scrollViewWith(binding.recycler, padBottom = true)
+         binding.recycler.layoutManager = GridLayoutManager(view.context, spanCount(view))
+         binding.recycler.adapter = adapter
+@@ -69,6 +80,12 @@ class SourcePreviewController(
+             dp(SyPagePreviewLayout.OUTER_PADDING_DP),
+         )
+         binding.recycler.addItemDecoration(SyPreviewSpacingDecoration())
++        binding.recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
++            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
++                rememberPosition()
++                loadAdjacent(dy)
++            }
++        })
+ 
+         val root = binding.root as FrameLayout
+         loading = LoadingIndicator(view.context).apply { isVisible = false }
+@@ -81,23 +98,44 @@ class SourcePreviewController(
+         if (manga == null) {
+             emptyView.show(R.drawable.ic_search_off_24dp, R.string.no_results_found)
+         } else {
+-            load(navigation.page)
++            val anchor = args.getInt(ANCHOR_INDEX, 0).takeIf { it > 0 }?.let {
++                ScrollAnchor(it, args.getInt(ANCHOR_OFFSET, 0))
++            }
++            load(navigation.page, anchor = anchor)
+         }
+     }
+ 
+     override fun onDestroyView(view: View) {
++        viewAlive = false
+         loadGeneration++
++        loadJob?.cancel()
++        loadJob = null
+         binding.recycler.adapter = null
+         adapter.clear()
+         super.onDestroyView(view)
+     }
+ 
+     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
++        navigation.previousPage?.let {
++            menu.add(Menu.NONE, MENU_PREVIOUS, 0, R.string.hayai_preview_previous)
++                .setIcon(R.drawable.ic_page_previous_outline_24dp)
++                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
++        }
++        navigation.nextPage?.let {
++            menu.add(Menu.NONE, MENU_NEXT, 1, R.string.hayai_preview_next)
++                .setIcon(R.drawable.ic_page_next_outline_24dp)
++                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
++        }
+         if (navigation.canChoosePage) {
+-            menu.add(Menu.NONE, MENU_GO_TO, 0, R.string.hayai_go_to_preview_page)
++            menu.add(Menu.NONE, MENU_GO_TO, 2, R.string.hayai_go_to_preview_page)
+                 .setIcon(R.drawable.ic_page_next_outline_24dp)
+                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+         }
++        menu.addSubMenu(R.string.hayai_preview_layout).apply {
++            add(MODE_GROUP, MENU_PAGED, 0, R.string.hayai_preview_paged).isChecked = !continuous
++            add(MODE_GROUP, MENU_CONTINUOUS, 1, R.string.hayai_preview_continuous).isChecked = continuous
++            setGroupCheckable(MODE_GROUP, true, true)
++        }
+     }
+ 
+     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
+@@ -105,35 +143,99 @@ class SourcePreviewController(
+             showGoToDialog()
+             true
+         }
++        MENU_PREVIOUS -> {
++            navigation.previousPage?.let(::seekTo)
++            true
++        }
++        MENU_NEXT -> {
++            navigation.nextPage?.let(::seekTo)
++            true
++        }
++        MENU_PAGED, MENU_CONTINUOUS -> {
++            val nextContinuous = item.itemId == MENU_CONTINUOUS
++            if (continuous != nextContinuous) {
++                val anchor = currentAnchor()
++                continuous = nextContinuous
++                args.putBoolean(CONTINUOUS, continuous)
++                load(navigation.page, anchor = anchor)
++            }
++            true
++        }
+         else -> super.onOptionsItemSelected(item)
+     }
+ 
+-    private fun load(targetPage: Int, forceRefresh: Boolean = false) {
++    private fun load(
++        targetPage: Int,
++        forceRefresh: Boolean = false,
++        adjacent: Boolean = false,
++        anchor: ScrollAnchor? = null,
++        direction: Int = 0,
++    ) {
+         val manga = manga ?: return
++        val context = binding.root.context
+         val knownTotal = navigation.totalPages
+         if (targetPage < 1 || knownTotal != null && targetPage > knownTotal) return
++        loadJob?.cancel()
++        failedPage = null
+         val generation = ++loadGeneration
+         loading.isVisible = true
++        (loading.layoutParams as FrameLayout.LayoutParams).apply {
++            gravity = if (adjacent) {
++                Gravity.CENTER_HORIZONTAL or if (direction < 0) Gravity.TOP else Gravity.BOTTOM
++            } else {
++                Gravity.CENTER
++            }
++            loading.layoutParams = this
++        }
+         emptyView.hide()
+-        binding.recycler.isVisible = false
+-        viewScope.launchIO {
+-            val result = runCatching {
+-                previews.load(manga, targetPage, CacheControl.FORCE_NETWORK.takeIf { forceRefresh })
++        if (!adjacent) binding.recycler.isVisible = false
++        loadJob = viewScope.launchIO {
++            val result = try {
++                val loaded = previews.load(manga, targetPage, CacheControl.FORCE_NETWORK.takeIf { forceRefresh })
++                require(loaded.page == targetPage) { context.getString(R.string.hayai_preview_wrong_page) }
++                Result.success(loaded)
++            } catch (cancelled: CancellationException) {
++                throw cancelled
++            } catch (error: Exception) {
++                Result.failure(error)
+             }
+             withUIContext {
+-                if (generation != loadGeneration || !isBindingInitialized) return@withUIContext
++                if (generation != loadGeneration || !viewAlive) return@withUIContext
++                loadJob = null
+                 loading.isVisible = false
+                 result.onSuccess { loaded ->
+-                    navigation = SourcePreviewNavigation(loaded.page, loaded.totalPages, loaded.hasNextPage)
+-                    adapter.submit(manga, loaded.previews)
+-                    binding.recycler.scrollToPosition(0)
+-                    binding.recycler.isVisible = loaded.previews.isNotEmpty()
+-                    if (loaded.previews.isEmpty()) {
++                    val visibleAnchor = if (adjacent) currentAnchor() else anchor
++                    if (adjacent) window.extend(loaded) else window.replace(loaded)
++                    navigation = visibleAnchor?.let { window.navigationForImage(it.index) }
++                        ?: requireNotNull(window.navigationForPage(loaded.page))
++                    args.putInt(CURRENT_PAGE, navigation.page)
++                    adapter.submit(manga, window.previews)
++                    val layout = binding.recycler.layoutManager as GridLayoutManager
++                    val position = visibleAnchor?.let { window.positionForImage(it.index) } ?: 0
++                    layout.scrollToPositionWithOffset(position, visibleAnchor?.offset ?: 0)
++                    binding.recycler.isVisible = adapter.itemCount > 0
++                    if (adapter.itemCount == 0) {
+                         emptyView.show(R.drawable.ic_search_off_24dp, R.string.hayai_no_page_previews)
+                     }
+                     setTitle()
+                     activity?.invalidateOptionsMenu()
++                    binding.recycler.doOnNextLayout {
++                        if (generation == loadGeneration && viewAlive) {
++                            rememberPosition()
++                            loadAdjacent(direction)
++                        }
++                    }
+                 }.onFailure { error ->
++                    failedPage = targetPage
++                    if (adjacent && adapter.itemCount > 0) {
++                        binding.recycler.snack(error.message ?: emptyView.context.getString(R.string.hayai_page_previews_failed)) {
++                            setAction(R.string.retry) {
++                                val stillAdjacent = continuous && targetPage in listOf(window.previousPage, window.nextPage)
++                                load(targetPage, forceRefresh = true, adjacent = stillAdjacent, direction = direction)
++                            }
++                        }
++                        return@onFailure
++                    }
+                     adapter.clear()
+                     val actions = buildList {
+                         add(EmptyView.Action(R.string.retry) { load(targetPage, forceRefresh = true) })
+@@ -155,6 +257,66 @@ class SourcePreviewController(
+         }
+     }
+ 
++    private fun seekTo(targetPage: Int) {
++        loadJob?.cancel()
++        loadJob = null
++        loadGeneration++
++        val generation = loadGeneration
++        loading.isVisible = false
++        val position = window.positionForPage(targetPage).takeIf { continuous && adapter.itemCount > 0 }
++        if (position != null) {
++            failedPage = null
++            (binding.recycler.layoutManager as GridLayoutManager).scrollToPositionWithOffset(position, 0)
++            navigation = requireNotNull(window.navigationForPage(targetPage))
++            setTitle()
++            activity?.invalidateOptionsMenu()
++            binding.recycler.doOnNextLayout {
++                if (generation == loadGeneration && viewAlive) {
++                    rememberPosition()
++                    loadAdjacent(0)
++                }
++            }
++        } else {
++            load(targetPage)
++        }
++    }
++
++    private fun loadAdjacent(direction: Int) {
++        if (!viewAlive || !continuous || loadJob != null || adapter.itemCount == 0) return
++        val layout = binding.recycler.layoutManager as? GridLayoutManager ?: return
++        val first = layout.findFirstVisibleItemPosition()
++        val last = layout.findLastVisibleItemPosition()
++        if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
++        val threshold = layout.spanCount
++        val previous = window.previousPage.takeIf { direction <= 0 && first <= threshold }
++        val next = window.nextPage.takeIf { direction >= 0 && last >= adapter.itemCount - 1 - threshold }
++        val target = previous ?: next ?: return
++        if (target == failedPage) return
++        load(target, adjacent = true, direction = if (previous != null) -1 else 1)
++    }
++
++    private fun currentAnchor(): ScrollAnchor? {
++        if (!viewAlive) return null
++        val layout = binding.recycler.layoutManager as? GridLayoutManager ?: return null
++        val position = layout.findFirstVisibleItemPosition()
++        val preview = adapter.itemAt(position) ?: return null
++        val offset = layout.findViewByPosition(position)?.let { layout.getDecoratedTop(it) - binding.recycler.paddingTop } ?: 0
++        return ScrollAnchor(preview.index, offset)
++    }
++
++    private fun rememberPosition() {
++        val anchor = currentAnchor() ?: return
++        args.putInt(ANCHOR_INDEX, anchor.index)
++        args.putInt(ANCHOR_OFFSET, anchor.offset)
++        val currentNavigation = window.navigationForImage(anchor.index) ?: return
++        args.putInt(CURRENT_PAGE, currentNavigation.page)
++        if (currentNavigation != navigation) {
++            navigation = currentNavigation
++            setTitle()
++            activity?.invalidateOptionsMenu()
++        }
++    }
++
+     private fun showGoToDialog() {
+         val lastPage = navigation.totalPages?.takeIf { it > 1 } ?: return
+         val context = activity ?: return
+@@ -177,7 +339,7 @@ class SourcePreviewController(
+         context.materialAlertDialog()
+             .setTitle(R.string.hayai_go_to_preview_page)
+             .setView(row)
+-            .setPositiveButton(android.R.string.ok) { _, _ -> load(slider.value.roundToInt()) }
++            .setPositiveButton(android.R.string.ok) { _, _ -> seekTo(slider.value.roundToInt()) }
+             .setNegativeButton(android.R.string.cancel, null)
+             .show()
+     }
+@@ -199,10 +361,25 @@ class SourcePreviewController(
+         private var manga: Manga? = null
+         private var items = emptyList<SourcePagePreview>()
+ 
++        init {
++            setHasStableIds(true)
++        }
++
++        fun itemAt(position: Int): SourcePagePreview? = items.getOrNull(position)
++
+         fun submit(manga: Manga, items: List<SourcePagePreview>) {
++            val previous = this.items
++            val changes = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
++                override fun getOldListSize(): Int = previous.size
++                override fun getNewListSize(): Int = items.size
++                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
++                    previous[oldItemPosition].index == items[newItemPosition].index
++                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean =
++                    previous[oldItemPosition] == items[newItemPosition]
++            })
+             this.manga = manga
+             this.items = items
+-            notifyDataSetChanged()
++            changes.dispatchUpdatesTo(this)
+         }
+ 
+         fun clear() {
+@@ -213,6 +390,8 @@ class SourcePreviewController(
+ 
+         override fun getItemCount(): Int = items.size
+ 
++        override fun getItemId(position: Int): Long = items[position].index.toLong()
++
+         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PreviewHolder {
+             val column = LinearLayout(parent.context).apply {
+                 orientation = LinearLayout.VERTICAL
+@@ -267,6 +446,7 @@ class SourcePreviewController(
+     ) : RecyclerView.ViewHolder(itemView) {
+         private var generation = 0
+         private var bitmap: Bitmap? = null
++        private var imageJob: Job? = null
+ 
+         fun bind(manga: Manga, preview: SourcePagePreview) {
+             recycle()
+@@ -274,22 +454,34 @@ class SourcePreviewController(
+             image.contentDescription = image.context.getString(R.string.hayai_gallery_page, preview.index)
+             loading.isVisible = true
+             val expectedGeneration = generation
+-            viewScope.launchIO {
+-                val loaded = runCatching { SourcePreviewBitmapDecoder.decode(previews.loadImage(manga, preview)) }.getOrNull()
+-                withUIContext {
+-                    if (expectedGeneration == generation && bindingAdapterPosition != RecyclerView.NO_POSITION) {
+-                        bitmap = loaded
+-                        image.setImageBitmap(loaded)
+-                        loading.isVisible = false
+-                    } else {
+-                        loaded?.recycle()
++            imageJob = viewScope.launchIO {
++                var loaded: Bitmap? = null
++                try {
++                    loaded = SourcePreviewBitmapDecoder.decode(previews.loadImage(manga, preview))
++                    withUIContext {
++                        if (expectedGeneration == generation && bindingAdapterPosition != RecyclerView.NO_POSITION) {
++                            bitmap = loaded
++                            image.setImageBitmap(loaded)
++                            loaded = null
++                            loading.isVisible = false
++                        }
+                     }
++                } catch (cancelled: CancellationException) {
++                    throw cancelled
++                } catch (_: Exception) {
++                    withUIContext {
++                        if (expectedGeneration == generation) loading.isVisible = false
++                    }
++                } finally {
++                    loaded?.takeUnless(Bitmap::isRecycled)?.recycle()
+                 }
+             }
+         }
+ 
+         fun recycle() {
+             generation++
++            imageJob?.cancel()
++            imageJob = null
+             image.setImageDrawable(null)
+             loading.isVisible = false
+             bitmap?.takeUnless(Bitmap::isRecycled)?.recycle()
+@@ -297,8 +489,19 @@ class SourcePreviewController(
+         }
+     }
+ 
++    private data class ScrollAnchor(val index: Int, val offset: Int)
++
+     private companion object {
+         const val MANGA_ID = "manga_id"
+         const val MENU_GO_TO = 1
++        const val MENU_PREVIOUS = 2
++        const val MENU_NEXT = 3
++        const val MENU_PAGED = 4
++        const val MENU_CONTINUOUS = 5
++        const val MODE_GROUP = 1
++        const val CURRENT_PAGE = "hayai_preview_page"
++        const val CONTINUOUS = "hayai_preview_continuous"
++        const val ANCHOR_INDEX = "hayai_preview_anchor"
++        const val ANCHOR_OFFSET = "hayai_preview_offset"
+     }
+ }
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewWindow.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewWindow.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..cc6c26ca8c39080ab1a50d569b90bb8c646abe45
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewWindow.kt
+@@ -0,0 +1,51 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++/** A bounded, contiguous view of existing provider listings, with global image indices as anchors. */
++internal class SourcePreviewWindow(private val pageLimit: Int = 5) {
++    private val pages = sortedMapOf<Int, SourcePreviewPage>()
++    private var totalPages: Int? = null
++
++    init {
++        require(pageLimit >= 3)
++    }
++
++    val previews: List<SourcePagePreview>
++        get() = pages.values.flatMap { it.previews }.distinctBy { it.index }
++
++    val previousPage: Int?
++        get() = pages.firstKeyOrNull()?.minus(1)?.takeIf { it > 0 }
++
++    val nextPage: Int?
++        get() = pages.values.lastOrNull()?.let { navigation(it).nextPage }
++
++    fun replace(page: SourcePreviewPage) {
++        pages.clear()
++        totalPages = page.totalPages
++        pages[page.page] = page
++    }
++
++    fun extend(page: SourcePreviewPage) {
++        require(pages.isNotEmpty())
++        require(page.page == previousPage || page.page == nextPage)
++        val prepending = page.page < pages.firstKey()
++        pages[page.page] = page
++        page.totalPages?.let { totalPages = it }
++        if (pages.size > pageLimit) {
++            pages.remove(if (prepending) pages.lastKey() else pages.firstKey())
++        }
++    }
++
++    fun positionForPage(page: Int): Int? =
++        pages[page]?.previews?.firstOrNull()?.index?.let(::positionForImage)
++
++    fun positionForImage(index: Int): Int? = previews.indexOfFirst { it.index == index }.takeIf { it >= 0 }
++
++    fun navigationForImage(index: Int): SourcePreviewNavigation? =
++        pages.values.firstOrNull { page -> page.previews.any { it.index == index } }?.let(::navigation)
++
++    fun navigationForPage(page: Int): SourcePreviewNavigation? = pages[page]?.let(::navigation)
++
++    private fun navigation(page: SourcePreviewPage) = SourcePreviewNavigation(page.page, totalPages, page.hasNextPage)
++
++    private fun java.util.SortedMap<Int, SourcePreviewPage>.firstKeyOrNull(): Int? = if (isEmpty()) null else firstKey()
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..696068eb88c5f7a7e2d592ae550841356cfe7a7c
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt
+@@ -0,0 +1,123 @@
++package dev.ahmedmohamed.hayai.source.search
++
++import eu.kanade.tachiyomi.data.preference.PreferenceKeys
++import eu.kanade.tachiyomi.data.preference.PreferenceStore
++import eu.kanade.tachiyomi.source.model.Filter
++import eu.kanade.tachiyomi.source.model.FilterList
++import eu.kanade.tachiyomi.ui.source.searchhistory.FilterApplyResult
++import eu.kanade.tachiyomi.ui.source.searchhistory.SavedFilter
++import eu.kanade.tachiyomi.ui.source.searchhistory.SearchHistoryEntry
++import eu.kanade.tachiyomi.ui.source.searchhistory.applyTo
++import eu.kanade.tachiyomi.ui.source.searchhistory.diffFromDefault
++import kotlinx.serialization.encodeToString
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.decodeFromJsonElement
++import java.nio.ByteBuffer
++import java.security.MessageDigest
++
++/** Migrates the old Hayai preference into J2K's saved-search owner without discarding unresolved presets. */
++class SavedSourceSearchMigration(
++    preferenceStore: PreferenceStore,
++) {
++    private val legacy = preferenceStore.getString(LEGACY_KEY, "[]")
++    private val savedSearches = preferenceStore.getString(PreferenceKeys.savedSearches, "[]")
++
++    fun migrate(
++        sourceId: Long,
++        defaultFilters: () -> FilterList,
++        importedName: (String, Int) -> String,
++    ): Int = synchronized(lock) {
++        val original = legacy.get()
++        val pending = runCatching { Json.parseToJsonElement(original) as? JsonArray }.getOrNull()
++            ?: return@synchronized 0
++        if (pending.isEmpty() || pending.size > MAX_LEGACY_SEARCHES) return@synchronized 0
++        val decoded = pending.map { runCatching { Json.decodeFromJsonElement<SavedSourceSearch>(it) }.getOrNull() }
++        val duplicateIds = decoded.filterNotNull().groupingBy { it.sourceId to it.id }.eachCount().filterValues { it > 1 }.keys
++        val current = runCatching { Json.decodeFromString<List<SearchHistoryEntry>>(savedSearches.get()) }.getOrNull()
++            ?: return@synchronized 0
++        val updated = current.toMutableList()
++        val resolved = mutableSetOf<Int>()
++        val defaults by lazy { runCatching(defaultFilters).getOrNull() }
++
++        decoded.forEachIndexed { index, old ->
++            if (old == null || old.sourceId != sourceId || (old.sourceId to old.id) in duplicateIds) return@forEachIndexed
++            if (old.id.isBlank() || old.id.length > 64 || old.name.isBlank() || old.name.length > 80 || old.query.length > 2_000) return@forEachIndexed
++            val filters = defaults?.let { SavedSourceSearchFilterMigration.convert(old.filters, it) } ?: return@forEachIndexed
++            // Upstream skips the apply callback for empty payloads; a blank query also has no submission to activate it.
++            if (filters.isEmpty() && (old.query.isBlank() || SavedSourceFilterCodec.capture(requireNotNull(defaults)).isNotEmpty())) return@forEachIndexed
++            val id = migratedId(old.sourceId, old.id)
++            val existing = updated.find { it.id == id }
++            if (existing != null) {
++                // The target was written before a process stopped or the old backup was restored again.
++                if (existing.sourceId == sourceId && existing.query == old.query && existing.filters == filters && existing.name != null) {
++                    resolved += index
++                }
++                return@forEachIndexed
++            }
++            val sameName = updated.filter { it.sourceId == sourceId && it.name?.equals(old.name, ignoreCase = true) == true }
++            if (sameName.any { it.query == old.query && it.filters == filters }) {
++                resolved += index
++                return@forEachIndexed
++            }
++            val name = if (sameName.isEmpty()) {
++                old.name
++            } else {
++                (1..(updated.size + 1))
++                    .map { importedName(old.name, it) }
++                    .firstOrNull { candidate -> updated.none { it.sourceId == sourceId && it.name?.equals(candidate, ignoreCase = true) == true } }
++                    ?: return@forEachIndexed
++            }
++            updated += SearchHistoryEntry(id = id, query = old.query, filters = filters, sourceId = sourceId, name = name)
++            resolved += index
++        }
++
++        if (resolved.isNotEmpty()) {
++            // Write the canonical target first. Deterministic identities make a retry safe if cleanup is interrupted.
++            if (updated != current) savedSearches.set(Json.encodeToString(updated))
++            legacy.set(JsonArray(pending.filterIndexed { index, _ -> index !in resolved }).toString())
++        }
++        updated.size - current.size
++    }
++
++    companion object {
++        const val LEGACY_KEY = "hayai_saved_source_searches_v1"
++        private const val MAX_LEGACY_SEARCHES = 100
++        private val lock = Any()
++
++        internal fun migratedId(sourceId: Long, oldId: String): Long {
++            val digest = MessageDigest.getInstance("SHA-256").digest("$sourceId\u0000$oldId".toByteArray(Charsets.UTF_8))
++            return (ByteBuffer.wrap(digest).long and Long.MAX_VALUE) or (1L shl 62)
++        }
++    }
++}
++
++internal object SavedSourceSearchFilterMigration {
++    fun convert(states: List<SavedFilterState>, defaults: FilterList): List<SavedFilter>? {
++        if (states.map { it.path }.distinct().size != states.size) return null
++        val restored = defaults.copyForMigration()
++        if (SavedSourceFilterCodec.restore(restored, states) != states.size) return null
++        val restoredStates = SavedSourceFilterCodec.capture(restored)
++        val byPath = restoredStates.associateBy { it.path }
++        if (states.any { byPath[it.path] != it }) return null
++        // Include representable defaults so upstream invokes its apply callback and resets any active filters.
++        val converted = restored.diffFromDefault(FilterList())
++        val replayed = defaults.copyForMigration()
++        if (converted.applyTo(replayed, strict = true) != FilterApplyResult.ALL) return null
++        if (SavedSourceFilterCodec.capture(replayed) != restoredStates) return null
++        return converted
++    }
++
++    private fun FilterList.copyForMigration(): FilterList = FilterList(map { it.copyForMigration() })
++
++    private fun Filter<*>.copyForMigration(): Filter<*> = when (this) {
++        is Filter.CheckBox -> object : Filter.CheckBox(name, state) {}
++        is Filter.TriState -> object : Filter.TriState(name, state) {}
++        is Filter.Text -> object : Filter.Text(name, state) {}
++        is Filter.Select<*> -> object : Filter.Select<Any?>(name, values.map { it }.toTypedArray(), state) {}
++        is Filter.Sort -> object : Filter.Sort(name, values.copyOf(), state?.copy()) {}
++        is Filter.Group<*> -> object : Filter.Group<Any?>(name, state.map { (it as? Filter<*>)?.copyForMigration() ?: it }) {}
++        is Filter.Header -> Filter.Header(name)
++        is Filter.Separator -> Filter.Separator(name)
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt b/app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt
+index 31e35b136fed2c4a24cfadaee006b8b251671a9d..20e8df64ada50736f10e841a3b12f645b6d4a23d 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt
+@@ -1,12 +1,8 @@
+ package dev.ahmedmohamed.hayai.source.search
+ 
+-import eu.kanade.tachiyomi.data.preference.PreferenceStore
+ import eu.kanade.tachiyomi.source.model.Filter
+ import eu.kanade.tachiyomi.source.model.FilterList
+ import kotlinx.serialization.Serializable
+-import kotlinx.serialization.encodeToString
+-import kotlinx.serialization.json.Json
+-import java.util.UUID
+ 
+ @Serializable
+ data class SavedSourceSearch(
+@@ -25,43 +21,6 @@ data class SavedFilterState(
+     val extra: Boolean = false,
+ )
+ 
+-class SavedSourceSearchStore(
+-    preferenceStore: PreferenceStore,
+-    private val json: Json = Json { ignoreUnknownKeys = true },
+-) {
+-    private val preference = preferenceStore.getString(KEY, "[]")
+-
+-    fun list(sourceId: Long): List<SavedSourceSearch> = read().filter { it.sourceId == sourceId }
+-
+-    fun save(sourceId: Long, name: String, query: String, filters: FilterList): SavedSourceSearch {
+-        val normalizedName = name.trim().take(MAX_NAME_LENGTH)
+-        require(normalizedName.isNotBlank())
+-        val current = read().toMutableList()
+-        val existing = current.firstOrNull { it.sourceId == sourceId && it.name.equals(normalizedName, ignoreCase = true) }
+-        val saved = SavedSourceSearch(existing?.id ?: UUID.randomUUID().toString(), sourceId, normalizedName, query.take(MAX_QUERY_LENGTH), SavedSourceFilterCodec.capture(filters))
+-        current.removeAll { it.id == saved.id }
+-        current += saved
+-        write(current.takeLast(MAX_SAVED_SEARCHES))
+-        return saved
+-    }
+-
+-    fun delete(id: String) = write(read().filterNot { it.id == id })
+-
+-    private fun read(): List<SavedSourceSearch> =
+-        runCatching { json.decodeFromString<List<SavedSourceSearch>>(preference.get()) }
+-            .getOrDefault(emptyList())
+-            .filter { it.id.length <= 64 && it.name.isNotBlank() && it.name.length <= MAX_NAME_LENGTH }
+-
+-    private fun write(items: List<SavedSourceSearch>) = preference.set(json.encodeToString(items))
+-
+-    private companion object {
+-        const val KEY = "hayai_saved_source_searches_v1"
+-        const val MAX_SAVED_SEARCHES = 100
+-        const val MAX_NAME_LENGTH = 80
+-        const val MAX_QUERY_LENGTH = 2_000
+-    }
+-}
+-
+ object SavedSourceFilterCodec {
+     fun capture(filters: FilterList): List<SavedFilterState> = buildList {
+         filters.forEachIndexed { index, filter -> capture(filter, listOf(index), this) }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+index 5dcf5a011ddede96caa8d086b9f0d9813d7bf322..512c704f66abc753a47f700a1d637df25e9a78f8 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsController.kt
+@@ -1767,20 +1767,13 @@ class MangaDetailsController :
+     fun sourceSearch(text: String) = sourceSearch(listOf(text))
+ 
+     fun sourceSearch(tags: List<String>) {
+-        when (val previousController = previousController) {
+-            is BrowseSourceController -> {
+-                if (presenter.source is CatalogueSource) {
+-                    router.getOnBackPressedDispatcher()?.onBackPressed()
+-                    previousController.searchGenres(tags)
+-                }
+-            }
+-            else -> {
+-                if (presenter.source is CatalogueSource) {
+-                    val controller = BrowseSourceController(presenter.source)
+-                    router.pushController(controller.withFadeTransaction())
+-                    controller.searchGenres(tags)
+-                }
+-            }
++        val source = presenter.source as? CatalogueSource ?: return
++        val previous = previousController as? BrowseSourceController
++        if (previous?.presenter?.sourceIsInitialized == true && previous.presenter.source.id == source.id) {
++            router.getOnBackPressedDispatcher()?.onBackPressed()
++            previous.searchGenres(tags)
++        } else {
++            router.pushController(BrowseSourceController(source, tags).withFadeTransaction())
+         }
+     }
+ 
+@@ -1795,6 +1788,10 @@ class MangaDetailsController :
+         isTag: Boolean,
+     ) {
+         finishFloatingActionMode()
++        if (isTag && dev.ahmedmohamed.hayai.source.filter.SourceGenreSearch.usesGalleryTags(presenter.source)) {
++            sourceSearch(content ?: view.text.toString())
++            return
++        }
+         val previousController = previousController
+         val hasDifferentAuthors =
+             view.id == R.id.manga_author &&
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
+index 3717b8f0492b6c215628a985a049884b882b920d..f0ece8c08464f87bfca4d1284256a7363251c352 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
+@@ -9,8 +9,6 @@ import android.view.MenuInflater
+ import android.view.MenuItem
+ import android.view.View
+ import android.view.ViewGroup
+-import android.widget.EditText
+-import androidx.appcompat.app.AlertDialog
+ import androidx.appcompat.widget.PopupMenu
+ import androidx.core.view.WindowInsetsCompat.Type.systemBars
+ import androidx.core.view.isVisible
+@@ -28,9 +26,8 @@ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
+ import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
+ import dev.ahmedmohamed.hayai.source.presentation.SourceBrowseLayout
+ import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
+-import dev.ahmedmohamed.hayai.source.search.SavedSourceFilterCodec
+-import dev.ahmedmohamed.hayai.source.search.SavedSourceSearch
+-import dev.ahmedmohamed.hayai.source.search.SavedSourceSearchStore
++import dev.ahmedmohamed.hayai.source.search.SavedSourceSearchMigration
++import dev.ahmedmohamed.hayai.source.filter.SourceGenreSearch
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.IFlexible
+ import eu.kanade.tachiyomi.R
+@@ -124,12 +121,19 @@ open class BrowseSourceController(
+         },
+     )
+ 
++    constructor(source: CatalogueSource, genres: List<String>) : this(
++        Bundle().apply {
++            putLong(SOURCE_ID_KEY, source.id)
++            putStringArrayList(INITIAL_GENRES_KEY, ArrayList(genres))
++        },
++    )
++
+     /**
+      * Preferences helper.
+      */
+     private val preferences: PreferencesHelper by injectLazy()
+     private val ehPreferences: EhPreferences by injectLazy()
+-    private val savedSourceSearches by lazy { SavedSourceSearchStore(Injekt.get<PreferenceStore>()) }
++    private val savedSearchMigration by lazy { SavedSourceSearchMigration(Injekt.get<PreferenceStore>()) }
+ 
+     /**
+      * Adapter containing the list of manga from the catalogue.
+@@ -229,6 +233,12 @@ open class BrowseSourceController(
+             return
+         }
+ 
++        runCatching {
++            savedSearchMigration.migrate(presenter.source.id, presenter.source::getFilterList) { name, number ->
++                view.context.getString(R.string.hayai_saved_search_imported_name, name, number)
++            }
++        }.onFailure { Timber.e(it) }
++
+         // Initialize adapter, scroll listener and recycler views
+         adapter = FlexibleAdapter(null, this)
+         setupRecycler(view)
+@@ -269,6 +279,10 @@ open class BrowseSourceController(
+         }
+         updatePopLatestIcons()
+         requestFilePermissionsSafe(301, preferences, presenter.source is LocalSource)
++        args.getStringArrayList(INITIAL_GENRES_KEY)?.let {
++            args.remove(INITIAL_GENRES_KEY)
++            searchGenres(it)
++        }
+     }
+ 
+     override fun onDestroyView(view: View) {
+@@ -537,73 +551,6 @@ open class BrowseSourceController(
+         sheet.show()
+     }
+ 
+-    private fun showSavedSearches(sheet: SourceFilterSheet) {
+-        val activity = activity ?: return
+-        val saved = savedSourceSearches.list(presenter.source.id)
+-        val labels = listOf(activity.getString(R.string.hayai_save_current_search)) + saved.map { it.name }
+-        AlertDialog.Builder(activity)
+-            .setTitle(R.string.hayai_saved_searches)
+-            .setItems(labels.toTypedArray()) { _, which ->
+-                if (which == 0) {
+-                    val input = EditText(activity).apply {
+-                        hint = activity.getString(R.string.hayai_saved_search_name)
+-                        maxLines = 1
+-                    }
+-                    AlertDialog.Builder(activity)
+-                        .setTitle(R.string.hayai_save_current_search)
+-                        .setView(input)
+-                        .setPositiveButton(R.string.save) { _, _ ->
+-                            runCatching {
+-                                savedSourceSearches.save(
+-                                    presenter.source.id,
+-                                    input.text.toString(),
+-                                    presenter.query,
+-                                    presenter.sourceFilters,
+-                                )
+-                            }.onSuccess {
+-                                activity.toast(R.string.hayai_saved_search_saved)
+-                            }.onFailure {
+-                                activity.toast(R.string.hayai_saved_search_name_required)
+-                            }
+-                        }
+-                        .setNegativeButton(android.R.string.cancel, null)
+-                        .show()
+-                } else {
+-                    showSavedSearchActions(sheet, saved[which - 1])
+-                }
+-            }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
+-    }
+-
+-    private fun showSavedSearchActions(sheet: SourceFilterSheet, saved: SavedSourceSearch) {
+-        val activity = activity ?: return
+-        AlertDialog.Builder(activity)
+-            .setTitle(saved.name)
+-            .setMessage(activity.getString(R.string.hayai_saved_search_details, saved.query.ifBlank { activity.getString(R.string.hayai_saved_search_no_query) }))
+-            .setPositiveButton(R.string.hayai_apply_saved_search) { _, _ -> applySavedSearch(sheet, saved) }
+-            .setNeutralButton(R.string.delete) { _, _ ->
+-                savedSourceSearches.delete(saved.id)
+-                activity.toast(R.string.hayai_saved_search_deleted)
+-            }
+-            .setNegativeButton(android.R.string.cancel, null)
+-            .show()
+-    }
+-
+-    private fun applySavedSearch(sheet: SourceFilterSheet, saved: SavedSourceSearch) {
+-        val filters = presenter.source.getFilterList()
+-        SavedSourceFilterCodec.restore(filters, saved.filters)
+-        presenter.query = saved.query
+-        presenter.sourceFilters = filters
+-        presenter.appliedFilters = filters
+-        activityBinding?.searchToolbar?.searchView?.setQuery(saved.query, false)
+-        showProgressBar()
+-        adapter?.clear()
+-        presenter.restartPager(saved.query, filters)
+-        updatePopLatestIcons()
+-        sheet.dismissWithoutSearch()
+-    }
+-
+     /**
+      * Attempts to restart the request with a new genre-filtered query.
+      * If the genre name can't be found the filters,
+@@ -617,10 +564,18 @@ open class BrowseSourceController(
+         names: List<String>,
+         useContains: Boolean = false,
+     ) {
++        if (adapter == null || !presenter.sourceIsInitialized) {
++            args.putStringArrayList(INITIAL_GENRES_KEY, ArrayList(names))
++            return
++        }
+         presenter.sourceFilters = presenter.source.getFilterList()
+         val genreNames = names.map { it.split(":").last().trim() }
+-        var filterList: FilterList? = null
+-        genres@ for (genreName in genreNames) {
++        var filterList: FilterList? = presenter.sourceFilters.takeIf { SourceGenreSearch.apply(presenter.source, it, names) }
++        if (filterList == null && SourceGenreSearch.usesGalleryTags(presenter.source)) {
++            searchWithQuery(names.joinToString(" "))
++            return
++        }
++        genres@ for (genreName in if (filterList == null) genreNames else emptyList()) {
+             filter@ for (sourceFilter in presenter.sourceFilters) {
+                 if (sourceFilter is Filter.Group<*>) {
+                     for (filter in sourceFilter.state) {
+@@ -1101,5 +1056,6 @@ open class BrowseSourceController(
+         const val SEARCH_QUERY_KEY = "searchQuery"
+         const val USE_LATEST_KEY = "useLatest"
+         const val SMART_SEARCH_CONFIG_KEY = "smartSearchConfig"
++        private const val INITIAL_GENRES_KEY = "hayaiInitialGenres"
+     }
+ }
+diff --git a/app/src/main/res/values-ar/strings_hayai_misc.xml b/app/src/main/res/values-ar/strings_hayai_misc.xml
+index 23ac72dff14a2d34e1b01e287e59ceb408321278..f3d2c66707c330737c0203bc8cc124081b1a0ad0 100644
+--- a/app/src/main/res/values-ar/strings_hayai_misc.xml
++++ b/app/src/main/res/values-ar/strings_hayai_misc.xml
+@@ -1,5 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+     <string name="hayai_source_badge_novel">رواية</string>
++    <string name="hayai_saved_search_imported_name">%1$s (مستورد %2$d)</string>
+     <string name="hayai_failure_source_not_novel">هذا المصدر لا يوفّر نصوص الروايات.</string>
+ </resources>
+diff --git a/app/src/main/res/values-ar/strings_hayai_previews.xml b/app/src/main/res/values-ar/strings_hayai_previews.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..d0e6664e69e1037bc121742748e4bbb89b034bf5
+--- /dev/null
++++ b/app/src/main/res/values-ar/strings_hayai_previews.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="hayai_preview_layout">طريقة عرض المعاينات</string>
++    <string name="hayai_preview_paged">صفحات</string>
++    <string name="hayai_preview_continuous">تمرير مستمر</string>
++    <string name="hayai_preview_previous">صفحة المعاينات السابقة</string>
++    <string name="hayai_preview_next">صفحة المعاينات التالية</string>
++    <string name="hayai_preview_wrong_page">أعاد المصدر صفحة معاينات مختلفة. يرجى إعادة المحاولة.</string>
++</resources>
+diff --git a/app/src/main/res/values/strings_hayai_misc.xml b/app/src/main/res/values/strings_hayai_misc.xml
+index 077090bce9ed575d43503e29252e1dbf78e7dcbd..e443ee648f3a2cf61c313e8788b4a676284c39d3 100644
+--- a/app/src/main/res/values/strings_hayai_misc.xml
++++ b/app/src/main/res/values/strings_hayai_misc.xml
+@@ -1,5 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
++    <string name="hayai_saved_search_imported_name">%1$s (imported %2$d)</string>
+     <string name="hayai_download_app_updates">Automatically download app updates</string>
+     <string name="hayai_dont_download_updates">Don\'t download automatically</string>
+     <string name="hayai_library_scope">Library section</string>
+diff --git a/app/src/main/res/values/strings_hayai_previews.xml b/app/src/main/res/values/strings_hayai_previews.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..a48b3369620939d50af366c69b545cd9270a94c4
+--- /dev/null
++++ b/app/src/main/res/values/strings_hayai_previews.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="hayai_preview_layout">Preview layout</string>
++    <string name="hayai_preview_paged">Paged</string>
++    <string name="hayai_preview_continuous">Continuous scroll</string>
++    <string name="hayai_preview_previous">Previous preview page</string>
++    <string name="hayai_preview_next">Next preview page</string>
++    <string name="hayai_preview_wrong_page">The source returned a different preview page. Please retry.</string>
++</resources>
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalogTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalogTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..0fd3fac102edcebcf12c39c2969865ed866b0252
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalogTest.kt
+@@ -0,0 +1,49 @@
++package dev.ahmedmohamed.hayai.adult.eh.source
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class EhTagCatalogTest {
++    private val catalog = EhTagCatalog(listOf("female:big breasts", "female:sole female", "male:yaoi", "artist:someone"))
++
++    @Test
++    fun `substring matches survive namespaces and preserve exclude and OR prefixes`() {
++        assertEquals(listOf("female:big breasts"), catalog.suggest("breasts", 100))
++        assertEquals(listOf("-female:big breasts"), catalog.suggest("-BREASTS", 100))
++        assertEquals(listOf("~female:big breasts"), catalog.suggest("~breasts", 100))
++        assertTrue(catalog.suggest("+breasts", 100).isEmpty())
++    }
++
++    @Test
++    fun `namespace entries lead into a qualified search instead of becoming tags`() {
++        assertEquals(
++            listOf("female:", "female:big breasts", "female:sole female"),
++            catalog.suggest("fem", 100),
++        )
++        assertEquals(
++            listOf("~female:", "~female:big breasts", "~female:sole female"),
++            catalog.suggest("~fe", 100),
++        )
++        assertEquals(listOf("artist:", "artist:someone"), catalog.suggest("artist:", 100))
++    }
++
++    @Test
++    fun `short inputs keep the suggestion list empty`() {
++        assertTrue(catalog.suggest("", 100).isEmpty())
++        assertTrue(catalog.suggest("fe", 100).isEmpty())
++        assertTrue(catalog.suggest("-", 100).isEmpty())
++    }
++
++    @Test
++    fun `suggestion cap includes namespace choices and retains catalog order`() {
++        val largeCatalog = EhTagCatalog((1..110).map { "female:tag$it" })
++        val matches = largeCatalog.suggest("female", 100)
++
++        assertEquals(100, matches.size)
++        assertEquals("female:", matches.first())
++        assertEquals("female:tag99", matches.last())
++        assertFalse("female:tag100" in matches)
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodecTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodecTest.kt
+index 8870886e4f30500fb7e10de0a741dad75111dcf0..596cdac2fc64f7e0284dbf1898a8a0dd37dad068 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodecTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodecTest.kt
+@@ -1,6 +1,7 @@
+ package dev.ahmedmohamed.hayai.adult.eh.source
+ 
+ import dev.ahmedmohamed.hayai.adult.eh.domain.EhTagMode
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhFailure
+ import dev.ahmedmohamed.hayai.adult.eh.network.EhTagQueryCodec
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertThrows
+@@ -34,4 +35,27 @@ class EhTagSelectionCodecTest {
+             EhTagSelectionCodec.normalize(listOf("female:sole female", "Female:Sole Female")),
+         )
+     }
++
++    @Test
++    fun `namespace drilldown cannot enter a saved filter as an empty tag`() {
++        for (namespace in listOf("female:", "-male:", "~artist:")) {
++            assertThrows(EhFailure.MalformedDocument::class.java) { EhTagSelectionCodec.encode(listOf(namespace)) }
++        }
++    }
++
++    @Test
++    fun `duplicate selection at the limit succeeds without creating a ninth chip`() {
++        val selections = (1..8).map { "female:tag$it" }
++
++        assertEquals(selections, EhTagSelectionCodec.normalize(selections + "Female:Tag1"))
++    }
++
++    @Test
++    fun `removing a chip preserves the remaining multiword tags and modes`() {
++        val selections = listOf("female:big breasts", "-male:yaoi", "~artist:some artist")
++        val remaining = EhTagSelectionCodec.decode(EhTagSelectionCodec.encode(selections - "-male:yaoi"))
++
++        assertEquals(listOf("female:big breasts", "~artist:some artist"), remaining)
++        assertEquals(listOf(EhTagMode.Include, EhTagMode.Any), EhTagQueryCodec.parse(EhTagSelectionCodec.encode(remaining)).map { it.mode })
++    }
+ }
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/filter/SourceGenreSearchTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/filter/SourceGenreSearchTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b5957af441f77830693d4d5ea912801e0d5f288
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/filter/SourceGenreSearchTest.kt
+@@ -0,0 +1,47 @@
++package dev.ahmedmohamed.hayai.source.filter
++
++import dev.ahmedmohamed.hayai.adult.eh.domain.EhCategory
++import dev.ahmedmohamed.hayai.source.SourceCapabilityRegistry
++import eu.kanade.tachiyomi.source.Source
++import eu.kanade.tachiyomi.source.model.Filter
++import eu.kanade.tachiyomi.source.model.FilterList
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class SourceGenreSearchTest {
++    @Test
++    fun `gallery tags keep namespaces and multiword values`() {
++        val tags = CompletionFilter()
++        val source = FakeSource(SourceCapabilityRegistry.EXH_SOURCE_ID)
++        assertTrue(SourceGenreSearch.apply(source, FilterList(tags), listOf("female:big breasts")))
++        assertEquals(listOf("female:big breasts"), tags.values)
++    }
++
++    @Test
++    fun `ordinary sources keep their existing genre matching`() {
++        val tags = CompletionFilter()
++        assertFalse(SourceGenreSearch.apply(FakeSource(1), FilterList(tags), listOf("Action")))
++        assertTrue(tags.values.isEmpty())
++    }
++
++    @Test
++    fun `gallery categories distinguish category filters from tags`() {
++        assertEquals(EhCategory.ArtistCg, SourceGenreSearch.category(listOf("Artist CG")))
++        assertEquals(EhCategory.NonH, SourceGenreSearch.category(listOf("Non-H")))
++        assertEquals(null, SourceGenreSearch.category(listOf("female:manga")))
++    }
++
++    private class FakeSource(override val id: Long) : Source { override val name = "Source" }
++
++    private class CompletionFilter : Filter.Text("Tags"), SourceTagCompletionFilter {
++        var values = emptyList<String>()
++        override val hint = ""
++        override val maximumSelections = 8
++        override val validPrefixes = setOf('-', '~')
++        override fun selections() = values
++        override fun setSelections(values: List<String>) { this.values = values }
++        override fun suggestions(input: String, limit: Int) = emptyList<String>()
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilterTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilterTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c7c0da813aac7f05c05cbe3e7b2db6632d31b27
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilterTest.kt
+@@ -0,0 +1,27 @@
++package dev.ahmedmohamed.hayai.source.filter
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class SourceTagCompletionFilterTest {
++    private val completion = object : SourceTagCompletionFilter {
++        override val hint = ""
++        override val maximumSelections = 8
++        override val validPrefixes = setOf('-', '~')
++        override fun selections(): List<String> = emptyList()
++        override fun setSelections(values: List<String>) = Unit
++        override fun suggestions(input: String, limit: Int): List<String> = emptyList()
++    }
++
++    @Test
++    fun `qualified namespace choices stay editable in every supported mode`() {
++        assertTrue(completion.isNamespaceSuggestion("female:"))
++        assertTrue(completion.isNamespaceSuggestion("-female:"))
++        assertTrue(completion.isNamespaceSuggestion(" ~Artist: "))
++        assertFalse(completion.isNamespaceSuggestion("female:big breasts"))
++        assertFalse(completion.isNamespaceSuggestion("-male:yaoi"))
++        assertFalse(completion.isNamespaceSuggestion("+female:"))
++        assertFalse(completion.isNamespaceSuggestion("female:person:"))
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewWindowTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewWindowTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..fda2311502e6cc77395249ad438555d275d076b6
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewWindowTest.kt
+@@ -0,0 +1,85 @@
++package dev.ahmedmohamed.hayai.source.preview
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertThrows
++import org.junit.Test
++
++class SourcePreviewWindowTest {
++    @Test
++    fun `seeking into a gallery permits scrolling into both adjacent listings`() {
++        val window = SourcePreviewWindow()
++        window.replace(page(3))
++        window.extend(page(2))
++        window.extend(page(4))
++
++        assertEquals((3..8).toList(), window.previews.map { it.index })
++        assertEquals(2, window.positionForImage(5))
++        assertEquals(1, window.previousPage)
++        assertEquals(5, window.nextPage)
++        assertEquals(3, window.navigationForImage(5)?.page)
++        assertEquals(6, window.navigationForImage(5)?.totalPages)
++    }
++
++    @Test
++    fun `bounded forward and backward scrolling retain global anchors`() {
++        val window = SourcePreviewWindow(pageLimit = 3)
++        window.replace(page(1))
++        window.extend(page(2))
++        window.extend(page(3))
++        window.extend(page(4))
++
++        assertNull(window.positionForPage(1))
++        assertEquals(2, window.positionForImage(5))
++        assertEquals(1, window.previousPage)
++
++        window.extend(page(1))
++
++        assertNull(window.positionForPage(4))
++        assertEquals(4, window.positionForImage(5))
++        assertEquals(4, window.nextPage)
++    }
++
++    @Test
++    fun `an arbitrary seek replaces the window and cannot retain stale listings`() {
++        val window = SourcePreviewWindow()
++        window.replace(page(1))
++        window.extend(page(2))
++        window.replace(page(6))
++
++        assertEquals(listOf(11, 12), window.previews.map { it.index })
++        assertEquals(0, window.positionForPage(6))
++        assertEquals(5, window.previousPage)
++        assertNull(window.nextPage)
++        assertNull(window.navigationForImage(1))
++    }
++
++    @Test
++    fun `unknown totals follow provider pagination and stop at an empty terminal page`() {
++        val window = SourcePreviewWindow()
++        window.replace(page(2).copy(totalPages = null))
++        window.extend(SourcePreviewPage(3, emptyList(), hasNextPage = false))
++
++        assertEquals(1, window.previousPage)
++        assertNull(window.nextPage)
++        assertNull(window.navigationForImage(3)?.totalPages)
++        assertEquals(listOf(3, 4), window.previews.map { it.index })
++    }
++
++    @Test
++    fun `repeated or nonadjacent responses cannot corrupt the mounted window`() {
++        val window = SourcePreviewWindow()
++        window.replace(page(3))
++
++        assertThrows(IllegalArgumentException::class.java) { window.extend(page(3)) }
++        assertThrows(IllegalArgumentException::class.java) { window.extend(page(6)) }
++        assertEquals(listOf(5, 6), window.previews.map { it.index })
++    }
++
++    private fun page(number: Int) = SourcePreviewPage(
++        number,
++        ((number - 1) * 2 + 1..number * 2).map { SourcePagePreview(it, "https://example.com/$it.jpg") },
++        hasNextPage = number < 6,
++        totalPages = 6,
++    )
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigrationTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigrationTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..8cae37bb587c20544fc2b96d2b0e80d2504f84c1
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigrationTest.kt
+@@ -0,0 +1,347 @@
++package dev.ahmedmohamed.hayai.source.search
++
++import dev.ahmedmohamed.hayai.testing.MemoryPreferenceStore
++import eu.kanade.tachiyomi.data.preference.Preference
++import eu.kanade.tachiyomi.data.preference.PreferenceKeys
++import eu.kanade.tachiyomi.data.preference.PreferenceStore
++import eu.kanade.tachiyomi.source.model.Filter
++import eu.kanade.tachiyomi.source.model.FilterList
++import eu.kanade.tachiyomi.ui.source.searchhistory.FilterApplyResult
++import eu.kanade.tachiyomi.ui.source.searchhistory.SearchHistoryEntry
++import eu.kanade.tachiyomi.ui.source.searchhistory.applyTo
++import kotlinx.serialization.encodeToString
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonPrimitive
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class SavedSourceSearchMigrationTest {
++    @Test
++    fun `complete query and nested filter state move to the upstream owner without mutating source filters`() {
++        val defaults = filters(changed = false)
++        val before = SavedSourceFilterCodec.capture(defaults)
++        val desired = filters(changed = true)
++        val old = preset(query = "  exact query  ", filters = SavedSourceFilterCodec.capture(desired))
++        val store = store(old)
++
++        assertEquals(1, migrate(store) { defaults })
++
++        val target = saved(store).single()
++        assertEquals(old.name, target.name)
++        assertEquals(old.query, target.query)
++        assertEquals(old.sourceId, target.sourceId)
++        assertFalse(target.showOnAllSources)
++        assertTrue(target.id > 0)
++        val replayed = filters(changed = false)
++        assertEquals(FilterApplyResult.ALL, target.filters.applyTo(replayed, strict = true))
++        assertEquals(SavedSourceFilterCodec.capture(desired), SavedSourceFilterCodec.capture(replayed))
++        assertEquals(before, SavedSourceFilterCodec.capture(defaults))
++        assertEquals("[]", pending(store))
++        assertEquals(0, migrate(store) { defaults })
++        assertEquals(listOf(target), saved(store))
++    }
++
++    @Test
++    fun `query only searches migrate with empty source filters`() {
++        val store = store(preset())
++
++        assertEquals(1, migrate(store))
++        assertEquals("query", saved(store).single().query)
++        assertEquals(emptyList<Any>(), saved(store).single().filters)
++        assertEquals("[]", pending(store))
++    }
++
++    @Test
++    fun `a default preset resets active nondefault controls through the upstream apply path`() {
++        val defaults = filters(changed = false)
++        val store = store(preset(filters = SavedSourceFilterCodec.capture(defaults)))
++
++        assertEquals(1, migrate(store) { defaults })
++        val target = saved(store).single()
++        assertTrue(target.filters.isNotEmpty())
++        val active = filters(changed = true)
++        assertEquals(FilterApplyResult.ALL, target.filters.applyTo(active, strict = true))
++        assertEquals(SavedSourceFilterCodec.capture(defaults), SavedSourceFilterCodec.capture(active))
++        assertEquals("query", target.query)
++        assertEquals("[]", pending(store))
++    }
++
++    @Test
++    fun `blank query presets with controls have an activating reset payload`() {
++        val defaults = filters(changed = false)
++        val store = store(preset(query = "", filters = SavedSourceFilterCodec.capture(defaults)))
++
++        assertEquals(1, migrate(store) { defaults })
++        val target = saved(store).single()
++        assertTrue(target.query.isBlank())
++        assertTrue(target.filters.isNotEmpty())
++        val active = filters(changed = true)
++        assertEquals(FilterApplyResult.ALL, target.filters.applyTo(active, strict = true))
++        assertEquals(SavedSourceFilterCodec.capture(defaults), SavedSourceFilterCodec.capture(active))
++    }
++
++    @Test
++    fun `blank query presets without controls remain pending because upstream cannot activate them`() {
++        val store = store(preset(query = ""))
++        val original = pending(store)
++
++        assertEquals(0, migrate(store))
++        assertEquals(original, pending(store))
++        assertTrue(saved(store).isEmpty())
++    }
++
++    @Test
++    fun `a lone unset sort remains pending because an empty payload cannot reset an active sort`() {
++        val store = store(preset(filters = listOf(SavedFilterState(listOf(0), "sort-none", ""))))
++        val original = pending(store)
++
++        assertEquals(0, migrate(store) { FilterList(Sort("Order", null)) })
++        assertEquals(original, pending(store))
++        assertTrue(saved(store).isEmpty())
++    }
++
++    @Test
++    fun `stale positional schema leaves the entire original preset pending`() {
++        val old = preset(filters = listOf(SavedFilterState(listOf(0), "select", "2")))
++        val store = store(old)
++        val original = pending(store)
++
++        assertEquals(0, migrate(store) { FilterList(Choice("Rating", 0, arrayOf("Only"))) })
++        assertEquals(original, pending(store))
++        assertTrue(saved(store).isEmpty())
++    }
++
++    @Test
++    fun `a cleared sort that upstream cannot represent remains recoverable`() {
++        val old = preset(filters = listOf(SavedFilterState(listOf(0), "sort-none", "")))
++        val store = store(old)
++        val original = pending(store)
++        val defaults = FilterList(Sort("Order", Filter.Sort.Selection(0, true)))
++
++        assertEquals(0, migrate(store) { defaults })
++        assertEquals(original, pending(store))
++        assertEquals(Filter.Sort.Selection(0, true), (defaults[0] as Sort).state)
++        assertTrue(saved(store).isEmpty())
++    }
++
++    @Test
++    fun `duplicate filter names cannot silently change which filter is selected`() {
++        val old = preset(filters = SavedSourceFilterCodec.capture(FilterList(Check("Same", false), Check("Same", true))))
++        val store = store(old)
++        val original = pending(store)
++
++        assertEquals(0, migrate(store) { FilterList(Check("Same", false), Check("Same", false)) })
++        assertEquals(original, pending(store))
++        assertTrue(saved(store).isEmpty())
++    }
++
++    @Test
++    fun `a conflicting upstream search keeps its contents and the imported search receives a unique name`() {
++        val existing = SearchHistoryEntry(25L, "upstream query", sourceId = SOURCE_ID, name = "Favourite")
++        val store = store(preset(name = "favourite"))
++        store.getString(PreferenceKeys.savedSearches).set(Json.encodeToString(listOf(existing)))
++
++        assertEquals(1, migrate(store))
++        assertEquals(existing, saved(store).first())
++        assertEquals("favourite (imported 1)", saved(store).last().name)
++        assertEquals("query", saved(store).last().query)
++        assertEquals("[]", pending(store))
++    }
++
++    @Test
++    fun `another source may keep the same name without a migration rename`() {
++        val existing = SearchHistoryEntry(25L, "other query", sourceId = SOURCE_ID + 1, name = "Favourite")
++        val store = store(preset())
++        store.getString(PreferenceKeys.savedSearches).set(Json.encodeToString(listOf(existing)))
++
++        assertEquals(1, migrate(store))
++        assertEquals(existing, saved(store).first())
++        assertEquals("Favourite", saved(store).last().name)
++    }
++
++    @Test
++    fun `an identical upstream entry is reused rather than duplicated`() {
++        val existing = SearchHistoryEntry(25L, "query", sourceId = SOURCE_ID, name = "Favourite")
++        val store = store(preset())
++        val originalTarget = Json.encodeToString(listOf(existing))
++        store.getString(PreferenceKeys.savedSearches).set(originalTarget)
++
++        assertEquals(0, migrate(store))
++        assertEquals(originalTarget, store.getString(PreferenceKeys.savedSearches).get())
++        assertEquals("[]", pending(store))
++    }
++
++    @Test
++    fun `a canonical id collision never overwrites either search`() {
++        val old = preset()
++        val existing = SearchHistoryEntry(SavedSourceSearchMigration.migratedId(old.sourceId, old.id), "different", sourceId = SOURCE_ID, name = "Other")
++        val store = store(old)
++        val original = pending(store)
++        store.getString(PreferenceKeys.savedSearches).set(Json.encodeToString(listOf(existing)))
++
++        assertEquals(0, migrate(store))
++        assertEquals(listOf(existing), saved(store))
++        assertEquals(original, pending(store))
++    }
++
++    @Test
++    fun `an interrupted cleanup retries without another canonical entry`() {
++        val backing = store(preset())
++        val original = pending(backing)
++        var interruptCleanup = true
++        val interrupted = object : PreferenceStore by backing {
++            override fun getString(key: String, defaultValue: String): Preference<String> {
++                val preference = backing.getString(key, defaultValue)
++                if (key != SavedSourceSearchMigration.LEGACY_KEY) return preference
++                return object : Preference<String> by preference {
++                    override fun set(value: String) {
++                        if (interruptCleanup) {
++                            interruptCleanup = false
++                            error("Interrupted migration cleanup")
++                        }
++                        preference.set(value)
++                    }
++                }
++            }
++        }
++
++        assertNotNull(runCatching { migrate(interrupted) }.exceptionOrNull())
++        val target = saved(backing).single()
++        assertEquals(original, pending(backing))
++        assertEquals(0, migrate(interrupted))
++        assertEquals(listOf(target), saved(backing))
++        assertEquals("[]", pending(backing))
++    }
++
++    @Test
++    fun `unknown malformed and unavailable source entries are preserved when a valid sibling migrates`() {
++        val unknown = Json.parseToJsonElement("""{"id":"future","sourceId":7,"name":"Future","query":"q","filters":[],"newField":{"value":1}}""")
++        val malformed = JsonPrimitive("unrecognized preset")
++        val unavailable = Json.parseToJsonElement(Json.encodeToString(preset(id = "missing", sourceId = SOURCE_ID + 1)))
++        val valid = Json.parseToJsonElement(Json.encodeToString(preset()))
++        val store = MemoryPreferenceStore(SavedSourceSearchMigration.LEGACY_KEY to JsonArray(listOf(unknown, malformed, unavailable, valid)).toString())
++
++        assertEquals(1, migrate(store))
++        assertEquals(JsonArray(listOf(unknown, malformed, unavailable)), Json.parseToJsonElement(pending(store)))
++        assertEquals(1, saved(store).size)
++    }
++
++    @Test
++    fun `invalid JSON never replaces either preference with an empty list`() {
++        val badLegacy = MemoryPreferenceStore(SavedSourceSearchMigration.LEGACY_KEY to "{broken")
++        assertEquals(0, migrate(badLegacy))
++        assertEquals("{broken", pending(badLegacy))
++
++        val badTarget = store(preset())
++        val original = pending(badTarget)
++        badTarget.getString(PreferenceKeys.savedSearches).set("{broken")
++        assertEquals(0, migrate(badTarget))
++        assertEquals(original, pending(badTarget))
++        assertEquals("{broken", badTarget.getString(PreferenceKeys.savedSearches).get())
++    }
++
++    @Test
++    fun `an unknown canonical schema is not reserialized by the migration`() {
++        val store = store(preset())
++        val original = pending(store)
++        val target = """[{"id":20,"query":"upstream","filters":[],"name":"New","futureField":true}]"""
++        store.getString(PreferenceKeys.savedSearches).set(target)
++
++        assertEquals(0, migrate(store))
++        assertEquals(original, pending(store))
++        assertEquals(target, store.getString(PreferenceKeys.savedSearches).get())
++    }
++
++    @Test
++    fun `unavailable filter definitions do not change existing preferences`() {
++        val store = store(preset())
++        val original = pending(store)
++
++        assertEquals(0, migrate(store) { error("Source cannot supply filters") })
++        assertEquals(original, pending(store))
++        assertTrue(saved(store).isEmpty())
++    }
++
++    @Test
++    fun `migration remains bounded and preserves oversized legacy data for recovery`() {
++        val store = store(*(1..101).map { preset(id = it.toString(), name = "Preset $it") }.toTypedArray())
++        val original = pending(store)
++
++        assertEquals(0, migrate(store))
++        assertEquals(original, pending(store))
++        assertTrue(saved(store).isEmpty())
++    }
++
++    @Test
++    fun `duplicate legacy identities are preserved rather than collapsed`() {
++        val store = store(preset(), preset(query = "other query"))
++        val original = pending(store)
++
++        assertEquals(0, migrate(store))
++        assertEquals(original, pending(store))
++        assertTrue(saved(store).isEmpty())
++    }
++
++    @Test
++    fun `restoring app preference data keeps canonical and pending searches without duplicate import`() {
++        val old = preset()
++        val missing = preset(id = "missing", sourceId = SOURCE_ID + 1)
++        val store = store(old, missing)
++        assertEquals(1, migrate(store))
++        val existing = saved(store).single()
++        val restored = MemoryPreferenceStore(*store.getAll().map { it.key to requireNotNull(it.value) }.toTypedArray())
++
++        assertEquals(0, migrate(restored))
++        assertEquals(listOf(existing), saved(restored))
++        assertEquals(listOf(missing), Json.decodeFromString<List<SavedSourceSearch>>(pending(restored)))
++        // An older backup can restore the pre-conversion preference beside the new canonical list.
++        restored.getString(SavedSourceSearchMigration.LEGACY_KEY).set(Json.encodeToString(listOf(old, missing)))
++        assertEquals(0, migrate(restored))
++        assertEquals(listOf(existing), saved(restored))
++        assertEquals(listOf(missing), Json.decodeFromString<List<SavedSourceSearch>>(pending(restored)))
++    }
++
++    private fun migrate(store: PreferenceStore, defaults: () -> FilterList = { FilterList() }): Int =
++        SavedSourceSearchMigration(store).migrate(SOURCE_ID, defaults) { name, number -> "$name (imported $number)" }
++
++    private fun store(vararg old: SavedSourceSearch): MemoryPreferenceStore =
++        MemoryPreferenceStore(SavedSourceSearchMigration.LEGACY_KEY to Json.encodeToString(old.toList()))
++
++    private fun saved(store: PreferenceStore): List<SearchHistoryEntry> =
++        Json.decodeFromString(store.getString(PreferenceKeys.savedSearches, "[]").get())
++
++    private fun pending(store: PreferenceStore): String = store.getString(SavedSourceSearchMigration.LEGACY_KEY).get()
++
++    private fun preset(
++        id: String = "old-id",
++        sourceId: Long = SOURCE_ID,
++        name: String = "Favourite",
++        query: String = "query",
++        filters: List<SavedFilterState> = emptyList(),
++    ): SavedSourceSearch = SavedSourceSearch(id, sourceId, name, query, filters)
++
++    private fun filters(changed: Boolean): FilterList =
++        FilterList(
++            Check("Completed", changed),
++            Tri("Status", if (changed) 2 else 0),
++            Text("Author", if (changed) "Hayai" else ""),
++            Choice("Rating", if (changed) 2 else 0),
++            Sort("Order", Filter.Sort.Selection(if (changed) 1 else 0, !changed)),
++            Group("Tags", listOf(Check("Adventure", changed), Group("Nested", listOf(Text("Fandom", if (changed) "Novel" else ""))))),
++        )
++
++    private class Check(name: String, state: Boolean) : Filter.CheckBox(name, state)
++    private class Tri(name: String, state: Int) : Filter.TriState(name, state)
++    private class Text(name: String, state: String) : Filter.Text(name, state)
++    private class Choice(name: String, state: Int, values: Array<String> = arrayOf("A", "B", "C")) : Filter.Select<String>(name, values, state)
++    private class Sort(name: String, state: Filter.Sort.Selection?) : Filter.Sort(name, arrayOf("Name", "Date"), state)
++    private class Group(name: String, state: List<Filter<*>>) : Filter.Group<Filter<*>>(name, state)
++
++    private companion object {
++        const val SOURCE_ID = 7L
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 3a2f271600a8d61865e16cf88727cdbeaf7a861c..b9ebd4daecdbe4d6a8ccfd5a511390983aa8b1c1 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -82,10 +82,12 @@ The browse-source presenter and its existing holders form one approved presentat
+ 
+ Built-in source settings are another deliberate adapter seam. `BrowseSourceController` pushes E-Hentai sources into the Hayai account `SettingsController` inside J2K navigation and sends other built-in `ConfigurableSource` implementations to `SourceSettingsController`. This fixes JavaScript novel source settings without adding a second settings model or activity shell. Extension sources continue to use `ExtensionDetailsController`.
+ 
+-Saved source searches are an approved filter-sheet seam. One action on J2K's existing `SourceFilterSheet` stores the current query and recursively typed filter values through `SavedSourceSearchStore`. Restoring starts from the source's current filter schema and applies only structurally compatible values, so an extension update cannot replay an invalid select or sort index. The data is a bounded Hayai preference and therefore travels through J2K's existing preference backup rather than a second backup pipeline.
++Saved source searches now use J2K's source/global history, filter sheet, save dialog, and preference models introduced at the October 2026 baseline. The former `SavedSourceSearchStore` preference is migration input only. A Hayai adapter validates each preset against the installed source's current filter schema and imports complete representable states into J2K. Missing sources, stale or unrepresentable filters, and identity conflicts retain their original data for a later attempt. Deterministic migration identity makes target publication before legacy removal repeatable. The data remains covered by J2K's app-settings preference backup rather than a second backup pipeline.
+ 
+ The October metadata repair adds `NovelSeriesType` to the existing J2K genre-based type contract. `Manga.kt` delegates novel-tag recognition and its localized type label to Hayai; the existing details and bulk library editors use the shared series-type array. No type column, settings model, or library is added. The details/library presenters remove conflicting series tags before saving `Novel` through J2K's custom metadata. `NovelContentIdentity` classifies explicit novel tags before source or retained side-data evidence. The sole reader adapter and J2K download queue use that same identity, allowing an older text entry to be corrected even when its source lacks the current novel marker. The source must still provide real text or a saved document; changing a label cannot manufacture chapter content. J2K's existing custom-info backup option preserves this choice.
+ 
++Source-local gallery searches use `SourceGenreSearch` through `SourceCapabilityRegistry`. The existing details controller reuses a previous browse controller only when its source ID matches the gallery. New browse destinations stage tags until their view is ready. Namespaced multiword E-Hentai tags use the existing tag filter; categories select the matching category rather than checking its exclusion checkbox. Other source genre matching retains J2K behavior.
++
+ The `ExtensionInstaller.kt` and `ExtensionInstallerJob.kt` seams retain J2K's package installation and WorkManager scheduling. They make a package operation cancellable while queued, downloading, or installing, reject missing downloads/sessions as terminal retry states, and subscribe before producing installation events. Hayai owns small operation policies and batch cancellation. Existing extension manager/UI adapters publish newly installed untrusted APKs to the trust UI and cancel by package identity. `ShizukuInstaller` exposes cancellation of only the requested waiting package; cancellation is unavailable after its privileged session has committed. These seams do not introduce another installer or extension catalog.
+ 
+ Tsundoku extensions can implement its compile-only `eu.kanade.tachiyomi.source.SourceTracker` and `RateLimited` contracts. The compatibility declarations live under Hayai's `novel/compat` directory, with the required upstream package name as an explicit binary-interface exception. Preserve their interfaces, signatures, and Kotlin default implementations during minification. WTR-LAB and Novel Phoenix at NovelSourcery source commit `432f591ceac7a7bdd2d8ae9e65fa4ec91744320b` require these interfaces. This prevents class resolution failures; source-owned tracking callbacks remain **Foundation** and are not a claimed tracking port. Production callback dispatch remains separately audited, and no parallel rate-limit settings or chapter queue is added.
+@@ -138,6 +140,8 @@ Offline novel files are deliberately excluded, matching J2K's treatment of downl
+ 
+ ## Updating upstreams
+ 
++Hayai's Manga/Novels search scope remains attached to J2K's new global-search entry path, including searches restored with filters. Upstream owns saved-search storage and UI. Hayai's old source presets migrate into it only when the current source filter schema can represent their complete state; unresolved entries remain durable migration input. No second active saved-search writer or dialog remains. Both the upstream preferences and pending legacy entries use the existing app-settings backup path. Core and Hayai database schemas are unchanged.
++
+ The first October integration build confirmed that JitPack no longer provides J2K's pinned arkon FlexibleAdapter `c8013533` artifacts. Tsundoku `775508f3c6e8814ab38634874168948600e81574`, referencing Mihon `737fdbfbf`, switches to the canonical Maven Central artifact. Hayai follows that packaging correction for core 5.1.0 and UI 1.0.0 in `app/build.gradle.kts`, retaining the existing adapter API and ownership. Local caches are not a release dependency.
+ 
+ The canonical adapter automatically filters updates when a query exists. J2K's details and category adapters already produce filtered datasets, including its blank library placeholder. The existing `MangaDetailsAdapter` seam and new `LibraryCategoryAdapter` seam retain the superclass UPDATE path for those prepared lists while preserving the stored query for highlighting. This also keeps same-query refreshes and existing headers and footers. Browse and other adapters retain the dependency's normal filter behavior.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index eebd897faac67e7f84a0a6e5f1d5bb6d6d4f178b..14bfd0a0b6440ac05344b5cc4b321b303a7efcd3 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -76,6 +76,7 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ | Download and automatic-backup locations | Shared Hayai SAF validation under the existing J2K preferences, download provider, and backup worker; app-owned defaults avoid broad storage permission while selected trees retain durable write grants | implemented with focused path tests; Android picker, download, and scheduled-backup device verification pending |
+ | Localized Hayai interface | `hayai_` Android resources, typed presentation failures, a reviewed nonlocalizable-literal inventory, per-locale coverage, and deterministic SY translation imports | implemented; static gate verified; translation coverage remains incomplete and is reported per locale |
+ | Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
++| Search history and saved filters | J2K source/global history and saved-search UI; complete Hayai presets migrate into upstream preferences; unresolved presets remain migration input | upstream integration implemented; focused migration and device checks pending |
+ | Manga and novel extension management | J2K Extensions sheet with Manga, Novels, and Migration tabs; novel APK and JavaScript entries reuse the J2K row and action pipeline; both repository types reuse J2K's one-field inline repository UI; supplied Keiyoushi, Cursed Manga, and LNReader indexes seed once on first run and remain user-removable | port verified on emulator; Comikey 1.6.9 and Komga 1.0.2 installed and detected without false update or load-failed states |
+ | Custom application color | Hayai seed preference and picker in J2K Appearance settings; both base activity families apply Material's content-based color scheme after the selected base theme and before view inflation, with an explicit unsupported-device state | preference/policy/application seams covered by focused tests; live light/dark/AMOLED and unsupported-device verification pending |
+ | Cloudflare challenge bypass | Existing Mihon WebView solver with shared detection, SY legacy 403/503 recognition, and browser clearance handoff into typed EH clients; references Mihon `3a64c8d65cf9fe44346a5994642db440c73aa70a` and SY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42` | port of clearance handoff verified with real HTTP retry tests; successful proxied pages no longer rejected; authenticated Cloudflare emulator flow pending |
+diff --git a/docs/development/source-previews.md b/docs/development/source-previews.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..f92d03ba97c4249b9bad7f9e0bf567b2476d256c
+--- /dev/null
++++ b/docs/development/source-previews.md
+@@ -0,0 +1,11 @@
++# Source page previews
++
++The full preview screen reuses `SourcePreviewController`, its SY-sized thumbnail grid, the authenticated `SourceDetailsPreviewRegistry`, and `ReaderLauncher`. The behavior applies to every registered preview provider, including E-Hentai, ExHentai, NHentai, and LANraragi. Providers keep their existing ownership rules and gallery-page numbering.
++
++The layout menu offers **Paged** and **Continuous scroll**. Paged remains the default and displays one source listing at a time. Continuous scroll loads an adjacent listing as the grid approaches either end. Seeking into the middle of a gallery also loads the previous listing so the user can scroll backward without leaving the screen. Both modes use the existing **Go to page** slider, and previous/next actions remain available when a source cannot report its total page count.
++
++`SourcePreviewWindow` retains at most five contiguous listings. Global image indices preserve the first visible thumbnail and its vertical offset when listings are prepended or evicted. Stable RecyclerView IDs and DiffUtil updates retain visible thumbnail holders. Layout choice, current listing, and scroll anchor are view state stored in controller arguments; they introduce no second settings, chapter, or progress model. Tapping a thumbnail still opens the authoritative J2K chapter at the selected image index through `ReaderLauncher`.
++
++An explicit seek or layout change cancels the previous listing job. Destroying the view cancels listing and thumbnail jobs, invalidates queued layout callbacks, and recycles decoded bitmaps. A failed adjacent request preserves the visible grid and offers the existing Snackbar Retry action; it does not automatically repeat the failing request. Initial-page errors retain the existing EmptyView retry and ExHentai settings action.
++
++Focused coverage is in `SourcePreviewWindowTest`: middle-gallery seeks, forward/backward bounded windows, global anchors, unknown totals and terminal listings, and rejection of repeated or nonadjacent responses. Device verification should cover a gallery with several listings, switching layouts while scrolled, direct seeks, scrolling into previous/next listings, an interrupted request, and opening the expected reader image.
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 1a9718b55443e0c4ff56ce413f20bb335698cf70..1182900db4b36f8e6096e824f39d3fb30f0d31c7 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -643,7 +643,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	@Suppress("UNCHECKED_CAST")
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	arrayOf(context.getString(R.string.hayai_eh_filter_any), "2", "3", "4", "5"),
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	.map { tag -> prefix?.let { "$it$tag" } ?: tag }
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	"male", "female", "mixed", "location", "other",
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	"reclass", "language", "parody", "character", "group", "artist", "cosplayer",
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	const val ASSET_PATH = "hayai/eh_tags.txt"
++app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	return (NAMESPACES.asSequence().map { "$it:" } + tags.asSequence())
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	"$prefix$namespace$value"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	EhTagMode.Any -> "~"
+ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	EhTagMode.Exclude -> "-"
+@@ -3226,6 +3229,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	else -> "$first\n\n$second"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	require(output.length + read <= limit) { "Enhanced source details exceeded the size limit" }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	return joinToString("\n") { row ->
++app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceGenreSearch.kt	val value = tags.singleOrNull()?.trim()?.lowercase(Locale.ROOT)?.replace(" ", "")?.replace("-", "") ?: return null
++app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilter.kt	private val NAMESPACE = Regex("[a-z][a-z0-9_-]{0,31}:", RegexOption.IGNORE_CASE)
+ app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt	holder.input.setText("", false)
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt	const val MANGA_ID = "manga_id"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	EnhancedDescriptionLabel.Tags -> error("Tags are represented by SourceMetadataDocument.tags")
+@@ -3284,13 +3289,19 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	pr
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val root = File(context.cacheDir, "hayai_source_previews").apply { mkdirs() }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val files = root.walkTopDown().filter(File::isFile).filterNot { it.extension == "tmp" }.toList()
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val temporary = File.createTempFile("$key.", ".tmp", directory)
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val ANCHOR_INDEX = "hayai_preview_anchor"
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val ANCHOR_OFFSET = "hayai_preview_offset"
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val CONTINUOUS = "hayai_preview_continuous"
++app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val CURRENT_PAGE = "hayai_preview_page"
+ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val MANGA_ID = "manga_id"
+-app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	const val KEY = "hayai_saved_source_searches_v1"
++app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt	const val LEGACY_KEY = "hayai_saved_source_searches_v1"
++app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt	private val legacy = preferenceStore.getString(LEGACY_KEY, "[]")
++app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt	private val savedSearches = preferenceStore.getString(PreferenceKeys.savedSearches, "[]")
++app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt	val digest = MessageDigest.getInstance("SHA-256").digest("$sourceId\u0000$oldId".toByteArray(Charsets.UTF_8))
+ app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.CheckBox -> result += SavedFilterState(path, "check", filter.state.toString())
+ app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.Select<*> -> result += SavedFilterState(path, "select", filter.state.toString())
+ app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.Text -> result += SavedFilterState(path, "text", filter.state.take(MAX_TEXT_LENGTH))
+ app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.TriState -> result += SavedFilterState(path, "tri", filter.state.toString())
+-app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	private val preference = preferenceStore.getString(KEY, "[]")
+ app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	result += if (selection == null) SavedFilterState(path, "sort-none", "") else SavedFilterState(path, "sort", selection.index.toString(), selection.ascending)
+ app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "check" && filter is Filter.CheckBox -> saved.value.toBooleanStrictOrNull()?.let { filter.state = it; true }
+ app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "select" && filter is Filter.Select<*> -> saved.value.toIntOrNull()?.takeIf { it in filter.values.indices }?.let { filter.state = it; true }
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 5c1433f2b8ff581b1a4b112dbdba08e9826e6bac..24c766d09fea0a42fb30549206a472f7b70014b2 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -128,8 +128,6 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt"
+-        # Approved in docs/architecture/j2k-reset.md. Adds one saved-search action to the existing source filter sheet.
+-        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/SourceFilterSheet.kt"
+         # Approved in docs/architecture/j2k-reset.md. Optional typed rich-result and tag-filter presentation only.
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceGridHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceHolder.kt"
+-- 
+2.54.0.windows.1
+

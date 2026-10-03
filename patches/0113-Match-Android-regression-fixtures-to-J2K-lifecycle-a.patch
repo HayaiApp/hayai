@@ -1,0 +1,122 @@
+From 3b98013361656addb65c5fb3003bdfd0dd306a81 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 07:48:00 +0300
+Subject: [PATCH] Match Android regression fixtures to J2K lifecycle and
+ platform cleanup
+
+
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallerOwnerTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallerOwnerTest.kt
+index a65b064bf304c5d1860138ff0cb1e0ab59a24ccb..9a228a24a7cca158581aae7a6b5ef513b106261d 100644
+--- a/app/src/androidTest/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallerOwnerTest.kt
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallerOwnerTest.kt
+@@ -1,6 +1,7 @@
+ package dev.ahmedmohamed.hayai.extension.install
+ 
+ import android.content.pm.PackageInstaller
++import android.os.SystemClock
+ import androidx.test.ext.junit.runners.AndroidJUnit4
+ import androidx.test.platform.app.InstrumentationRegistry
+ import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
+@@ -50,7 +51,7 @@ class ExtensionInstallerOwnerTest {
+             assertNotNull(platform.getSessionInfo(session))
+             assertFalse(installer.isInstallActive(Long.MAX_VALUE))
+             installer.setInstalling("dev.hayai.fixture.cancelled", session, Long.MAX_VALUE)
+-            assertNull(platform.getSessionInfo(session))
++            awaitAbandonedSession(platform, session)
+             assertFalse(installer.isInstallActive(Long.MAX_VALUE, session))
+         } finally {
+             runCatching { platform.abandonSession(session) }
+@@ -76,7 +77,7 @@ class ExtensionInstallerOwnerTest {
+         try {
+             installer.setInstalling(pkg, retrySession, Long.MAX_VALUE)
+             installer.setInstalling(pkg, oldSession, Long.MAX_VALUE - 1)
+-            assertNull(platform.getSessionInfo(oldSession))
++            awaitAbandonedSession(platform, oldSession)
+             assertEquals(retrySession, installer.downloadInstallerMap[pkg])
+             installer.setInstallationResult(pkg, false, Long.MAX_VALUE - 1)
+             assertEquals(retrySession, installer.downloadInstallerMap[pkg])
+@@ -90,4 +91,13 @@ class ExtensionInstallerOwnerTest {
+             runCatching { platform.abandonSession(oldSession) }
+         }
+     }
++
++    private fun awaitAbandonedSession(platform: PackageInstaller, sessionId: Int) {
++        // PackageInstallerService removes abandoned sessions on its install handler.
++        val deadline = SystemClock.uptimeMillis() + 5_000
++        while (platform.getSessionInfo(sessionId) != null && SystemClock.uptimeMillis() < deadline) {
++            SystemClock.sleep(25)
++        }
++        assertNull("The platform did not remove abandoned session $sessionId", platform.getSessionInfo(sessionId))
++    }
+ }
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/ui/PrefilteredAdapterInstrumentedTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/ui/PrefilteredAdapterInstrumentedTest.kt
+index f463c680b7c938e0ef8f1dda82676d332035a412..fa33052421edc7219771882211cc6cf2735019e7 100644
+--- a/app/src/androidTest/java/dev/ahmedmohamed/hayai/ui/PrefilteredAdapterInstrumentedTest.kt
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/ui/PrefilteredAdapterInstrumentedTest.kt
+@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.database.models.Category
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+ import eu.kanade.tachiyomi.data.database.models.LibraryManga
+ import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.ui.library.LibraryCategoryAdapter
+ import eu.kanade.tachiyomi.ui.library.LibraryHeaderItem
+ import eu.kanade.tachiyomi.ui.library.LibraryItem
+@@ -15,12 +16,15 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
+ import eu.kanade.tachiyomi.ui.manga.MangaDetailsAdapter
+ import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
+ import eu.kanade.tachiyomi.ui.manga.chapter.ChapterItem
++import eu.kanade.tachiyomi.widget.AutofitRecyclerView
+ import org.junit.After
+ import org.junit.Assert.assertEquals
+ import org.junit.Assert.assertTrue
+ import org.junit.Before
+ import org.junit.Test
+ import org.junit.runner.RunWith
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
+ 
+ @RunWith(AndroidJUnit4::class)
+ class PrefilteredAdapterInstrumentedTest {
+@@ -89,8 +93,12 @@ class PrefilteredAdapterInstrumentedTest {
+         val other = libraryItem(header, 2, "Unrelated manga")
+         val later = libraryItem(header, 3, "New needle manga")
+         val placeholder = LibraryItem(LibraryManga.createBlank(123), header, null)
+-        activity.onActivity {
++        activity.onActivity { host ->
++            LibraryItem.updateDisplayPrefs()
+             adapter = LibraryCategoryAdapter(null)
++            val recycler = AutofitRecyclerView(host)
++            recycler.useStaggered(Injekt.get<PreferencesHelper>())
++            recycler.adapter = adapter
+             adapter.setFilter("title:needle")
+             adapter.setItems(listOf(first, other))
+         }
+diff --git a/tools/verify-hayai-emulator.ps1 b/tools/verify-hayai-emulator.ps1
+index 37274a580f5d3a21c04cb93396ca10c54b7ed860..b4d9d8a3cedb13d58c25a2faeab29ec642904947 100644
+--- a/tools/verify-hayai-emulator.ps1
++++ b/tools/verify-hayai-emulator.ps1
+@@ -437,7 +437,7 @@ try {
+     Capture "07-reader-settings-advanced"
+     Assert-NodeAfterSwiping "^Previous chapter$" "07-reader-settings-advanced-actions"
+     Capture "07-reader-settings-advanced-actions"
+-    Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
++    Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline" -MaximumSwipes 24
+     Start-Sleep -Seconds 3
+     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
+     Invoke-Adb @("shell", "am", "start", "-S", "-W", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.reader.ReaderActivity", "--el", "manga", "100", "--el", "chapter", "1000") | Out-Null
+@@ -454,7 +454,11 @@ try {
+     Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity") | Out-Null
+     $script:foregroundIntentArgs = @("shell", "am", "start", "--activity-reorder-to-front", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity")
+     Start-Sleep -Seconds 2
+-    Tap-Node "^More$" "07-eh-more"
++    Tap-Node "^(More|More options)$" "07-eh-more"
++    $overflowWindow = Dump-Window "07-main-overflow"
++    if ($null -eq (Find-NodeOptional $overflowWindow "^Settings$")) {
++        Tap-WindowNode (Find-Node $overflowWindow "^More$") "More"
++    }
+     Tap-Node "^Settings$" "07-eh-settings"
+     Tap-NodeAfterSwiping "^Reader$" "07-reader-settings"
+     Tap-NodeAfterSwiping "^Novel reader$" "07-novel-reader-settings"
+-- 
+2.54.0.windows.1
+

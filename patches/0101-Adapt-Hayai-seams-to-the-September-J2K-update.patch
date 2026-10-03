@@ -1,4 +1,4 @@
-From 0bf9f166d0bf03fce92198c322cc14cd78d7fbfe Mon Sep 17 00:00:00 2001
+From 035134e5d2330f113df9a521c9191de2bf0093fa Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 6 Sep 2026 16:39:21 +0300
 Subject: [PATCH] Adapt Hayai seams to the September J2K update
@@ -65,10 +65,10 @@ index 3fc77b5647f2e1bb2bd60bd1c696c87749155811..b49935dc87bdd8cf5fa44e4bd2c979a3
              hayaiReport.errors.forEach { error -> errors.add(Date() to "Hayai data: $error") }
              restoreProgress += 1
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-index caefaf77269138e7f87145dae1fd42d1de910173..bc4c1c3cfdded1d379ae233949d062ac5d08f48b 100644
+index 7994e5736748eb2dfc12f2f24bfaf666e276a2a3..8ed3aa99978249d2560af3a08de34c72ddb327cb 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-@@ -141,7 +141,7 @@ class PreferencesHelper(
+@@ -142,7 +142,7 @@ class PreferencesHelper(
  
      fun flashPageInterval() = flowPrefs.getInt(Keys.flashPageInterval, 1)
  

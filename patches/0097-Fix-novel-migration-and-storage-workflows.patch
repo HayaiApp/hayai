@@ -1,4 +1,4 @@
-From 67cb974faa20938cfb3ecabc7776a4ca8f310c52 Mon Sep 17 00:00:00 2001
+From bbc8e6dd72df264233008aa106a3b445d3bec548 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 30 Aug 2026 13:07:01 +0300
 Subject: [PATCH] Fix novel migration and storage workflows
@@ -888,7 +888,7 @@ index e7a1bc6bd8082a90eba7dca188693ef38f9aec68..b2ebbee9d6606ad8511f5b5c59fa0384
          }
      }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-index 0b223eb08eb433d8eeb3c1b6f46426bddf9d0de9..caefaf77269138e7f87145dae1fd42d1de910173 100644
+index 6e68061b71ad34c8c3e05fd97220746cffb12a1f..7994e5736748eb2dfc12f2f24bfaf666e276a2a3 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 @@ -1,14 +1,13 @@
@@ -907,7 +907,7 @@ index 0b223eb08eb433d8eeb3c1b6f46426bddf9d0de9..caefaf77269138e7f87145dae1fd42d1
  import dev.ahmedmohamed.hayai.preferences.getCompatibleEnum
  import eu.kanade.tachiyomi.BuildConfig
  import eu.kanade.tachiyomi.R
-@@ -37,7 +36,6 @@ import kotlinx.coroutines.flow.onEach
+@@ -38,7 +37,6 @@ import kotlinx.coroutines.flow.onEach
  import kotlinx.serialization.decodeFromString
  import kotlinx.serialization.encodeToString
  import kotlinx.serialization.json.Json
@@ -915,7 +915,7 @@ index 0b223eb08eb433d8eeb3c1b6f46426bddf9d0de9..caefaf77269138e7f87145dae1fd42d1
  import java.text.DateFormat
  import java.text.SimpleDateFormat
  import java.util.Locale
-@@ -84,23 +82,9 @@ class PreferencesHelper(
+@@ -85,23 +83,9 @@ class PreferencesHelper(
      private val prefs = TypeSafeSharedPreferences(PreferenceManager.getDefaultSharedPreferences(context))
      private val flowPrefs = FlowSharedPreferences(prefs)
  
@@ -1466,7 +1466,7 @@ index d24152e52c5ee331ed42d301c2b685a07115c8c7..b3236f460cceff39c1e6ad9395931b96
      fun migrateManga(
          mDialog: DialogInterface,
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 3be3ed9b130e1f0fb83f41ca78a7faf6da96e0c8..2b34f3c3b61bc5b508b18fd3ed34ceaa5f3bf61b 100644
+index b0876cbfea5dd97e49ad97723c9cd95e38461359..c86abaefeae7890048c102e73ad862ba8e5b05e2 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -16,6 +16,25 @@

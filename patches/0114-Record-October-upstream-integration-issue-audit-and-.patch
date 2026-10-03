@@ -1,0 +1,350 @@
+From d7faf37edb0caaf1847bb940df33d001bc47aef0 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 07:57:36 +0300
+Subject: [PATCH] Record October upstream integration, issue audit and scoped
+ verification
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 35184cfe779dcd5e9eeaf204ca7dc538154a97cf..315602335969e4aeadb8dcdfcd453a456f5bd518 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -163,10 +163,19 @@ ts	phase	decision	why	evidence	result
+ 2026-09-06T17:02:55.6903785+03:00	reader-content-sheets	reused J2K E2E sheets and Material controls for quotes, highlights, statistics, translation results, and fonts; moved legacy JSON import into overflow	no J2K file or storage-schema changes; 501 unit tests passed; 2 Android sheet tests passed after correcting text-field layout params and keyboard expansion; localization and boundary passed	NovelReaderAttachment.kt; NovelReaderContentSheet.kt; artifacts/novel-reader/sheets-instrumentation.log	VERIFIED_SCOPED
+ 2026-09-06T22:12:59.8085941+03:00	cloudflare-eh-clearance	reused the Mihon solver with SY legacy challenge detection; shared browser clearance across EH verification browse favorites and settings; removed passive CDN false positives	504 unit tests and DevDebug compilation passed; real HTTP retry and cookie scoping verified; authenticated login remains pending; no schema change	EhBrowserCookies.kt; CloudflareHelpDetector.kt; existing CloudflareInterceptor adapter; artifacts/novel-reader/cloudflare-validation.log	HTTP_UNIT_BOUNDARY_VERIFIED
+ 2026-09-06T22:55:53.6040369+03:00	manual-app-update-installation	removed automatic PackageInstaller sessions; reuse existing Install notification and clarify automatic download settings; keep work input and network preference compatibility	DevDebug compilation and 504 unit tests passed; localization boundary and whitespace passed; Xiaomi verification pending; no schema change; nightly startup diagnostics added after two missing-process failures	AppDownloadInstallJob.kt; AppUpdateNotifier.kt; SettingsGeneralController.kt; tools/verify-apk-startup.ps1; artifacts/novel-reader/manual-update-validation.log	COMPILE_UNIT_VERIFIED
++2026-10-03T06:30:26.1416506+03:00	upstream-october	Replayed 113 Hayai commits onto all 31 new J2K commits	Preserve the architectural parent and keep SY/Tsundoku as feature references	codex/pre-j2k-update-2026-10-03; codex/j2k-update-2026-10-03; docs/architecture/j2k-reset.md	REBASE_COMPLETE_VALIDATION_PENDING
+ 2026-10-03T06:30:26.2456950+03:00	saved-search-migration	Moved legacy presets into J2K saved filters and removed the old active writer	One authoritative UI and storage path; retain entries that current filters cannot represent	SavedSourceSearchMigration.kt; SavedSourceSearchMigrationTest.kt	IMPLEMENTED_VALIDATION_PENDING
+ 2026-10-03T06:30:26.2477346+03:00	novel-identity	Added Novel to existing editors and shared routing and download identity	Old text entries can opt into reading without duplicating J2K metadata	NovelSeriesType.kt; NovelContentIdentity.kt; ReaderLauncher.kt; NovelDocumentLoaderTest.kt	IMPLEMENTED_VALIDATION_PENDING
+ 2026-10-03T06:30:26.2503029+03:00	previews-and-tags	Reused the preview grid for continuous windows and seeking; kept gallery genres within their source	Preserve visible image anchors and SY tag semantics	SourcePreviewWindow.kt; SourcePreviewController.kt; SourceGenreSearch.kt; SourceTagCompletionFilter.kt	IMPLEMENTED_VALIDATION_PENDING
+ 2026-10-03T06:30:26.2528148+03:00	review-preview-route	Removed the image-index exception for manually classified Novel preview handoff	Independent review found both preview callers could throw after the type changed	ReaderLauncher.kt; ReaderLauncherInstrumentedTest.kt; NovelDocumentLoaderTest.kt	FIXED_VALIDATION_PENDING
++2026-10-03T06:30:26.2542645+03:00	upstream-and-issues	Mapped all ten Tsundoku commits and nine open GitHub issues	Distinguish applicable fixes from missing evidence and deferred feature requests	docs/development/tsundoku-update-2026-10-03.md; docs/development/github-issue-review-2026-10-03.md; artifacts/j2k-update-2026-10-03/issues.json	AUDITED_IMPLEMENTATION_IN_PROGRESS
+ 2026-10-03T06:42:20.7884232+03:00	dependency-publication	Replaced unavailable arkon JitPack artifacts with the published FlexibleAdapter core and UI used by Tsundoku	The first build failed before Kotlin; the initial equivalent mapping was incomplete when caches expired	artifacts/j2k-update-2026-10-03/gradle-validation.log; flexibleadapter-jitpack.log; tsundoku 775508f3c6; app/build.gradle.kts	CORRECTED_VALIDATION_PENDING
+ 2026-10-03T06:56:20.6835174+03:00	dependency-source-audit	Reviewed canonical FlexibleAdapter source differences and preserved J2K prefiltered datasets	Supersedes the earlier unqualified JitPack-log reference; synchronous guard retains same-query refresh, headers and placeholders	artifacts/j2k-update-2026-10-03/flexibleadapter-jitpack.log; artifacts/j2k-update-2026-10-03/flexibleadapter-source-audit.md; PrefilteredAdapterInstrumentedTest.kt	SOURCE_REVIEWED_RUNTIME_PENDING
+ 2026-10-03T06:56:20.6958765+03:00	resource-link-review	Reused existing singular Novel resource in the series type array and label	The second build failed before Kotlin on an undefined resource; Arabic label reviewed; upstream restore_duration warnings left unchanged	artifacts/j2k-update-2026-10-03/gradle-validation-complete.log; arrays.xml; Manga.kt; strings_hayai_misc.xml	FIXED_KOTLIN_TESTS_RUNNING
++2026-10-03T07:29:00+03:00	plugin-cancellation	Converted closed-socket cancellation to CancellationException while preserving real IOException failures	The first complete unit run exposed a real streaming cancellation failure; targeted four-test regression and later full suites passed	NovelPluginDownload.kt; artifacts/j2k-update-2026-10-03/plugin-cancellation-regression.log; final-reader-batch-validation.log	VERIFIED
++2026-10-03T07:29:01+03:00	novel-reader-october	Excluded HTML head metadata and removed only exact leading duplicate titles; sampled Web chapter identity below configured reading inset	Actual emulator showed three titles and stricter browser verification found short-final-chapter seek reporting its predecessor	NovelContentProcessor.kt; NovelHtmlDocumentBuilder.kt; artifacts/j2k-update-2026-10-03/browser-reader-final.log; emulator/20261003-042743/02-novel-reader.png	BROWSER_UNIT_VERIFIED_DEVICE_IN_PROGRESS
++2026-10-03T07:29:02+03:00	final-local-batch	Passed final Kotlin compile, 604 unit tests, both debug APK assemblies, localization, boundary and whitespace checks	Verify the coherent implementation after the actual cancellation, heading and chapter-boundary fixes	artifacts/j2k-update-2026-10-03/final-reader-batch-validation.log; localization-final.log; boundary-final.log; diff-check-final.log	PASSED
++2026-10-03T07:29:03+03:00	github-issue-refresh	Refreshed nine open issues and zero comments; no new or changed reports since initial October audit	No issue posts or closures were authorized; keep unresolved theme and translation requests scoped separately	docs/development/github-issue-review-2026-10-03.md; GitHub API refresh 2026-10-03 04:20 UTC	AUDITED
++2026-10-03T07:48:48.6169058+03:00	android-regression-verification	Passed all 21 unique Android regressions after exact platform timing and production host fixture corrections	Original full run had 19 passes and two fixture failures; the corrected five-test target covers both failures and three previous passes; main production code unchanged	artifacts/j2k-update-2026-10-03/android-tests-final.log; artifacts/j2k-update-2026-10-03/android-tests-fixture-host-targeted.log; artifacts/j2k-update-2026-10-03/emulator-final-harness.log; artifacts/j2k-update-2026-10-03/emulator/20261003-043633	VERIFIED_SCOPED
++2026-10-03T07:48:48.6169058+03:00	reader-idle-verification	Exact final APK stayed alive for 120 seconds and then passed full offline restart and settings navigation	The successful full harness used idle zero to avoid repeating the already verified 120-second check; authenticated EH credentials absent	artifacts/j2k-update-2026-10-03/emulator/20261003-042743; artifacts/j2k-update-2026-10-03/emulator/20261003-043633; artifacts/j2k-update-2026-10-03/emulator-verification-final.log	VERIFIED_SCOPED
++2026-10-03T07:56:34.5994353+03:00	production-novel-apk-debug	Verified published WTR-LAB 1.6.12 and Novel Phoenix 1.6.13 discovery, trust, source construction, live listings, and cold-restart persistence	Missing ABI and initial package-added publication reports require actual extension packages; external installation covers discovery and trust rather than the in-app download worker; signed minified repeat remains a publication gate	artifacts/j2k-update-2026-10-03/production-extension-debug/verification-facts.json	VERIFIED_SCOPED
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 2ca765e179a8f4558d9d321cae0b9859b7f5663f..495ae2fd008a4233a3acf111d3b640ccbc1557e1 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -140,6 +140,8 @@ Offline novel files are deliberately excluded, matching J2K's treatment of downl
+ 
+ ## Updating upstreams
+ 
++The October 3, 2026 integration advances J2K from `c88c8e1b3d864268785f6a9655ee471e4cc368c1` to `b83defe42b` (31 commits). This brings source and global search history, named saved searches and filters, search-header and back-navigation fixes, source-aware incognito keyboard behavior, duplicate-chapter download cleanup, recent-row corner corrections, tag contrast improvements, translations, and Android Gradle Plugin 9.3.3. The Gradle wrapper remains unchanged.
++
+ Hayai's Manga/Novels search scope remains attached to J2K's new global-search entry path, including searches restored with filters. Upstream owns saved-search storage and UI. Hayai's old source presets migrate into it only when the current source filter schema can represent their complete state; unresolved entries remain durable migration input. No second active saved-search writer or dialog remains. Both the upstream preferences and pending legacy entries use the existing app-settings backup path. Core and Hayai database schemas are unchanged.
+ 
+ The upstream `MainActivity` changes remain identical to the new parent. No new adapter is added to `App.kt`, `MainActivity.kt`, or the image `ReaderActivity.kt`. Duplicate chapter cleanup retains J2K's download authority and bookmark protection while applying the same category exclusions as ordinary read-based deletion.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index f836ebb56e1df59a876942ccac96b4420bc60ab4..c0b2816657d25d010fa3a4009869d23162a47272 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -1,6 +1,6 @@
+ # TachiyomiSY and Tsundoku feature audit
+ 
+-Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `4d744fc`, and J2K `c88c8e1b3d864268785f6a9655ee471e4cc368c1`.
++Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `a3e32c8b60`, and J2K `b83defe42b` (October 3, 2026 integration).
+ 
+ **Foundation** means a boundary or partial implementation exists. **Port** means the end-to-end production behavior is implemented and verified. **Audit** means upstream behavior is mapped but production work remains. This distinction prevents the clean baseline from being mistaken for the full multi-upstream port.
+ 
+@@ -14,7 +14,7 @@ Audit refs: TachiyomiSY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42`, Tsundoku `4d
+ | E-Hentai/ExHentai sources and login/session handling | Built-in source delegates and account gateway | foundation verified; logged-out emulator screen verified; authenticated login pending |
+ | EH source settings, default filters, enhanced browse/details toggles, and remote uconfig | Conditional dedicated main-settings page over typed desired settings, idempotent per-site profile uploader, partial retry UI, searchable controls, and independent SY browse/Hayai details preferences | port; settings placement and preference behavior implemented; authenticated emulator upload pending |
+ | EH favorites, categories, notes, watched tags, gallery updates | Durable three-way favorites plan, explicit category mappings, note-preserving remote gateway, resumable journal, updater state/statistics, and revision/download recovery | implemented unverified; authenticated emulator sync and updater flows pending |
+-| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, non-duplicated SY-style inline/full metadata UI in independent phone/tablet anchors, sprite-first current/legacy thumbnail parsing, versioned preview caches, SY-exact direct preview paging and geometry, reader-page handoff, detailed browse rows or image grids with metadata badges, SY-grouped filters, and the pinned SY tag catalog with autocomplete chips | port; live E-Hentai detailed/grid browse and page 1 to final-page preview navigation verified on emulator; authenticated ExHentai verification pending |
++| EH metadata, gallery versions, thumbnails/previews, and tag filtering | Typed metadata documents, non-duplicated SY-style inline/full metadata UI in independent phone/tablet anchors, sprite-first current/legacy thumbnail parsing, versioned preview caches, SY-exact direct preview paging and geometry, selectable continuous preview windows and seeking through the same grid, reader-page handoff, detailed browse rows or image grids with metadata badges, SY-grouped filters, and the pinned SY tag catalog with autocomplete chips | port for paged previews; live E-Hentai detailed/grid browse and page 1 to final-page navigation previously verified on emulator; five continuous-window and eight source-tag query/completion unit checks pass; continuous live-source and authenticated ExHentai verification pending |
+ | 8Muses/EroMuse, HBrowse, NHentai, Pururin/Puruin, LANraragi | ID-preserving delegated extension wrappers | implemented unverified for the source-specific behavior SY exposes |
+ | Custom descriptions, open-in-app, batch-add, and page previews | Capability-provided source actions, source-specific SY description layouts, adaptive SY preview rows, bounded listing/image caches, and a J2K-hosted preview controller | port; NHentai and LANraragi expose previews upstream, while 8Muses, HBrowse, and Pururin do not; live authenticated source verification remains pending |
+ | Raised metadata, titles, and tags | Additive schema, typed source documents, durable enhanced-source cache, inline summary, and a full metadata controller hosted by J2K navigation | port; E-Hentai fixture verified on emulator |
+@@ -42,10 +42,10 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+-| SourceTracker and RateLimited extension ABI | Host interfaces in the Hayai compatibility directory use the published extension package names; J2K remains the APK loader and tracking authority | foundation; production APK linkage and minified retention pending; optional tracking callbacks are not a completed tracking port |
+-| Editable Novel series type | Existing individual and bulk editors, J2K custom genres, and shared `NovelContentIdentity` for reading, library classification, and download routing | implemented; focused and device checks pending; source markers and durable novel evidence still determine identity after removing the manual Novel tag |
+-| Downloaded-entry text search and word density | Shared reader content sheets over existing chapter rows, local files, and `NovelDownloadStore`; cancellable literal/regex searches and coverage reports | implemented; verification pending; unavailable/corrupt chapters remain visible in coverage and no source fetch is started |
+-| One J2K reader, central routing, and J2K history | The actual J2K `ReaderActivity`, `ReaderViewModel`, `ReaderChapter`, `ViewerChapters`, toolbar, navigation overlay, slider, chapter sheet, preload request, and chapter loading path; Hayai adds only a `BaseViewer`, bounded adjacent-document window, normalized progress loader, and novel-action attachment. Native `TextView` and isolated `WebView` renderers remain document surfaces; the duplicate activity/chrome/chapter adapter are removed. | port; page counts are measured per chapter from real column fragments, page movement uses the document scroller and one viewport, and chapter scroll is separate from bidirectional continuous and paged reading; window updates preserve mounted text, and chapter crossings use J2K page selection; the September stability changes pass browser regressions and five native Android renderer checks, including real touchscreen selection; live-extension stress and full reader lifecycle checks remain pending |
++| SourceTracker and RateLimited extension ABI | Host interfaces in the Hayai compatibility directory use the published extension package names; J2K remains the APK loader and tracking authority | foundation; the published WTR-LAB 1.6.12 and Novel Phoenix 1.6.13 APKs load settings, filters, and live listings and retain trust across a debug-APK restart; signed minified retention is checked separately during publication; optional tracking callbacks are not a completed tracking port |
++| Editable Novel series type | Existing individual and bulk editors, J2K custom genres, and shared `NovelContentIdentity` for reading, library classification, and download routing | port; focused policy tests and two Android checks verify custom metadata persistence, source refresh, backup, and preview routing; source markers and durable novel evidence still determine identity after removing the manual Novel tag |
++| Downloaded-entry text search and word density | Shared reader content sheets over existing chapter rows, local files, and `NovelDownloadStore`; cancellable literal/regex searches and coverage reports | implemented; literal/regex, cancellation, readable-text, and file-coverage unit checks passed; unavailable/corrupt chapters remain visible in coverage and no source fetch is started; representative interactive search device checks remain pending |
++| One J2K reader, central routing, and J2K history | The actual J2K `ReaderActivity`, `ReaderViewModel`, `ReaderChapter`, `ViewerChapters`, toolbar, navigation overlay, slider, chapter sheet, preload request, and chapter loading path; Hayai adds only a `BaseViewer`, bounded adjacent-document window, normalized progress loader, and novel-action attachment. Native `TextView` and isolated `WebView` renderers remain document surfaces; the duplicate activity/chrome/chapter adapter are removed. | port; page counts are measured per chapter from real column fragments, page movement uses the document scroller and one viewport, and chapter scroll is separate from bidirectional continuous and paged reading; window updates preserve mounted text, and chapter crossings use J2K page selection; the October changes pass browser navigation and seven native Android checks, including touchscreen selection and exact title handling; two callback-lifecycle tests and the controlled idle/offline/settings emulator flow passed; live-extension reader stress remains pending |
+ | Source and extension artwork | Shared fitted, rounded icon binding for APK and URL artwork in Extensions, Browse, and migration; existing J2K row dimensions retained | Port; two Android checks verify Coil fit, rounded artwork bounds, and recycled crop/tint reset for wide and tall logos |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+ | Remote novel extension catalogs and installation | A Novels tab beside Manga and Migration over J2K APK authority and Hayai JavaScript authority; namespaced identities; explicit load failures; consistent duplicate reconciliation; shared-safe tagged repository ownership; and J2K's inline repository editor reused for both backends | port verified on emulator with a checksum-verified Keiyoushi Comikey APK and the production LNReader v3 repository; install, detection, settings, and source registration passed |
+@@ -77,11 +77,11 @@ Tsundoku areas audited include its novel source/text-fetch contract, extension a
+ | Download and automatic-backup locations | Shared Hayai SAF validation under the existing J2K preferences, download provider, and backup worker; app-owned defaults avoid broad storage permission while selected trees retain durable write grants | implemented with focused path tests; Android picker, download, and scheduled-backup device verification pending |
+ | Localized Hayai interface | `hayai_` Android resources, typed presentation failures, a reviewed nonlocalizable-literal inventory, per-locale coverage, and deterministic SY translation imports | implemented; static gate verified; translation coverage remains incomplete and is reported per locale |
+ | Browse content tabs and local novel discovery | J2K main tabs backed by shared `ContentKind`; scoped global search; language-independent local novel entry | port; repeated Browse/Recents navigation verified on emulator |
+-| Search history and saved filters | J2K source/global history and saved-search UI; complete Hayai presets migrate into upstream preferences; unresolved presets remain migration input | upstream integration implemented; focused migration and device checks pending |
++| Search history and saved filters | J2K source/global history and saved-search UI; complete Hayai presets migrate into upstream preferences; unresolved presets remain migration input | upstream integration implemented; 21 migration tests passed, including schema mismatch and interrupted publication; device preset restoration checks remain pending |
+ | Manga and novel extension management | J2K Extensions sheet with Manga, Novels, and Migration tabs; novel APK and JavaScript entries reuse the J2K row and action pipeline; both repository types reuse J2K's one-field inline repository UI; supplied Keiyoushi, Cursed Manga, and LNReader indexes seed once on first run and remain user-removable | port verified on emulator; Comikey 1.6.9 and Komga 1.0.2 installed and detected without false update or load-failed states |
+ | Custom application color | Hayai seed preference and picker in J2K Appearance settings; both base activity families apply Material's content-based color scheme after the selected base theme and before view inflation, with an explicit unsupported-device state | preference/policy/application seams covered by focused tests; live light/dark/AMOLED and unsupported-device verification pending |
+ | Cloudflare challenge bypass | Existing Mihon WebView solver with shared detection, SY legacy 403/503 recognition, and browser clearance handoff into typed EH clients; references Mihon `3a64c8d65cf9fe44346a5994642db440c73aa70a` and SY `14648c7cf0aa84e5a35d48de9dbf1386df6cca42` | port of clearance handoff verified with real HTTP retry tests; successful proxied pages no longer rejected; authenticated Cloudflare emulator flow pending |
+-| App update installation | J2K download worker and existing Install notification; automatic package sessions removed and automatic-download labels clarified | implementation complete; Xiaomi device verification pending |
++| App update installation | J2K download worker and existing Install notification; automatic package sessions removed and automatic-download labels clarified | port; actual Android notification check verifies a dismissible Install activity action and no package session creation; physical Xiaomi verification pending |
+ 
+ ## Completion rules
+ 
+diff --git a/docs/development/github-issue-review-2026-10-03.md b/docs/development/github-issue-review-2026-10-03.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d43b9b46723e86770020bc05353e19ea382c8bf6
+--- /dev/null
++++ b/docs/development/github-issue-review-2026-10-03.md
+@@ -0,0 +1,19 @@
++# GitHub issue review — October 3, 2026
++
++Reviewed all nine open issues and their comments through the GitHub API, then refreshed them at 04:20 UTC on October 3. There were no new or changed issues and no comments. Device reports without logs are not treated as reproduced crashes. No comments or issue closures were posted.
++
++| Issue | Evidence and disposition |
++|---|---|
++| [#58 — Tsundoku update](https://github.com/HayaiApp/hayai/issues/58) | The installation listener discarded a newly installed untrusted APK when there was no previously installed version. The trust-list publication and cancellation/retry lifecycle are repaired. The actual production WTR-LAB and Novel Phoenix APKs also reference missing SourceTracker/RateLimited host interfaces; their binary contracts and minification rules are restored. The published WTR-LAB 1.6.12 and Novel Phoenix 1.6.13 APKs appear immediately in Trust, publish real settings/filters, fetch live popular listings, and retain trust/source rows across a cold debug-APK restart. Signed minified linkage is checked during publication. External package installation verifies discovery/trust rather than the in-app download worker. |
++| [#57 — downloaded files disappear](https://github.com/HayaiApp/hayai/issues/57) | The report describes model extraction in “App 2.5.1,” supplies no Hayai version or usable log, and does not identify a Hayai feature. This tree has no downloaded model extraction workflow. A package/version and file path are needed before assigning a Hayai fix. |
++| [#56 — Read from here](https://github.com/HayaiApp/hayai/issues/56) | Identical chapter text caused the speech queue to ignore a newly requested paragraph. Explicit seeks now replace the queue position; ordinary document refreshes preserve it. Focused queue tests cover explicit seeks and refresh preservation; the emulator verifies the shared TTS controls. A live-extension seek stress check remains separate. |
++| [#55 — Max title lines](https://github.com/HayaiApp/hayai/issues/55) | Comfortable cards had a fixed two-line container even when the title allowed five lines. The existing holder now lets that container grow for longer novel titles and sets the line limit before measurement. Compact titles now use the same preference; cover-only mode has no visible title to expand. Dedicated one-to-five-line visual checks remain separate. |
++| [#54 — Tts on continuos reader](https://github.com/HayaiApp/hayai/issues/54) | A completed queue stayed beyond its last utterance when the same chapter was configured again. Playback can restart a completed queue, begin at the viewport, and resume a paused queue. Delayed callbacks must remain bound to the active chapter and main thread. No device crash stack was supplied. |
++| [#53 — Colofull](https://github.com/HayaiApp/hayai/issues/53) | This requests a different light-theme palette, rather than a reader or installation repair. Evaluate saturation alongside contrast in a separate theme change. |
++| [#52 — Auto-translation and bulk translation](https://github.com/HayaiApp/hayai/issues/52) | Existing offline translation work provides a reusable worker, but automatic transitions and chapter multi-selection need cancellation, target-language identity, and stale-result handling as a complete translation slice. Keep the request open for that work. |
++| [#51 — Translation](https://github.com/HayaiApp/hayai/issues/51) | Browse-title/description translation remains a presentation feature request. It needs bounded caching and original-text access without overwriting J2K metadata or starting network work on every row bind. |
++| [#48 — Hayai tts](https://github.com/HayaiApp/hayai/issues/48) | An explicit language choice is implemented in the existing reader sheet and full TTS settings. Automatic mode prefers the displayed translation/source language; unavailable engine languages report a recoverable error. Preference/queue tests and settings navigation pass; every engine/locale combination is not device-verified. |
++
++The additional reports in this task cover extension cancellation, reader idle crashes, source-local gallery searches, editable Novel identity, and continuous previews. The idle-crash report has no stack or reproduction interval; lifecycle hardening and controlled idle checks can provide scoped evidence, but cannot identify an unobserved Xiaomi/Samsung failure.
++
++Validation results and device limitations are recorded in `.audit/j2k-reset.tsv` and the maintenance plan after the implementation batch.
+diff --git a/docs/development/localization-coverage.md b/docs/development/localization-coverage.md
+index c707ca663b4905e6498bdaf9253af513196f0fab..49b1fe2a98ad6c4327ffc9cede69090ca288955c 100644
+--- a/docs/development/localization-coverage.md
++++ b/docs/development/localization-coverage.md
+@@ -4,70 +4,70 @@ Generated by `tools/verify-localization.ps1 -WriteCoverage`. Android uses the de
+ 
+ | Locale | Translated Hayai strings | Coverage |
+ |---|---:|---:|
+-| `ajp` | 0 / 1160 | 0.0% |
+-| `ar` | 39 / 1160 | 3.4% |
+-| `ars` | 0 / 1160 | 0.0% |
+-| `az` | 0 / 1160 | 0.0% |
+-| `bg` | 0 / 1160 | 0.0% |
+-| `bn` | 0 / 1160 | 0.0% |
+-| `ca` | 0 / 1160 | 0.0% |
+-| `ceb` | 0 / 1160 | 0.0% |
+-| `cs` | 0 / 1160 | 0.0% |
+-| `cv` | 0 / 1160 | 0.0% |
+-| `de` | 29 / 1160 | 2.5% |
+-| `el` | 0 / 1160 | 0.0% |
+-| `eo` | 0 / 1160 | 0.0% |
+-| `es` | 31 / 1160 | 2.7% |
+-| `eu` | 0 / 1160 | 0.0% |
+-| `fa` | 0 / 1160 | 0.0% |
+-| `fi` | 0 / 1160 | 0.0% |
+-| `fil` | 31 / 1160 | 2.7% |
+-| `fr` | 31 / 1160 | 2.7% |
+-| `gl` | 0 / 1160 | 0.0% |
+-| `ha` | 0 / 1160 | 0.0% |
+-| `hi` | 0 / 1160 | 0.0% |
+-| `hr` | 31 / 1160 | 2.7% |
+-| `hu` | 0 / 1160 | 0.0% |
+-| `in` | 31 / 1160 | 2.7% |
+-| `it` | 17 / 1160 | 1.5% |
+-| `iw` | 0 / 1160 | 0.0% |
+-| `ja` | 29 / 1160 | 2.5% |
+-| `jv` | 0 / 1160 | 0.0% |
+-| `ka` | 0 / 1160 | 0.0% |
+-| `kk` | 0 / 1160 | 0.0% |
+-| `km` | 0 / 1160 | 0.0% |
+-| `ko` | 7 / 1160 | 0.6% |
+-| `lt` | 0 / 1160 | 0.0% |
+-| `lv` | 0 / 1160 | 0.0% |
+-| `ml` | 0 / 1160 | 0.0% |
+-| `mn` | 0 / 1160 | 0.0% |
+-| `ms` | 0 / 1160 | 0.0% |
+-| `my` | 0 / 1160 | 0.0% |
+-| `nb-rNO` | 0 / 1160 | 0.0% |
+-| `ne` | 5 / 1160 | 0.4% |
+-| `nl` | 0 / 1160 | 0.0% |
+-| `nn` | 0 / 1160 | 0.0% |
+-| `om` | 0 / 1160 | 0.0% |
+-| `or` | 0 / 1160 | 0.0% |
+-| `pl` | 0 / 1160 | 0.0% |
+-| `pt` | 31 / 1160 | 2.7% |
+-| `pt-rBR` | 31 / 1160 | 2.7% |
+-| `ro` | 0 / 1160 | 0.0% |
+-| `ru` | 31 / 1160 | 2.7% |
+-| `sc` | 0 / 1160 | 0.0% |
+-| `si` | 0 / 1160 | 0.0% |
+-| `sk` | 0 / 1160 | 0.0% |
+-| `sq` | 0 / 1160 | 0.0% |
+-| `sr` | 0 / 1160 | 0.0% |
+-| `sv` | 0 / 1160 | 0.0% |
+-| `ta` | 31 / 1160 | 2.7% |
+-| `te` | 0 / 1160 | 0.0% |
+-| `th` | 0 / 1160 | 0.0% |
+-| `ti` | 0 / 1160 | 0.0% |
+-| `tl` | 0 / 1160 | 0.0% |
+-| `tr` | 31 / 1160 | 2.7% |
+-| `uk` | 7 / 1160 | 0.6% |
+-| `ur` | 0 / 1160 | 0.0% |
+-| `vi` | 5 / 1160 | 0.4% |
+-| `zh-rCN` | 31 / 1160 | 2.7% |
+-| `zh-rTW` | 31 / 1160 | 2.7% |
++| `ajp` | 0 / 1189 | 0.0% |
++| `ar` | 70 / 1189 | 5.9% |
++| `ars` | 0 / 1189 | 0.0% |
++| `az` | 0 / 1189 | 0.0% |
++| `bg` | 0 / 1189 | 0.0% |
++| `bn` | 0 / 1189 | 0.0% |
++| `ca` | 0 / 1189 | 0.0% |
++| `ceb` | 0 / 1189 | 0.0% |
++| `cs` | 0 / 1189 | 0.0% |
++| `cv` | 0 / 1189 | 0.0% |
++| `de` | 29 / 1189 | 2.4% |
++| `el` | 0 / 1189 | 0.0% |
++| `eo` | 0 / 1189 | 0.0% |
++| `es` | 31 / 1189 | 2.6% |
++| `eu` | 0 / 1189 | 0.0% |
++| `fa` | 0 / 1189 | 0.0% |
++| `fi` | 0 / 1189 | 0.0% |
++| `fil` | 31 / 1189 | 2.6% |
++| `fr` | 31 / 1189 | 2.6% |
++| `gl` | 0 / 1189 | 0.0% |
++| `ha` | 0 / 1189 | 0.0% |
++| `hi` | 0 / 1189 | 0.0% |
++| `hr` | 31 / 1189 | 2.6% |
++| `hu` | 0 / 1189 | 0.0% |
++| `in` | 31 / 1189 | 2.6% |
++| `it` | 17 / 1189 | 1.4% |
++| `iw` | 0 / 1189 | 0.0% |
++| `ja` | 29 / 1189 | 2.4% |
++| `jv` | 0 / 1189 | 0.0% |
++| `ka` | 0 / 1189 | 0.0% |
++| `kk` | 0 / 1189 | 0.0% |
++| `km` | 0 / 1189 | 0.0% |
++| `ko` | 7 / 1189 | 0.6% |
++| `lt` | 0 / 1189 | 0.0% |
++| `lv` | 0 / 1189 | 0.0% |
++| `ml` | 0 / 1189 | 0.0% |
++| `mn` | 0 / 1189 | 0.0% |
++| `ms` | 0 / 1189 | 0.0% |
++| `my` | 0 / 1189 | 0.0% |
++| `nb-rNO` | 0 / 1189 | 0.0% |
++| `ne` | 5 / 1189 | 0.4% |
++| `nl` | 0 / 1189 | 0.0% |
++| `nn` | 0 / 1189 | 0.0% |
++| `om` | 0 / 1189 | 0.0% |
++| `or` | 0 / 1189 | 0.0% |
++| `pl` | 0 / 1189 | 0.0% |
++| `pt` | 31 / 1189 | 2.6% |
++| `pt-rBR` | 31 / 1189 | 2.6% |
++| `ro` | 0 / 1189 | 0.0% |
++| `ru` | 31 / 1189 | 2.6% |
++| `sc` | 0 / 1189 | 0.0% |
++| `si` | 0 / 1189 | 0.0% |
++| `sk` | 0 / 1189 | 0.0% |
++| `sq` | 0 / 1189 | 0.0% |
++| `sr` | 0 / 1189 | 0.0% |
++| `sv` | 0 / 1189 | 0.0% |
++| `ta` | 31 / 1189 | 2.6% |
++| `te` | 0 / 1189 | 0.0% |
++| `th` | 0 / 1189 | 0.0% |
++| `ti` | 0 / 1189 | 0.0% |
++| `tl` | 0 / 1189 | 0.0% |
++| `tr` | 31 / 1189 | 2.6% |
++| `uk` | 7 / 1189 | 0.6% |
++| `ur` | 0 / 1189 | 0.0% |
++| `vi` | 5 / 1189 | 0.4% |
++| `zh-rCN` | 31 / 1189 | 2.6% |
++| `zh-rTW` | 31 / 1189 | 2.6% |
+diff --git a/docs/development/maintenance-2026-10-03.md b/docs/development/maintenance-2026-10-03.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..8ddf1ff1d0a1459e95c80b089dd8723e073adc48
+--- /dev/null
++++ b/docs/development/maintenance-2026-10-03.md
+@@ -0,0 +1,44 @@
++# October maintenance plan
++
++The starting Hayai revision is `36f69f075787f86eb0b12492dff37378f7aeee15`. A backup branch preserves it. J2K advances from `c88c8e1b3d` to `b83defe42b`; Tsundoku advances from `fe54f05ae0` to `a3e32c8b60`. SY remains at `14648c7cf0`.
++
++- [x] Read Poteto Mode's principles and the contributor contract.
++- [x] Fetch the three references and replay Hayai's commits onto J2K's 31 updates.
++- [x] Preserve legacy saved searches through J2K's canonical history and filter model, including default-filter activation and interrupted migration.
++- [x] Repair extension installation, trust, cancellation, and applicable Tsundoku update behavior.
++- [x] Repair reader lifecycle and navigation defects; map and port applicable Tsundoku reader and downloaded-text features.
++- [x] Add Novel to the existing metadata editor and use the same durable identity for library classification and chapter routing.
++- [x] Keep gallery tag searches in their source and match SY's tag completion behavior.
++- [x] Add continuous previews and seeking through the existing preview screen.
++- [x] Review all open GitHub issues and record the evidence and disposition.
++- [x] Complete the related adapter documentation, translations, feature audit, and decision trail.
++- [x] Run localization, boundary, compile, unit tests, APK assembly, and controlled emulator checks after the implementation batch.
++- [x] Review the actual diff and validation artifacts and commit focused feature changes.
++- [ ] Refresh and replay the patch series from its recorded J2K base.
++- [ ] Push master and verify the resulting nightly release.
++
++Completion requires coherent production paths, meaningful regression coverage, a replayable patch series based on current J2K, and a published nightly. An unreported-device crash or authenticated E-Hentai session remains unverified until exercised on the relevant device/session. A successful compile alone does not resolve those reports. The canonical decision trail is `.audit/j2k-reset.tsv`.
++
++Parallel work uses disjoint file ownership in this integration checkout. Shared J2K adapters and architecture documents are coordinated by the integration owner. This avoids concurrent Git index changes and lets the final review inspect one coherent tree. Validation is grouped after substantive implementation as required by the contributor contract.
++
++## Validation checkpoint
++
++| Check | Result |
++|---|---|
++| `:app:compileDevDebugKotlin :app:testDevDebugUnitTest :app:assembleDevDebug :app:assembleDevDebugAndroidTest -x :app:formatKotlin` | Passed after the final reader change; 604 tests, zero failures, errors, or skips. |
++| `tools/verify-novel-web-reader.cjs` | Passed production CSS/JavaScript containment, bidirectional chapter navigation, explicit seeks with custom margins, viewport anchors, pagination, snapping, and selection. |
++| `tools/verify-localization.ps1 -WriteCoverage` | Passed: 1189 Hayai keys, 67 supported locales, 20 locales with Hayai translations; reviewed protocol literals remain in the explicit inventory. |
++| `tools/verify-upstream-boundary.ps1` | Passed: 113 documented J2K adapter files. |
++| `git diff --check` | Passed. |
++| Dedicated `Hayai_Reader_Test` emulator flow | Passed sanitized v36 database import and row counts, native fixture content, J2K progress, TTS controls, all reader settings tabs, offline save/restart, full settings, Browse tabs, and final crash-log check. |
++| Controlled reader idle | Exact final APK remained alive for 120 seconds in `emulator/20261003-042743`; the complete subsequent harness used idle zero to avoid repeating that check. |
++| Published novel APK compatibility | Passed on the final debug APK: WTR-LAB 1.6.12 and Novel Phoenix 1.6.13 appear in Trust without restarting, load real settings/filters and live popular listings, and retain trust and source rows after cold restart. No linkage or application crash matches in captured per-PID logs. |
++| Android regression suite | All 21 unique tests have passing evidence: 16 retained from the full run plus five passing targeted installer/adapter checks after correcting fixture timing and RecyclerView setup. Native selection/title/viewport, stale callbacks, sheets, artwork, Novel metadata/backup, and the manual Install notification passed. |
++
++The first dependency build failed because JitPack had no artifacts for the pinned FlexibleAdapter commit. Source comparison and the published Maven switch preserve J2K's already-filtered datasets. A resource-link failure exposed an undefined Novel label, corrected by reusing the existing localized badge. The first complete unit run exposed a streaming cancellation exception; the cancellation and genuine network-failure regressions now pass. Actual emulator content exposed duplicated HTML chapter headings, and a stricter browser fixture exposed a short final chapter reporting its predecessor. Both production defects are corrected and covered.
++
++The original Android run had two fixture failures: Android removes abandoned package sessions asynchronously, and the standalone library adapter was missing its production RecyclerView attachment. The final fixture uses J2K's `AutofitRecyclerView`, display preferences, and layout setup, and waits at most five seconds for the exact abandoned session to disappear. Search/query/header/placeholder and operation-owner assertions remain intact. `android-tests-fixture-host-targeted.log` reports `OK (5 tests)`; the original full run and intermediate failures are preserved.
++
++Logs are retained under `artifacts/j2k-update-2026-10-03/`. The passing full flow is `emulator/20261003-043633`, with `emulator-final-harness.log`. Android 37 uses the existing APK's 16 KB compatibility mode. Scoped recovery dismisses only System UI ANRs and the platform compatibility prompt; application crash assertions remain active. Narrow-display gestures avoid action reorder handles, and the main settings route follows J2K's overflow menu. Authenticated EH checks are explicitly skipped without test credentials. Production extension, patch replay, and release verification results are recorded separately. Core/Hayai database schemas and legacy database write policy are unchanged. Existing custom metadata and app-settings backup preserve the Novel choice and migrated saved searches.
++
++This checkpoint is committed before regenerating the patch series and publishing. The final replay comparison and signed nightly results belong to the shipping artifacts and task handoff; unchecked publication steps here do not claim a release that has not happened yet.
+diff --git a/docs/development/tsundoku-update-2026-10-03.md b/docs/development/tsundoku-update-2026-10-03.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..9bf3156ce627d516a5b2dcd57d7bc6c6ccbdd1ad
+--- /dev/null
++++ b/docs/development/tsundoku-update-2026-10-03.md
+@@ -0,0 +1,20 @@
++# Tsundoku update mapping
++
++The reference advanced from `fe54f05ae038cbc2ae72713c6ac68a2fbccb11af` to `a3e32c8b60` on October 3, 2026. All ten new commits were inspected. J2K remains the architectural parent.
++
++| Tsundoku commit | Hayai disposition |
++|---|---|
++| `a3e32c8b60` downloaded word counts and density | Rebuilt in `NovelEntryContentTools` and `NovelWordDensity`, using the existing reader sheet and downloaded chapter store. Counts include coverage for unavailable or unreadable files. |
++| `455cb456c1` downloaded-entry text search | Rebuilt over J2K chapter rows and local downloaded documents with case, word, and regular-expression options. Cancelled searches and changed queries cannot publish stale results. |
++| `27b0cefd97` Android 8 PrecomputedText crash | Hayai's native renderer does not call platform `PrecomputedText`. Its selectable TextView path already avoids the unavailable API. |
++| `c3c8a20861` font list scrolling and long labels | Hayai already uses a RecyclerView sheet for imported fonts and constrained labels in the existing spinner. No duplicate selector is added. |
++| `cc36869a0b` JavaScript plugins in Update all | Existing Hayai Update all already includes plugins. Its operation queue is repaired to cancel queued or active downloads and clear failed/cancelled state. |
++| `775508f3c6` upstream FlexibleAdapter | Ported the switch to published Maven Central core 5.1.0 and UI 1.0.0. The first integration build confirmed JitPack's pinned arkon commit has no artifacts. Existing adapter classes remain authoritative; no adapter tree is copied. |
++| `b04f9a4d39` SourceTracker release ABI | Preserve the published optional interface at its binary package name in the Hayai compatibility directory, with release keep rules. This enables compatible APK linkage; optional source tracking callback dispatch remains Foundation. |
++| `626397e15f` EPUB book title in chapter titles | Ported the title-selection behavior in Hayai's EPUB parser with title and sibling-heading fixtures. |
++| `b9c23e2363` custom metadata reset on refresh | J2K's existing `CustomMangaManager` getters retain custom fields while `SManga.copyFrom` refreshes originals. The new Novel type uses that same favorite-entry custom-genre path. |
++| `3cbd993ba6` paged WebView reader | Hayai already has paged WebView rendering through `NovelRenderPlan.Web(Paged)` and measured document geometry. Existing browser pagination regressions are retained. |
++
++The source audit also found Novel Phoenix implementing the compile-only `RateLimited` interface. Its host ABI is restored beside SourceTracker; rate-limit storage and chapter queues remain Hayai/J2K owned. Missing host interfaces can prevent an installed APK from entering the trust list or publishing sources.
++
++Verification results belong in the October maintenance plan and `.audit/j2k-reset.tsv`. A mapped equivalent does not imply every upstream behavior has been tested on every device.
+diff --git a/tools/localization/upstream-hardcoded-ui.txt b/tools/localization/upstream-hardcoded-ui.txt
+index 163bcc72bc4244362825a49b347f779bc6a274fa..76d32bcbf54ae48fd080c12b28aae1a120887745 100644
+--- a/tools/localization/upstream-hardcoded-ui.txt
++++ b/tools/localization/upstream-hardcoded-ui.txt
+@@ -1,4 +1,4 @@
+-# J2K-owned hardcoded UI literals present at c88c8e1b3d864268785f6a9655ee471e4cc368c1.
++# J2K-owned hardcoded UI literals present at b83defe42b2ac9f460667bda3a42fdd9d12e767e.
+ # Regenerate only while rebasing onto a reviewed J2K baseline:
+ # .\tools\verify-localization.ps1 -WriteUpstreamBaseline -UpstreamRef j2k/master
+ app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadNotifier.kt	setContentTitle("$title - $chapter".chop(30))
+-- 
+2.54.0.windows.1
+

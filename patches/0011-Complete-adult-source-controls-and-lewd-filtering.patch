@@ -1,4 +1,4 @@
-From 1881922fe321234fb04b84f3f8f231f6b0ed0d4c Mon Sep 17 00:00:00 2001
+From ce710c35735b94fcefa4c3edbd6261f0e4cfea5c Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 20 Aug 2026 19:55:31 +0300
 Subject: [PATCH] Complete adult source controls and lewd filtering
@@ -463,10 +463,10 @@ index 713d70b7a02f6c06ceb1ed74c5157860c02ecd56..1becc381a1350892045cdaeec6f4d4ba
                      titleRes = R.string.hayai_novel_plugins
                      summaryRes = R.string.hayai_novel_plugins_summary
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
-index b3911988133273e3ea41258eb7c1c0cd1d618c73..bcd738d89d1be22d29b907736f82ca50bec7e80a 100644
+index 5e5beeceaf471d24429e01e8032734d19a687823..1943ddae6a204fdd2ad64a25c80b579d22ece6e8 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
-@@ -177,7 +177,7 @@ class SettingsBrowseController : SettingsController() {
+@@ -208,7 +208,7 @@ class SettingsBrowseController : SettingsController() {
                          val hiddenCatalogues = preferences.hiddenSources().get()
                          val enabledSources =
                              sourceManager
@@ -476,7 +476,7 @@ index b3911988133273e3ea41258eb7c1c0cd1d618c73..bcd738d89d1be22d29b907736f82ca50
                                  .filterNot { it.id.toString() in hiddenCatalogues }
                                  .sortedBy { "(${it.lang}) ${it.name}" }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt
-index b2bf1828ccf8ec77e565e0b5fe62ba003d7fcc3c..ddf623ad0db72a2c35a36563b6a28e3d1eab4561 100644
+index 17e980900b8b0d23de848744531d2d9f7a40e198..5b1b637bc86ecaf8c47e3a946d6396dc19f70da0 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsSourcesController.kt
 @@ -31,7 +31,7 @@ class SettingsSourcesController :
@@ -502,10 +502,10 @@ index cbcbdd8f56c8c86d8a9e697494485e44bf20290a..9530de7996c7bca7b6c7dcc20b50a1bc
              .filterNot { it.id.toString() in hiddenCatalogues }
              .sortedBy { "(${it.lang}) ${it.name}" }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
-index f9e0f82775c80fdc6c319a569c8c3366e90997cb..734a6f437e2f7d9a690c9b546e9f8990b578f2f4 100644
+index f0b5fd24e8ac0f269c55bb7befd5f9b93909800c..51585a629e4ced23449c5da0005ac949eaa15ea8 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/globalsearch/GlobalSearchPresenter.kt
-@@ -96,7 +96,7 @@ open class GlobalSearchPresenter(
+@@ -129,7 +129,7 @@ open class GlobalSearchPresenter(
  
          val list =
              sourceManager
@@ -515,7 +515,7 @@ index f9e0f82775c80fdc6c319a569c8c3366e90997cb..734a6f437e2f7d9a690c9b546e9f8990
                  .filterNot { it.id.toString() in hiddenCatalogues }
                  .sortedBy { "(${it.lang}) ${it.name}" }
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 59a9d34ce39528a537bf5c7b38450a248e28061d..d81a8e3fe8253c5be5f87280364ba19c4b11a062 100644
+index 873a82c94ba640d752f6aaac3c0b74e3cd5d4285..74766e7123585ba42e2ed163a6bb6c34c8aeb603 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -11,10 +11,8 @@

@@ -1,4 +1,4 @@
-From e974c551d46f42669b6a9ba3b676ead491f11e61 Mon Sep 17 00:00:00 2001
+From b2162176b85eec8fb058f0f8aa70dc5550aaae0d Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Fri, 21 Aug 2026 01:06:09 +0300
 Subject: [PATCH] Integrate source badges and built-in settings
@@ -548,7 +548,7 @@ index c0643febedc6ff98443ac5e1c941a1f41d8f724a..6e422289641f031631705c8997396f0a
          binding.sourcePin.apply {
              iconTint =
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-index 4ddf91334008f09d7d62e101ecd2bfe58c19dfc0..d7dea028e23d8ce28d9b060a174dfc7c132e1847 100644
+index 119309920d9ab2242e4fae5433f8c95e36b3fc86..d51d75991bb16dd9bab047a8bc3d7477d3e0f454 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 @@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
@@ -559,7 +559,7 @@ index 4ddf91334008f09d7d62e101ecd2bfe58c19dfc0..d7dea028e23d8ce28d9b060a174dfc7c
  import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
  import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
  import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
-@@ -537,13 +538,16 @@ open class BrowseSourceController(
+@@ -629,13 +630,16 @@ open class BrowseSourceController(
              activity?.let { startActivity(Intent(it, EhSettingsActivity::class.java)) }
              return
          }

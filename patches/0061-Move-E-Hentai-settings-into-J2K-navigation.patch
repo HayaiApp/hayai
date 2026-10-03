@@ -1,4 +1,4 @@
-From 562825fac3565e29edc41b1ec4b5a6695145eb66 Mon Sep 17 00:00:00 2001
+From fbf8ca50a7838d1a6e6cdfdf827f792b9e6bd7ed Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 13:45:49 +0300
 Subject: [PATCH] Move E-Hentai settings into J2K navigation
@@ -996,7 +996,7 @@ index d8300e0b0ab9c5e7b9bedc76cd2e02d625394c15..63e5a578eba8352ae84e103258dd6ad9
  
                  preference {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-index d7dea028e23d8ce28d9b060a174dfc7c132e1847..ac4faf27712ffd24968b2fd1a3d0364fe66288d7 100644
+index d51d75991bb16dd9bab047a8bc3d7477d3e0f454..ba42a1176ab3aafc8cb7ac60e0d37677544a159f 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 @@ -1,6 +1,5 @@
@@ -1015,7 +1015,7 @@ index d7dea028e23d8ce28d9b060a174dfc7c132e1847..ac4faf27712ffd24968b2fd1a3d0364f
  import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
  import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
  import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
-@@ -535,7 +534,7 @@ open class BrowseSourceController(
+@@ -627,7 +626,7 @@ open class BrowseSourceController(
  
      private fun openSourceSettings() {
          if (EhSite.entries.any { it.sourceId == presenter.source.id }) {

@@ -1,4 +1,4 @@
-From eb767ba466014992d032bf899d3318c56c82fe6d Mon Sep 17 00:00:00 2001
+From 4ef0ad9a6eff7dd2d700f501f2673212646fee33 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Thu, 3 Sep 2026 19:46:09 +0300
 Subject: [PATCH] Complete novel reader and source issue fixes
@@ -1229,7 +1229,7 @@ index 4336d981e087fbfa67d6d41ce397773abed85ff6..5e1744237c2224c42e97ea96c0526c3e
                      bindTo(preferences.markDuplicateReadChapterAsRead())
                      titleRes = R.string.pref_mark_duplicate_read_chapter_read
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-index a21121045258020c0eb219a4414cd3473e184187..56a763d4cf487ce4e9183128504969029795fcfc 100644
+index 1fe2eccfef3be3412a83ad1ab5d8a464377a090f..3717b8f0492b6c215628a985a049884b882b920d 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 @@ -9,6 +9,8 @@ import android.view.MenuInflater
@@ -1257,7 +1257,7 @@ index a21121045258020c0eb219a4414cd3473e184187..56a763d4cf487ce4e918312850496902
  import eu.kanade.tachiyomi.databinding.BrowseSourceControllerBinding
  import eu.kanade.tachiyomi.source.CatalogueSource
  import eu.kanade.tachiyomi.source.ConfigurableSource
-@@ -70,6 +76,8 @@ import eu.kanade.tachiyomi.widget.EmptyView
+@@ -78,6 +84,8 @@ import eu.kanade.tachiyomi.widget.EmptyView
  import eu.kanade.tachiyomi.widget.LinearLayoutManagerAccurateOffset
  import timber.log.Timber
  import uy.kohesive.injekt.injectLazy
@@ -1266,7 +1266,7 @@ index a21121045258020c0eb219a4414cd3473e184187..56a763d4cf487ce4e918312850496902
  import kotlin.math.roundToInt
  
  /**
-@@ -113,6 +121,7 @@ open class BrowseSourceController(
+@@ -121,6 +129,7 @@ open class BrowseSourceController(
       */
      private val preferences: PreferencesHelper by injectLazy()
      private val ehPreferences: EhPreferences by injectLazy()
@@ -1274,15 +1274,7 @@ index a21121045258020c0eb219a4414cd3473e184187..56a763d4cf487ce4e918312850496902
  
      /**
       * Adapter containing the list of manga from the catalogue.
-@@ -434,6 +443,7 @@ open class BrowseSourceController(
-             presenter.sourceFilters = newFilters
-             sheet.setFilters(presenter.filterItems)
-         }
-+        sheet.onSavedClicked = { showSavedSearches(sheet) }
-         sheet.setOnDismissListener {
-             filterSheet = null
-         }
-@@ -443,6 +453,73 @@ open class BrowseSourceController(
+@@ -528,6 +537,73 @@ open class BrowseSourceController(
          sheet.show()
      }
  
@@ -1356,89 +1348,11 @@ index a21121045258020c0eb219a4414cd3473e184187..56a763d4cf487ce4e918312850496902
      /**
       * Attempts to restart the request with a new genre-filtered query.
       * If the genre name can't be found the filters,
-diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/SourceFilterSheet.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/SourceFilterSheet.kt
-index 0a1b3e0884c9252984681b4c317a09e4aa68c518..099d72ca6a852f637148fe790616be422f67bf0e 100644
---- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/SourceFilterSheet.kt
-+++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/SourceFilterSheet.kt
-@@ -31,6 +31,7 @@ class SourceFilterSheet(
-     var onSearchClicked = {}
- 
-     var onResetClicked = {}
-+    var onSavedClicked = {}
- 
-     override var recyclerView: RecyclerView? = binding.filtersRecycler
- 
-@@ -42,6 +43,7 @@ class SourceFilterSheet(
-     init {
-         binding.searchBtn.setOnClickListener { dismiss() }
-         binding.resetBtn.setOnClickListener { onResetClicked() }
-+        binding.savedBtn.setOnClickListener { onSavedClicked() }
- 
-         sheetBehavior.peekHeight = 450.dpToPx
-         sheetBehavior.collapse()
-@@ -127,6 +129,11 @@ class SourceFilterSheet(
-         }
-     }
- 
-+    fun dismissWithoutSearch() {
-+        filterChanged = false
-+        dismiss()
-+    }
-+
-     fun setFilters(items: List<IFlexible<*>>) {
-         adapter.updateDataSet(items)
-     }
-diff --git a/app/src/main/res/layout/source_filter_sheet.xml b/app/src/main/res/layout/source_filter_sheet.xml
-index 09f15541aedc9906b62dab9b36e22af1aa7e55c0..b31a5417830ed0857b25a38dfca0e813c01a414a 100644
---- a/app/src/main/res/layout/source_filter_sheet.xml
-+++ b/app/src/main/res/layout/source_filter_sheet.xml
-@@ -64,16 +64,27 @@
-             android:layout_height="wrap_content"
-             android:text="@string/reset"
-             app:layout_constraintBottom_toBottomOf="parent"
--            app:layout_constraintEnd_toStartOf="@id/search_btn"
-+            app:layout_constraintEnd_toStartOf="@id/saved_btn"
-             app:layout_constraintHorizontal_chainStyle="spread_inside"
-             app:layout_constraintStart_toStartOf="parent"
-             app:layout_constraintTop_toTopOf="parent" />
- 
-+        <com.google.android.material.button.MaterialButton
-+            android:id="@+id/saved_btn"
-+            style="@style/Widget.Material3Expressive.Button.TextButton"
-+            android:layout_width="wrap_content"
-+            android:layout_height="wrap_content"
-+            android:text="@string/hayai_saved_searches"
-+            app:layout_constraintBottom_toBottomOf="parent"
-+            app:layout_constraintEnd_toStartOf="@id/search_btn"
-+            app:layout_constraintStart_toEndOf="@id/reset_btn"
-+            app:layout_constraintTop_toTopOf="parent" />
-+
-         <com.google.android.material.button.MaterialButton
-             android:id="@+id/search_btn"
-             android:layout_width="wrap_content"
-             android:layout_height="wrap_content"
--            android:layout_marginStart="48dp"
-+            android:layout_marginStart="8dp"
-             android:layout_marginEnd="16dp"
-             android:text="@string/filter"
-             app:flow_verticalBias="1.0"
-@@ -81,9 +92,9 @@
-             app:layout_constraintBottom_toBottomOf="parent"
-             app:layout_constraintEnd_toEndOf="parent"
-             app:layout_constraintHorizontal_chainStyle="spread"
--            app:layout_constraintStart_toEndOf="@id/reset_btn"
-+            app:layout_constraintStart_toEndOf="@id/saved_btn"
-             app:layout_constraintTop_toTopOf="parent"
--            app:layout_constraintWidth_min="150dp" />
-+            app:layout_constraintWidth_min="96dp" />
- 
-         <View
-             android:id="@+id/bottom_divider"
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index 2b34f3c3b61bc5b508b18fd3ed34ceaa5f3bf61b..eae692c74b4e49d983d320b8c17106ecaf0ffa86 100644
+index c86abaefeae7890048c102e73ad862ba8e5b05e2..ab9584fff71c8c52b567aefdd44716deb092433c 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1349,4 +1349,15 @@
+@@ -1364,4 +1364,15 @@
      <string name="hayai_novel_plugin_install_warning">This plugin can access websites and store source settings through Hayai’s restricted JavaScript bridge. Install only if you trust its repository.</string>
      <string name="hayai_remove_repository_confirmation">Remove %1$s? Installed plugins from this repository stay installed until you uninstall them.</string>
      <string name="refresh">Refresh</string>

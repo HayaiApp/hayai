@@ -1,4 +1,4 @@
-From b08d30b5dff7b6e408279ea3ef369656a00ce3ca Mon Sep 17 00:00:00 2001
+From 1f5dfa0d0fcd8a0a24d6b63155a4a67d37bc6501 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sat, 22 Aug 2026 11:23:51 +0300
 Subject: [PATCH] Restore SY source metadata and preview surfaces
@@ -30711,20 +30711,20 @@ index ab0a81ceab6f9d1956f2684e412ddae43334d754..1cf506a824162ff782993456830cc328
          // Update the cover.
          if (manga.thumbnail_url == null) {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourcePresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourcePresenter.kt
-index fd82330fa8bc6d2cfc42ab0cc099aa2efdf0b654..da485a85c57ef59ffe614fdf2dcf789e74c18254 100644
+index d5633e46684ded606e1346b95943bbc2a82721a7..7aead3576929fb06d459c84e440cf084583ff342 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourcePresenter.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourcePresenter.kt
-@@ -26,6 +26,9 @@ import eu.kanade.tachiyomi.ui.source.filter.TextItem
- import eu.kanade.tachiyomi.ui.source.filter.TextSectionItem
- import eu.kanade.tachiyomi.ui.source.filter.TriStateItem
- import eu.kanade.tachiyomi.ui.source.filter.TriStateSectionItem
+@@ -29,6 +29,9 @@ import eu.kanade.tachiyomi.ui.source.filter.TriStateSectionItem
+ import eu.kanade.tachiyomi.ui.source.searchhistory.FilterApplyResult
+ import eu.kanade.tachiyomi.ui.source.searchhistory.SavedFilter
+ import eu.kanade.tachiyomi.ui.source.searchhistory.applyTo
 +import dev.ahmedmohamed.hayai.source.filter.SourceTagCompletionFilter
 +import dev.ahmedmohamed.hayai.source.filter.SourceTagCompletionItem
 +import dev.ahmedmohamed.hayai.source.presentation.SourceBrowsePresentationProvider
  import eu.kanade.tachiyomi.util.manga.duplicateLibraryMangaIds
  import eu.kanade.tachiyomi.util.system.launchIO
  import eu.kanade.tachiyomi.util.system.withUIContext
-@@ -200,6 +203,7 @@ open class BrowseSourcePresenter(
+@@ -224,6 +227,7 @@ open class BrowseSourcePresenter(
                                          sourceListType,
                                          outlineCovers,
                                          isDuplicateInLibrary = it.id in duplicateIds,
@@ -30732,7 +30732,7 @@ index fd82330fa8bc6d2cfc42ab0cc099aa2efdf0b654..da485a85c57ef59ffe614fdf2dcf789e
                                      )
                                  }
                              this@BrowseSourcePresenter.items.addAll(items)
-@@ -338,7 +342,12 @@ open class BrowseSourcePresenter(
+@@ -362,7 +366,12 @@ open class BrowseSourcePresenter(
                  is Filter.Separator -> SeparatorItem(filter)
                  is Filter.CheckBox -> CheckboxItem(filter)
                  is Filter.TriState -> TriStateItem(filter)

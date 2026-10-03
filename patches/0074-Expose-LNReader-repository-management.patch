@@ -1,4 +1,4 @@
-From 0e59e969ae182dc7dc5d03c9faa5d909d1cab1dc Mon Sep 17 00:00:00 2001
+From b84415c3ec593c67345d27f40a985822190371fc Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 10:21:34 +0300
 Subject: [PATCH] Expose LNReader repository management
@@ -69,7 +69,7 @@ index 0000000000000000000000000000000000000000..5be901bf11a6a86a6d4ee1aa1d4e3059
 +    }
 +}
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
-index 79fac5430548f4dd01130da7f6c3669902be693a..dbb48247c8429689904ca54e582a913ef232abbb 100644
+index df881ccfd1013fbf6d5275c3f0a27b315586bfb3..cabd9321124c3ae931917d4888fe1796d96ed815 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
 @@ -5,8 +5,8 @@ import android.content.Intent
@@ -82,7 +82,7 @@ index 79fac5430548f4dd01130da7f6c3669902be693a..dbb48247c8429689904ca54e582a913e
  import eu.kanade.tachiyomi.BuildConfig
  import eu.kanade.tachiyomi.R
  import eu.kanade.tachiyomi.data.notification.Notifications
-@@ -26,7 +26,6 @@ import uy.kohesive.injekt.injectLazy
+@@ -27,7 +27,6 @@ import uy.kohesive.injekt.injectLazy
  
  class SettingsBrowseController : SettingsController() {
      val sourceManager: SourceManager by injectLazy()
@@ -90,7 +90,7 @@ index 79fac5430548f4dd01130da7f6c3669902be693a..dbb48247c8429689904ca54e582a913e
      var updatedExtNotifPref: SwitchPreferenceCompat? = null
  
      override fun setupPreferenceScreen(screen: PreferenceScreen) =
-@@ -70,11 +69,10 @@ class SettingsBrowseController : SettingsController() {
+@@ -71,11 +70,10 @@ class SettingsBrowseController : SettingsController() {
                  preference {
                      key = "pref_edit_novel_extension_repos"
  
@@ -106,7 +106,7 @@ index 79fac5430548f4dd01130da7f6c3669902be693a..dbb48247c8429689904ca54e582a913e
                  if (ExtensionManager.canAutoInstallUpdates()) {
                      val intPref =
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-index b22b06e479e028775729e5dbfc8cf3530f5b6dc5..29346c7774c5b831b7e52758d01902d8c7d01829 100644
+index adfe9e3806745cb5a41b1873ad578cca26c80181..636dc6b52736f34288b7983eb1fcdef9fb4fcc18 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 @@ -25,6 +25,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -117,7 +117,7 @@ index b22b06e479e028775729e5dbfc8cf3530f5b6dc5..29346c7774c5b831b7e52758d01902d8
  import eu.davidea.flexibleadapter.FlexibleAdapter
  import eu.davidea.flexibleadapter.items.IFlexible
  import eu.kanade.tachiyomi.R
-@@ -429,7 +430,13 @@ class BrowseController :
+@@ -455,7 +456,13 @@ class BrowseController :
                  }
                  R.id.action_ext_repos -> {
                      val kind = ContentKind.fromPosition(binding.bottomSheet.tabs.selectedTabPosition)

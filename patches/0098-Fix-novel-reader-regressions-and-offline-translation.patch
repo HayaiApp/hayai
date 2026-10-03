@@ -1,4 +1,4 @@
-From d4d4dc5b2981afeec9f0989cd4f2b3d746616e99 Mon Sep 17 00:00:00 2001
+From 3b2b4e2137190b10daa03f68b4d35e2d274009e8 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Tue, 1 Sep 2026 12:10:00 +0300
 Subject: [PATCH] Fix novel reader regressions and offline translation
@@ -3929,7 +3929,7 @@ index 0000000000000000000000000000000000000000..e73e1ab6d8afb2988eb12f98d77c0f00
 +    }
 +}
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt
-index d63cbf71061e9ce48382a990fdb9e743faec62db..05ffc360680ddd052ddd72c084b9e6c8b1f1c7b1 100644
+index 81c5b0fd28b759a326a1d71c05f38a2cedf0b503..b9fce6c78ce11342149a2988e8927d97dcf82da0 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt
 @@ -424,6 +424,7 @@ class ReaderViewModel(

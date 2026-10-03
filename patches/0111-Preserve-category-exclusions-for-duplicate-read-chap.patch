@@ -1,0 +1,139 @@
+From 17154fe22a47e9e73d721f8768d1bc57f619e500 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 07:23:58 +0300
+Subject: [PATCH] Preserve category exclusions for duplicate read chapter
+ deletion
+
+
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/reader/ReadChapterDeletionPolicy.kt b/app/src/main/java/dev/ahmedmohamed/hayai/reader/ReadChapterDeletionPolicy.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b301b1b769c3187e7b1f7152b5bfc3a8c657d21
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/reader/ReadChapterDeletionPolicy.kt
+@@ -0,0 +1,14 @@
++package dev.ahmedmohamed.hayai.reader
++
++// J2K 3d06488991 adds duplicate deletion; retain the category policy shared by reader deletions.
++internal object ReadChapterDeletionPolicy {
++    fun allowsDeletion(
++        removeAfterReadSlots: Int,
++        excludedCategoryIds: Set<Int>,
++        mangaCategoryIds: () -> List<Int>,
++    ): Boolean {
++        if (removeAfterReadSlots == -1) return false
++        if (excludedCategoryIds.isEmpty()) return true
++        return mangaCategoryIds().ifEmpty { listOf(0) }.none { it in excludedCategoryIds }
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt
+index b9fce6c78ce11342149a2988e8927d97dcf82da0..e95d0f836314e3f5574482ac88bd924054bfbcfc 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/reader/ReaderViewModel.kt
+@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+ import dev.ahmedmohamed.hayai.novel.reader.NovelProgressPage
+ import dev.ahmedmohamed.hayai.novel.reader.NovelReaderProgress
++import dev.ahmedmohamed.hayai.reader.ReadChapterDeletionPolicy
+ import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+ import eu.kanade.tachiyomi.ui.reader.settings.OrientationType
+ import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
+@@ -609,23 +610,18 @@ class ReaderViewModel(
+             chapterToDownload = null
+         }
+         // Check if deleting option is enabled and chapter exists
+-        if (removeAfterReadSlots != -1 && chapterToDelete != null) {
+-            val excludedCategories = preferences.removeExcludeCategories().get().map(String::toInt)
+-            if (excludedCategories.any()) {
+-                val categories =
+-                    db
+-                        .getCategoriesForManga(manga!!)
+-                        .executeAsBlocking()
+-                        .mapNotNull { it.id }
+-                        .ifEmpty { listOf(0) }
+-
+-                if (categories.any { it in excludedCategories }) return
+-            }
+-
++        if (chapterToDelete != null && canDeleteReadChapters(removeAfterReadSlots)) {
+             enqueueDeleteReadChapters(chapterToDelete)
+         }
+     }
+ 
++    private fun canDeleteReadChapters(removeAfterReadSlots: Int): Boolean =
++        ReadChapterDeletionPolicy.allowsDeletion(
++            removeAfterReadSlots,
++            preferences.removeExcludeCategories().get().map(String::toInt).toSet(),
++            { db.getCategoriesForManga(manga!!).executeAsBlocking().mapNotNull { it.id } },
++        )
++
+     /**
+      * Marks other unread chapters sharing the same chapter number as [readerChapter] as read,
+      * if the user has enabled that behavior in the library settings.
+@@ -650,7 +646,7 @@ class ReaderViewModel(
+         duplicateUnreadChapters.forEach { it.read = true }
+         db.updateChaptersProgress(duplicateUnreadChapters).executeAsBlocking()
+ 
+-        if (preferences.removeAfterReadSlots().get() != -1) {
++        if (canDeleteReadChapters(preferences.removeAfterReadSlots().get())) {
+             val downloadedDuplicates = duplicateUnreadChapters.filter { downloadManager.isChapterDownloaded(it, manga) }
+             if (downloadedDuplicates.isNotEmpty()) {
+                 downloadManager.enqueueDeleteChapters(downloadedDuplicates, manga)
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/reader/ReadChapterDeletionPolicyTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/reader/ReadChapterDeletionPolicyTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..2818ead74df463569d897d7c585ab7575d957fda
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/reader/ReadChapterDeletionPolicyTest.kt
+@@ -0,0 +1,37 @@
++package dev.ahmedmohamed.hayai.reader
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ReadChapterDeletionPolicyTest {
++    @Test
++    fun `completing a duplicate respects every assigned category exclusion`() {
++        for (slots in listOf(0, 2)) {
++            assertFalse(ReadChapterDeletionPolicy.allowsDeletion(slots, setOf(8)) { listOf(3, 8) })
++        }
++    }
++
++    @Test
++    fun `default category protects a manga without explicit categories`() {
++        assertFalse(ReadChapterDeletionPolicy.allowsDeletion(0, setOf(0)) { emptyList() })
++        assertTrue(ReadChapterDeletionPolicy.allowsDeletion(0, setOf(0)) { listOf(3) })
++    }
++
++    @Test
++    fun `disabled deletion never queries manga categories`() {
++        assertFalse(ReadChapterDeletionPolicy.allowsDeletion(-1, setOf(8)) { error("Unexpected category lookup") })
++    }
++
++    @Test
++    fun `unrestricted deletion needs no category lookup`() {
++        assertTrue(ReadChapterDeletionPolicy.allowsDeletion(0, emptySet()) { error("Unexpected category lookup") })
++    }
++
++    @Test
++    fun `unrelated category exclusion permits normal and duplicate deletion`() {
++        for (slots in listOf(0, 2)) {
++            assertTrue(ReadChapterDeletionPolicy.allowsDeletion(slots, setOf(8)) { listOf(3, 7) })
++        }
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index b9ebd4daecdbe4d6a8ccfd5a511390983aa8b1c1..4a400cccbd4fe1fe86da2da6452642e0b9befb62 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -142,6 +142,8 @@ Offline novel files are deliberately excluded, matching J2K's treatment of downl
+ 
+ Hayai's Manga/Novels search scope remains attached to J2K's new global-search entry path, including searches restored with filters. Upstream owns saved-search storage and UI. Hayai's old source presets migrate into it only when the current source filter schema can represent their complete state; unresolved entries remain durable migration input. No second active saved-search writer or dialog remains. Both the upstream preferences and pending legacy entries use the existing app-settings backup path. Core and Hayai database schemas are unchanged.
+ 
++The upstream `MainActivity` changes remain identical to the new parent. No new adapter is added to `App.kt`, `MainActivity.kt`, or the image `ReaderActivity.kt`. Duplicate chapter cleanup retains J2K's download authority and bookmark protection while applying the same category exclusions as ordinary read-based deletion.
++
+ The first October integration build confirmed that JitPack no longer provides J2K's pinned arkon FlexibleAdapter `c8013533` artifacts. Tsundoku `775508f3c6e8814ab38634874168948600e81574`, referencing Mihon `737fdbfbf`, switches to the canonical Maven Central artifact. Hayai follows that packaging correction for core 5.1.0 and UI 1.0.0 in `app/build.gradle.kts`, retaining the existing adapter API and ownership. Local caches are not a release dependency.
+ 
+ The canonical adapter automatically filters updates when a query exists. J2K's details and category adapters already produce filtered datasets, including its blank library placeholder. The existing `MangaDetailsAdapter` seam and new `LibraryCategoryAdapter` seam retain the superclass UPDATE path for those prepared lists while preserving the stored query for highlighting. This also keeps same-query refreshes and existing headers and footers. Browse and other adapters retain the dependency's normal filter behavior.
+-- 
+2.54.0.windows.1
+

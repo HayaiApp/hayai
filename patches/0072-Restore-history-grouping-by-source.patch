@@ -1,4 +1,4 @@
-From 44af65e411586b137c083a4fefd755d75e030b32 Mon Sep 17 00:00:00 2001
+From dfb1aa49203bc161922808fa0e92d0c8f5896f57 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 09:09:00 +0300
 Subject: [PATCH] Restore history grouping by source
@@ -54,10 +54,10 @@ index 7ad84c10dcd0abb7bdab507170cfdbd54320e559..7a86ede285b761f0e1bd61c6b4be08ce
          combine(hiddenInHistory.changes(), hiddenInUpdates.changes()) { _, _ -> Unit }
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-index bf5802738013cdfa810d8404e1b0f573f361849b..c81e6df5c30f9717fa3af7e3829829b56885ee5e 100644
+index fbcb33b30eaec422d6bc786a8be69fd530ccac14..6fcb399cf02763543c9f18beeea29036475d8eb8 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/data/preference/PreferencesHelper.kt
-@@ -460,7 +460,6 @@ class PreferencesHelper(
+@@ -497,7 +497,6 @@ class PreferencesHelper(
          flowPrefs.getCompatibleEnum(
              "group_chapters_history_type",
              RecentsPresenter.GroupType.ByWeek,
@@ -403,7 +403,7 @@ index 6187f23a67277e57e965e6c5d2fd51a42c89b592..688ff91f4bf97b8a1526597bbdf90141
      </string-array>
  
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index c1ed735d4dae06da931461e3c789ee4d12abf1fa..c42175401cf5bd64ee6aeaf01cf80c5ed79623f2 100644
+index be7d3c49da3601e212097bb820e8465ffb076d6b..0c3513c0806f7cba83e58da7e8232978b33e3dea 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
 @@ -312,6 +312,7 @@

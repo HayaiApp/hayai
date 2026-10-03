@@ -1,0 +1,2638 @@
+From ca858f1d85071cb29ef7d7b3a1be3b74bbfdd363 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 07:22:46 +0300
+Subject: [PATCH] Repair extension cancellation, trust publication and novel
+ APK compatibility
+
+
+diff --git a/app/proguard-rules.pro b/app/proguard-rules.pro
+index 85a73ca3e4501a39edacfcbc67dc6c44ae45beec..6c323a99cad0df3fe2d776c8334cd5cd147382f6 100644
+--- a/app/proguard-rules.pro
++++ b/app/proguard-rules.pro
+@@ -1,6 +1,11 @@
+ -dontobfuscate
+ 
+ -keep class eu.kanade.tachiyomi.source.** { public protected *; } # Avoid access modification
++# Compile-only Tsundoku SourceTracker ABI, including legacy Kotlin default delegates.
++-keep interface eu.kanade.tachiyomi.source.SourceTracker { *; }
++-keep class eu.kanade.tachiyomi.source.SourceTracker$DefaultImpls { *; }
++-keep interface eu.kanade.tachiyomi.source.RateLimited { *; }
++-keep class eu.kanade.tachiyomi.source.RateLimited$DefaultImpls { *; }
+ -keep,allowoptimization class eu.kanade.** { public protected *; }
+ -keep,allowoptimization class dev.ahmedmohamed.hayai.** { public protected *; }
+ -keep,allowoptimization class tachiyomi.** { public protected *; }
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallerOwnerTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallerOwnerTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a65b064bf304c5d1860138ff0cb1e0ab59a24ccb
+--- /dev/null
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallerOwnerTest.kt
+@@ -0,0 +1,93 @@
++package dev.ahmedmohamed.hayai.extension.install
++
++import android.content.pm.PackageInstaller
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.async
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.withTimeoutOrNull
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Test
++import org.junit.runner.RunWith
++
++@RunWith(AndroidJUnit4::class)
++class ExtensionInstallerOwnerTest {
++    @Test
++    fun cancelAfterCompletedInstallDoesNotPublishAnErrorForItsRow() = runBlocking {
++        val context = InstrumentationRegistry.getInstrumentation().targetContext
++        val installer = ExtensionInstaller(context)
++        val operations = ExtensionInstaller::class.java.getDeclaredField("operations").let { field ->
++            field.isAccessible = true
++            field.get(installer) as ExtensionInstallOperations
++        }
++        val pkg = "dev.hayai.fixture.completed"
++        val owner = Job()
++        operations.replace(pkg, owner)
++        operations.finish(pkg, owner)
++        owner.complete()
++        val event = async(start = CoroutineStart.UNDISPATCHED) {
++            withTimeoutOrNull(500) { installer.downloadSharedFlow.first { it.first == pkg } }
++        }
++        installer.cancelInstallation(pkg)
++        assertNull(event.await())
++        assertFalse(owner.isCancelled)
++    }
++
++    @Test
++    fun stalePlatformSessionIsAbandonedInsteadOfRegisteringAfterCancellation() {
++        val context = InstrumentationRegistry.getInstrumentation().targetContext
++        val platform = context.packageManager.packageInstaller
++        val installer = ExtensionInstaller(context)
++        val session = platform.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
++        try {
++            assertNotNull(platform.getSessionInfo(session))
++            assertFalse(installer.isInstallActive(Long.MAX_VALUE))
++            installer.setInstalling("dev.hayai.fixture.cancelled", session, Long.MAX_VALUE)
++            assertNull(platform.getSessionInfo(session))
++            assertFalse(installer.isInstallActive(Long.MAX_VALUE, session))
++        } finally {
++            runCatching { platform.abandonSession(session) }
++        }
++    }
++
++    @Test
++    fun resolvedOldDownloadCannotOverwriteOrFinishTheReplacementSession() {
++        val context = InstrumentationRegistry.getInstrumentation().targetContext
++        val platform = context.packageManager.packageInstaller
++        val installer = ExtensionInstaller(context)
++        val owner = Job()
++        val operations = ExtensionInstaller::class.java.getDeclaredField("operations").let { field ->
++            field.isAccessible = true
++            field.get(installer) as ExtensionInstallOperations
++        }
++        val pkg = "dev.hayai.fixture.replacement"
++        // Reproduce replacement after Manager resolved the old download ID to this package.
++        operations.replace(pkg, owner)
++        installer.activeDownloads[pkg] = Long.MAX_VALUE
++        val retrySession = platform.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
++        val oldSession = platform.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
++        try {
++            installer.setInstalling(pkg, retrySession, Long.MAX_VALUE)
++            installer.setInstalling(pkg, oldSession, Long.MAX_VALUE - 1)
++            assertNull(platform.getSessionInfo(oldSession))
++            assertEquals(retrySession, installer.downloadInstallerMap[pkg])
++            installer.setInstallationResult(pkg, false, Long.MAX_VALUE - 1)
++            assertEquals(retrySession, installer.downloadInstallerMap[pkg])
++            assertNotNull(platform.getSessionInfo(retrySession))
++        } finally {
++            installer.activeDownloads.clear()
++            installer.downloadInstallerMap.clear()
++            operations.finish(pkg, owner)
++            owner.cancel()
++            runCatching { platform.abandonSession(retrySession) }
++            runCatching { platform.abandonSession(oldSession) }
++        }
++    }
++}
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/update/ManualAppUpdateInstrumentedTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/update/ManualAppUpdateInstrumentedTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..25f20b328330b9a343cda5e9ee7083d3a1b808cb
+--- /dev/null
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/update/ManualAppUpdateInstrumentedTest.kt
+@@ -0,0 +1,53 @@
++package dev.ahmedmohamed.hayai.update
++
++import android.Manifest
++import android.app.Notification
++import android.app.NotificationManager
++import android.net.Uri
++import android.os.Build
++import androidx.test.core.app.ActivityScenario
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.notification.Notifications
++import eu.kanade.tachiyomi.data.updater.AppUpdateNotifier
++import eu.kanade.tachiyomi.ui.main.MainActivity
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import org.junit.runner.RunWith
++
++@RunWith(AndroidJUnit4::class)
++class ManualAppUpdateInstrumentedTest {
++    @Test
++    fun completedDownloadPostsDismissibleInstallActionWithoutStartingAPackageSession() {
++        val instrumentation = InstrumentationRegistry.getInstrumentation()
++        val context = instrumentation.targetContext
++        if (Build.VERSION.SDK_INT >= 33) {
++            instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.POST_NOTIFICATIONS)
++        }
++        val notifications = context.getSystemService(NotificationManager::class.java)
++        val installer = context.packageManager.packageInstaller
++        val sessionsBefore = installer.mySessions.map { it.sessionId }.toSet()
++        val scenario = ActivityScenario.launch(MainActivity::class.java)
++        try {
++            scenario.onActivity { activity ->
++                val notifier = AppUpdateNotifier(activity)
++                notifier.onDownloadStarted()
++                notifier.onDownloadFinished(Uri.parse("content://${context.packageName}.provider/manual-update-fixture.apk"))
++            }
++            instrumentation.waitForIdleSync()
++            val notification = notifications.activeNotifications.single { it.id == Notifications.ID_INSTALL }.notification
++            val install = notification.actions.single { it.title.toString() == context.getString(R.string.install) }
++            assertTrue(install.actionIntent.isActivity)
++            assertEquals(install.actionIntent, notification.contentIntent)
++            assertFalse(notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
++            assertEquals(sessionsBefore, installer.mySessions.map { it.sessionId }.toSet())
++        } finally {
++            notifications.cancel(Notifications.ID_INSTALL)
++            notifications.cancel(Notifications.ID_UPDATER)
++            scenario.close()
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconciler.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconciler.kt
+index a9f3325e6812af6bea7fa8a9f50258bd980feb05..6a60e33208072d779efb36ba8068cc161165864e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconciler.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/ExtensionCatalogReconciler.kt
+@@ -1,6 +1,7 @@
+ package dev.ahmedmohamed.hayai.extension
+ 
+ import eu.kanade.tachiyomi.extension.model.Extension
++import dev.ahmedmohamed.hayai.extension.managed.ApkExtensionSnapshot
+ 
+ /**
+  * Gives every APK-extension consumer the same package and version decision.
+@@ -9,6 +10,12 @@ import eu.kanade.tachiyomi.extension.model.Extension
+  * list, update check, and installer leaves an update permanently pending.
+  */
+ object ExtensionCatalogReconciler {
++    fun recordUntrusted(snapshot: ApkExtensionSnapshot, extension: Extension.Untrusted): ApkExtensionSnapshot = snapshot.copy(
++        installed = snapshot.installed.filterNot { it.pkgName == extension.pkgName },
++        untrusted = snapshot.untrusted.filterNot { it.pkgName == extension.pkgName } + extension,
++        failures = snapshot.failures.filterNot { it.packageName == extension.pkgName },
++    )
++
+     fun newestCopies(extensions: List<Extension.Available>): List<Extension.Available> =
+         extensions
+             .groupBy(Extension.Available::pkgName)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallActions.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallActions.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d760a1d99e55c7b3e9059421155340a955b84577
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallActions.kt
+@@ -0,0 +1,12 @@
++package dev.ahmedmohamed.hayai.extension.install
++
++import eu.kanade.tachiyomi.extension.model.InstallStep
++
++object ExtensionInstallActions {
++    fun canCancel(step: InstallStep?, hasSession: Boolean): Boolean =
++        when (step) {
++            InstallStep.Pending, InstallStep.Downloading, InstallStep.Loading -> true
++            InstallStep.Installing -> hasSession
++            else -> false
++        }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallBatch.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallBatch.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..88b48b4d25d7ef74163c692cee3cc9b96d9f2665
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallBatch.kt
+@@ -0,0 +1,44 @@
++package dev.ahmedmohamed.hayai.extension.install
++
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.joinAll
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Semaphore
++import kotlinx.coroutines.sync.withPermit
++
++/** Per-package cancellation inside J2K's existing WorkManager batch. */
++class ExtensionInstallBatch(private val parallelism: Int = 3) {
++    private val jobs = mutableMapOf<String, Job>()
++    private val cancelled = mutableSetOf<String>()
++
++    fun wasCancelled(packageName: String): Boolean = synchronized(this) { packageName in cancelled }
++
++    suspend fun run(packageNames: List<String>, install: suspend CoroutineScope.(String) -> Unit) = coroutineScope {
++        val semaphore = Semaphore(parallelism)
++        val children = packageNames.distinct().map { packageName ->
++            launch(start = CoroutineStart.LAZY) {
++                semaphore.withPermit { install(packageName) }
++            }.also { job ->
++                synchronized(this@ExtensionInstallBatch) {
++                    jobs[packageName] = job
++                    if (packageName in cancelled) job.cancel()
++                }
++            }
++        }
++        try {
++            children.forEach { it.start() }
++            children.joinAll()
++        } finally {
++            synchronized(this@ExtensionInstallBatch) { jobs.clear() }
++        }
++    }
++
++    @Synchronized
++    fun cancel(packageName: String) {
++        cancelled += packageName
++        jobs[packageName]?.cancel()
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallEvent.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallEvent.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..455f694e6364209127f924cfd6abd710ab8eeda9
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallEvent.kt
+@@ -0,0 +1,19 @@
++package dev.ahmedmohamed.hayai.extension.install
++
++import eu.kanade.tachiyomi.ui.extension.ExtensionIntallInfo
++import kotlinx.coroutines.Job
++
++/** An event belongs to the attempt that produced it, even after another attempt starts. */
++data class ExtensionInstallEvent(val packageName: String, val info: ExtensionIntallInfo, val owner: Job?) {
++    fun belongsTo(packageName: String, owner: Job): Boolean = this.packageName == packageName && this.owner === owner
++
++    fun isVisible(currentOwner: Job?, latestOwner: Job?): Boolean =
++        if (packageName.startsWith("Finished") || packageName.startsWith("Uninstalled")) {
++            owner == null
++        } else {
++            owner === latestOwner && (
++                (owner != null && owner.isActive && owner === currentOwner) ||
++                    (info.first.isCompleted() && (currentOwner == null || owner === currentOwner))
++                )
++        }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallOperations.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallOperations.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..de80dbe1a966ad5cd121ff80d4f94c34a2fcc16d
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallOperations.kt
+@@ -0,0 +1,50 @@
++package dev.ahmedmohamed.hayai.extension.install
++
++import kotlinx.coroutines.Job
++
++/** Transient ownership of installer work; package state remains in J2K. */
++class ExtensionInstallOperations {
++    private val jobs = mutableMapOf<String, Job>()
++    private val latest = mutableMapOf<String, Job>()
++
++    @Synchronized
++    fun replace(packageName: String, job: Job, cleanUp: () -> Unit = {}) {
++        jobs.remove(packageName)?.takeUnless { it === job }?.cancel()
++        cleanUp()
++        jobs[packageName] = job
++        latest[packageName] = job
++    }
++
++    @Synchronized
++    fun isCurrent(packageName: String, job: Job): Boolean = jobs[packageName] === job
++
++    @Synchronized
++    fun current(packageName: String): Job? = jobs[packageName]
++
++    @Synchronized
++    fun latest(packageName: String): Job? = latest[packageName]
++
++    @Synchronized
++    fun withCurrent(packageName: String, action: (Job) -> Unit): Boolean {
++        val job = jobs[packageName]?.takeIf { it.isActive } ?: return false
++        action(job)
++        return true
++    }
++
++    @Synchronized
++    fun finish(packageName: String, job: Job, cleanUp: () -> Unit = {}): Boolean {
++        if (jobs[packageName] !== job) return false
++        cleanUp()
++        jobs.remove(packageName)
++        return true
++    }
++
++    @Synchronized
++    fun cancel(packageName: String, cleanUp: () -> Unit = {}): Boolean {
++        val job = jobs[packageName]
++        cleanUp()
++        jobs.remove(packageName)
++        job?.cancel()
++        return job != null
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallWait.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallWait.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..8999ce6493acac06d4c1e3ade5c09a2b1c0a8cc9
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallWait.kt
+@@ -0,0 +1,22 @@
++package dev.ahmedmohamed.hayai.extension.install
++
++/** Monotonic deadlines, including a short grace for PackageInstaller result broadcasts. */
++class ExtensionInstallWait(private val startedAt: Long) {
++    private var missingSessionAt: Long? = null
++
++    fun expired(now: Long): Boolean = now - startedAt >= TIMEOUT_MILLIS
++
++    fun sessionDisappeared(now: Long, sessionExists: Boolean): Boolean {
++        if (sessionExists) {
++            missingSessionAt = null
++            return false
++        }
++        val since = missingSessionAt ?: now.also { missingSessionAt = it }
++        return now - since >= RESULT_GRACE_MILLIS
++    }
++
++    companion object {
++        const val TIMEOUT_MILLIS = 5 * 60 * 1000L
++        const val RESULT_GRACE_MILLIS = 3_000L
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/QueuedExtensionCancellations.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/QueuedExtensionCancellations.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..324dd716551b43cf4590951011fd74e7255cb0e7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/install/QueuedExtensionCancellations.kt
+@@ -0,0 +1,12 @@
++package dev.ahmedmohamed.hayai.extension.install
++
++/** Covers the interval between enqueueing existing WorkManager work and starting its worker. */
++object QueuedExtensionCancellations {
++    private val cancelled = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
++
++    fun start(packageNames: List<String>) { cancelled.removeAll(packageNames.toSet()) }
++
++    fun cancel(packageName: String) { cancelled += packageName }
++
++    fun contains(packageName: String): Boolean = packageName in cancelled
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionUpdatePlan.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionUpdatePlan.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a2f8f44fbfc782314a0d8c04bcc5ead8adf6c79d
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionUpdatePlan.kt
+@@ -0,0 +1,17 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++import dev.ahmedmohamed.hayai.novel.integration.ContentKind
++
++data class ManagedExtensionUpdatePlan(val apkPackages: List<String>, val pluginIds: List<String>) {
++    companion object {
++        fun create(entries: List<ManagedExtensionEntry>, kind: ContentKind, active: Set<ManagedExtensionKey>): ManagedExtensionUpdatePlan {
++            val updates = entries.filter {
++                kind in it.contentKinds && it.installation == ManagedInstallation.Installed && it.hasUpdate && it.key !in active
++            }.distinctBy(ManagedExtensionEntry::key)
++            return ManagedExtensionUpdatePlan(
++                updates.mapNotNull { (it.key as? ManagedExtensionKey.Apk)?.packageName },
++                updates.mapNotNull { (it.key as? ManagedExtensionKey.Js)?.pluginId },
++            )
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedPluginOperations.kt b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedPluginOperations.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..cf652eeef857cce2dfece83f5febb4d77cadb754
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ManagedPluginOperations.kt
+@@ -0,0 +1,50 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/** Tsundoku cc36869a0b: reserve each JS update once and execute the queue in order. */
++class ManagedPluginOperations(private val scope: CoroutineScope) {
++    private val jobs = mutableMapOf<String, Job>()
++    private val mutex = Mutex()
++    private val _active = MutableStateFlow<Set<String>>(emptySet())
++    val active = _active.asStateFlow()
++
++    @Synchronized
++    fun start(pluginId: String, onFailure: suspend (Throwable) -> Unit, action: suspend () -> Unit): Boolean {
++        if (pluginId in jobs) return false
++        val job = scope.launch(start = CoroutineStart.LAZY) {
++            try {
++                mutex.withLock { action() }
++            } catch (cancelled: CancellationException) {
++                throw cancelled
++            } catch (error: Exception) {
++                onFailure(error)
++            }
++        }
++        jobs[pluginId] = job
++        _active.value = jobs.keys.toSet()
++        job.invokeOnCompletion {
++            synchronized(this) {
++                if (jobs[pluginId] === job) {
++                    jobs.remove(pluginId)
++                    _active.value = jobs.keys.toSet()
++                }
++            }
++        }
++        job.start()
++        return true
++    }
++
++    @Synchronized
++    fun cancel(pluginId: String) {
++        jobs[pluginId]?.cancel()
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/compat/RateLimited.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/compat/RateLimited.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..711878dc356cbb62170b5a9599323fa29141ebd2
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/compat/RateLimited.kt
+@@ -0,0 +1,12 @@
++package eu.kanade.tachiyomi.source
++
++/** Compile-only extension ABI from Tsundoku b04f9a4d39aa4e99a9ca14e4bb76f38d35566998. */
++interface RateLimited {
++    val minimumDelayMillis: Long
++
++    val recommendedDelayMillis: Long
++        get() = minimumDelayMillis
++
++    val recommendedPermits: Int
++        get() = 1
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/compat/SourceTracker.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/compat/SourceTracker.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a71204e10c163bd9e5c68a929a3e306d425eba62
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/compat/SourceTracker.kt
+@@ -0,0 +1,25 @@
++package eu.kanade.tachiyomi.source
++
++import eu.kanade.tachiyomi.source.model.SChapter
++import eu.kanade.tachiyomi.source.model.SManga
++
++/**
++ * Compile-only extension ABI from Tsundoku b04f9a4d39aa4e99a9ca14e4bb76f38d35566998.
++ * The package name is required for linking existing APKs. Source callbacks are optional;
++ * Hayai's tracking services remain their own production contract.
++ */
++interface SourceTracker {
++    val supportsChapterTracking: Boolean
++        get() = true
++
++    val supportsFavoritesTracking: Boolean
++        get() = false
++
++    suspend fun onChaptersRead(manga: SManga, changedChapters: List<SChapter>, allChapters: List<SChapter>, categories: List<String>) = Unit
++
++    suspend fun onChaptersUnread(manga: SManga, changedChapters: List<SChapter>, allChapters: List<SChapter>, categories: List<String>) = Unit
++
++    suspend fun onFavorited(manga: SManga, categories: List<String>) = Unit
++
++    suspend fun onUnfavorited(manga: SManga, categories: List<String>) = Unit
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginDownload.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginDownload.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..bea5d35e47007e8a33ad1352202f904d322df8e7
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginDownload.kt
+@@ -0,0 +1,54 @@
++package dev.ahmedmohamed.hayai.novel.plugin
++
++import dev.ahmedmohamed.hayai.novel.error.NovelFailure
++import dev.ahmedmohamed.hayai.novel.error.novelRequire
++import eu.kanade.tachiyomi.network.await
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import okhttp3.Call
++import java.io.ByteArrayOutputStream
++import java.io.IOException
++
++/** Cancellation closes the socket during both response waiting and streaming body reads. */
++object NovelPluginDownload {
++    suspend fun read(call: Call, maxBytes: Long): ByteArray = withContext(Dispatchers.IO) {
++        val cancellation = launch(start = CoroutineStart.UNDISPATCHED) {
++            try {
++                awaitCancellation()
++            } finally {
++                call.cancel()
++            }
++        }
++        try {
++            call.await().use { response ->
++                novelRequire(response.isSuccessful, NovelFailure.Code.PluginHttp, response.code)
++                val body = response.body
++                val length = body.contentLength()
++                novelRequire(length <= maxBytes, NovelFailure.Code.PluginResponseTooLarge)
++                val input = body.byteStream()
++                val output = ByteArrayOutputStream(if (length in 1..maxBytes) length.toInt() else 8192)
++                val buffer = ByteArray(8192)
++                var total = 0L
++                while (true) {
++                    currentCoroutineContext().ensureActive()
++                    val count = input.read(buffer)
++                    if (count < 0) break
++                    total += count
++                    novelRequire(total <= maxBytes, NovelFailure.Code.PluginResponseTooLarge)
++                    output.write(buffer, 0, count)
++                }
++                output.toByteArray()
++            }
++        } catch (error: IOException) {
++            currentCoroutineContext().ensureActive()
++            throw error
++        } finally {
++            cancellation.cancel()
++        }
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+index 1f731bf51beab1365ae4c401cf0846f7c7e18bae..b092c870df269c664e26ba543aaddd5061c2cd05 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginManager.kt
+@@ -25,7 +25,6 @@ import kotlinx.coroutines.sync.withLock
+ import kotlinx.coroutines.withContext
+ import kotlinx.serialization.json.Json
+ import okhttp3.OkHttpClient
+-import java.io.ByteArrayOutputStream
+ 
+ data class NovelPluginCatalog(
+     val repositories: List<NovelPluginRepository> = emptyList(),
+@@ -334,24 +333,7 @@ class NovelPluginManager(
+     ): ByteArray =
+         withContext(Dispatchers.IO) {
+             requireSafeUrl(url, allowLocalHttp = true)
+-            client.newCall(GET(url)).execute().use { response ->
+-                novelRequire(response.isSuccessful, NovelFailure.Code.PluginHttp, response.code)
+-                val body = response.body
+-                val length = body.contentLength()
+-                novelRequire(length <= maxBytes, NovelFailure.Code.PluginResponseTooLarge)
+-                val input = body.byteStream()
+-                val output = ByteArrayOutputStream(if (length in 1..maxBytes) length.toInt() else 8192)
+-                val buffer = ByteArray(8192)
+-                var total = 0L
+-                while (true) {
+-                    val count = input.read(buffer)
+-                    if (count < 0) break
+-                    total += count
+-                    novelRequire(total <= maxBytes, NovelFailure.Code.PluginResponseTooLarge)
+-                    output.write(buffer, 0, count)
+-                }
+-                output.toByteArray()
+-            }
++            NovelPluginDownload.read(client.newCall(GET(url)), maxBytes)
+         }
+ 
+     companion object {
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionInstallerJob.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionInstallerJob.kt
+index 5ab287343c8bc7cb16965f3ddff36df62c3ece47..b4d569a62dd43f2eddbb60344b8d83a53f74c2aa 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionInstallerJob.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionInstallerJob.kt
+@@ -13,6 +13,8 @@ import androidx.work.WorkInfo
+ import androidx.work.WorkManager
+ import androidx.work.WorkerParameters
+ import androidx.work.workDataOf
++import dev.ahmedmohamed.hayai.extension.install.ExtensionInstallBatch
++import dev.ahmedmohamed.hayai.extension.install.QueuedExtensionCancellations
+ import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.notification.Notifications
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+@@ -24,16 +26,10 @@ import eu.kanade.tachiyomi.util.system.localeContext
+ import eu.kanade.tachiyomi.util.system.notificationManager
+ import eu.kanade.tachiyomi.util.system.toast
+ import eu.kanade.tachiyomi.util.system.tryToSetForeground
+-import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+-import kotlinx.coroutines.async
+-import kotlinx.coroutines.awaitAll
+-import kotlinx.coroutines.cancel
++import kotlinx.coroutines.NonCancellable
+ import kotlinx.coroutines.coroutineScope
+-import kotlinx.coroutines.launch
+-import kotlinx.coroutines.sync.Semaphore
+-import kotlinx.coroutines.sync.withPermit
+ import kotlinx.coroutines.withContext
+ import kotlinx.serialization.decodeFromString
+ import kotlinx.serialization.encodeToString
+@@ -42,6 +38,7 @@ import timber.log.Timber
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+ import java.lang.ref.WeakReference
++import java.util.concurrent.CopyOnWriteArrayList
+ import kotlin.math.max
+ 
+ class ExtensionInstallerJob(
+@@ -52,13 +49,12 @@ class ExtensionInstallerJob(
+ 
+     private val preferences: PreferencesHelper = Injekt.get()
+ 
+-    private var activeInstalls = mutableListOf<String>()
++    private var activeInstalls = CopyOnWriteArrayList<String>()
+ 
+     val extensionManager: ExtensionManager = Injekt.get()
+ 
+-    private var emitScope = CoroutineScope(Job() + Dispatchers.Default)
+-
+     private var job: Job? = null
++    private val batch = ExtensionInstallBatch()
+ 
+     override suspend fun getForegroundInfo(): ForegroundInfo {
+         val notification = notifier.progressNotificationBuilder.build()
+@@ -96,6 +92,7 @@ class ExtensionInstallerJob(
+             } ?: return Result.failure()
+         val list =
+             infos.filter {
++                if (QueuedExtensionCancellations.contains(it.pkgName)) return@filter false
+                 val installedExt =
+                     extensionManager.installedExtensionsFlow.value.find { installed ->
+                         installed.pkgName == it.pkgName
+@@ -103,47 +100,50 @@ class ExtensionInstallerJob(
+                 installedExt.versionCode < it.versionCode || installedExt.libVersion < it.libVersion
+             }
+ 
+-        activeInstalls = list.map { it.pkgName }.toMutableList()
+-        emitScope.launch { list.forEach { extensionManager.setPending(it.pkgName) } }
++        activeInstalls = CopyOnWriteArrayList(list.map { it.pkgName })
+         var installed = 0
+         val installedExtensions = mutableListOf<ExtensionManager.ExtensionInfo>()
+         val failedExtensions = mutableListOf<ExtensionManager.ExtensionInfo>()
+-        val requestSemaphore = Semaphore(3)
+-        coroutineScope {
+-            job =
+-                launchIO {
+-                    list
+-                        .map { extension ->
+-                            async {
+-                                requestSemaphore.withPermit {
+-                                    extensionManager
+-                                        .installExtension(extension, this)
+-                                        .collect {
+-                                            if (it.first.isCompleted()) {
+-                                                activeInstalls.remove(extension.pkgName)
+-                                                if (it.first == InstallStep.Installed) {
+-                                                    installedExtensions.add(extension)
+-                                                    installed++
+-                                                    val prefCount = preferences.extensionUpdatesCount().get()
+-                                                    preferences
+-                                                        .extensionUpdatesCount()
+-                                                        .set(max(prefCount - 1, 0))
+-                                                } else {
+-                                                    // Keep this extension counted as a pending update so it
+-                                                    // isn't silently dropped - the re-check triggered below
+-                                                    // will surface it again in the updates notification.
+-                                                    failedExtensions.add(extension)
+-                                                }
+-                                            }
+-                                            notifier.showProgressNotification(installed, list.size)
+-                                            if (activeInstalls.isEmpty() || isStopped) {
+-                                                cancel()
+-                                            }
++        try {
++            coroutineScope {
++                job = launchIO {
++                    val byPackage = list.associateBy { it.pkgName }
++                    batch.run(byPackage.keys.toList()) { pkgName ->
++                        val extension = byPackage.getValue(pkgName)
++                        try {
++                            if (QueuedExtensionCancellations.contains(pkgName) || batch.wasCancelled(pkgName)) return@run
++                            extensionManager.installExtension(extension, this).collect { info ->
++                                synchronized(installedExtensions) {
++                                    if (info.first.isCompleted()) {
++                                        activeInstalls.remove(extension.pkgName)
++                                        if (info.first == InstallStep.Installed) {
++                                            installedExtensions.add(extension)
++                                            installed++
++                                            val prefCount = preferences.extensionUpdatesCount().get()
++                                            preferences.extensionUpdatesCount().set(max(prefCount - 1, 0))
++                                        } else {
++                                            failedExtensions.add(extension)
+                                         }
++                                    }
++                                    notifier.showProgressNotification(installed, list.size)
+                                 }
+                             }
+-                        }.awaitAll()
++                        } finally {
++                            activeInstalls.remove(pkgName)
++                        }
++                    }
++                }
++            }
++        } finally {
++            withContext(NonCancellable) {
++                activeInstalls.toList().forEach { extensionManager.cancelInstallation(it) }
++                activeInstalls.clear()
++                if (isStopped || job?.isCancelled == true) {
++                    extensionManager.emitToInstaller("Finished", (InstallStep.Error to null))
++                    context.notificationManager.cancel(Notifications.ID_EXTENSION_PROGRESS)
+                 }
++                if (instance?.get() == this@ExtensionInstallerJob) instance = null
++            }
+         }
+ 
+         if (showUpdatedNotification && installedExtensions.size > 0) {
+@@ -197,6 +197,8 @@ class ExtensionInstallerJob(
+             info: List<ExtensionManager.ExtensionInfo>,
+             showUpdatedExtension: Int = -1,
+         ) {
++            if (info.isEmpty()) return
++            QueuedExtensionCancellations.start(info.map { it.pkgName })
+             // chunked to satisfy input limits
+             val requests =
+                 info.chunked(32).map {
+@@ -224,6 +226,12 @@ class ExtensionInstallerJob(
+ 
+         fun removeActiveInstall(pkgName: String) = instance?.get()?.activeInstalls?.remove(pkgName)
+ 
++        fun cancelInstallation(pkgName: String) {
++            QueuedExtensionCancellations.cancel(pkgName)
++            instance?.get()?.batch?.cancel(pkgName)
++            removeActiveInstall(pkgName)
++        }
++
+         fun stop(context: Context) {
+             instance?.get()?.job?.cancel()
+             WorkManager.getInstance(context).cancelAllWorkByTag(TAG)
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt
+index 6f9472f4f7ca19abd343ee2d2945dc4cff46c313..fad0c06d20c7c4bd14287fd8739a6144f9ce5c2b 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionManager.kt
+@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.extension
+ import android.content.Context
+ import dev.ahmedmohamed.hayai.extension.ExtensionCatalogReconciler
+ import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
++import dev.ahmedmohamed.hayai.extension.managed.ApkExtensionSnapshot
+ import android.graphics.drawable.Drawable
+ import android.os.Build
+ import android.os.Parcelable
+@@ -273,20 +274,13 @@ class ExtensionManager(
+         result: Boolean,
+     ) {
+         val pkgName = getExtension(downloadId) ?: return
+-        setInstallationResult(pkgName, result)
++        installer.setInstallationResult(pkgName, result, downloadId)
+     }
+ 
+     fun cleanUpInstallation(pkgName: String) {
+         installer.cleanUpInstallation(pkgName)
+     }
+ 
+-    fun setInstallationResult(
+-        pkgName: String,
+-        result: Boolean,
+-    ) {
+-        installer.setInstallationResult(pkgName, result)
+-    }
+-
+     /** Sets the result of the installation of an extension.
+      *
+      * @param sessionId The id of the download.
+@@ -295,6 +289,11 @@ class ExtensionManager(
+         installer.cancelInstallation(sessionId)
+     }
+ 
++    fun cancelInstallation(pkgName: String) {
++        ExtensionInstallerJob.cancelInstallation(pkgName)
++        installer.cancelInstallation(pkgName)
++    }
++
+     /**
+      * Sets the result of the installation of an extension.
+      *
+@@ -304,10 +303,15 @@ class ExtensionManager(
+         downloadId: Long,
+         sessionId: Int,
+     ) {
+-        val pkgName = getExtension(downloadId) ?: return
+-        installer.setInstalling(pkgName, sessionId)
++        val pkgName = getExtension(downloadId) ?: run {
++            installer.abandonSession(sessionId)
++            return
++        }
++        installer.setInstalling(pkgName, sessionId, downloadId)
+     }
+ 
++    fun isInstallActive(downloadId: Long, sessionId: Int? = null): Boolean = installer.isInstallActive(downloadId, sessionId)
++
+     suspend fun setPending(pkgName: String) {
+         installer.setPending(pkgName)
+     }
+@@ -462,13 +466,19 @@ class ExtensionManager(
+         }
+ 
+         override fun onExtensionUntrusted(extension: Extension.Untrusted) {
+-            _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == extension.pkgName }
+-            val installedExtension =
+-                _installedExtensionsFlow.value
+-                    .find { it.pkgName == extension.pkgName }
+-                    ?: return
+-            _installedExtensionsFlow.value -= installedExtension
+-            _untrustedExtensionsFlow.value += extension
++            val updated = ExtensionCatalogReconciler.recordUntrusted(
++                ApkExtensionSnapshot(
++                    installedExtensionsFlow.value,
++                    untrustedExtensionsFlow.value,
++                    availableExtensionsFlow.value,
++                    failedExtensionsFlow.value,
++                ),
++                extension,
++            )
++            _failedExtensionsFlow.value = updated.failures
++            _installedExtensionsFlow.value = updated.installed
++            _untrustedExtensionsFlow.value = updated.untrusted
++            emitToInstaller("Finished/${extension.pkgName}/Untrusted", ExtensionIntallInfo(InstallStep.Installed, null))
+         }
+ 
+         override fun onExtensionLoadFailed(failure: ApkLoadFailure) {
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/ShizukuInstaller.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/ShizukuInstaller.kt
+index 9ad97a413bdabdf898899fd07c2f2a260f770310..d350153191a79e74b7ba9860a02b76d723da6348 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/ShizukuInstaller.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/ShizukuInstaller.kt
+@@ -162,9 +162,17 @@ class ShizukuInstaller(
+     }
+ 
+     fun processEntry(entry: Entry) {
++        if (!extensionManager.isInstallActive(entry.downloadId)) {
++            continueQueue(false)
++            return
++        }
+         extensionManager.setInstalling(entry.downloadId, entry.uri.hashCode())
+         ioScope.launch {
+             try {
++                if (!extensionManager.isInstallActive(entry.downloadId, entry.uri.hashCode())) {
++                    continueQueue(false)
++                    return@launch
++                }
+                 val shell = shellInterface ?: throw IllegalStateException("Shizuku service is not bound")
+                 context.contentResolver.openAssetFileDescriptor(entry.uri, "r")!!.use {
+                     shell.install(it, statusIntent.intentSender)
+@@ -184,18 +192,19 @@ class ShizukuInstaller(
+      * @see ready
+      */
+     fun checkQueue() {
+-        if (!ready) {
+-            return
+-        }
+-        if (queue.isEmpty()) {
+-            finishedQueue(this)
+-            return
+-        }
+-        val nextEntry = queue.first()
+-        if (waitingInstall.compareAndSet(null, nextEntry)) {
+-            queue.removeAt(0)
+-            processEntry(nextEntry)
++        if (!ready) return
++        var finished = false
++        val nextEntry = synchronized(queue) {
++            if (queue.isEmpty()) {
++                finished = waitingInstall.get() == null
++                null
++            } else {
++                queue.first().takeIf { waitingInstall.compareAndSet(null, it) }?.also { queue.removeAt(0) }
++            }
+         }
++        // Manager takes the operation lock; never call it while holding the queue monitor.
++        if (finished) finishedQueue(this)
++        nextEntry?.let(::processEntry)
+     }
+ 
+     /**
+@@ -232,18 +241,14 @@ class ShizukuInstaller(
+      * @param downloadId Download ID as known by [ExtensionManager]
+      */
+     private fun cancelQueue(downloadId: Long) {
+-        val waitingInstall = this.waitingInstall.get()
+-        val toCancel = queue.find { it.downloadId == downloadId } ?: waitingInstall ?: return
+-        if (cancelEntry(toCancel)) {
+-            queue.remove(toCancel)
+-            if (waitingInstall == toCancel) {
+-                // Currently processing removed entry, continue queue
+-                this.waitingInstall.set(null)
+-                checkQueue()
+-            }
+-            queue.forEach { extensionManager.setInstallationResult(it.downloadId, false) }
+-//            extensionManager.up(downloadId, InstallStep.Idle)
+-        }
++        cancelQueued(downloadId)
++    }
++
++    /** Committed sessions cannot be recalled; remove only this waiting package. */
++    fun cancelQueued(downloadId: Long): Boolean {
++        val removed = synchronized(queue) { queue.removeAll { it.downloadId == downloadId } }
++        if (removed) checkQueue()
++        return removed
+     }
+ 
+     // Don't cancel if entry is already started installing
+@@ -267,8 +272,8 @@ class ShizukuInstaller(
+         }
+         ioScope.cancel()
+         LocalBroadcastManager.getInstance(context).unregisterReceiver(cancelReceiver)
+-        queue.forEach { extensionManager.setInstallationResult(it.pkgName, false) }
+-        queue.clear()
++        val abandoned = synchronized(queue) { queue.toList().also { queue.clear() } }
++        abandoned.forEach { extensionManager.setInstallationResult(it.downloadId, false) }
+         waitingInstall.set(null)
+     }
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt
+index f2e90ddfa02b32a07703ee8e0fb7da6254da92f0..2786ff8dfc5091b217df4c3c6f72892646cdd601 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt
+@@ -34,16 +34,17 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
+         context: Context,
+         intent: Intent,
+     ) {
++        val extensionManager: ExtensionManager by injectLazy()
++        val downloadId = intent.getLongExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, -1)
++        var createdSession: Int? = null
+         try {
+             if (PACKAGE_INSTALLED_ACTION == intent.action) {
+                 packageInstallStep(context, intent)
+                 return
+             }
+ 
+-            val downloadId = intent.extras!!.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID)
++            if (!extensionManager.isInstallActive(downloadId)) return
+             val packageInstaller = context.packageManager.packageInstaller
+-            val data = UniFile.fromUri(context, intent.data).openInputStream()
+-
+             val params =
+                 SessionParams(
+                     SessionParams.MODE_FULL_INSTALL,
+@@ -52,42 +53,53 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
+                 params.setRequireUserAction(USER_ACTION_NOT_REQUIRED)
+             }
+             val sessionId = packageInstaller.createSession(params)
+-            val session = packageInstaller.openSession(sessionId)
+-            session.openWrite("package", 0, -1).use { packageInSession ->
+-                data.copyTo(packageInSession)
++            createdSession = sessionId
++            extensionManager.setInstalling(downloadId, sessionId)
++            if (!extensionManager.isInstallActive(downloadId, sessionId)) {
++                packageInstaller.abandonSession(sessionId)
++                return
+             }
++            packageInstaller.openSession(sessionId).use { session ->
++                UniFile.fromUri(context, intent.data).openInputStream().use { data ->
++                    session.openWrite("package", 0, -1).use { packageInSession -> data.copyTo(packageInSession) }
++                }
+ 
+-            val newIntent =
+-                Intent(context, ExtensionInstallBroadcast::class.java)
+-                    .setAction(PACKAGE_INSTALLED_ACTION)
+-                    .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, downloadId)
+-                    .putExtra(EXTRA_SESSION_ID, sessionId)
++                val newIntent =
++                    Intent(context, ExtensionInstallBroadcast::class.java)
++                        .setAction(PACKAGE_INSTALLED_ACTION)
++                        .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, downloadId)
++                        .putExtra(EXTRA_SESSION_ID, sessionId)
+ 
+-            val mutableFlag =
++                val mutableFlag =
++                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
++                        PendingIntent.FLAG_MUTABLE
++                    } else {
++                        0
++                    }
++                val pendingIntent =
++                    PendingIntent.getBroadcast(
++                        context,
++                        downloadId.hashCode(),
++                        newIntent,
++                        PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag,
++                    )
++                val statusReceiver = pendingIntent.intentSender
++                if (!extensionManager.isInstallActive(downloadId, sessionId)) {
++                    packageInstaller.abandonSession(sessionId)
++                    return
++                }
++                session.commit(statusReceiver)
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+-                    PendingIntent.FLAG_MUTABLE
+-                } else {
+-                    0
++                    (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(downloadId)
+                 }
+-            val pendingIntent =
+-                PendingIntent.getBroadcast(
+-                    context,
+-                    downloadId.hashCode(),
+-                    newIntent,
+-                    PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag,
+-                )
+-            val statusReceiver = pendingIntent.intentSender
+-            session.commit(statusReceiver)
+-            val extensionManager: ExtensionManager by injectLazy()
+-            extensionManager.setInstalling(downloadId, sessionId)
+-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+-                (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(downloadId)
+             }
+-            data.close()
+         } catch (error: Exception) {
+             // Either install package can't be found (probably bots) or there's a security exception
+             // with the download manager. Nothing we can workaround.
+-            context.toast(error.message)
++            createdSession?.let { runCatching { context.packageManager.packageInstaller.abandonSession(it) } }
++            val wasActive = extensionManager.isInstallActive(downloadId)
++            extensionManager.setInstallationResult(downloadId, false)
++            if (wasActive) context.toast(error.message)
+         }
+     }
+ 
+@@ -105,6 +117,11 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
+             if (PACKAGE_INSTALLED_ACTION == intent.action) {
+                 val downloadId = extras.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID)
+                 val extensionManager: ExtensionManager by injectLazy()
++                val sessionId = extras.getInt(EXTRA_SESSION_ID, -1)
++                if (!extensionManager.isInstallActive(downloadId, sessionId)) {
++                    runCatching { context.packageManager.packageInstaller.abandonSession(sessionId) }
++                    return
++                }
+                 when (val status = extras.getInt(PackageInstaller.EXTRA_STATUS)) {
+                     PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                         val confirmIntent = extras[Intent.EXTRA_INTENT] as? Intent ?: return
+@@ -158,6 +175,11 @@ class ExtensionInstallActivity : Activity() {
+             finish()
+             return
+         }
++        val extensionManager: ExtensionManager by injectLazy()
++        if (!extensionManager.isInstallActive(intent.getLongExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, -1))) {
++            finish()
++            return
++        }
+ 
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+             !packageManager.canRequestPackageInstalls()
+@@ -195,11 +217,15 @@ class ExtensionInstallActivity : Activity() {
+     }
+ 
+     private fun installDownloadedExtension() {
++        val extensionManager: ExtensionManager by injectLazy()
++        val downloadId = intent.getLongExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, -1)
++        if (!extensionManager.isInstallActive(downloadId)) {
++            finish()
++            return
++        }
++        var createdSession: Int? = null
+         try {
+-            val downloadId = intent.extras!!.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID)
+             val packageInstaller = packageManager.packageInstaller
+-            val data = UniFile.fromUri(this, intent.data).openInputStream()
+-
+             val params =
+                 SessionParams(
+                     SessionParams.MODE_FULL_INSTALL,
+@@ -208,41 +234,54 @@ class ExtensionInstallActivity : Activity() {
+                 params.setRequireUserAction(USER_ACTION_NOT_REQUIRED)
+             }
+             val sessionId = packageInstaller.createSession(params)
+-            val session = packageInstaller.openSession(sessionId)
+-            session.openWrite("package", 0, -1).use { packageInSession ->
+-                data.copyTo(packageInSession)
++            createdSession = sessionId
++            extensionManager.setInstalling(downloadId, sessionId)
++            if (!extensionManager.isInstallActive(downloadId, sessionId)) {
++                packageInstaller.abandonSession(sessionId)
++                finish()
++                return
+             }
+-            val newIntent =
+-                Intent(this, ExtensionInstallActivity::class.java)
+-                    .setAction(PACKAGE_INSTALLED_ACTION)
+-                    .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, downloadId)
+-                    .putExtra(EXTRA_SESSION_ID, sessionId)
+-            val mutableFlag =
++            packageInstaller.openSession(sessionId).use { session ->
++                UniFile.fromUri(this, intent.data).openInputStream().use { data ->
++                    session.openWrite("package", 0, -1).use { packageInSession -> data.copyTo(packageInSession) }
++                }
++                val newIntent =
++                    Intent(this, ExtensionInstallActivity::class.java)
++                        .setAction(PACKAGE_INSTALLED_ACTION)
++                        .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, downloadId)
++                        .putExtra(EXTRA_SESSION_ID, sessionId)
++                val mutableFlag =
++                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
++                        PendingIntent.FLAG_MUTABLE
++                    } else {
++                        0
++                    }
++                val pendingIntent =
++                    PendingIntent.getActivity(
++                        this,
++                        downloadId.hashCode(),
++                        newIntent,
++                        PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag,
++                        activityOptionsBackgroundOptions()?.toBundle(),
++                    )
++                val statusReceiver = pendingIntent.intentSender
++                if (!extensionManager.isInstallActive(downloadId, sessionId)) {
++                    packageInstaller.abandonSession(sessionId)
++                    finish()
++                    return
++                }
++                session.commit(statusReceiver)
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+-                    PendingIntent.FLAG_MUTABLE
+-                } else {
+-                    0
++                    (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(downloadId)
+                 }
+-            val pendingIntent =
+-                PendingIntent.getActivity(
+-                    this,
+-                    downloadId.hashCode(),
+-                    newIntent,
+-                    PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag,
+-                    activityOptionsBackgroundOptions()?.toBundle(),
+-                )
+-            val statusReceiver = pendingIntent.intentSender
+-            session.commit(statusReceiver)
+-            val extensionManager: ExtensionManager by injectLazy()
+-            extensionManager.setInstalling(downloadId, sessionId)
+-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+-                (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(downloadId)
+             }
+-            data.close()
+         } catch (error: Exception) {
+             // Either install package can't be found (probably bots) or there's a security exception
+             // with the download manager. Nothing we can workaround.
+-            toast(error.message)
++            createdSession?.let { runCatching { packageManager.packageInstaller.abandonSession(it) } }
++            val wasActive = extensionManager.isInstallActive(downloadId)
++            extensionManager.setInstallationResult(downloadId, false)
++            if (wasActive) toast(error.message)
+         }
+         finish()
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstaller.kt b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstaller.kt
+index 7ec41e6bc6bd6a3db516348ce54300acc4509cea..27a7df54ec2a075dc68671b8f7f1131a531db581 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstaller.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstaller.kt
+@@ -4,52 +4,52 @@ import android.annotation.SuppressLint
+ import android.app.DownloadManager
+ import android.content.BroadcastReceiver
+ import android.content.Context
+-import android.content.Context.RECEIVER_EXPORTED
+ import android.content.Intent
+ import android.content.IntentFilter
+ import android.net.Uri
+ import android.os.Build
+ import android.os.Environment
++import android.os.SystemClock
+ import androidx.core.content.ContextCompat
+ import androidx.core.net.toUri
++import dev.ahmedmohamed.hayai.extension.install.ExtensionInstallOperations
++import dev.ahmedmohamed.hayai.extension.install.ExtensionInstallEvent
++import dev.ahmedmohamed.hayai.extension.install.ExtensionInstallWait
+ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+ import eu.kanade.tachiyomi.extension.ExtensionInstallerJob
+ import eu.kanade.tachiyomi.extension.ExtensionManager
+ import eu.kanade.tachiyomi.extension.ShizukuInstaller
+ import eu.kanade.tachiyomi.extension.model.InstallStep
+ import eu.kanade.tachiyomi.ui.extension.ExtensionIntallInfo
+-import eu.kanade.tachiyomi.util.storage.getUriCompat
+ import eu.kanade.tachiyomi.util.system.isOnline
+ import eu.kanade.tachiyomi.util.system.isPackageInstalled
+ import eu.kanade.tachiyomi.util.system.launchUI
+ import eu.kanade.tachiyomi.util.system.toast
+ import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.CoroutineStart
+ import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
+ import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.currentCoroutineContext
+ import kotlinx.coroutines.delay
++import kotlinx.coroutines.ensureActive
+ import kotlinx.coroutines.flow.Flow
+ import kotlinx.coroutines.flow.MutableSharedFlow
+-import kotlinx.coroutines.flow.asSharedFlow
+-import kotlinx.coroutines.flow.catch
++import kotlinx.coroutines.flow.channelFlow
+ import kotlinx.coroutines.flow.distinctUntilChanged
+-import kotlinx.coroutines.flow.emptyFlow
+ import kotlinx.coroutines.flow.filter
+-import kotlinx.coroutines.flow.flatMapConcat
+-import kotlinx.coroutines.flow.flattenMerge
+-import kotlinx.coroutines.flow.flow
+ import kotlinx.coroutines.flow.flowOf
+ import kotlinx.coroutines.flow.flowOn
+ import kotlinx.coroutines.flow.map
+-import kotlinx.coroutines.flow.onCompletion
+-import kotlinx.coroutines.flow.takeWhile
+ import kotlinx.coroutines.flow.transformWhile
+ import kotlinx.coroutines.launch
+ import timber.log.Timber
+ import uy.kohesive.injekt.Injekt
+ import uy.kohesive.injekt.api.get
+ import java.io.File
++import java.util.concurrent.ConcurrentHashMap
+ import kotlin.time.Duration.Companion.milliseconds
+-import kotlin.time.Duration.Companion.seconds
+ 
+ /**
+  * The installer which installs, updates and uninstalls the extensions.
+@@ -74,7 +74,9 @@ internal class ExtensionInstaller(
+      * The currently requested downloads, with the package name (unique id) as key, and the id
+      * returned by the download manager.
+      */
+-    val activeDownloads = hashMapOf<String, Long>()
++    val activeDownloads = ConcurrentHashMap<String, Long>()
++    private val operations = ExtensionInstallOperations()
++    private val completedDownloads = ConcurrentHashMap.newKeySet<Long>()
+     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+ 
+     private var installer: ShizukuInstaller? = null
+@@ -88,7 +90,7 @@ internal class ExtensionInstaller(
+                             it.onDestroy()
+                             ioScope.launch {
+                                 delay(500.milliseconds)
+-                                _downloadsSharedFlow.emit("Finished" to (InstallStep.Installed to null))
++                                _downloadsSharedFlow.emit(ExtensionInstallEvent("Finished", InstallStep.Installed to null, null))
+                             }
+                             installer = null
+                         }
+@@ -103,16 +105,25 @@ internal class ExtensionInstaller(
+     /**
+      * StateFlow used to notify the installation step of every download.
+      */
+-    private val _downloadsSharedFlow = MutableSharedFlow<Pair<String, ExtensionIntallInfo>>()
+-    val downloadSharedFlow = _downloadsSharedFlow.asSharedFlow()
++    private val _downloadsSharedFlow = MutableSharedFlow<ExtensionInstallEvent>()
++    val downloadSharedFlow = _downloadsSharedFlow
++        .filter { it.isVisible(operations.current(it.packageName), operations.latest(it.packageName)) }
++        .map { it.packageName to it.info }
+ 
+     /** Map of download id to installer session id */
+-    val downloadInstallerMap = hashMapOf<String, Int>()
++    val downloadInstallerMap = ConcurrentHashMap<String, Int>()
+ 
+     fun emitToFlow(
+         name: String,
+         extensionInfo: ExtensionIntallInfo,
+-    ) = ioScope.launch { _downloadsSharedFlow.emit(name to extensionInfo) }
++    ): Job {
++        val owner = operations.current(name)
++        return ioScope.launch {
++            if (owner != null || name.startsWith("Finished") || name.startsWith("Uninstalled")) {
++                _downloadsSharedFlow.emit(ExtensionInstallEvent(name, extensionInfo, owner))
++            }
++        }
++    }
+ 
+     /**
+      * Adds the given extension to the downloads queue and returns a flow containing its
+@@ -134,146 +145,95 @@ internal class ExtensionInstaller(
+             return flowOf(ExtensionIntallInfo(InstallStep.Error, null))
+         }
+ 
+-        val oldDownload = activeDownloads[pkgName]
+-        if (oldDownload != null) {
+-            deleteDownload(pkgName)
+-        }
+-        val oldInstall = downloadInstallerMap[pkgName]
+-        if (oldInstall != null) {
+-            try {
+-                context.packageManager.packageInstaller.abandonSession(oldInstall)
+-            } catch (_: Exception) {
++        return channelFlow {
++            val owner = currentCoroutineContext()[Job]!!
++            scope.coroutineContext.ensureActive()
++            operations.replace(pkgName, owner) {
++                cleanUpInstallation(pkgName)
++                deleteDownload(pkgName)
+             }
+-            downloadInstallerMap.remove(pkgName)
+-        }
+-
+-        // Register the receiver after removing (and unregistering) the previous download
+-        downloadReceiver.register()
+-
+-        val downloadUri = url.toUri()
+-        val request =
+-            DownloadManager
+-                .Request(downloadUri)
+-                .setTitle(extension.name)
+-                .setMimeType(APK_MIME)
+-                .setDestinationInExternalFilesDir(
+-                    context,
+-                    Environment.DIRECTORY_DOWNLOADS,
+-                    downloadUri.lastPathSegment,
+-                ).setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+-
+-        val id = downloadManager.enqueue(request)
+-        activeDownloads[pkgName] = id
+-
+-        scope.launch {
+-            flowOf(
+-                pollStatus(id),
+-                pollInstallStatus(pkgName),
+-            ).flattenMerge()
+-                .transformWhile {
+-                    emit(it)
+-                    !it.first.isCompleted()
+-                }.flowOn(Dispatchers.IO)
+-                .catch { e ->
+-                    Timber.e(e)
+-                    emit(InstallStep.Error to null)
+-                }.onCompletion {
++            // Subscribe before enqueue: private installs and failed downloads can finish immediately.
++            launch(start = CoroutineStart.UNDISPATCHED) {
++                _downloadsSharedFlow.filter { it.belongsTo(pkgName, owner) }.collect { send(it.info) }
++            }
++            try {
++                downloadReceiver.register()
++                val downloadUri = url.toUri()
++                val request = DownloadManager.Request(downloadUri)
++                    .setTitle(extension.name)
++                    .setMimeType(APK_MIME)
++                    .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, downloadUri.lastPathSegment)
++                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
++                val id = downloadManager.enqueue(request)
++                activeDownloads[pkgName] = id
++                pollInstallation(pkgName, id, owner)
++                awaitCancellation()
++            } catch (error: Exception) {
++                currentCoroutineContext().ensureActive()
++                Timber.e(error)
++                if (operations.isCurrent(pkgName, owner)) {
++                    _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Error to null, owner))
++                    send(InstallStep.Error to null)
++                }
++            } finally {
++                operations.finish(pkgName, owner) {
++                    cleanUpInstallation(pkgName)
+                     deleteDownload(pkgName)
+-                }.collect {
+-                    _downloadsSharedFlow.emit(extension.pkgName to it)
+                 }
+-        }
+-
+-        return _downloadsSharedFlow
+-            .filter { it.first == extension.pkgName }
+-            .map { it.second }
+-            .flowOn(Dispatchers.IO)
+-            .transformWhile {
+-                emit(it)
+-                !it.first.isCompleted()
+-            }.onCompletion {
+-                deleteDownload(pkgName)
+             }
++        }.flowOn(Dispatchers.IO).distinctUntilChanged().transformWhile {
++            emit(it)
++            !it.first.isCompleted()
++        }
+     }
+ 
+-    /**
+-     * Returns a flow that polls the given download id for its status every second, as the
+-     * manager doesn't have any notification system. It'll stop once the download finishes.
+-     *
+-     * @param id The id of the download to poll.
+-     */
+     @SuppressLint("Range")
+-    private fun pollStatus(id: Long): Flow<ExtensionIntallInfo> {
++    private suspend fun pollInstallation(pkgName: String, id: Long, owner: Job) {
++        val wait = ExtensionInstallWait(SystemClock.elapsedRealtime())
+         val query = DownloadManager.Query().setFilterById(id)
+-
+-        return flow {
+-            while (true) {
+-                val newDownloadState =
+-                    try {
+-                        downloadManager.query(query)?.use { cursor ->
+-                            cursor.moveToFirst()
+-                            cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
+-                        }
+-                    } catch (_: Exception) {
+-                        null
+-                    }
+-                if (newDownloadState != null) {
+-                    emit(newDownloadState)
+-                }
+-                delay(1.seconds)
+-            }
+-        }.distinctUntilChanged()
+-            .transformWhile {
+-                emit(it)
+-                !(it == DownloadManager.STATUS_SUCCESSFUL || it == DownloadManager.STATUS_FAILED)
+-            }.flatMapConcat { downloadState ->
+-                val step =
+-                    when (downloadState) {
+-                        DownloadManager.STATUS_PENDING -> InstallStep.Pending
+-                        DownloadManager.STATUS_RUNNING -> InstallStep.Downloading
+-                        // Paused is waiting on a connection that may never come back, and a failed
+-                        // download used to end the flow without ever reporting anything
+-                        DownloadManager.STATUS_PAUSED, DownloadManager.STATUS_FAILED -> InstallStep.Error
+-                        else -> return@flatMapConcat emptyFlow()
+-                    }
+-                flowOf(ExtensionIntallInfo(step, null))
+-            }
+-    }
+-
+-    /**
+-     * Returns a flow that polls the given installer session for its status every half second, as the
+-     * manager doesn't have any notification system. This will only stop once
+-     *
+-     * @param pkgName The pkgName of the download mapped to the session to poll.
+-     */
+-    private fun pollInstallStatus(pkgName: String): Flow<ExtensionIntallInfo> =
+-        flow {
+-            while (true) {
+-                val sessionId = downloadInstallerMap[pkgName]
+-                if (sessionId != null) {
+-                    val session =
+-                        context.packageManager.packageInstaller.getSessionInfo(sessionId)
+-                    emit(InstallStep.Installing to session)
+-                }
+-                delay(500)
++        var missingDownloadAt: Long? = null
++        while (operations.isCurrent(pkgName, owner)) {
++            currentCoroutineContext().ensureActive()
++            val now = SystemClock.elapsedRealtime()
++            if (wait.expired(now)) {
++                _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Error to null, owner))
++                return
+             }
+-        }.takeWhile { info ->
+             val sessionId = downloadInstallerMap[pkgName]
++            val shizukuActive = installer?.getActiveEntry()?.pkgName == pkgName
+             if (sessionId != null) {
+-                info.second != null || installer?.isInQueue(pkgName) == true
+-            } else {
+-                true
+-            }
+-        }.catch {
+-            Timber.e(it)
+-        }.onCompletion { cause ->
+-            deleteDownload(pkgName)
+-            // A failed download ends the merged flow while this one is still polling, and emitting
+-            // into a collector that's already gone throws
+-            if (cause == null) {
+-                emit(InstallStep.Done to null)
++                val session = context.packageManager.packageInstaller.getSessionInfo(sessionId)
++                if (wait.sessionDisappeared(now, session != null || shizukuActive)) {
++                    // A lost result broadcast must not leave an update on Installing forever.
++                    _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Error to null, owner))
++                    return
++                }
++                _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Installing to session, owner))
++            } else if (id !in completedDownloads) {
++                val status = downloadManager.query(query)?.use { cursor ->
++                    if (cursor.moveToFirst()) cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)) else null
++                }
++                when (status) {
++                    DownloadManager.STATUS_PENDING -> _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Pending to null, owner))
++                    DownloadManager.STATUS_RUNNING -> _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Downloading to null, owner))
++                    DownloadManager.STATUS_SUCCESSFUL -> downloadReceiver.complete(id)
++                    DownloadManager.STATUS_PAUSED, DownloadManager.STATUS_FAILED -> {
++                        _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Error to null, owner))
++                        return
++                    }
++                    null -> {
++                        val since = missingDownloadAt ?: now.also { missingDownloadAt = it }
++                        if (now - since >= ExtensionInstallWait.RESULT_GRACE_MILLIS) {
++                            _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Error to null, owner))
++                            return
++                        }
++                    }
++                }
++                if (status != null) missingDownloadAt = null
+             }
++            delay(500.milliseconds)
+         }
++    }
+ 
+     /**
+      * Starts an intent to install the extension at the given uri.
+@@ -292,8 +252,9 @@ internal class ExtensionInstaller(
+         when (prefs.extensionInstaller().get()) {
+             SHIZUKU -> {
+                 pkgName ?: return
+-                setInstalling(pkgName, uri.hashCode())
++                emitToFlow(pkgName, InstallStep.Loading to null)
+                 shizukuInstaller?.addToQueue(downloadId, pkgName, uri)
++                    ?: setInstallationResult(pkgName, false, downloadId)
+             }
+             PRIVATE -> installPrivately(downloadId, pkgName, uri)
+             else -> {
+@@ -327,33 +288,36 @@ internal class ExtensionInstaller(
+         pkgName: String?,
+         uri: Uri,
+     ) {
+-        val tempFile = File(context.cacheDir, "temp_$downloadId")
+-
+         pkgName ?: return
+-        if (tempFile.exists() && !tempFile.delete()) {
+-            // Unlikely but just in case
+-            setInstallationResult(pkgName, false)
+-            return
+-        }
+-
+-        try {
+-            context.contentResolver.openInputStream(uri)?.use { input ->
+-                tempFile.outputStream().use { output ->
+-                    input.copyTo(output)
++        val owner = operations.current(pkgName) ?: return
++        CoroutineScope(owner + Dispatchers.IO).launch {
++            val tempFile = File(context.cacheDir, "temp_$downloadId")
++            try {
++                context.contentResolver.openInputStream(uri).use { input ->
++                    checkNotNull(input)
++                    tempFile.outputStream().use { output ->
++                        val buffer = ByteArray(8192)
++                        while (true) {
++                            currentCoroutineContext().ensureActive()
++                            val count = input.read(buffer)
++                            if (count < 0) break
++                            output.write(buffer, 0, count)
++                        }
++                    }
+                 }
++                currentCoroutineContext().ensureActive()
++                _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Installing to null, owner))
++                currentCoroutineContext().ensureActive()
++                val result = ExtensionLoader.installPrivateExtensionFile(context, tempFile)
++                if (operations.isCurrent(pkgName, owner)) setInstallationResult(pkgName, result, downloadId)
++            } catch (error: Exception) {
++                currentCoroutineContext().ensureActive()
++                Timber.e(error, "Failed to read downloaded extension file.")
++                if (operations.isCurrent(pkgName, owner)) setInstallationResult(pkgName, false, downloadId)
++            } finally {
++                tempFile.delete()
+             }
+-
+-            if (ExtensionLoader.installPrivateExtensionFile(context, tempFile)) {
+-                setInstallationResult(pkgName, true)
+-            } else {
+-                setInstallationResult(pkgName, false)
+-            }
+-        } catch (e: Exception) {
+-            Timber.e(e, "Failed to read downloaded extension file.")
+-            setInstallationResult(pkgName, false)
+         }
+-
+-        tempFile.delete()
+     }
+ 
+     /**
+@@ -383,33 +347,63 @@ internal class ExtensionInstaller(
+     fun setInstalling(
+         pkgName: String,
+         sessionId: Int,
++        expectedDownloadId: Long,
+     ) {
+-        emitToFlow(pkgName, ExtensionIntallInfo(InstallStep.Installing, null))
+-        downloadInstallerMap[pkgName] = sessionId
++        var registered = false
++        operations.withCurrent(pkgName) {
++            if (activeDownloads[pkgName] == expectedDownloadId) {
++                downloadInstallerMap[pkgName] = sessionId
++                emitToFlow(pkgName, ExtensionIntallInfo(InstallStep.Installing, null))
++                registered = true
++            }
++        }
++        if (!registered) abandonSession(sessionId)
++    }
++
++    fun isInstallActive(downloadId: Long, sessionId: Int? = null): Boolean {
++        val pkgName = activeDownloads.entries.find { it.value == downloadId }?.key ?: return false
++        var active = false
++        operations.withCurrent(pkgName) {
++            active = activeDownloads[pkgName] == downloadId && (sessionId == null || downloadInstallerMap[pkgName] == sessionId)
++        }
++        return active
++    }
++
++    fun abandonSession(sessionId: Int) {
++        runCatching { context.packageManager.packageInstaller.abandonSession(sessionId) }
+     }
+ 
+     suspend fun setPending(pkgName: String) {
+-        _downloadsSharedFlow.emit(pkgName to ExtensionIntallInfo(InstallStep.Pending, null))
++        val owner = operations.current(pkgName) ?: return
++        _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Pending to null, owner))
+     }
+ 
+     fun cancelInstallation(sessionId: Int) {
+-        val downloadId = downloadInstallerMap.entries.find { it.value == sessionId }?.key ?: return
+-        setInstallationResult(downloadId, false)
+-        try {
+-            context.packageManager.packageInstaller.abandonSession(sessionId)
+-        } catch (_: Exception) {
++        val pkgName = downloadInstallerMap.entries.find { it.value == sessionId }?.key ?: return
++        operations.withCurrent(pkgName) {
++            if (downloadInstallerMap[pkgName] == sessionId) cancelInstallation(pkgName)
+         }
+     }
+ 
+-    fun cleanUpInstallation(pkgName: String) {
+-        val sessionId = downloadInstallerMap[pkgName] ?: return
+-        downloadInstallerMap.remove(pkgName)
+-        try {
+-            context.packageManager.packageInstaller.abandonSession(sessionId)
+-        } catch (_: Exception) {
++    fun cancelInstallation(pkgName: String) {
++        var owner: Job? = null
++        val cancelled = operations.cancel(pkgName) {
++            owner = operations.current(pkgName)
++            cleanUpInstallation(pkgName)
++            deleteDownload(pkgName)
++        }
++        if (!cancelled) return
++        ioScope.launch {
++            _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, InstallStep.Error to null, owner))
+         }
+     }
+ 
++    fun cleanUpInstallation(pkgName: String) {
++        activeDownloads[pkgName]?.let { installer?.cancelQueued(it) }
++        val sessionId = downloadInstallerMap.remove(pkgName) ?: return
++        abandonSession(sessionId)
++    }
++
+     /**
+      * Sets the result of the installation of an extension.
+      *
+@@ -419,13 +413,15 @@ internal class ExtensionInstaller(
+     fun setInstallationResult(
+         pkgName: String,
+         result: Boolean,
++        expectedDownloadId: Long,
+     ) {
+-        if (result) {
+-            deleteDownload(pkgName)
+-        }
+         val step = if (result) InstallStep.Installed else InstallStep.Error
+-        downloadInstallerMap.remove(pkgName)
+-        emitToFlow(pkgName, ExtensionIntallInfo(step, null))
++        operations.withCurrent(pkgName) { owner ->
++            if (activeDownloads[pkgName] == expectedDownloadId) {
++                downloadInstallerMap.remove(pkgName)
++                ioScope.launch { _downloadsSharedFlow.emit(ExtensionInstallEvent(pkgName, step to null, owner)) }
++            }
++        }
+     }
+ 
+     /**
+@@ -437,8 +433,9 @@ internal class ExtensionInstaller(
+         val downloadId = activeDownloads.remove(pkgName)
+         if (downloadId != null) {
+             downloadManager.remove(downloadId)
++            completedDownloads.remove(downloadId)
++            ExtensionInstallerJob.removeActiveInstall(pkgName)
+         }
+-        ExtensionInstallerJob.removeActiveInstall(pkgName)
+         if (activeDownloads.isEmpty()) {
+             downloadReceiver.unregister()
+         }
+@@ -456,6 +453,7 @@ internal class ExtensionInstaller(
+         /**
+          * Registers this receiver if it's not already.
+          */
++        @Synchronized
+         fun register() {
+             if (isRegistered) return
+             isRegistered = true
+@@ -467,6 +465,7 @@ internal class ExtensionInstaller(
+         /**
+          * Unregisters this receiver if it's not already.
+          */
++        @Synchronized
+         fun unregister() {
+             if (!isRegistered) return
+             isRegistered = false
+@@ -484,33 +483,26 @@ internal class ExtensionInstaller(
+             intent: Intent?,
+         ) {
+             val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, 0) ?: return
++            complete(id)
++        }
+ 
+-            // Avoid events for downloads we didn't request
+-            if (id !in activeDownloads.values) return
+-
+-            val uri = downloadManager.getUriForDownloadedFile(id)
+-
+-            val pkgName = activeDownloads.entries.find { id == it.value }?.key
+-            // Set next installation step
+-            if (uri != null && pkgName != null) {
+-                emitToFlow(pkgName, ExtensionIntallInfo(InstallStep.Loading, null))
+-            } else if (pkgName != null) {
+-                Timber.e("Couldn't locate downloaded APK")
+-                emitToFlow(pkgName, ExtensionIntallInfo(InstallStep.Error, null))
+-                return
+-            }
+-
+-            val query = DownloadManager.Query().setFilterById(id)
+-            downloadManager.query(query).use { cursor ->
+-                if (cursor.moveToFirst()) {
+-                    val localUri =
+-                        cursor
+-                            .getString(
+-                                cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI),
+-                            ).removePrefix(FILE_SCHEME)
+-
+-                    installApk(id, File(localUri).getUriCompat(context))
++        fun complete(id: Long) {
++            val pkgName = activeDownloads.entries.find { id == it.value }?.key ?: return
++            val owner = operations.current(pkgName) ?: return
++            if (!completedDownloads.add(id)) return
++            try {
++                val uri = downloadManager.getUriForDownloadedFile(id)
++                if (uri == null) {
++                    Timber.e("Couldn't locate downloaded APK")
++                    setInstallationResult(pkgName, false, id)
++                    return
+                 }
++                if (!operations.isCurrent(pkgName, owner) || activeDownloads[pkgName] != id) return
++                emitToFlow(pkgName, ExtensionIntallInfo(InstallStep.Loading, null))
++                installApk(id, uri)
++            } catch (error: Exception) {
++                Timber.e(error)
++                if (operations.isCurrent(pkgName, owner)) setInstallationResult(pkgName, false, id)
+             }
+         }
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
+index ace1f496c25be9685693f52516a59f176c5cb42d..b56ff5eadfac7cc51fdd1bb9f088c7e70dc88dd8 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionBottomPresenter.kt
+@@ -1,12 +1,15 @@
+ package eu.kanade.tachiyomi.ui.extension
+ 
+ import android.content.pm.PackageInstaller
++import dev.ahmedmohamed.hayai.extension.install.ExtensionInstallActions
+ import dev.ahmedmohamed.hayai.extension.managed.ApkExtensionSnapshot
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionEntry
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionFilter
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionKey
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionProjector
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionState
++import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionUpdatePlan
++import dev.ahmedmohamed.hayai.extension.managed.ManagedPluginOperations
+ import dev.ahmedmohamed.hayai.novel.integration.ContentKind
+ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginManager
+ import eu.kanade.tachiyomi.R
+@@ -37,7 +40,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+     private val pluginManager: NovelPluginManager = Injekt.get()
+     private var extensions = ContentKind.entries.associateWith { emptyList<ExtensionItem>() }
+     private var currentDownloads = hashMapOf<String, ExtensionIntallInfo>()
+-    private var pluginOperations = emptySet<String>()
++    private val pluginOperations by lazy { ManagedPluginOperations(presenterScope) }
+     private var firstLoad = true
+ 
+     override fun onCreate() {
+@@ -53,6 +56,9 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         presenterScope.launch {
+             pluginManager.catalog.collectLatest { rebuildExtensions() }
+         }
++        presenterScope.launch {
++            pluginOperations.active.collect { rebuildExtensions() }
++        }
+         presenterScope.launch {
+             extensionManager.downloadSharedFlow.collect { event ->
+                 if (event.first.startsWith("Finished") || event.first.startsWith("Uninstalled")) {
+@@ -68,7 +74,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+                 } ?: return@collect
+                 val pkgName = (item.extension.key as ManagedExtensionKey.Apk).packageName
+                 when (event.second.first) {
+-                    InstallStep.Installed, InstallStep.Error -> currentDownloads.remove(pkgName)
++                    InstallStep.Installed, InstallStep.Error, InstallStep.Done -> currentDownloads.remove(pkgName)
+                     else -> currentDownloads[pkgName] = event.second
+                 }
+                 updateInstallStep(item.extension, event.second.first, event.second.second)?.let { updated ->
+@@ -181,7 +187,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+ 
+     private fun ManagedExtensionEntry.toItem(header: ExtensionGroupItem?): ExtensionItem {
+         val apkInfo = (key as? ManagedExtensionKey.Apk)?.packageName?.let(currentDownloads::get)
+-        val pluginStep = (key as? ManagedExtensionKey.Js)?.pluginId?.takeIf(pluginOperations::contains)?.let { InstallStep.Loading }
++        val pluginStep = (key as? ManagedExtensionKey.Js)?.pluginId?.takeIf { it in pluginOperations.active.value }?.let { InstallStep.Loading }
+         return ExtensionItem(
+             extension = this,
+             header = header,
+@@ -214,7 +220,16 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+     }
+ 
+     fun cancelExtensionInstall(item: ExtensionItem) {
+-        item.session?.sessionId?.let(extensionManager::cancelInstallation)
++        when (val key = item.extension.key) {
++            is ManagedExtensionKey.Apk -> {
++                val info = currentDownloads[key.packageName] ?: return
++                if (!ExtensionInstallActions.canCancel(info.first, info.second != null)) return
++                extensionManager.cancelInstallation(key.packageName)
++                currentDownloads.remove(key.packageName)
++                updateInstallStep(item.extension, null, null)?.let { view?.downloadUpdate(it) }
++            }
++            is ManagedExtensionKey.Js -> pluginOperations.cancel(key.pluginId)
++        }
+     }
+ 
+     fun install(entry: ManagedExtensionEntry) {
+@@ -232,39 +247,53 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+     }
+ 
+     private fun installApk(pkgName: String) {
++        if (currentDownloads[pkgName]?.first?.isCompleted() == false) return
+         val context = view?.context
+         if (context?.isOnline() == false) {
+             context.toast(R.string.no_network_connection)
+             return
+         }
+         val available = extensionManager.availableExtensionsFlow.value.firstOrNull { it.pkgName == pkgName } ?: return
++        currentDownloads[pkgName] = InstallStep.Pending to null
+         presenterScope.launch {
+-            extensionManager.installExtension(ExtensionManager.ExtensionInfo(available), presenterScope).collect { info ->
+-                when (info.first) {
+-                    InstallStep.Installed, InstallStep.Error -> currentDownloads.remove(pkgName)
+-                    else -> currentDownloads[pkgName] = info
+-                }
+-                extensions.values.flatten().firstOrNull { it.extension.key == ManagedExtensionKey.Apk(pkgName) }?.extension?.let { entry ->
+-                    updateInstallStep(entry, info.first, info.second)?.let { item ->
+-                        withContext(NonCancellable + Dispatchers.Main) { view?.downloadUpdate(item) }
++            try {
++                extensionManager.installExtension(ExtensionManager.ExtensionInfo(available), this).collect { info ->
++                    when (info.first) {
++                        InstallStep.Installed, InstallStep.Error, InstallStep.Done -> currentDownloads.remove(pkgName)
++                        else -> currentDownloads[pkgName] = info
++                    }
++                    extensions.values.flatten().firstOrNull { it.extension.key == ManagedExtensionKey.Apk(pkgName) }?.extension?.let { entry ->
++                        updateInstallStep(entry, info.first, info.second)?.let { item ->
++                            withContext(NonCancellable + Dispatchers.Main) { view?.downloadUpdate(item) }
++                        }
+                     }
+                 }
++            } finally {
++                currentDownloads.remove(pkgName)
++                withContext(NonCancellable) { rebuildExtensions() }
+             }
+         }
+     }
+ 
+     fun updateAllPendingExtensions(contentKind: ContentKind) {
+-        val apkUpdates = extensionManager.installedExtensionsFlow.value.filter { contentKind.accepts(it) && it.hasUpdate }
++        val active = buildSet {
++            currentDownloads.filterValues { !it.first.isCompleted() }.keys.forEach { add(ManagedExtensionKey.Apk(it)) }
++            pluginOperations.active.value.forEach { add(ManagedExtensionKey.Js(it)) }
++        }
++        val plan = ManagedExtensionUpdatePlan.create(extensions.values.flatten().map(ExtensionItem::extension), contentKind, active)
++        val apkUpdates = extensionManager.installedExtensionsFlow.value.filter { it.pkgName in plan.apkPackages }
+         updateExtensions(apkUpdates)
+-        extensions.getValue(contentKind)
+-            .mapNotNull { (it.extension.key as? ManagedExtensionKey.Js)?.pluginId?.takeIf { _ -> it.extension.hasUpdate } }
+-            .forEach { id -> pluginAction(id) { pluginManager.update(id) } }
++        plan.pluginIds.forEach { id -> pluginAction(id) { pluginManager.update(id) } }
+     }
+ 
+     fun updateExtensions(extensions: List<Extension.Installed>) {
+         if (extensions.isEmpty()) return
+         val context = view?.context ?: return
+-        extensions.forEach { extension ->
++        val available = extensions.mapNotNull { installed ->
++            extensionManager.availableExtensionsFlow.value.find { it.pkgName == installed.pkgName }
++        }.filter { currentDownloads[it.pkgName]?.first?.isCompleted() != false }.distinctBy { it.pkgName }
++        if (available.isEmpty()) return
++        available.forEach { extension ->
+             currentDownloads[extension.pkgName] = InstallStep.Pending to null
+             this.extensions.values.flatten().firstOrNull { it.extension.key == ManagedExtensionKey.Apk(extension.pkgName) }?.extension?.let { entry ->
+                 updateInstallStep(entry, InstallStep.Pending, null)?.let { view?.downloadUpdate(it) }
+@@ -272,7 +301,7 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         }
+         ExtensionInstallerJob.start(
+             context,
+-            extensions.mapNotNull { installed -> extensionManager.availableExtensionsFlow.value.find { it.pkgName == installed.pkgName } },
++            available,
+         )
+     }
+ 
+@@ -303,15 +332,8 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>()
+         extensionManager.untrustedExtensionsFlow.value.firstOrNull { it.pkgName == pkgName }
+ 
+     private fun pluginAction(pluginId: String, action: suspend () -> Any?) {
+-        if (pluginId in pluginOperations) return
+-        pluginOperations += pluginId
+-        presenterScope.launch {
+-            rebuildExtensions()
+-            runCatching { action() }.onFailure { failure ->
+-                withContext(Dispatchers.Main) { view?.context?.toast(failure.message ?: view?.context?.getString(R.string.unknown_error).orEmpty()) }
+-            }
+-            pluginOperations -= pluginId
+-            rebuildExtensions()
+-        }
++        pluginOperations.start(pluginId, onFailure = { failure ->
++            withContext(Dispatchers.Main) { view?.context?.toast(failure.message ?: view?.context?.getString(R.string.unknown_error).orEmpty()) }
++        }) { action() }
+     }
+ }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
+index 7a94fc309e9224b9d8def13ed81427841cd5f876..699b40870c266a24cec1138f86a23a8f8dec2e4a 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt
+@@ -90,8 +90,8 @@ class ExtensionHolder(
+             }.uppercase(Locale.ROOT)
+         binding.installProgress.progress = item.sessionProgress ?: 0
+         binding.installProgress.isVisible = item.sessionProgress != null
+-        binding.cancelButton.isVisible = item.sessionProgress != null
+-        binding.webviewButton.isVisible = extension.websiteUrl != null && item.sessionProgress == null
++        binding.cancelButton.isVisible = item.canCancelInstall
++        binding.webviewButton.isVisible = extension.websiteUrl != null && item.installStep?.isCompleted() != false
+ 
+         val iconFallback =
+             if (extension.backend == ManagedExtensionBackend.JavaScript) R.drawable.ic_code_24dp else R.mipmap.ic_launcher
+@@ -107,15 +107,14 @@ class ExtensionHolder(
+ 
+     @Suppress("ResourceType")
+     fun bindButton(item: ExtensionItem) = with(binding.extButton) {
+-        if (item.installStep == InstallStep.Done) return@with
+-        val installStep = item.installStep
++        val installStep = item.installStep.takeUnless { it == InstallStep.Done }
+         val extension = item.extension
+         isEnabled = true
+         isClickable = true
+         binding.installProgress.progress = item.sessionProgress ?: 0
+-        binding.cancelButton.isVisible = item.sessionProgress != null
++        binding.cancelButton.isVisible = item.canCancelInstall
+         binding.installProgress.isVisible = item.sessionProgress != null
+-        binding.webviewButton.isVisible = extension.websiteUrl != null && item.sessionProgress == null
++        binding.webviewButton.isVisible = extension.websiteUrl != null && item.installStep?.isCompleted() != false
+         if (installStep != null) {
+             applyStyle(R.style.Widget_Tachiyomi_Button_TextButton)
+             setText(
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
+index 8d7c192c68c53d94a142df359df134f488a9b903..91cf19d5e22378e18eceb44f308b7873eb3f4900 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt
+@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.extension
+ import android.content.pm.PackageInstaller
+ import android.view.View
+ import androidx.recyclerview.widget.RecyclerView
++import dev.ahmedmohamed.hayai.extension.install.ExtensionInstallActions
+ import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionEntry
+ import eu.davidea.flexibleadapter.FlexibleAdapter
+ import eu.davidea.flexibleadapter.items.AbstractSectionableItem
+@@ -28,6 +29,9 @@ data class ExtensionItem(
+     val sessionProgress: Int?
+         get() = (session?.progress?.times(100)?.toInt())
+ 
++    val canCancelInstall: Boolean
++        get() = ExtensionInstallActions.canCancel(installStep, session != null)
++
+     /**
+      * Returns the layout resource of this item.
+      */
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallLifecycleTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallLifecycleTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..b8efa403e13f72e9f9f944ac7faecd1f8c3575a2
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallLifecycleTest.kt
+@@ -0,0 +1,210 @@
++package dev.ahmedmohamed.hayai.extension.install
++
++import eu.kanade.tachiyomi.extension.model.InstallStep
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.filter
++import kotlinx.coroutines.flow.transformWhile
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.withTimeout
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ExtensionInstallLifecycleTest {
++    @Test
++    fun `cancelling a queued package never starts it and preserves other installs`() = runBlocking {
++        val batch = ExtensionInstallBatch(parallelism = 1)
++        val entered = CompletableDeferred<Unit>()
++        val release = CompletableDeferred<Unit>()
++        val started = mutableListOf<String>()
++        val work = launch {
++            batch.run(listOf("active", "cancelled", "next")) { pkg ->
++                started += pkg
++                if (pkg == "active") {
++                    entered.complete(Unit)
++                    release.await()
++                }
++            }
++        }
++        entered.await()
++        batch.cancel("cancelled")
++        release.complete(Unit)
++        withTimeout(2_000) { work.join() }
++        assertEquals(listOf("active", "next"), started)
++    }
++
++    @Test
++    fun `cancelling active work terminates it without cancelling another package`() = runBlocking {
++        val batch = ExtensionInstallBatch(parallelism = 1)
++        val entered = CompletableDeferred<Unit>()
++        var activeStopped = false
++        var nextCompleted = false
++        val work = launch {
++            batch.run(listOf("active", "next")) { pkg ->
++                if (pkg == "active") {
++                    try {
++                        entered.complete(Unit)
++                        awaitCancellation()
++                    } finally {
++                        activeStopped = true
++                    }
++                } else {
++                    nextCompleted = true
++                }
++            }
++        }
++        entered.await()
++        batch.cancel("active")
++        withTimeout(2_000) { work.join() }
++        assertTrue(activeStopped)
++        assertTrue(nextCompleted)
++    }
++
++    @Test
++    fun `cancellation before batch creation is respected`() = runBlocking {
++        val batch = ExtensionInstallBatch()
++        batch.cancel("cancelled")
++        val started = mutableListOf<String>()
++        batch.run(listOf("cancelled", "other")) { started += it }
++        assertEquals(listOf("other"), started)
++    }
++
++    @Test
++    fun `replaced operation cannot delete retry or publish stale state`() {
++        val operations = ExtensionInstallOperations()
++        val old = Job()
++        val retry = Job()
++        operations.replace("pkg", old)
++        operations.replace("pkg", retry)
++        var staleCleanup = false
++        assertTrue(old.isCancelled)
++        assertFalse(operations.isCurrent("pkg", old))
++        assertFalse(operations.finish("pkg", old) { staleCleanup = true })
++        assertFalse(staleCleanup)
++        assertTrue(operations.isCurrent("pkg", retry))
++        assertTrue(operations.cancel("pkg"))
++        assertTrue(retry.isCancelled)
++    }
++
++    @Test
++    fun `cancelled owner cannot register a late platform session`() {
++        val operations = ExtensionInstallOperations()
++        val owner = Job()
++        operations.replace("pkg", owner)
++        owner.cancel()
++        var registered = false
++        assertFalse(operations.withCurrent("pkg") { registered = true })
++        assertFalse(registered)
++    }
++
++    @Test
++    fun `cancel after completion cleans orphan resources without cancelling the completed owner`() {
++        val operations = ExtensionInstallOperations()
++        val owner = Job()
++        operations.replace("pkg", owner)
++        operations.finish("pkg", owner)
++        owner.complete()
++        var cleaned = false
++        assertFalse(operations.cancel("pkg") { cleaned = true })
++        assertTrue(cleaned)
++        assertFalse(owner.isCancelled)
++        assertTrue(operations.latest("pkg") === owner)
++    }
++
++    @Test
++    fun `delayed old terminal event cannot finish the replacement collector`() = runBlocking {
++        val old = Job()
++        val retry = Job()
++        val events = MutableSharedFlow<ExtensionInstallEvent>()
++        val received = mutableListOf<InstallStep>()
++        val collection = launch(start = CoroutineStart.UNDISPATCHED) {
++            events.filter { it.belongsTo("pkg", retry) }.transformWhile {
++                emit(it.info.first)
++                !it.info.first.isCompleted()
++            }.collect { received += it }
++        }
++        events.emit(ExtensionInstallEvent("pkg", InstallStep.Error to null, old))
++        assertTrue(collection.isActive)
++        events.emit(ExtensionInstallEvent("pkg", InstallStep.Downloading to null, retry))
++        events.emit(ExtensionInstallEvent("pkg", InstallStep.Installed to null, old))
++        assertTrue(collection.isActive)
++        events.emit(ExtensionInstallEvent("pkg", InstallStep.Installed to null, retry))
++        withTimeout(2_000) { collection.join() }
++        assertEquals(listOf(InstallStep.Downloading, InstallStep.Installed), received)
++    }
++
++    @Test
++    fun `public row projection drops old attempt events after a retry starts`() {
++        val old = Job()
++        val retry = Job()
++        assertFalse(ExtensionInstallEvent("pkg", InstallStep.Error to null, old).isVisible(retry, retry))
++        assertFalse(ExtensionInstallEvent("pkg", InstallStep.Loading to null, old).isVisible(null, old))
++        assertTrue(ExtensionInstallEvent("pkg", InstallStep.Error to null, old).isVisible(null, old))
++        assertFalse(ExtensionInstallEvent("pkg", InstallStep.Error to null, old).isVisible(null, retry))
++        assertTrue(ExtensionInstallEvent("Finished/pkg", InstallStep.Installed to null, null).isVisible(retry, retry))
++    }
++
++    @Test
++    fun `delayed older terminal events stay hidden after replacement has completed`() = runBlocking {
++        val operations = ExtensionInstallOperations()
++        val old = Job()
++        val retry = Job()
++        operations.replace("pkg", old)
++        operations.replace("pkg", retry)
++        val events = MutableSharedFlow<ExtensionInstallEvent>()
++        val received = mutableListOf<InstallStep>()
++        val projected = launch(start = CoroutineStart.UNDISPATCHED) {
++            events.filter { it.isVisible(operations.current(it.packageName), operations.latest(it.packageName)) }
++                .collect { received += it.info.first }
++        }
++        events.emit(ExtensionInstallEvent("pkg", InstallStep.Installed to null, retry))
++        operations.finish("pkg", retry)
++        retry.complete()
++        events.emit(ExtensionInstallEvent("pkg", InstallStep.Error to null, old))
++        events.emit(ExtensionInstallEvent("pkg", InstallStep.Installed to null, old))
++        projected.cancel()
++        projected.join()
++        assertEquals(listOf(InstallStep.Installed), received)
++    }
++
++    @Test
++    fun `missing callbacks and disappeared sessions have bounded retry deadlines`() {
++        val wait = ExtensionInstallWait(100)
++        assertFalse(wait.expired(100 + ExtensionInstallWait.TIMEOUT_MILLIS - 1))
++        assertTrue(wait.expired(100 + ExtensionInstallWait.TIMEOUT_MILLIS))
++        assertFalse(wait.sessionDisappeared(200, false))
++        assertFalse(wait.sessionDisappeared(2_000, true))
++        assertFalse(wait.sessionDisappeared(2_500, false))
++        assertFalse(wait.sessionDisappeared(5_499, false))
++        assertTrue(wait.sessionDisappeared(5_500, false))
++    }
++
++    @Test
++    fun `all cancellable phases expose cancel without requiring session progress`() {
++        listOf(InstallStep.Pending, InstallStep.Downloading, InstallStep.Loading).forEach {
++            assertTrue(ExtensionInstallActions.canCancel(it, false))
++        }
++        assertTrue(ExtensionInstallActions.canCancel(InstallStep.Installing, true))
++        assertFalse(ExtensionInstallActions.canCancel(InstallStep.Installing, false))
++        listOf(null, InstallStep.Installed, InstallStep.Error, InstallStep.Done).forEach {
++            assertFalse(ExtensionInstallActions.canCancel(it, true))
++        }
++    }
++
++    @Test
++    fun `worker cancellation before start persists until an intentional retry`() {
++        QueuedExtensionCancellations.start(listOf("queued.fixture"))
++        QueuedExtensionCancellations.cancel("queued.fixture")
++        assertTrue(QueuedExtensionCancellations.contains("queued.fixture"))
++        QueuedExtensionCancellations.start(listOf("unrelated.fixture"))
++        assertTrue(QueuedExtensionCancellations.contains("queued.fixture"))
++        QueuedExtensionCancellations.start(listOf("queued.fixture"))
++        assertFalse(QueuedExtensionCancellations.contains("queued.fixture"))
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
+index 97665a16547aae5414de2b8b230934d002454dda..15b8b26a83d5e7c90ca9b9c003b701fd116cc491 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedExtensionProjectorTest.kt
+@@ -1,6 +1,7 @@
+ package dev.ahmedmohamed.hayai.extension.managed
+ 
+ import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
++import dev.ahmedmohamed.hayai.extension.ExtensionCatalogReconciler
+ import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
+ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
+ import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
+@@ -96,6 +97,76 @@ class ManagedExtensionProjectorTest {
+         assertEquals(setOf("apk:update.apk", "js:update-js"), state.updates.map { it.key.stableValue }.toSet())
+     }
+ 
++    @Test
++    fun `first installed untrusted novel apk becomes a visible trust row immediately`() {
++        val untrusted = Extension.Untrusted(
++            name = "WTR-LAB",
++            pkgName = "eu.kanade.tachiyomi.novelextension.all.wtrlab",
++            versionName = "1.6.12",
++            versionCode = 12,
++            libVersion = 1.6,
++            signatureHash = "a".repeat(64),
++            lang = "all",
++            isNovel = true,
++        )
++        val snapshot = ApkExtensionSnapshot(emptyList(), emptyList(), emptyList(), emptyList())
++        val recorded = ExtensionCatalogReconciler.recordUntrusted(snapshot, untrusted)
++        val repeated = ExtensionCatalogReconciler.recordUntrusted(recorded, untrusted)
++        val state = ManagedExtensionProjector.project(repeated, NovelPluginCatalog(), filter)
++        assertEquals(1, repeated.untrusted.size)
++        assertEquals(ManagedInstallation.Untrusted, state.installed.single().installation)
++        assertEquals(setOf(ContentKind.Novel), state.installed.single().contentKinds)
++    }
++
++    @Test
++    fun `untrusted update replaces only its old installed record and failure`() {
++        val target = installedApk("target")
++        val other = installedApk("other")
++        val untrusted = Extension.Untrusted("Target", "target", "1.6.2", 2, 1.6, "hash")
++        val result = ExtensionCatalogReconciler.recordUntrusted(
++            ApkExtensionSnapshot(
++                listOf(target, other),
++                emptyList(),
++                emptyList(),
++                listOf(ApkLoadFailure("target", reason = ApkLoadFailure.Reason.ClassLoader)),
++            ),
++            untrusted,
++        )
++        assertEquals(listOf(other), result.installed)
++        assertEquals(listOf(untrusted), result.untrusted)
++        assertTrue(result.failures.isEmpty())
++    }
++
++    @Test
++    fun `novel update all dispatches apk and js once and skips active or untrusted entries`() {
++        val installedJs = InstalledNovelPlugin(plugin("js", "1.0.0"), REPO, 1L, "c".repeat(64))
++        val state = ManagedExtensionProjector.project(
++            ApkExtensionSnapshot(
++                listOf(installedApk("novel").copy(isNovel = true, hasUpdate = true)),
++                emptyList(),
++                listOf(availableApk("novel", 2).copy(isNovel = true)),
++                emptyList(),
++            ),
++            NovelPluginCatalog(
++                installed = listOf(installedJs),
++                available = listOf(plugin("js", "2.0.0")),
++                availableOrigins = mapOf("js" to REPO),
++            ),
++            filter,
++        )
++        val duplicated = state.entries + state.entries
++        val plan = ManagedExtensionUpdatePlan.create(duplicated, ContentKind.Novel, emptySet())
++        assertEquals(listOf("novel"), plan.apkPackages)
++        assertEquals(listOf("js"), plan.pluginIds)
++        val active = ManagedExtensionUpdatePlan.create(duplicated, ContentKind.Novel, setOf(ManagedExtensionKey.Js("js")))
++        assertTrue(active.pluginIds.isEmpty())
++        val manga = ManagedExtensionUpdatePlan.create(duplicated, ContentKind.Manga, emptySet())
++        assertTrue(manga.apkPackages.isEmpty())
++        assertTrue(manga.pluginIds.isEmpty())
++        val untrusted = duplicated.map { it.copy(installation = ManagedInstallation.Untrusted) }
++        assertTrue(ManagedExtensionUpdatePlan.create(untrusted, ContentKind.Novel, emptySet()).apkPackages.isEmpty())
++    }
++
+     private fun plugin(id: String, version: String) = NovelPluginDescriptor(
+         id = id,
+         name = id,
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedPluginOperationsTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedPluginOperationsTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..e5d0f8f00e02773dd4e95700a35dbaa486614781
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/extension/managed/ManagedPluginOperationsTest.kt
+@@ -0,0 +1,77 @@
++package dev.ahmedmohamed.hayai.extension.managed
++
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.withTimeout
++import kotlinx.coroutines.yield
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ManagedPluginOperationsTest {
++    @Test
++    fun `update all reserves each plugin once and runs in order`() = runBlocking {
++        val operations = ManagedPluginOperations(this)
++        val entered = CompletableDeferred<Unit>()
++        val release = CompletableDeferred<Unit>()
++        val order = mutableListOf<String>()
++        assertTrue(operations.start("first", { throw AssertionError(it) }) {
++            order += "first"
++            entered.complete(Unit)
++            release.await()
++        })
++        assertTrue(operations.start("second", { throw AssertionError(it) }) { order += "second" })
++        assertFalse(operations.start("first", { throw AssertionError(it) }) { order += "duplicate" })
++        entered.await()
++        assertEquals(listOf("first"), order)
++        assertEquals(setOf("first", "second"), operations.active.value)
++        release.complete(Unit)
++        withTimeout(2_000) { while (operations.active.value.isNotEmpty()) yield() }
++        assertEquals(listOf("first", "second"), order)
++    }
++
++    @Test
++    fun `cancel stops actual plugin job clears reservation and does not report an error`() = runBlocking {
++        val operations = ManagedPluginOperations(this)
++        val entered = CompletableDeferred<Unit>()
++        val stopped = CompletableDeferred<Unit>()
++        var failed = false
++        var queuedRan = false
++        operations.start("active", { failed = true }) {
++            try {
++                entered.complete(Unit)
++                awaitCancellation()
++            } finally {
++                stopped.complete(Unit)
++            }
++        }
++        operations.start("queued", { failed = true }) { queuedRan = true }
++        entered.await()
++        operations.cancel("queued")
++        operations.cancel("active")
++        withTimeout(2_000) {
++            stopped.await()
++            while (operations.active.value.isNotEmpty()) yield()
++        }
++        assertFalse(failed)
++        assertFalse(queuedRan)
++        var retryRan = false
++        assertTrue(operations.start("active", { failed = true }) { retryRan = true })
++        withTimeout(2_000) { while (operations.active.value.isNotEmpty()) yield() }
++        assertTrue(retryRan)
++    }
++
++    @Test
++    fun `a failed plugin releases queue for remaining updates`() = runBlocking {
++        val operations = ManagedPluginOperations(this)
++        val failures = mutableListOf<String>()
++        var nextRan = false
++        operations.start("broken", { failures += it.message.orEmpty() }) { error("broken update") }
++        operations.start("next", { throw AssertionError(it) }) { nextRan = true }
++        withTimeout(2_000) { while (operations.active.value.isNotEmpty()) yield() }
++        assertEquals(listOf("broken update"), failures)
++        assertTrue(nextRan)
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/compat/SourceTrackerCompatibilityTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/compat/SourceTrackerCompatibilityTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..24176cffa9287755c733a3255d600dbb86971148
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/compat/SourceTrackerCompatibilityTest.kt
+@@ -0,0 +1,60 @@
++package dev.ahmedmohamed.hayai.novel.compat
++
++import eu.kanade.tachiyomi.source.Source
++import eu.kanade.tachiyomi.source.SourceTracker
++import eu.kanade.tachiyomi.source.RateLimited
++import eu.kanade.tachiyomi.source.model.SChapter
++import eu.kanade.tachiyomi.source.model.SManga
++import kotlinx.coroutines.runBlocking
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import kotlin.coroutines.Continuation
++
++class SourceTrackerCompatibilityTest {
++    @Test
++    fun `compile-only tracker source can link inherited defaults and suspend callbacks`() = runBlocking {
++        val source = TrackerExtensionShape()
++        assertTrue(source.supportsChapterTracking)
++        assertFalse(source.supportsFavoritesTracking)
++        source.onChaptersRead(SManga.create(), emptyList(), emptyList(), emptyList())
++        source.onChaptersUnread(SManga.create(), emptyList(), emptyList(), emptyList())
++        source.onFavorited(SManga.create(), emptyList())
++        source.onUnfavorited(SManga.create(), emptyList())
++    }
++
++    @Test
++    fun `host exposes exact tracker binary names and Kotlin legacy default delegates`() {
++        val type = Class.forName("eu.kanade.tachiyomi.source.SourceTracker")
++        assertEquals(SourceTracker::class.java, type)
++        type.getMethod("getSupportsChapterTracking")
++        type.getMethod("getSupportsFavoritesTracking")
++        type.getMethod("onChaptersRead", SManga::class.java, List::class.java, List::class.java, List::class.java, Continuation::class.java)
++        type.getMethod("onUnfavorited", SManga::class.java, List::class.java, Continuation::class.java)
++        Class.forName("eu.kanade.tachiyomi.source.SourceTracker\$DefaultImpls")
++            .getMethod("getSupportsFavoritesTracking", type)
++    }
++
++    private class TrackerExtensionShape : Source, SourceTracker {
++        override val id = 7L
++        override val name = "WTR-LAB fixture"
++    }
++
++    @Test
++    fun `novel phoenix compile-only pacing interface links inherited defaults`() {
++        val source = PhoenixExtensionShape()
++        assertEquals(1000L, source.recommendedDelayMillis)
++        assertEquals(1, source.recommendedPermits)
++        val type = Class.forName("eu.kanade.tachiyomi.source.RateLimited")
++        type.getMethod("getMinimumDelayMillis")
++        Class.forName("eu.kanade.tachiyomi.source.RateLimited\$DefaultImpls")
++            .getMethod("getRecommendedDelayMillis", type)
++    }
++
++    private class PhoenixExtensionShape : Source, RateLimited {
++        override val id = 7165539527173321330L
++        override val name = "Novel Phoenix fixture"
++        override val minimumDelayMillis = 1000L
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginDownloadTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginDownloadTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..9db66b918ece88fad8151fd9b8f2e0c25e968e80
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/plugin/NovelPluginDownloadTest.kt
+@@ -0,0 +1,93 @@
++package dev.ahmedmohamed.hayai.novel.plugin
++
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.async
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.withTimeout
++import okhttp3.OkHttpClient
++import okhttp3.Request
++import okhttp3.ResponseBody
++import okhttp3.mockwebserver.MockResponse
++import okhttp3.mockwebserver.MockWebServer
++import okhttp3.mockwebserver.SocketPolicy
++import okio.Buffer
++import okio.ForwardingSource
++import okio.buffer
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.io.IOException
++import java.util.concurrent.TimeUnit
++
++class NovelPluginDownloadTest {
++    @Test
++    fun `cancel waiting for response cancels the underlying call`() = runBlocking {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
++            server.start()
++            val call = OkHttpClient().newCall(Request.Builder().url(server.url("/plugin.js")).build())
++            val download = async(Dispatchers.IO) { NovelPluginDownload.read(call, 1024) }
++            assertTrue(server.takeRequest(2, TimeUnit.SECONDS) != null)
++            withTimeout(2_000) { download.cancelAndJoin() }
++            assertTrue(call.isCanceled())
++            assertTrue(runCatching { download.await() }.exceptionOrNull() is CancellationException)
++        }
++    }
++
++    @Test
++    fun `cancel during body streaming closes the socket without waiting for the full body`() = runBlocking {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse().setBody("x".repeat(1024)).throttleBody(1, 1, TimeUnit.SECONDS))
++            server.start()
++            val bodyStarted = java.util.concurrent.CountDownLatch(1)
++            val client = OkHttpClient.Builder().addNetworkInterceptor { chain ->
++                val response = chain.proceed(chain.request())
++                val body = response.body
++                val source = object : ForwardingSource(body.source()) {
++                    private var reads = 0
++
++                    override fun read(sink: Buffer, byteCount: Long): Long {
++                        // One byte has arrived; the next read waits for the throttled remainder.
++                        if (++reads >= 2) bodyStarted.countDown()
++                        return super.read(sink, byteCount)
++                    }
++                }.buffer()
++                response.newBuilder().body(object : ResponseBody() {
++                    override fun contentType() = body.contentType()
++                    override fun contentLength() = body.contentLength()
++                    override fun source() = source
++                }).build()
++            }.build()
++            val call = client.newCall(Request.Builder().url(server.url("/plugin.js")).build())
++            val download = async(Dispatchers.IO) { NovelPluginDownload.read(call, 2048) }
++            assertTrue(bodyStarted.await(2, TimeUnit.SECONDS))
++            withTimeout(2_000) { download.cancelAndJoin() }
++            assertTrue(call.isCanceled())
++            assertTrue(runCatching { download.await() }.exceptionOrNull() is CancellationException)
++        }
++    }
++
++    @Test
++    fun `uncancelled disconnect during streaming remains a network failure`() = runBlocking {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse().setBody("x".repeat(1024)).setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY))
++            server.start()
++            val call = OkHttpClient().newCall(Request.Builder().url(server.url("/plugin.js")).build())
++            val failure = runCatching { NovelPluginDownload.read(call, 2048) }.exceptionOrNull()
++            assertTrue(failure is IOException)
++            assertTrue(failure !is CancellationException)
++        }
++    }
++
++    @Test
++    fun `completed download preserves plugin bytes`() = runBlocking {
++        MockWebServer().use { server ->
++            server.enqueue(MockResponse().setBody("plugin code"))
++            server.start()
++            val call = OkHttpClient().newCall(Request.Builder().url(server.url("/plugin.js")).build())
++            assertEquals("plugin code", NovelPluginDownload.read(call, 1024).toString(Charsets.UTF_8))
++        }
++    }
++}
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 8de46ebf2c52f1dbd27f2cc987c33cdc484e1b02..fe62ea3ca7d8e9b5133619bfc20a7805b486e77e 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -84,6 +84,10 @@ Built-in source settings are another deliberate adapter seam. `BrowseSourceContr
+ 
+ Saved source searches are an approved filter-sheet seam. One action on J2K's existing `SourceFilterSheet` stores the current query and recursively typed filter values through `SavedSourceSearchStore`. Restoring starts from the source's current filter schema and applies only structurally compatible values, so an extension update cannot replay an invalid select or sort index. The data is a bounded Hayai preference and therefore travels through J2K's existing preference backup rather than a second backup pipeline.
+ 
++The `ExtensionInstaller.kt` and `ExtensionInstallerJob.kt` seams retain J2K's package installation and WorkManager scheduling. They make a package operation cancellable while queued, downloading, or installing, reject missing downloads/sessions as terminal retry states, and subscribe before producing installation events. Hayai owns small operation policies and batch cancellation. Existing extension manager/UI adapters publish newly installed untrusted APKs to the trust UI and cancel by package identity. `ShizukuInstaller` exposes cancellation of only the requested waiting package; cancellation is unavailable after its privileged session has committed. These seams do not introduce another installer or extension catalog.
++
++Tsundoku extensions can implement its compile-only `eu.kanade.tachiyomi.source.SourceTracker` and `RateLimited` contracts. The compatibility declarations live under Hayai's `novel/compat` directory, with the required upstream package name as an explicit binary-interface exception. Preserve their interfaces, signatures, and Kotlin default implementations during minification. WTR-LAB and Novel Phoenix at NovelSourcery source commit `432f591ceac7a7bdd2d8ae9e65fa4ec91744320b` require these interfaces. This prevents class resolution failures; source-owned tracking callbacks remain **Foundation** and are not a claimed tracking port. Production callback dispatch remains separately audited, and no parallel rate-limit settings or chapter queue is added.
++
+ J2K's extension-facing `JavaScriptEngine` delegates evaluation to Hayai's QuickJS runtime. The novel plugin bridge needs the Dokar binding API, while J2K previously packaged a second QuickJS implementation with the same native `libquickjs.so` name. One Hayai-owned evaluator preserves the extension API and prevents an unresolvable APK native-library collision without changing application lifecycle code.
+ 
+ The Cloudflare interceptor and WebView help behavior follow Mihon commit `ac249e3668a57f24782a49218834064459ba2d09`. The interceptor detects the official `cf-mitigated: challenge` response header and stops the bypass when Cloudflare reports an interactive challenge. After a WebView page finishes, the adapter checks Mihon's `window._cf_chl_opt` and `Ray ID is` markers and exposes the same tappable error banner linked to Mihon's Cloudflare troubleshooting guide. The default HTTP and WebView identity is the requested Chrome 151 Android mobile user agent; custom stored user agents remain authoritative. Hayai keeps J2K's client, cookie jar, and source-header path unchanged.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 3087fc6a86cca360091b930249275e8e0495584a..0e2f9a264a7ec64458feaf2fa04932662be28619 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -42,6 +42,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ | Capability | Hayai boundary | Status |
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
++| SourceTracker and RateLimited extension ABI | Host interfaces in the Hayai compatibility directory use the published extension package names; J2K remains the APK loader and tracking authority | foundation; production APK linkage and minified retention pending; optional tracking callbacks are not a completed tracking port |
+ | One J2K reader, central routing, and J2K history | The actual J2K `ReaderActivity`, `ReaderViewModel`, `ReaderChapter`, `ViewerChapters`, toolbar, navigation overlay, slider, chapter sheet, preload request, and chapter loading path; Hayai adds only a `BaseViewer`, bounded adjacent-document window, normalized progress loader, and novel-action attachment. Native `TextView` and isolated `WebView` renderers remain document surfaces; the duplicate activity/chrome/chapter adapter are removed. | port; page counts are measured per chapter from real column fragments, page movement uses the document scroller and one viewport, and chapter scroll is separate from bidirectional continuous and paged reading; window updates preserve mounted text, and chapter crossings use J2K page selection; the September stability changes pass browser regressions and five native Android renderer checks, including real touchscreen selection; live-extension stress and full reader lifecycle checks remain pending |
+ | Source and extension artwork | Shared fitted, rounded icon binding for APK and URL artwork in Extensions, Browse, and migration; existing J2K row dimensions retained | Port; two Android checks verify Coil fit, rounded artwork bounds, and recycled crop/tint reset for wide and tall logos |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index f9508130715caaa7d64419deb156a61f79cfc5cb..1b371d7b444c45eb9de6bac0ef777786af0681c5 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -963,6 +963,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	where = "s
+ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	where = "source_id = ? AND manga_url = ?",
+ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt	"hayai-quote-v1",
+ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt	).joinToString("\u0000")
++app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallEvent.kt	if (packageName.startsWith("Finished") || packageName.startsWith("Uninstalled")) {
+ app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	"https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json"
+ app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	const val CURSED_MANGA = "https://raw.githubusercontent.com/mojuru/cursed-manga-repo/repo/index.pb"
+ app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	const val KEIYOUSHI_MANGA = "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb"
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 7ad78cb5e3e338717a3636bc35ff7a9457f04fa9..29e027b15ad469675b8a1b64b7582fb230a0fb0f 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -31,6 +31,11 @@ try {
+         # Approved in docs/architecture/j2k-reset.md. Defers J2K's install session until unknown-source permission exists.
+         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
++        # Approved in docs/architecture/j2k-reset.md. Makes existing package/download operations cancellable and terminal.
++        "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstaller.kt"
++        "app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionInstallerJob.kt"
++        # Approved in docs/architecture/j2k-reset.md. Cancels only the requested package in Shizuku's pending queue.
++        "app/src/main/java/eu/kanade/tachiyomi/extension/ShizukuInstaller.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
+         # Approved in docs/architecture/j2k-reset.md. Updates only the default HTTP/WebView user-agent identity.
+         "app/src/main/java/eu/kanade/tachiyomi/network/NetworkHelper.kt"
+-- 
+2.54.0.windows.1
+

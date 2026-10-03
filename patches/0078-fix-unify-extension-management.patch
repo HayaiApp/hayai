@@ -1,4 +1,4 @@
-From ba605d8079d692d148a9a7369112cbe8fcb12040 Mon Sep 17 00:00:00 2001
+From 89bfc490378dad4c7ad9eb3fc5ed1512e5744f65 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 13:05:11 +0300
 Subject: [PATCH] fix: unify extension management
@@ -2863,7 +2863,7 @@ index 63e5a578eba8352ae84e103258dd6ad997c6ca7f..e8ce41cd65dcc30a8b8023e26825d4d3
                      titleRes = R.string.hayai_eh_account
                      summaryRes = R.string.hayai_eh_account_summary
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
-index 71ec32e8b51f3a59c0ace8a92fad642978505404..cabb3f39c83da943f808ef1fb9bf30f6dc5a3ef7 100644
+index 1b878f7ee3c9c743e8032c19ed20f5fa11cbcbc4..9ff20e240668e262509941f764b8f5d74e761bce 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/setting/SettingsBrowseController.kt
 @@ -6,7 +6,6 @@ import android.provider.Settings
@@ -2879,10 +2879,10 @@ index 71ec32e8b51f3a59c0ace8a92fad642978505404..cabb3f39c83da943f808ef1fb9bf30f6
  import eu.kanade.tachiyomi.ui.main.MainActivity
  import eu.kanade.tachiyomi.ui.migration.MigrationController
 -import eu.kanade.tachiyomi.ui.source.browse.repos.RepoController
+ import eu.kanade.tachiyomi.ui.source.searchhistory.clearSearchHistory
  import eu.kanade.tachiyomi.util.view.snack
  import eu.kanade.tachiyomi.util.view.withFadeTransaction
- import uy.kohesive.injekt.injectLazy
-@@ -62,15 +60,6 @@ class SettingsBrowseController : SettingsController() {
+@@ -63,15 +61,6 @@ class SettingsBrowseController : SettingsController() {
                  preference {
                      key = "pref_edit_extension_repos"
  
@@ -2899,7 +2899,7 @@ index 71ec32e8b51f3a59c0ace8a92fad642978505404..cabb3f39c83da943f808ef1fb9bf30f6
                      summaryRes = R.string.hayai_novel_repository_management_summary
  
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
-index 29346c7774c5b831b7e52758d01902d8c7d01829..47908478cfa7382126b625cf6e9ef9d18bc60d2a 100644
+index 636dc6b52736f34288b7983eb1fcdef9fb4fcc18..8f43af6096f59796aa9ad2235a22a797605d57d9 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/BrowseController.kt
 @@ -47,7 +47,6 @@ import eu.kanade.tachiyomi.ui.main.TabbedInterface
@@ -2908,9 +2908,9 @@ index 29346c7774c5b831b7e52758d01902d8c7d01829..47908478cfa7382126b625cf6e9ef9d1
  import eu.kanade.tachiyomi.ui.source.browse.BrowseSourceController
 -import eu.kanade.tachiyomi.ui.source.browse.repos.RepoController
  import eu.kanade.tachiyomi.ui.source.globalsearch.GlobalSearchController
- import eu.kanade.tachiyomi.util.system.dpToPx
- import eu.kanade.tachiyomi.util.system.getBottomGestureInsets
-@@ -339,7 +338,7 @@ class BrowseController :
+ import eu.kanade.tachiyomi.ui.source.searchhistory.FilterApplyResult
+ import eu.kanade.tachiyomi.ui.source.searchhistory.SearchHistoryDelegate
+@@ -365,7 +364,7 @@ class BrowseController :
      }
  
      private fun updateSheetMenu() {
@@ -2919,7 +2919,7 @@ index 29346c7774c5b831b7e52758d01902d8c7d01829..47908478cfa7382126b625cf6e9ef9d1
          binding.bottomSheet.sheetToolbar.title =
              if (!onExtensionTab) {
                  binding.bottomSheet.root.currentSourceTitle
-@@ -429,14 +428,7 @@ class BrowseController :
+@@ -455,14 +454,7 @@ class BrowseController :
                      router.pushController(SettingsBrowseController().withFadeTransaction())
                  }
                  R.id.action_ext_repos -> {
@@ -2935,7 +2935,7 @@ index 29346c7774c5b831b7e52758d01902d8c7d01829..47908478cfa7382126b625cf6e9ef9d1
                  }
              }
              return@setOnMenuItemClickListener true
-@@ -532,9 +524,6 @@ class BrowseController :
+@@ -558,9 +550,6 @@ class BrowseController :
          binding.bottomSheet.root.extensionFrameLayout?.binding?.fastScroller?.updateLayoutParams<ViewGroup.MarginLayoutParams> {
              bottomMargin = -pad.toInt()
          }

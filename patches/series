@@ -104,3 +104,11 @@
 0104-Fix-E-Hentai-browser-clearance-handoff-and-Cloudflar.patch
 0105-Preserve-nightly-APK-startup-diagnostics-and-signed-.patch
 0106-Require-notification-tap-to-install-downloaded-app-u.patch
+0107-Use-published-FlexibleAdapter-artifacts-and-preserve.patch
+0108-Repair-extension-cancellation-trust-publication-and-.patch
+0109-Allow-existing-entries-to-use-the-Novel-series-type-.patch
+0110-Keep-gallery-tag-searches-scoped-and-add-continuous-.patch
+0111-Preserve-category-exclusions-for-duplicate-read-chap.patch
+0112-Stabilize-novel-reader-lifecycle-chapter-seeking-and.patch
+0113-Match-Android-regression-fixtures-to-J2K-lifecycle-a.patch
+0114-Record-October-upstream-integration-issue-audit-and-.patch

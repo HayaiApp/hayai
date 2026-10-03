@@ -1,0 +1,314 @@
+From 90394e5eba8ebef96e203fec574a1d73f9e011c4 Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 07:22:08 +0300
+Subject: [PATCH] Use published FlexibleAdapter artifacts and preserve J2K
+ filtering
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index e76b474cfcdd4b2e4291a693e30f965b1036cbd7..17b9fae6760a3db82d4411bbfdd1f9e31e892c4e 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -163,3 +163,5 @@ ts	phase	decision	why	evidence	result
+ 2026-09-06T17:02:55.6903785+03:00	reader-content-sheets	reused J2K E2E sheets and Material controls for quotes, highlights, statistics, translation results, and fonts; moved legacy JSON import into overflow	no J2K file or storage-schema changes; 501 unit tests passed; 2 Android sheet tests passed after correcting text-field layout params and keyboard expansion; localization and boundary passed	NovelReaderAttachment.kt; NovelReaderContentSheet.kt; artifacts/novel-reader/sheets-instrumentation.log	VERIFIED_SCOPED
+ 2026-09-06T22:12:59.8085941+03:00	cloudflare-eh-clearance	reused the Mihon solver with SY legacy challenge detection; shared browser clearance across EH verification browse favorites and settings; removed passive CDN false positives	504 unit tests and DevDebug compilation passed; real HTTP retry and cookie scoping verified; authenticated login remains pending; no schema change	EhBrowserCookies.kt; CloudflareHelpDetector.kt; existing CloudflareInterceptor adapter; artifacts/novel-reader/cloudflare-validation.log	HTTP_UNIT_BOUNDARY_VERIFIED
+ 2026-09-06T22:55:53.6040369+03:00	manual-app-update-installation	removed automatic PackageInstaller sessions; reuse existing Install notification and clarify automatic download settings; keep work input and network preference compatibility	DevDebug compilation and 504 unit tests passed; localization boundary and whitespace passed; Xiaomi verification pending; no schema change; nightly startup diagnostics added after two missing-process failures	AppDownloadInstallJob.kt; AppUpdateNotifier.kt; SettingsGeneralController.kt; tools/verify-apk-startup.ps1; artifacts/novel-reader/manual-update-validation.log	COMPILE_UNIT_VERIFIED
++2026-10-03T06:42:20.7884232+03:00	dependency-publication	Replaced unavailable arkon JitPack artifacts with the published FlexibleAdapter core and UI used by Tsundoku	The first build failed before Kotlin; the initial equivalent mapping was incomplete when caches expired	artifacts/j2k-update-2026-10-03/gradle-validation.log; flexibleadapter-jitpack.log; tsundoku 775508f3c6; app/build.gradle.kts	CORRECTED_VALIDATION_PENDING
++2026-10-03T06:56:20.6835174+03:00	dependency-source-audit	Reviewed canonical FlexibleAdapter source differences and preserved J2K prefiltered datasets	Supersedes the earlier unqualified JitPack-log reference; synchronous guard retains same-query refresh, headers and placeholders	artifacts/j2k-update-2026-10-03/flexibleadapter-jitpack.log; artifacts/j2k-update-2026-10-03/flexibleadapter-source-audit.md; PrefilteredAdapterInstrumentedTest.kt	SOURCE_REVIEWED_RUNTIME_PENDING
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 6eb0b8186f03359d443fb2a41a97ea1d329817db..a76e62587e5fcd8577bc9934dedcceaf323c90a6 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -271,8 +271,8 @@ dependencies {
+     val fastAdapterVersion = "5.7.0"
+     implementation("com.mikepenz:fastadapter:$fastAdapterVersion")
+     implementation("com.mikepenz:fastadapter-extensions-binding:$fastAdapterVersion")
+-    implementation("com.github.arkon.FlexibleAdapter:flexible-adapter:c8013533")
+-    implementation("com.github.arkon.FlexibleAdapter:flexible-adapter-ui:c8013533")
++    implementation("eu.davidea:flexible-adapter:5.1.0")
++    implementation("eu.davidea:flexible-adapter-ui:1.0.0")
+     implementation("com.nightlynexus.viewstatepageradapter:viewstatepageradapter:1.1.0")
+     implementation("com.github.mthli:Slice:v1.2")
+     implementation("io.noties.markwon:core:4.6.2")
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/ui/PrefilteredAdapterInstrumentedTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/ui/PrefilteredAdapterInstrumentedTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..f463c680b7c938e0ef8f1dda82676d332035a412
+--- /dev/null
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/ui/PrefilteredAdapterInstrumentedTest.kt
+@@ -0,0 +1,165 @@
++package dev.ahmedmohamed.hayai.ui
++
++import android.os.SystemClock
++import androidx.test.core.app.ActivityScenario
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import eu.kanade.tachiyomi.data.database.models.Category
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import eu.kanade.tachiyomi.data.database.models.LibraryManga
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.ui.library.LibraryCategoryAdapter
++import eu.kanade.tachiyomi.ui.library.LibraryHeaderItem
++import eu.kanade.tachiyomi.ui.library.LibraryItem
++import eu.kanade.tachiyomi.ui.main.MainActivity
++import eu.kanade.tachiyomi.ui.manga.MangaDetailsAdapter
++import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
++import eu.kanade.tachiyomi.ui.manga.chapter.ChapterItem
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++
++@RunWith(AndroidJUnit4::class)
++class PrefilteredAdapterInstrumentedTest {
++    private lateinit var activity: ActivityScenario<MainActivity>
++
++    @Before
++    fun launch() {
++        activity = ActivityScenario.launch(MainActivity::class.java)
++    }
++
++    @After
++    fun close() {
++        activity.close()
++    }
++
++    @Test
++    fun chapterSearchKeepsMatchesHeaderAndSameQueryRefresh() {
++        lateinit var adapter: MangaDetailsAdapter
++        lateinit var controller: MangaDetailsController
++        val manga = Manga.create("/adapter-fixture", "Adapter fixture").apply { id = -123L }
++        val first = chapter(manga, 1, "Needle chapter")
++        val scanlator = chapter(manga, 2, "Another chapter", "Needle group")
++        val other = chapter(manga, 3, "Unrelated chapter")
++        val later = chapter(manga, 4, "New needle chapter")
++        activity.onActivity {
++            controller = MangaDetailsController(manga)
++            adapter = MangaDetailsAdapter(controller)
++            adapter.addScrollableHeader(controller.presenter.headerItem)
++            adapter.items = listOf(first, scanlator, other)
++            adapter.performFilter()
++        }
++        await { chapterIds(adapter) == listOf(1L, 2L, 3L) }
++
++        activity.onActivity {
++            adapter.setFilter("needle")
++            adapter.performFilter()
++        }
++        await { chapterIds(adapter) == listOf(1L, 2L) }
++        activity.onActivity {
++            assertTrue(adapter.hasFilter())
++            assertEquals("needle", adapter.getFilter(String::class.java))
++            assertTrue(adapter.currentItems.contains(controller.presenter.headerItem))
++            adapter.items = listOf(first, scanlator, other, later)
++            adapter.performFilter()
++        }
++        await { chapterIds(adapter) == listOf(1L, 2L, 4L) }
++
++        activity.onActivity {
++            adapter.setFilter("missing")
++            adapter.performFilter()
++        }
++        await { chapterIds(adapter).isEmpty() && adapter.currentItems.contains(controller.presenter.headerItem) }
++        activity.onActivity {
++            adapter.setFilter("")
++            adapter.performFilter()
++        }
++        await { chapterIds(adapter) == listOf(1L, 2L, 3L, 4L) }
++    }
++
++    @Test
++    fun librarySearchRefreshesSameQueryAndKeepsCategoryPlaceholder() {
++        lateinit var adapter: LibraryCategoryAdapter
++        val category = Category.create("Fixture").apply { id = 123 }
++        val header = LibraryHeaderItem({ category }, 123)
++        val first = libraryItem(header, 1, "Needle manga")
++        val other = libraryItem(header, 2, "Unrelated manga")
++        val later = libraryItem(header, 3, "New needle manga")
++        val placeholder = LibraryItem(LibraryManga.createBlank(123), header, null)
++        activity.onActivity {
++            adapter = LibraryCategoryAdapter(null)
++            adapter.setFilter("title:needle")
++            adapter.setItems(listOf(first, other))
++        }
++        await { libraryIds(adapter) == listOf(1L) }
++        activity.onActivity {
++            assertTrue(adapter.hasFilter())
++            assertEquals("title:needle", adapter.getFilter(String::class.java))
++            assertTrue(adapter.currentItems.contains(header))
++            adapter.setItems(listOf(first, other, later))
++        }
++        await { libraryIds(adapter) == listOf(1L, 3L) }
++
++        activity.onActivity {
++            adapter.setFilter("title:missing")
++            // The single-category no-results branch supplies this same blank row to updateDataSet.
++            adapter.updateDataSet(listOf(placeholder), true)
++        }
++        await { libraryIds(adapter) == listOf(Long.MIN_VALUE) }
++        activity.onActivity {
++            assertTrue(adapter.currentItems.contains(header))
++            assertTrue(adapter.hasFilter())
++            adapter.updateDataSet(listOf(placeholder), false)
++            assertEquals(listOf(Long.MIN_VALUE), libraryIds(adapter))
++            assertTrue(adapter.hasFilter())
++            adapter.setFilter("")
++            adapter.setItems(listOf(first, other, later))
++        }
++        await { libraryIds(adapter) == listOf(1L, 2L, 3L) }
++    }
++
++    private fun chapter(manga: Manga, id: Long, name: String, scanlator: String? = null): ChapterItem =
++        ChapterItem(
++            Chapter.create().apply {
++                this.id = id
++                manga_id = manga.id
++                url = "/chapter/$id"
++                this.name = name
++                this.scanlator = scanlator
++                chapter_number = id.toFloat()
++            },
++            manga,
++        )
++
++    private fun libraryItem(header: LibraryHeaderItem, id: Long, title: String): LibraryItem =
++        LibraryItem(
++            LibraryManga().apply {
++                this.id = id
++                url = "/manga/$id"
++                this.title = title
++                category = header.catId
++            },
++            header,
++            null,
++        )
++
++    private fun chapterIds(adapter: MangaDetailsAdapter): List<Long?> =
++        adapter.currentItems.filterIsInstance<ChapterItem>().map { it.id }
++
++    private fun libraryIds(adapter: LibraryCategoryAdapter): List<Long?> =
++        adapter.currentItems.filterIsInstance<LibraryItem>().map { it.manga.id }
++
++    private fun await(check: () -> Boolean) {
++        val end = SystemClock.uptimeMillis() + 8000
++        var passed = false
++        while (!passed && SystemClock.uptimeMillis() < end) {
++            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
++            activity.onActivity { passed = check() }
++            if (!passed) SystemClock.sleep(50)
++        }
++        assertTrue("The production adapter did not show the expected filtered rows", passed)
++    }
++}
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryCategoryAdapter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryCategoryAdapter.kt
+index fa0a06b9178126686e6b90067fb0d576e9fdb437..418b28353917e45b23ea711ac6a90792a3eff6cc 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryCategoryAdapter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryCategoryAdapter.kt
+@@ -57,6 +57,7 @@ class LibraryCategoryAdapter(
+      * The list of manga in this category.
+      */
+     private var mangas: List<LibraryItem> = emptyList()
++    private var updatingPrefilteredItems = false
+ 
+     val libraryListener: LibraryListener? = controller
+ 
+@@ -149,6 +150,22 @@ class LibraryCategoryAdapter(
+         runBlocking { performFilterAsync() }
+     }
+ 
++    override fun hasFilter(): Boolean = !updatingPrefilteredItems && super.hasFilter()
++
++    override fun updateDataSet(
++        items: List<IFlexible<*>>?,
++        animate: Boolean,
++    ) {
++        // QueryNode owns filtering, including the blank row shown when a category has no matches.
++        val wasUpdating = updatingPrefilteredItems
++        updatingPrefilteredItems = true
++        try {
++            super.updateDataSet(items, animate)
++        } finally {
++            updatingPrefilteredItems = wasUpdating
++        }
++    }
++
+     suspend fun performFilterAsync() {
+         val s = getFilter(String::class.java)
+         if (s.isNullOrBlank()) {
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsAdapter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsAdapter.kt
+index 9f8db0b45a61f739eaf1703a77014ff2675ebeb1..f9f82b45a5153da9a9c636720755803439b3cc6f 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsAdapter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsAdapter.kt
+@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.ui.manga
+ 
+ import android.view.ActionMode
+ import android.view.View
+-import android.widget.TextView
+ import android.widget.LinearLayout
++import android.widget.TextView
+ import androidx.recyclerview.widget.ItemTouchHelper
+ import dev.ahmedmohamed.hayai.novel.download.NovelDownloadPresentationState
+ import dev.ahmedmohamed.hayai.novel.integration.NovelChapterPresentation
+@@ -42,6 +42,7 @@ class MangaDetailsAdapter(
+     var items: List<ChapterItem> = emptyList()
+     private var novelPresentations: Map<Long, NovelChapterPresentation> = emptyMap()
+     private var novelOfflineChapterIds: Set<Long> = emptySet()
++    private var updatingPrefilteredItems = false
+ 
+     val delegate: MangaDetailsInterface = controller
+     val presenter = controller.presenter
+@@ -102,6 +103,22 @@ class MangaDetailsAdapter(
+ 
+     fun indexOf(chapterId: Long): Int = currentItems.indexOfFirst { it is ChapterItem && it.id == chapterId }
+ 
++    override fun hasFilter(): Boolean = !updatingPrefilteredItems && super.hasFilter()
++
++    override fun updateDataSet(
++        items: List<IFlexible<*>>?,
++        animate: Boolean,
++    ) {
++        // J2K owns filtering; FlexibleAdapter must update this already-filtered list, including its headers.
++        val wasUpdating = updatingPrefilteredItems
++        updatingPrefilteredItems = true
++        try {
++            super.updateDataSet(items, animate)
++        } finally {
++            updatingPrefilteredItems = wasUpdating
++        }
++    }
++
+     fun performFilter() {
+         val s = getFilter(String::class.java)
+         if (s.isNullOrBlank()) {
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index 5590b165a369f4f382fdd1a36bb37208afa352ef..8de46ebf2c52f1dbd27f2cc987c33cdc484e1b02 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -132,6 +132,10 @@ Offline novel files are deliberately excluded, matching J2K's treatment of downl
+ 
+ ## Updating upstreams
+ 
++The first October integration build confirmed that JitPack no longer provides J2K's pinned arkon FlexibleAdapter `c8013533` artifacts. Tsundoku `775508f3c6e8814ab38634874168948600e81574`, referencing Mihon `737fdbfbf`, switches to the canonical Maven Central artifact. Hayai follows that packaging correction for core 5.1.0 and UI 1.0.0 in `app/build.gradle.kts`, retaining the existing adapter API and ownership. Local caches are not a release dependency.
++
++The canonical adapter automatically filters updates when a query exists. J2K's details and category adapters already produce filtered datasets, including its blank library placeholder. The existing `MangaDetailsAdapter` seam and new `LibraryCategoryAdapter` seam retain the superclass UPDATE path for those prepared lists while preserving the stored query for highlighting. This also keeps same-query refreshes and existing headers and footers. Browse and other adapters retain the dependency's normal filter behavior.
++
+ The September 6, 2026 integration advances J2K from `e848fcebef2cdc157c531e1f4a5086665bcc9d73` to `c88c8e1b3d864268785f6a9655ee471e4cc368c1` (eight commits). J2K owns the new card containers, ripples, e-ink controls, and selective backup restore. Existing Hayai adapters retain rich source metadata inside the new card layout and novel progress presentation after J2K's page-flash call. No new protected activity seam is added.
+ 
+ The backup adapter filters Hayai side data using J2K's restore selection: library data includes quotes, chapter statistics, highlights, translations, gallery aliases, favorites, and source metadata; categories include E-Hentai category mappings; extension repositories include novel repository lists; source settings include novel plugins and custom sources. Selecting only app settings restores no side data. The payload schema and database versions are unchanged. The new flash-color preference uses Hayai's existing compatible enum decoder. These changes remain within the existing `BackupRestorer`, `PreferencesHelper`, source-list, and reader adapter allowlist.
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index f64a5b4340998216422beeb05887f5c770f3f860..7ad78cb5e3e338717a3636bc35ff7a9457f04fa9 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -55,6 +55,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
++        # Approved in docs/architecture/j2k-reset.md. Keeps J2K's prefiltered rows authoritative after the dependency publication repair.
++        "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryCategoryAdapter.kt"
+         # Approved in docs/architecture/j2k-reset.md. Delegates only novel-card title line count to a Hayai presentation policy.
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryGridHolder.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryListHolder.kt"
+-- 
+2.54.0.windows.1
+

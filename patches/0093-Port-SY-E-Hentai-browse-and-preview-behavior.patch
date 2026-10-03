@@ -1,4 +1,4 @@
-From beb754104a70af1af045c1e899e68c17aaf5cc10 Mon Sep 17 00:00:00 2001
+From c580b9026b9f25c4aae4643746d32808ddc2779e Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 22:48:14 +0300
 Subject: [PATCH] Port SY E-Hentai browse and preview behavior
@@ -731,7 +731,7 @@ index 48f65f9c7ac82c4991a44a452c406e9aa554394e..5f5efe349907cb8bebd3e3967f00f1ee
                  val settingsPrefScreen = ctrl.setupPreferenceScreen(preferenceManager.createPreferenceScreen(context))
                  val prefCount = settingsPrefScreen.preferenceCount
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-index ac4faf27712ffd24968b2fd1a3d0364fe66288d7..a21121045258020c0eb219a4414cd3473e184187 100644
+index ba42a1176ab3aafc8cb7ac60e0d37677544a159f..1fe2eccfef3be3412a83ad1ab5d8a464377a090f 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 @@ -20,6 +20,12 @@ import com.bluelinelabs.conductor.ControllerChangeHandler
@@ -757,7 +757,7 @@ index ac4faf27712ffd24968b2fd1a3d0364fe66288d7..a21121045258020c0eb219a4414cd347
  import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
  import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
  import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
-@@ -109,6 +112,7 @@ open class BrowseSourceController(
+@@ -117,6 +120,7 @@ open class BrowseSourceController(
       * Preferences helper.
       */
      private val preferences: PreferencesHelper by injectLazy()
@@ -765,7 +765,7 @@ index ac4faf27712ffd24968b2fd1a3d0364fe66288d7..a21121045258020c0eb219a4414cd347
  
      /**
       * Adapter containing the list of manga from the catalogue.
-@@ -333,7 +337,7 @@ open class BrowseSourceController(
+@@ -380,7 +384,7 @@ open class BrowseSourceController(
      ) {
          menu?.findItem(R.id.action_display_mode)?.apply {
              val icon =
@@ -774,7 +774,7 @@ index ac4faf27712ffd24968b2fd1a3d0364fe66288d7..a21121045258020c0eb219a4414cd347
                      R.drawable.ic_view_module_24dp
                  } else {
                      R.drawable.ic_view_list_24dp
-@@ -733,7 +737,26 @@ open class BrowseSourceController(
+@@ -837,7 +841,26 @@ open class BrowseSourceController(
          val view = view ?: return
          val adapter = adapter ?: return
  
@@ -802,7 +802,7 @@ index ac4faf27712ffd24968b2fd1a3d0364fe66288d7..a21121045258020c0eb219a4414cd347
          presenter.prefs.browseAsList().set(isListMode)
          listOf(activityBinding?.toolbar?.menu, activityBinding?.searchToolbar?.menu).forEach {
              updateDisplayMenuItem(it, isListMode)
-@@ -749,6 +772,16 @@ open class BrowseSourceController(
+@@ -853,6 +876,16 @@ open class BrowseSourceController(
          }
      }
  

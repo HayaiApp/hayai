@@ -1,4 +1,4 @@
-From ae59aadc7afbba52cbee346fb937eca7d0a8e49a Mon Sep 17 00:00:00 2001
+From 8762ceedca5efb41358d5d5672ca6892c87efcc8 Mon Sep 17 00:00:00 2001
 From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
 Date: Fri, 21 Aug 2026 00:31:46 +0300
 Subject: [PATCH] Integrate novel workflows and E-Hentai source foundation
@@ -6411,10 +6411,10 @@ index 5f5a284f23c3962fca511c761769a80081b3f826..966860508326eb18d3fa8d00270cd36b
              presenter.deleteChapter(chapter)
          } else {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt
-index 0dce43fa43f0a93caa288d2f0915038fedc93751..a43f9aa5f73ca4ef4b7aa23b98419a270b68a49b 100644
+index 858091a34d617f43adec003d847434376ad5d0ac..73f68708d84fae7517b31baf76d79aea72c5c454 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaHeaderHolder.kt
-@@ -394,6 +394,7 @@ class MangaHeaderHolder(
+@@ -395,6 +395,7 @@ class MangaHeaderHolder(
              return
          }
          binding.title.text = manga.title
@@ -6470,10 +6470,10 @@ index 9e8ae5e990b199aa4810fb9620a7f1c94fa1a13a..327861dbbc0510380f97d23eb69e3be0
              statuses.add(chapter.scanlator!!)
          }
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt
-index e117421ce70e40206f6e6aa1116115e870d14957..cdf89105004a148e630d07043e68a1191e5a002e 100644
+index ede0138e2843361fae67cb7796cc8165b2ac70e7..c9210fbeda0708436d987737da00ad5bcffa2883 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/migration/SearchPresenter.kt
-@@ -1,20 +1,24 @@
+@@ -1,21 +1,25 @@
  package eu.kanade.tachiyomi.ui.migration
  
 +import dev.ahmedmohamed.hayai.novel.integration.NovelMigrationPolicy
@@ -6482,6 +6482,7 @@ index e117421ce70e40206f6e6aa1116115e870d14957..cdf89105004a148e630d07043e68a119
  import eu.kanade.tachiyomi.ui.source.globalsearch.GlobalSearchItem
  import eu.kanade.tachiyomi.ui.source.globalsearch.GlobalSearchMangaItem
  import eu.kanade.tachiyomi.ui.source.globalsearch.GlobalSearchPresenter
+ import eu.kanade.tachiyomi.ui.source.searchhistory.FilterApplyResult
 +import uy.kohesive.injekt.injectLazy
  
  class SearchPresenter(
@@ -6706,7 +6707,7 @@ index 34462c2777bf1754d75f7689677c5dfcdc8796fa..e61ebe2ae0dc2a4e8602bc33be833bfa
                  titleRes = R.string.general
                  intListPreference(activity) {
 diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
-index e4eda61e943030d86d16baf5078db4212dfff643..4ddf91334008f09d7d62e101ecd2bfe58c19dfc0 100644
+index 6e6ece9e90873e5d1075108b373a140259905e40..119309920d9ab2242e4fae5433f8c95e36b3fc86 100644
 --- a/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 +++ b/app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt
 @@ -1,5 +1,6 @@
@@ -6725,7 +6726,7 @@ index e4eda61e943030d86d16baf5078db4212dfff643..4ddf91334008f09d7d62e101ecd2bfe5
  import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
  import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
  import eu.kanade.tachiyomi.ui.main.FloatingSearchInterface
-@@ -353,7 +356,7 @@ open class BrowseSourceController(
+@@ -405,7 +408,7 @@ open class BrowseSourceController(
          val isHttpSource = presenter.source is HttpSource
          menu.findItem(R.id.action_open_in_web_view).isVisible = isHttpSource
  
@@ -6734,7 +6735,7 @@ index e4eda61e943030d86d16baf5078db4212dfff643..4ddf91334008f09d7d62e101ecd2bfe5
          menu.findItem(R.id.action_source_settings).isVisible = isConfigurableSource
  
          val isLocalSource = presenter.source is LocalSource
-@@ -530,6 +533,10 @@ open class BrowseSourceController(
+@@ -622,6 +625,10 @@ open class BrowseSourceController(
      }
  
      private fun openSourceSettings() {
@@ -7002,10 +7003,10 @@ index d847df8dfb116b26281c77cd801991ec458978c4..76bf268f9b5057f060a2b282647324dd
 \ No newline at end of file
 +</eu.kanade.tachiyomi.widget.StatefulNestedScrollView>
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
-index d81a8e3fe8253c5be5f87280364ba19c4b11a062..f4595fc7ae5e07aa7437b76ba3e384973659d5bc 100644
+index 74766e7123585ba42e2ed163a6bb6c34c8aeb603..a6227fa0dd420fd6975315fd6b8b0fe33d9162d8 100644
 --- a/app/src/main/res/values/strings.xml
 +++ b/app/src/main/res/values/strings.xml
-@@ -1272,6 +1272,34 @@
+@@ -1287,6 +1287,34 @@
      <string name="wifi">Wi-Fi</string>
      <string name="hayai_novel_plugins">Novel plugins</string>
      <string name="hayai_novel_plugins_summary">Manage LNReader-compatible novel repositories and sources</string>

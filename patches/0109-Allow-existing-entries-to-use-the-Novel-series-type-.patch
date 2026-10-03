@@ -1,0 +1,697 @@
+From 79fff72b642e8c10f825809f19473827235ba5bc Mon Sep 17 00:00:00 2001
+From: Ahmed Mohamed <50212311+ig4e@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 07:23:19 +0300
+Subject: [PATCH] Allow existing entries to use the Novel series type and
+ shared routing
+
+
+diff --git a/.audit/j2k-reset.tsv b/.audit/j2k-reset.tsv
+index 17b9fae6760a3db82d4411bbfdd1f9e31e892c4e..4e50bcf3b9dab0bf52ad8c6d38f921c79de0108b 100644
+--- a/.audit/j2k-reset.tsv
++++ b/.audit/j2k-reset.tsv
+@@ -163,5 +163,8 @@ ts	phase	decision	why	evidence	result
+ 2026-09-06T17:02:55.6903785+03:00	reader-content-sheets	reused J2K E2E sheets and Material controls for quotes, highlights, statistics, translation results, and fonts; moved legacy JSON import into overflow	no J2K file or storage-schema changes; 501 unit tests passed; 2 Android sheet tests passed after correcting text-field layout params and keyboard expansion; localization and boundary passed	NovelReaderAttachment.kt; NovelReaderContentSheet.kt; artifacts/novel-reader/sheets-instrumentation.log	VERIFIED_SCOPED
+ 2026-09-06T22:12:59.8085941+03:00	cloudflare-eh-clearance	reused the Mihon solver with SY legacy challenge detection; shared browser clearance across EH verification browse favorites and settings; removed passive CDN false positives	504 unit tests and DevDebug compilation passed; real HTTP retry and cookie scoping verified; authenticated login remains pending; no schema change	EhBrowserCookies.kt; CloudflareHelpDetector.kt; existing CloudflareInterceptor adapter; artifacts/novel-reader/cloudflare-validation.log	HTTP_UNIT_BOUNDARY_VERIFIED
+ 2026-09-06T22:55:53.6040369+03:00	manual-app-update-installation	removed automatic PackageInstaller sessions; reuse existing Install notification and clarify automatic download settings; keep work input and network preference compatibility	DevDebug compilation and 504 unit tests passed; localization boundary and whitespace passed; Xiaomi verification pending; no schema change; nightly startup diagnostics added after two missing-process failures	AppDownloadInstallJob.kt; AppUpdateNotifier.kt; SettingsGeneralController.kt; tools/verify-apk-startup.ps1; artifacts/novel-reader/manual-update-validation.log	COMPILE_UNIT_VERIFIED
++2026-10-03T06:30:26.2477346+03:00	novel-identity	Added Novel to existing editors and shared routing and download identity	Old text entries can opt into reading without duplicating J2K metadata	NovelSeriesType.kt; NovelContentIdentity.kt; ReaderLauncher.kt; NovelDocumentLoaderTest.kt	IMPLEMENTED_VALIDATION_PENDING
++2026-10-03T06:30:26.2528148+03:00	review-preview-route	Removed the image-index exception for manually classified Novel preview handoff	Independent review found both preview callers could throw after the type changed	ReaderLauncher.kt; ReaderLauncherInstrumentedTest.kt; NovelDocumentLoaderTest.kt	FIXED_VALIDATION_PENDING
+ 2026-10-03T06:42:20.7884232+03:00	dependency-publication	Replaced unavailable arkon JitPack artifacts with the published FlexibleAdapter core and UI used by Tsundoku	The first build failed before Kotlin; the initial equivalent mapping was incomplete when caches expired	artifacts/j2k-update-2026-10-03/gradle-validation.log; flexibleadapter-jitpack.log; tsundoku 775508f3c6; app/build.gradle.kts	CORRECTED_VALIDATION_PENDING
+ 2026-10-03T06:56:20.6835174+03:00	dependency-source-audit	Reviewed canonical FlexibleAdapter source differences and preserved J2K prefiltered datasets	Supersedes the earlier unqualified JitPack-log reference; synchronous guard retains same-query refresh, headers and placeholders	artifacts/j2k-update-2026-10-03/flexibleadapter-jitpack.log; artifacts/j2k-update-2026-10-03/flexibleadapter-source-audit.md; PrefilteredAdapterInstrumentedTest.kt	SOURCE_REVIEWED_RUNTIME_PENDING
++2026-10-03T06:56:20.6958765+03:00	resource-link-review	Reused existing singular Novel resource in the series type array and label	The second build failed before Kotlin on an undefined resource; Arabic label reviewed; upstream restore_duration warnings left unchanged	artifacts/j2k-update-2026-10-03/gradle-validation-complete.log; arrays.xml; Manga.kt; strings_hayai_misc.xml	FIXED_KOTLIN_TESTS_RUNNING
+diff --git a/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncherInstrumentedTest.kt b/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncherInstrumentedTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..68c7620161ea5286500430407b217b798058e5da
+--- /dev/null
++++ b/app/src/androidTest/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncherInstrumentedTest.kt
+@@ -0,0 +1,65 @@
++package dev.ahmedmohamed.hayai.novel.reader
++
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType
++import eu.kanade.tachiyomi.R
++import eu.kanade.tachiyomi.data.backup.models.BackupManga
++import eu.kanade.tachiyomi.data.database.models.Chapter
++import eu.kanade.tachiyomi.data.database.models.Manga
++import eu.kanade.tachiyomi.data.library.CustomMangaManager
++import eu.kanade.tachiyomi.source.model.SManga
++import eu.kanade.tachiyomi.ui.reader.ReaderActivity
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import org.junit.runner.RunWith
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
++
++@RunWith(AndroidJUnit4::class)
++class ReaderLauncherInstrumentedTest {
++    @Test
++    fun manualNovelChoiceSurvivesSourceRefreshAndReloadOfExistingCustomMetadata() {
++        val context = InstrumentationRegistry.getInstrumentation().targetContext
++        val manager = Injekt.get<CustomMangaManager>()
++        val manga = Manga.create(Long.MAX_VALUE).apply {
++            id = Long.MAX_VALUE - 17
++            url = "/manual-novel-fixture"
++            title = "Original title"
++            genre = "Manga"
++            favorite = true
++        }
++        val previous = manager.getCustomInfo(manga)
++        try {
++            manager.saveMangaInfo(CustomMangaManager.MangaJson(manga.id, genre = arrayOf("Novel", "Fantasy")))
++            manga.copyFrom(SManga.create().apply {
++                title = "Refreshed title"
++                genre = "Manga, Action"
++            })
++            assertEquals(NovelSeriesType.TYPE_NOVEL, manga.seriesType())
++            assertTrue(ReaderLauncher.isNovel(manga))
++            assertEquals("Novel, Fantasy", CustomMangaManager(context).getManga(manga)?.genre)
++            assertEquals("Novel, Fantasy", BackupManga.copyFrom(manga, manager).getCustomMangaInfo()?.genre?.joinToString(", "))
++            assertEquals(context.getString(R.string.hayai_source_badge_novel), context.resources.getStringArray(R.array.series_type).last())
++        } finally {
++            manager.saveMangaInfo(previous ?: CustomMangaManager.MangaJson(manga.id))
++        }
++    }
++
++    @Test
++    fun manuallyClassifiedNovelPreviewOpensReaderWithoutAnImageIndex() {
++        val context = InstrumentationRegistry.getInstrumentation().targetContext
++        val manga = Manga.create(Long.MAX_VALUE).apply {
++            id = 901L
++            genre = "Novel"
++        }
++        val chapter = Chapter.create().apply { id = 902L }
++        val intent = ReaderLauncher.newIntent(context, manga, chapter, initialPage = 8)
++        assertEquals(ReaderActivity::class.java.name, intent.component?.className)
++        assertEquals(901L, intent.getLongExtra("manga", -1L))
++        assertEquals(902L, intent.getLongExtra("chapter", -1L))
++        assertFalse(intent.hasExtra(ReaderLauncher.EXTRA_INITIAL_PAGE))
++    }
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadDelegate.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadDelegate.kt
+index 0165e513598bc2d915a650970af2dc0b62942f4e..c551493bdd36de5d9df1d92292a66ddd005e4d3e 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadDelegate.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadDelegate.kt
+@@ -1,6 +1,7 @@
+ package dev.ahmedmohamed.hayai.novel.download
+ 
+ import android.content.Context
++import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+ import eu.kanade.tachiyomi.data.database.models.Manga
+@@ -21,8 +22,8 @@ internal enum class ChapterDownloadStorage {
+ }
+ 
+ internal object ChapterDownloadRouting {
+-    fun storageFor(source: Source): ChapterDownloadStorage =
+-        if (source.isNovelSource()) ChapterDownloadStorage.HayaiNovel else ChapterDownloadStorage.J2kImages
++    fun storageFor(source: Source, explicitlyNovel: Boolean = false): ChapterDownloadStorage =
++        if (explicitlyNovel || source.isNovelSource()) ChapterDownloadStorage.HayaiNovel else ChapterDownloadStorage.J2kImages
+ }
+ 
+ internal object NovelDownloadPresentationState {
+@@ -40,10 +41,10 @@ internal object NovelDownloadPresentationState {
+ internal object NovelDownloadQueueSource {
+     private val adapters = ConcurrentHashMap<Long, HttpSource>()
+ 
+-    fun from(source: Source): HttpSource? =
++    fun from(source: Source, explicitlyNovel: Boolean = false): HttpSource? =
+         when {
+             source is HttpSource -> source
+-            !source.isNovelSource() -> null
++            !explicitlyNovel && !source.isNovelSource() -> null
+             else ->
+                 adapters.computeIfAbsent(source.id) {
+                     if (source is UnmeteredSource) {
+@@ -76,7 +77,8 @@ internal class NovelDownloadDelegate(
+ ) {
+     private val offline = NovelOfflineManager(context, database, sourceManager, network)
+ 
+-    fun handles(source: Source): Boolean = ChapterDownloadRouting.storageFor(source) == ChapterDownloadStorage.HayaiNovel
++    fun handles(manga: Manga, source: Source): Boolean =
++        ChapterDownloadRouting.storageFor(source, Injekt.get<NovelContentIdentity>().isNovel(manga)) == ChapterDownloadStorage.HayaiNovel
+ 
+     fun isDownloaded(
+         manga: Manga,
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt
+index 7df91f90da82f807a3c1bc8b71f456968f320b99..d4964582ddea0b6cc245d87c3732bff4658d0b62 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt
+@@ -5,7 +5,6 @@ import eu.kanade.tachiyomi.data.database.DatabaseHelper
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.source.SourceManager
+ import eu.kanade.tachiyomi.source.isNovelSource
+-import java.util.Locale
+ 
+ /** Resolves manga and novel identity from live capabilities plus durable Hayai evidence. */
+ class NovelContentIdentity internal constructor(
+@@ -20,7 +19,7 @@ class NovelContentIdentity internal constructor(
+         hasDurableNovelEvidence = DatabaseNovelIdentity(database)::matches,
+     )
+ 
+-    fun isNovel(manga: Manga): Boolean = sourceIsNovel(manga.source) || hasDurableNovelEvidence(manga)
++    fun isNovel(manga: Manga): Boolean = manga.hasNovelGenreIdentity() || sourceIsNovel(manga.source) || hasDurableNovelEvidence(manga)
+ 
+     fun contentKind(manga: Manga): ContentKind = if (isNovel(manga)) ContentKind.Novel else ContentKind.Manga
+ }
+@@ -49,9 +48,4 @@ private class DatabaseNovelIdentity(
+ }
+ 
+ internal fun Manga.hasNovelGenreIdentity(): Boolean =
+-    genre
+-        ?.split(',')
+-        ?.any { tag -> tag.trim().lowercase(Locale.US) in NOVEL_GENRES }
+-        ?: false
+-
+-private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
++    NovelSeriesType.hasNovelTags(genre)
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelSeriesType.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelSeriesType.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a28f4934eda10ab6d1c1cb32aae2b7cb8f8463ff
+--- /dev/null
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelSeriesType.kt
+@@ -0,0 +1,13 @@
++package dev.ahmedmohamed.hayai.novel.integration
++
++import java.util.Locale
++
++object NovelSeriesType {
++    const val TYPE_NOVEL = 6
++
++    fun isNovelTag(tag: String): Boolean = tag.trim().lowercase(Locale.ROOT) in novelTags
++
++    fun hasNovelTags(tags: String?): Boolean = tags?.split(',')?.any(::isNovelTag) == true
++
++    private val novelTags = setOf("novel", "light novel", "web novel")
++}
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt
+index f108e63965b75d2f11d5293f89e1c9405c1e8769..952464dfcbeec887cc22eecd8ee60dddf758bdf7 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt
+@@ -3,6 +3,9 @@ package dev.ahmedmohamed.hayai.novel.reader
+ import android.content.Context
+ import dev.ahmedmohamed.hayai.novel.download.NovelAssetReferences
+ import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
++import dev.ahmedmohamed.hayai.novel.error.NovelFailureCarrier
++import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
++import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
+ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+ import dev.ahmedmohamed.hayai.novel.source.NovelContentType
+ import dev.ahmedmohamed.hayai.novel.source.NovelDocument
+@@ -16,6 +19,7 @@ import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
+ import dev.ahmedmohamed.hayai.novel.translation.SqliteNovelTranslationStore
+ import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
+ import eu.kanade.tachiyomi.data.database.DatabaseHelper
++import eu.kanade.tachiyomi.R
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.data.preference.PreferenceStore
+@@ -122,7 +126,7 @@ internal class NovelDocumentRepository(
+     private val offlineChapterUrls = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+ 
+     suspend fun load(chapter: Chapter): NovelChapterContent {
+-        check(NovelReaderIdentity.isNovel(source)) { "Source ${source.id} is not a novel source" }
++        check(Injekt.get<NovelContentIdentity>().isNovel(manga)) { "Entry ${manga.id} is not a novel" }
+         val offline = downloadStore.loadDocument(source.id, chapter.url)
+         if (offline != null) offlineChapterUrls += chapter.url else offlineChapterUrls -= chapter.url
+         val chapterId = requireNotNull(chapter.id) { "Novel chapter is missing its durable database identity" }
+@@ -130,10 +134,13 @@ internal class NovelDocumentRepository(
+         var translatedOfflineLanguage: String? = null
+         val document =
+             offline ?: try {
+-                (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter)
++                (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter, explicitlyNovel = true)
+             } catch (error: CancellationException) {
+                 throw error
+             } catch (error: Exception) {
++                if (error is NovelFailureCarrier) {
++                    throw IllegalArgumentException(context.novelFailureMessage(error, R.string.hayai_novel_reader_load_error), error)
++                }
+                 if (!error.allowsOfflineTranslationFallback()) throw error
+                 val targetLanguage = NovelTranslationSettingsStore(context).get().targetLanguage
+                 val translated =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderIntegration.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderIntegration.kt
+index 370e910cc565188d2cfdeb84a6fd078887405687..20fb24bebedfa954f19001b78b782e0e16db7df6 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderIntegration.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderIntegration.kt
+@@ -1,11 +1,14 @@
+ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.content.Context
++import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.source.Source
+ import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+ import eu.kanade.tachiyomi.ui.reader.loader.PageLoader
+ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
++import uy.kohesive.injekt.Injekt
++import uy.kohesive.injekt.api.get
+ 
+ internal object NovelReaderIntegration {
+     fun pageLoaderOrNull(
+@@ -14,7 +17,7 @@ internal object NovelReaderIntegration {
+         source: Source,
+         chapter: ReaderChapter,
+     ): PageLoader? =
+-        if (NovelReaderIdentity.isNovel(source)) {
++        if (Injekt.get<NovelContentIdentity>().isNovel(manga)) {
+             NovelChapterPageLoader(context, manga, source, chapter)
+         } else {
+             null
+@@ -25,7 +28,7 @@ internal object NovelReaderIntegration {
+         manga: Manga,
+         source: Source,
+     ): NovelReaderAttachment? =
+-        if (NovelReaderIdentity.isNovel(source)) {
++        if (Injekt.get<NovelContentIdentity>().isNovel(manga)) {
+             NovelReaderAttachment(activity, manga, source)
+         } else {
+             null
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+index d09f0ff85f870a3fb537f9d8463f7712ffbd6fb1..ef04a6c64ca1a3db2b6df8914962e9571aa98c8a 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelReaderSession.kt
+@@ -4,6 +4,7 @@ import android.content.Context
+ import dev.ahmedmohamed.hayai.novel.download.NovelAssetReferences
+ import dev.ahmedmohamed.hayai.novel.download.NovelDownloadResult
+ import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
++import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
+ import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
+ import dev.ahmedmohamed.hayai.novel.source.NovelDocument
+ import dev.ahmedmohamed.hayai.novel.source.NovelDocumentLoader
+@@ -21,7 +22,6 @@ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.network.NetworkHelper
+ import eu.kanade.tachiyomi.source.Source
+ import eu.kanade.tachiyomi.source.SourceManager
+-import eu.kanade.tachiyomi.source.isNovelSource
+ import eu.kanade.tachiyomi.source.model.Page
+ import eu.kanade.tachiyomi.source.online.HttpSource
+ import eu.kanade.tachiyomi.util.chapter.ChapterSort
+@@ -93,10 +93,9 @@ internal class NovelReaderSession(
+     ): LoadedNovelChapter {
+         this.recordHistory = recordHistory
+         manga = requireNotNull(database.getManga(mangaId).executeAsBlocking()) { resources.getString(R.string.hayai_novel_reader_novel_not_found) }
++        check(NovelContentIdentity(database, sourceManager).isNovel(manga)) { resources.getString(R.string.hayai_novel_reader_source_no_text) }
+         source =
+             requireNotNull(sourceManager.get(manga.source)) { resources.getString(R.string.hayai_novel_reader_source_not_installed) }
+-                .takeIf { it.isNovelSource() }
+-                ?: error(resources.getString(R.string.hayai_novel_reader_source_no_text))
+ 
+         val databaseChapters = database.getChapters(manga).executeAsBlocking()
+         val selected = requireNotNull(databaseChapters.find { it.id == chapterId }) { resources.getString(R.string.hayai_novel_reader_chapter_not_found) }
+@@ -184,7 +183,7 @@ internal class NovelReaderSession(
+             if (prefetchedDocuments.containsKey(chapter.url) || downloadStore.contains(source.id, chapter.url)) continue
+             val document =
+                 try {
+-                    (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter)
++                    (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter, explicitlyNovel = true)
+                 } catch (error: CancellationException) {
+                     throw error
+                 } catch (_: Exception) {
+@@ -211,7 +210,7 @@ internal class NovelReaderSession(
+             offlineDocument
+                 ?: prefetchedDocuments.remove(chapter.url)
+                 ?: (source as? NovelSource)?.getChapterDocument(chapter)
+-                ?: NovelDocumentLoader.load(source, chapter)
++                ?: NovelDocumentLoader.load(source, chapter, explicitlyNovel = true)
+         val chapterId = requireNotNull(chapter.id)
+         // Derived analytics must never make otherwise readable content unavailable.
+         val statistics =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
+index 5f9a0ca83628e866485068fcbc1af6a854d5ef9f..13a12f96622223c9ef005a46d70b108cb64b3c54 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt
+@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.reader
+ 
+ import android.content.Context
+ import android.content.Intent
++import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
+ import eu.kanade.tachiyomi.data.database.models.Chapter
+ import eu.kanade.tachiyomi.data.database.models.Manga
+ import eu.kanade.tachiyomi.source.SourceManager
+@@ -15,7 +16,7 @@ object ReaderLauncher {
+     fun isNovel(
+         manga: Manga,
+         sourceManager: SourceManager = Injekt.get(),
+-    ): Boolean = NovelReaderIdentity.isNovel(sourceManager.getOrStub(manga.source))
++    ): Boolean = NovelReaderIdentity.isNovel(sourceManager.getOrStub(manga.source)) || Injekt.get<NovelContentIdentity>().isNovel(manga)
+ 
+     fun newIntent(
+         context: Context,
+@@ -32,8 +33,8 @@ object ReaderLauncher {
+         sourceManager: SourceManager = Injekt.get(),
+     ): Intent {
+         val page = requireInitialPage(initialPage)
+-        check(!isNovel(manga, sourceManager)) { "Novel chapters do not use image-page indices" }
+-        return ReaderActivity.newIntent(context, manga, chapter).putExtra(EXTRA_INITIAL_PAGE, page)
++        val intent = newIntent(context, manga, chapter, sourceManager)
++        return if (isNovel(manga, sourceManager)) intent else intent.putExtra(EXTRA_INITIAL_PAGE, page)
+     }
+ 
+     fun initialPage(intent: Intent): Int? =
+diff --git a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/NovelDocumentLoader.kt b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/NovelDocumentLoader.kt
+index 64932d60e2955267965c10d0493f15a8bec44a1d..63a53da8ad01935100f3e105cb56bc258e1badcc 100644
+--- a/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/NovelDocumentLoader.kt
++++ b/app/src/main/java/dev/ahmedmohamed/hayai/novel/source/NovelDocumentLoader.kt
+@@ -11,14 +11,19 @@ object NovelDocumentLoader {
+     suspend fun load(
+         source: Source,
+         chapter: SChapter,
++        explicitlyNovel: Boolean = false,
+     ): NovelDocument {
+-        novelRequire(source.isNovelSource(), NovelFailure.Code.SourceNotNovel)
++        novelRequire(explicitlyNovel || source.isNovelSource(), NovelFailure.Code.SourceNotNovel)
+ 
+         val pages = source.getPageList(chapter)
+         novelRequire(pages.isNotEmpty(), NovelFailure.Code.SourceChapterEmpty)
+         val contents = mutableListOf<String>()
+         pages.forEach { page ->
+-            contents += page.text ?: source.fetchPageText(page).also { page.text = it }
++            contents += page.text ?: try {
++                source.fetchPageText(page).also { page.text = it }
++            } catch (error: UnsupportedOperationException) {
++                throw NovelFailure(NovelFailure.Code.SourceNotNovel, cause = error)
++            }
+         }
+         val content = contents.joinToString("\n\n")
+ 
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/database/models/Manga.kt b/app/src/main/java/eu/kanade/tachiyomi/data/database/models/Manga.kt
+index 829aa51768371516dacc2105ebb14a5b4d1ea19c..fafc4df31a85692697d50d6da494efd94e3e6913 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/database/models/Manga.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/database/models/Manga.kt
+@@ -106,6 +106,7 @@ interface Manga : SManga {
+                     TYPE_MANHWA -> R.string.manhwa
+                     TYPE_MANHUA -> R.string.manhua
+                     TYPE_COMIC -> R.string.comic
++                    dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.TYPE_NOVEL -> R.string.hayai_source_badge_novel
+                     else -> R.string.manga
+                 },
+             ).lowercase(Locale.getDefault())
+@@ -130,6 +131,9 @@ interface Manga : SManga {
+     ): Int {
+         val sourceName by lazy { (sourceManager ?: Injekt.get()).getOrStub(source).name }
+         val tags = customTags ?: if (useOriginalTags) originalGenre else genre
++        if (dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.hasNovelTags(tags)) {
++            return dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.TYPE_NOVEL
++        }
+         val currentTags = tags?.split(",")?.map { it.trim().lowercase(Locale.US) } ?: emptyList()
+         return if (currentTags.any { tag -> isMangaTag(tag) }) {
+             TYPE_MANGA
+@@ -200,6 +204,7 @@ interface Manga : SManga {
+     fun isSeriesTag(tag: String): Boolean {
+         val tagLower = tag.lowercase(Locale.ROOT)
+         return isMangaTag(tagLower) ||
++            dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.isNovelTag(tagLower) ||
+             isManhuaTag(tagLower) ||
+             isManhwaTag(tagLower) ||
+             isComicTag(tagLower) ||
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadStore.kt b/app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadStore.kt
+index 80233ce5a948a2869c53293d60b0ee546795e4b5..7e04e27d7a0a6c78350407733727d897716938a5 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadStore.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadStore.kt
+@@ -91,7 +91,9 @@ class DownloadStore(
+                     cachedManga.getOrPut(mangaId) {
+                         db.getManga(mangaId).executeAsBlocking()
+                     } ?: continue
+-                val source = sourceManager.get(manga.source)?.let(NovelDownloadQueueSource::from) ?: continue
++                val source = sourceManager.get(manga.source)?.let {
++                    NovelDownloadQueueSource.from(it, dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher.isNovel(manga, sourceManager))
++                } ?: continue
+                 val chapter = db.getChapter(chapterId).executeAsBlocking() ?: continue
+                 downloads.add(Download(source, manga, chapter))
+             }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt b/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
+index 30de77c08f412cc62c89749bfecc5408cce72da2..c4166bb022a7e4d06cf21ad706fa02d3bb984a1f 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt
+@@ -133,7 +133,7 @@ class Downloader(
+                     store
+                         .restore()
+                         .filterNot { download ->
+-                            novelDownloads.handles(download.source) &&
++                            novelDownloads.handles(download.manga, download.source) &&
+                                 novelDownloads.isDownloaded(download.manga, download.chapter)
+                         }
+                 }
+@@ -337,8 +337,8 @@ class Downloader(
+         }
+ 
+         val source = sourceManager.get(manga.source) ?: return@launchIO
+-        val queueSource = NovelDownloadQueueSource.from(source) ?: return@launchIO
+-        val novelStorage = novelDownloads.handles(source)
++        val novelStorage = novelDownloads.handles(manga, source)
++        val queueSource = NovelDownloadQueueSource.from(source, explicitlyNovel = novelStorage) ?: return@launchIO
+         // Called in background thread, the operation can be slow with SAF.
+         val chaptersWithoutDir =
+             async {
+@@ -401,7 +401,7 @@ class Downloader(
+      * @param download the chapter to be downloaded.
+      */
+     private suspend fun downloadChapter(download: Download) {
+-        if (novelDownloads.handles(download.source)) {
++        if (novelDownloads.handles(download.manga, download.source)) {
+             downloadNovelChapter(download)
+             return
+         }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
+index 0f606b12f4be7d0e83963a80ad899fea3e692d89..9459fc1f91e063c6ce0f24b7b021de193d75e372 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryPresenter.kt
+@@ -1490,6 +1490,7 @@ class LibraryPresenter(
+             Manga.TYPE_MANHWA -> tags.add("Manhwa")
+             Manga.TYPE_COMIC -> tags.add("Comic")
+             Manga.TYPE_WEBTOON -> tags.add("Webtoon")
++            dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.TYPE_NOVEL -> tags.add("Novel")
+         }
+         return tags
+     }
+diff --git a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsPresenter.kt b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsPresenter.kt
+index b8b4500d4e7d3c16d947d9a26d863143ae4ebd05..152e4578bf2f536b3cc4387d2c8b040eecd3262d 100644
+--- a/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsPresenter.kt
++++ b/app/src/main/java/eu/kanade/tachiyomi/ui/manga/MangaDetailsPresenter.kt
+@@ -845,6 +845,7 @@ class MangaDetailsPresenter(
+             Manga.TYPE_MANHWA -> tags.add("Manhwa")
+             Manga.TYPE_COMIC -> tags.add("Comic")
+             Manga.TYPE_WEBTOON -> tags.add("Webtoon")
++            dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.TYPE_NOVEL -> tags.add("Novel")
+         }
+         return tags.toTypedArray()
+     }
+diff --git a/app/src/main/res/values-ar/strings_hayai_misc.xml b/app/src/main/res/values-ar/strings_hayai_misc.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..23ac72dff14a2d34e1b01e287e59ceb408321278
+--- /dev/null
++++ b/app/src/main/res/values-ar/strings_hayai_misc.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="hayai_source_badge_novel">رواية</string>
++    <string name="hayai_failure_source_not_novel">هذا المصدر لا يوفّر نصوص الروايات.</string>
++</resources>
+diff --git a/app/src/main/res/values/arrays.xml b/app/src/main/res/values/arrays.xml
+index 688ff91f4bf97b8a1526597bbdf90141cbad9d4c..d7bee9cc4505625e97f61b729033d3e1f1e94f39 100644
+--- a/app/src/main/res/values/arrays.xml
++++ b/app/src/main/res/values/arrays.xml
+@@ -49,6 +49,7 @@
+         <item>@string/manhua</item>
+         <item>@string/comic</item>
+         <item>@string/webtoon</item>
++        <item>@string/hayai_source_badge_novel</item>
+     </string-array>
+ 
+     <string-array name="webtoon_side_padding_values">
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadRoutingTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadRoutingTest.kt
+index ffb0161df6e97471fca4e879b232224e30bfed43..40c8a36d9226aa536fd99009f2e9db194adb56d9 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadRoutingTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/download/NovelDownloadRoutingTest.kt
+@@ -30,6 +30,14 @@ class NovelDownloadRoutingTest {
+         assertNull(NovelDownloadQueueSource.from(FakeSource(isNovel = false)))
+     }
+ 
++    @Test
++    fun `manually classified novel keeps the same authoritative download queue`() {
++        val source = FakeSource(isNovel = false)
++        assertEquals(ChapterDownloadStorage.HayaiNovel, ChapterDownloadRouting.storageFor(source, explicitlyNovel = true))
++        assertTrue(NovelDownloadQueueSource.from(source, explicitlyNovel = true) is HttpSource)
++        assertNull(NovelDownloadQueueSource.from(source))
++    }
++
+     @Test
+     fun `ordinary HTTP sources enter the queue without an adapter`() {
+         val source = FakeHttpSource()
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicyTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicyTest.kt
+index 32691a041e495dc36561636b6da46e73df939a93..48543f02858cc7dde3b95e8452c9138aa7848f63 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicyTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationPolicyTest.kt
+@@ -9,6 +9,17 @@ import org.junit.Assert.assertTrue
+ import org.junit.Test
+ 
+ class NovelMigrationPolicyTest {
++    @Test
++    fun `manual novel type overrides old manga classification without side data`() {
++        val entry = Manga.create("/old", "Old entry", 404).apply { genre = "Manga, Novel" }
++        val identity = NovelContentIdentity(sourceIsNovel = { false }, hasDurableNovelEvidence = { false })
++        assertEquals(ContentKind.Novel, identity.contentKind(entry))
++        assertEquals(NovelSeriesType.TYPE_NOVEL, entry.seriesType())
++        assertTrue(entry.isSeriesTag("Novel"))
++        entry.genre = "Manga"
++        assertEquals(ContentKind.Manga, identity.contentKind(entry))
++    }
++
+     @Test
+     fun `legacy novel data overrides a missing source during migration`() {
+         val legacyNovel = Manga.create(pathUrl = "/legacy-novel", title = "Legacy novel", source = 404)
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelSeriesTypeTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelSeriesTypeTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a937e6b8c46d8a1e8bc2200d5c1a11004e8b2eff
+--- /dev/null
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/integration/NovelSeriesTypeTest.kt
+@@ -0,0 +1,21 @@
++package dev.ahmedmohamed.hayai.novel.integration
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class NovelSeriesTypeTest {
++    @Test
++    fun `explicit novel overrides historical manga tags`() {
++        assertTrue(NovelSeriesType.hasNovelTags("Manga, Action, Novel"))
++        assertTrue(NovelSeriesType.hasNovelTags(" Web Novel , Fantasy"))
++        assertTrue(NovelSeriesType.hasNovelTags("LIGHT NOVEL"))
++    }
++
++    @Test
++    fun `ordinary genres do not change content kind`() {
++        assertFalse(NovelSeriesType.hasNovelTags("Manga, Fantasy"))
++        assertFalse(NovelSeriesType.hasNovelTags("Novelty, Comic"))
++        assertFalse(NovelSeriesType.hasNovelTags(null))
++    }
++}
+diff --git a/app/src/test/java/dev/ahmedmohamed/hayai/novel/source/NovelDocumentLoaderTest.kt b/app/src/test/java/dev/ahmedmohamed/hayai/novel/source/NovelDocumentLoaderTest.kt
+index f3350763d30c23e866ed98f00e21a321100d887b..c50f8004a8cbc5f742f2a2287abf84376e2cbcf8 100644
+--- a/app/src/test/java/dev/ahmedmohamed/hayai/novel/source/NovelDocumentLoaderTest.kt
++++ b/app/src/test/java/dev/ahmedmohamed/hayai/novel/source/NovelDocumentLoaderTest.kt
+@@ -1,10 +1,42 @@
+ package dev.ahmedmohamed.hayai.novel.source
+ 
+ import eu.kanade.tachiyomi.source.model.Page
++import eu.kanade.tachiyomi.source.Source
++import eu.kanade.tachiyomi.source.model.SChapter
++import dev.ahmedmohamed.hayai.novel.error.NovelFailure
++import kotlinx.coroutines.runBlocking
+ import org.junit.Assert.assertEquals
++import org.junit.Assert.fail
+ import org.junit.Test
+ 
+ class NovelDocumentLoaderTest {
++    @Test
++    fun `image source marked novel has a recoverable text capability failure`() = runBlocking {
++        val source = object : Source {
++            override val id = 1L
++            override val name = "Images"
++            override suspend fun getPageList(chapter: SChapter) = listOf(Page(0, "page.jpg"))
++        }
++        try {
++            NovelDocumentLoader.load(source, SChapter.create(), explicitlyNovel = true)
++            fail("An image source cannot supply novel text")
++        } catch (failure: NovelFailure) {
++            assertEquals(NovelFailure.Code.SourceNotNovel, failure.code)
++        }
++    }
++
++    @Test
++    fun `explicit novel can load legacy text pages without source marker`() = runBlocking {
++        val source = object : Source {
++            override val id = 1L
++            override val name = "Legacy text"
++            override suspend fun getPageList(chapter: SChapter) = listOf(Page(0, "chapter.txt").apply { text = "Saved chapter text" })
++        }
++        val loaded = NovelDocumentLoader.load(source, SChapter.create(), explicitlyNovel = true)
++        assertEquals("Saved chapter text", loaded.content)
++        assertEquals(NovelContentType.PlainText, loaded.contentType)
++    }
++
+     @Test
+     fun `detects local text formats and defaults extensionless online content to html`() {
+         assertEquals(NovelContentType.PlainText, NovelDocumentLoader.detectContentType(listOf(Page(0, "chapter.txt")), "text"))
+diff --git a/docs/architecture/j2k-reset.md b/docs/architecture/j2k-reset.md
+index fe62ea3ca7d8e9b5133619bfc20a7805b486e77e..3a2f271600a8d61865e16cf88727cdbeaf7a861c 100644
+--- a/docs/architecture/j2k-reset.md
++++ b/docs/architecture/j2k-reset.md
+@@ -84,6 +84,8 @@ Built-in source settings are another deliberate adapter seam. `BrowseSourceContr
+ 
+ Saved source searches are an approved filter-sheet seam. One action on J2K's existing `SourceFilterSheet` stores the current query and recursively typed filter values through `SavedSourceSearchStore`. Restoring starts from the source's current filter schema and applies only structurally compatible values, so an extension update cannot replay an invalid select or sort index. The data is a bounded Hayai preference and therefore travels through J2K's existing preference backup rather than a second backup pipeline.
+ 
++The October metadata repair adds `NovelSeriesType` to the existing J2K genre-based type contract. `Manga.kt` delegates novel-tag recognition and its localized type label to Hayai; the existing details and bulk library editors use the shared series-type array. No type column, settings model, or library is added. The details/library presenters remove conflicting series tags before saving `Novel` through J2K's custom metadata. `NovelContentIdentity` classifies explicit novel tags before source or retained side-data evidence. The sole reader adapter and J2K download queue use that same identity, allowing an older text entry to be corrected even when its source lacks the current novel marker. The source must still provide real text or a saved document; changing a label cannot manufacture chapter content. J2K's existing custom-info backup option preserves this choice.
++
+ The `ExtensionInstaller.kt` and `ExtensionInstallerJob.kt` seams retain J2K's package installation and WorkManager scheduling. They make a package operation cancellable while queued, downloading, or installing, reject missing downloads/sessions as terminal retry states, and subscribe before producing installation events. Hayai owns small operation policies and batch cancellation. Existing extension manager/UI adapters publish newly installed untrusted APKs to the trust UI and cancel by package identity. `ShizukuInstaller` exposes cancellation of only the requested waiting package; cancellation is unavailable after its privileged session has committed. These seams do not introduce another installer or extension catalog.
+ 
+ Tsundoku extensions can implement its compile-only `eu.kanade.tachiyomi.source.SourceTracker` and `RateLimited` contracts. The compatibility declarations live under Hayai's `novel/compat` directory, with the required upstream package name as an explicit binary-interface exception. Preserve their interfaces, signatures, and Kotlin default implementations during minification. WTR-LAB and Novel Phoenix at NovelSourcery source commit `432f591ceac7a7bdd2d8ae9e65fa4ec91744320b` require these interfaces. This prevents class resolution failures; source-owned tracking callbacks remain **Foundation** and are not a claimed tracking port. Production callback dispatch remains separately audited, and no parallel rate-limit settings or chapter queue is added.
+diff --git a/docs/architecture/upstream-feature-audit.md b/docs/architecture/upstream-feature-audit.md
+index 0e2f9a264a7ec64458feaf2fa04932662be28619..eebd897faac67e7f84a0a6e5f1d5bb6d6d4f178b 100644
+--- a/docs/architecture/upstream-feature-audit.md
++++ b/docs/architecture/upstream-feature-audit.md
+@@ -43,6 +43,7 @@ SY areas audited include its EH/ExHentai source, login and preferences; metadata
+ |---|---|---|
+ | Text chapter source ABI | `NovelSource.getChapterDocument` | foundation |
+ | SourceTracker and RateLimited extension ABI | Host interfaces in the Hayai compatibility directory use the published extension package names; J2K remains the APK loader and tracking authority | foundation; production APK linkage and minified retention pending; optional tracking callbacks are not a completed tracking port |
++| Editable Novel series type | Existing individual and bulk editors, J2K custom genres, and shared `NovelContentIdentity` for reading, library classification, and download routing | implemented; focused and device checks pending; source markers and durable novel evidence still determine identity after removing the manual Novel tag |
+ | One J2K reader, central routing, and J2K history | The actual J2K `ReaderActivity`, `ReaderViewModel`, `ReaderChapter`, `ViewerChapters`, toolbar, navigation overlay, slider, chapter sheet, preload request, and chapter loading path; Hayai adds only a `BaseViewer`, bounded adjacent-document window, normalized progress loader, and novel-action attachment. Native `TextView` and isolated `WebView` renderers remain document surfaces; the duplicate activity/chrome/chapter adapter are removed. | port; page counts are measured per chapter from real column fragments, page movement uses the document scroller and one viewport, and chapter scroll is separate from bidirectional continuous and paged reading; window updates preserve mounted text, and chapter crossings use J2K page selection; the September stability changes pass browser regressions and five native Android renderer checks, including real touchscreen selection; live-extension stress and full reader lifecycle checks remain pending |
+ | Source and extension artwork | Shared fitted, rounded icon binding for APK and URL artwork in Extensions, Browse, and migration; existing J2K row dimensions retained | Port; two Android checks verify Coil fit, rounded artwork bounds, and recycled crop/tint reset for wide and tall logos |
+ | Installed novel extension discovery | J2K loader plus Hayai ABI | port |
+diff --git a/tools/localization/hayai-nonlocalizable-literals.txt b/tools/localization/hayai-nonlocalizable-literals.txt
+index 1b371d7b444c45eb9de6bac0ef777786af0681c5..1a9718b55443e0c4ff56ce413f20bb335698cf70 100644
+--- a/tools/localization/hayai-nonlocalizable-literals.txt
++++ b/tools/localization/hayai-nonlocalizable-literals.txt
+@@ -1573,7 +1573,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.ifBlank { "asset.bin" }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.joinToString("") { "%02x".format(it) }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace("&", "&amp;")
+@@ -1702,6 +1701,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMov
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val sourceMangaId = sourceManga.id ?: throw NovelMigrationException("Source novel has no database identity")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val targetMangaId = targetManga.id ?: throw NovelMigrationException("Target novel has no database identity")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val values = ContentValues(1).apply { put("manga_id", targetMangaId) }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelSeriesType.kt	private val novelTags = setOf("novel", "light novel", "web novel")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	.setType("text/plain")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	@Suppress("DEPRECATION")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	const val GOOGLE_TRANSLATE_PACKAGE = "com.google.android.apps.translate"
+@@ -2250,7 +2250,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	val ASSET_SCHEMES = setOf("hayai-novel-image", "novel-image")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	val REMOTE_SCHEMES = setOf("http", "https")
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	check(NovelReaderIdentity.isNovel(source)) { "Source ${source.id} is not a novel source" }
++app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	check(Injekt.get<NovelContentIdentity>().isNovel(manga)) { "Entry ${manga.id} is not a novel" }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	private val downloadStore: NovelDownloadStore = NovelDownloadStore(File(context.filesDir, "hayai/novel-downloads")),
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	require(page is NovelProgressPage) { "Novel loader received a non-novel page" }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	val chapterId = requireNotNull(chapter.id) { "Novel chapter is missing its durable database identity" }
+@@ -2401,7 +2401,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var languageTag = ""
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var novelTitle = ""
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var voiceName = ""
+-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt	check(!isNovel(manga, sourceManager)) { "Novel chapters do not use image-page indices" }
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt	const val EXTRA_INITIAL_PAGE = "dev.ahmedmohamed.hayai.reader.INITIAL_PAGE"
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"(()=>{const id=${json.encodeToString(chapterId.toString())},until=$retryAt;const tick=()=>{" +
+ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"<div class=\"hayai-block-state\"><strong>${android.text.TextUtils.htmlEncode(title)}</strong>" +
+diff --git a/tools/verify-upstream-boundary.ps1 b/tools/verify-upstream-boundary.ps1
+index 29e027b15ad469675b8a1b64b7582fb230a0fb0f..5c1433f2b8ff581b1a4b112dbdba08e9826e6bac 100644
+--- a/tools/verify-upstream-boundary.ps1
++++ b/tools/verify-upstream-boundary.ps1
+@@ -14,6 +14,8 @@ try {
+         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
+         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
++        # Approved in docs/architecture/j2k-reset.md. Reuses J2K genre metadata for an editable Novel type.
++        "app/src/main/java/eu/kanade/tachiyomi/data/database/models/Manga.kt"
+         # Approved in docs/architecture/j2k-reset.md. Routes novel storage through J2K's authoritative download queue.
+         "app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt"
+         # Approved in docs/architecture/j2k-reset.md. Validates the configured root through Hayai's shared SAF boundary.
+-- 
+2.54.0.windows.1
+
