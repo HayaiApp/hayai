@@ -106,6 +106,7 @@ interface Manga : SManga {
                     TYPE_MANHWA -> R.string.manhwa
                     TYPE_MANHUA -> R.string.manhua
                     TYPE_COMIC -> R.string.comic
+                    dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.TYPE_NOVEL -> R.string.hayai_source_badge_novel
                     else -> R.string.manga
                 },
             ).lowercase(Locale.getDefault())
@@ -130,6 +131,9 @@ interface Manga : SManga {
     ): Int {
         val sourceName by lazy { (sourceManager ?: Injekt.get()).getOrStub(source).name }
         val tags = customTags ?: if (useOriginalTags) originalGenre else genre
+        if (dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.hasNovelTags(tags)) {
+            return dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.TYPE_NOVEL
+        }
         val currentTags = tags?.split(",")?.map { it.trim().lowercase(Locale.US) } ?: emptyList()
         return if (currentTags.any { tag -> isMangaTag(tag) }) {
             TYPE_MANGA
@@ -200,6 +204,7 @@ interface Manga : SManga {
     fun isSeriesTag(tag: String): Boolean {
         val tagLower = tag.lowercase(Locale.ROOT)
         return isMangaTag(tagLower) ||
+            dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.isNovelTag(tagLower) ||
             isManhuaTag(tagLower) ||
             isManhwaTag(tagLower) ||
             isComicTag(tagLower) ||

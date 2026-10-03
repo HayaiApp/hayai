@@ -14,6 +14,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/data/backup/models/Backup.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DatabaseHelper.kt"
         "app/src/main/java/eu/kanade/tachiyomi/data/database/DbOpenCallback.kt"
+        # Approved in docs/architecture/j2k-reset.md. Reuses J2K genre metadata for an editable Novel type.
+        "app/src/main/java/eu/kanade/tachiyomi/data/database/models/Manga.kt"
         # Approved in docs/architecture/j2k-reset.md. Routes novel storage through J2K's authoritative download queue.
         "app/src/main/java/eu/kanade/tachiyomi/data/download/Downloader.kt"
         # Approved in docs/architecture/j2k-reset.md. Validates the configured root through Hayai's shared SAF boundary.

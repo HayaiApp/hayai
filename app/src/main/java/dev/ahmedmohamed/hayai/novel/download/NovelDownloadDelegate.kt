@@ -1,6 +1,7 @@
 package dev.ahmedmohamed.hayai.novel.download
 
 import android.content.Context
+import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
@@ -21,8 +22,8 @@ internal enum class ChapterDownloadStorage {
 }
 
 internal object ChapterDownloadRouting {
-    fun storageFor(source: Source): ChapterDownloadStorage =
-        if (source.isNovelSource()) ChapterDownloadStorage.HayaiNovel else ChapterDownloadStorage.J2kImages
+    fun storageFor(source: Source, explicitlyNovel: Boolean = false): ChapterDownloadStorage =
+        if (explicitlyNovel || source.isNovelSource()) ChapterDownloadStorage.HayaiNovel else ChapterDownloadStorage.J2kImages
 }
 
 internal object NovelDownloadPresentationState {
@@ -40,10 +41,10 @@ internal object NovelDownloadPresentationState {
 internal object NovelDownloadQueueSource {
     private val adapters = ConcurrentHashMap<Long, HttpSource>()
 
-    fun from(source: Source): HttpSource? =
+    fun from(source: Source, explicitlyNovel: Boolean = false): HttpSource? =
         when {
             source is HttpSource -> source
-            !source.isNovelSource() -> null
+            !explicitlyNovel && !source.isNovelSource() -> null
             else ->
                 adapters.computeIfAbsent(source.id) {
                     if (source is UnmeteredSource) {
@@ -76,7 +77,8 @@ internal class NovelDownloadDelegate(
 ) {
     private val offline = NovelOfflineManager(context, database, sourceManager, network)
 
-    fun handles(source: Source): Boolean = ChapterDownloadRouting.storageFor(source) == ChapterDownloadStorage.HayaiNovel
+    fun handles(manga: Manga, source: Source): Boolean =
+        ChapterDownloadRouting.storageFor(source, Injekt.get<NovelContentIdentity>().isNovel(manga)) == ChapterDownloadStorage.HayaiNovel
 
     fun isDownloaded(
         manga: Manga,

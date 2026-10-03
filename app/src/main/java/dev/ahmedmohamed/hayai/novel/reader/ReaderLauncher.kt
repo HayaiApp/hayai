@@ -2,6 +2,7 @@ package dev.ahmedmohamed.hayai.novel.reader
 
 import android.content.Context
 import android.content.Intent
+import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.source.SourceManager
@@ -15,7 +16,7 @@ object ReaderLauncher {
     fun isNovel(
         manga: Manga,
         sourceManager: SourceManager = Injekt.get(),
-    ): Boolean = NovelReaderIdentity.isNovel(sourceManager.getOrStub(manga.source))
+    ): Boolean = NovelReaderIdentity.isNovel(sourceManager.getOrStub(manga.source)) || Injekt.get<NovelContentIdentity>().isNovel(manga)
 
     fun newIntent(
         context: Context,
@@ -32,8 +33,8 @@ object ReaderLauncher {
         sourceManager: SourceManager = Injekt.get(),
     ): Intent {
         val page = requireInitialPage(initialPage)
-        check(!isNovel(manga, sourceManager)) { "Novel chapters do not use image-page indices" }
-        return ReaderActivity.newIntent(context, manga, chapter).putExtra(EXTRA_INITIAL_PAGE, page)
+        val intent = newIntent(context, manga, chapter, sourceManager)
+        return if (isNovel(manga, sourceManager)) intent else intent.putExtra(EXTRA_INITIAL_PAGE, page)
     }
 
     fun initialPage(intent: Intent): Int? =

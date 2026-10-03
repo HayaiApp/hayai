@@ -845,6 +845,7 @@ class MangaDetailsPresenter(
             Manga.TYPE_MANHWA -> tags.add("Manhwa")
             Manga.TYPE_COMIC -> tags.add("Comic")
             Manga.TYPE_WEBTOON -> tags.add("Webtoon")
+            dev.ahmedmohamed.hayai.novel.integration.NovelSeriesType.TYPE_NOVEL -> tags.add("Novel")
         }
         return tags.toTypedArray()
     }

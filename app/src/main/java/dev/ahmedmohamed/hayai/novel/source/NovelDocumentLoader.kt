@@ -11,14 +11,19 @@ object NovelDocumentLoader {
     suspend fun load(
         source: Source,
         chapter: SChapter,
+        explicitlyNovel: Boolean = false,
     ): NovelDocument {
-        novelRequire(source.isNovelSource(), NovelFailure.Code.SourceNotNovel)
+        novelRequire(explicitlyNovel || source.isNovelSource(), NovelFailure.Code.SourceNotNovel)
 
         val pages = source.getPageList(chapter)
         novelRequire(pages.isNotEmpty(), NovelFailure.Code.SourceChapterEmpty)
         val contents = mutableListOf<String>()
         pages.forEach { page ->
-            contents += page.text ?: source.fetchPageText(page).also { page.text = it }
+            contents += page.text ?: try {
+                source.fetchPageText(page).also { page.text = it }
+            } catch (error: UnsupportedOperationException) {
+                throw NovelFailure(NovelFailure.Code.SourceNotNovel, cause = error)
+            }
         }
         val content = contents.joinToString("\n\n")
 

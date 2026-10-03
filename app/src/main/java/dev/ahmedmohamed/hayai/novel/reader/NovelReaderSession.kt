@@ -4,6 +4,7 @@ import android.content.Context
 import dev.ahmedmohamed.hayai.novel.download.NovelAssetReferences
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadResult
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
+import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
 import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import dev.ahmedmohamed.hayai.novel.source.NovelDocumentLoader
@@ -21,7 +22,6 @@ import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
-import eu.kanade.tachiyomi.source.isNovelSource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.chapter.ChapterSort
@@ -93,10 +93,9 @@ internal class NovelReaderSession(
     ): LoadedNovelChapter {
         this.recordHistory = recordHistory
         manga = requireNotNull(database.getManga(mangaId).executeAsBlocking()) { resources.getString(R.string.hayai_novel_reader_novel_not_found) }
+        check(NovelContentIdentity(database, sourceManager).isNovel(manga)) { resources.getString(R.string.hayai_novel_reader_source_no_text) }
         source =
             requireNotNull(sourceManager.get(manga.source)) { resources.getString(R.string.hayai_novel_reader_source_not_installed) }
-                .takeIf { it.isNovelSource() }
-                ?: error(resources.getString(R.string.hayai_novel_reader_source_no_text))
 
         val databaseChapters = database.getChapters(manga).executeAsBlocking()
         val selected = requireNotNull(databaseChapters.find { it.id == chapterId }) { resources.getString(R.string.hayai_novel_reader_chapter_not_found) }
@@ -184,7 +183,7 @@ internal class NovelReaderSession(
             if (prefetchedDocuments.containsKey(chapter.url) || downloadStore.contains(source.id, chapter.url)) continue
             val document =
                 try {
-                    (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter)
+                    (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter, explicitlyNovel = true)
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
@@ -211,7 +210,7 @@ internal class NovelReaderSession(
             offlineDocument
                 ?: prefetchedDocuments.remove(chapter.url)
                 ?: (source as? NovelSource)?.getChapterDocument(chapter)
-                ?: NovelDocumentLoader.load(source, chapter)
+                ?: NovelDocumentLoader.load(source, chapter, explicitlyNovel = true)
         val chapterId = requireNotNull(chapter.id)
         // Derived analytics must never make otherwise readable content unavailable.
         val statistics =

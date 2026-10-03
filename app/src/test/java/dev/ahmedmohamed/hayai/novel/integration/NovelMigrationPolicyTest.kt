@@ -10,6 +10,17 @@ import org.junit.Test
 
 class NovelMigrationPolicyTest {
     @Test
+    fun `manual novel type overrides old manga classification without side data`() {
+        val entry = Manga.create("/old", "Old entry", 404).apply { genre = "Manga, Novel" }
+        val identity = NovelContentIdentity(sourceIsNovel = { false }, hasDurableNovelEvidence = { false })
+        assertEquals(ContentKind.Novel, identity.contentKind(entry))
+        assertEquals(NovelSeriesType.TYPE_NOVEL, entry.seriesType())
+        assertTrue(entry.isSeriesTag("Novel"))
+        entry.genre = "Manga"
+        assertEquals(ContentKind.Manga, identity.contentKind(entry))
+    }
+
+    @Test
     fun `legacy novel data overrides a missing source during migration`() {
         val legacyNovel = Manga.create(pathUrl = "/legacy-novel", title = "Legacy novel", source = 404)
         val policy =

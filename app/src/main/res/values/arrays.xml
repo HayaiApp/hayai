@@ -49,6 +49,7 @@
         <item>@string/manhua</item>
         <item>@string/comic</item>
         <item>@string/webtoon</item>
+        <item>@string/hayai_source_badge_novel</item>
     </string-array>
 
     <string-array name="webtoon_side_padding_values">

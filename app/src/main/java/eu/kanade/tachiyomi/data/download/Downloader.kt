@@ -133,7 +133,7 @@ class Downloader(
                     store
                         .restore()
                         .filterNot { download ->
-                            novelDownloads.handles(download.source) &&
+                            novelDownloads.handles(download.manga, download.source) &&
                                 novelDownloads.isDownloaded(download.manga, download.chapter)
                         }
                 }
@@ -337,8 +337,8 @@ class Downloader(
         }
 
         val source = sourceManager.get(manga.source) ?: return@launchIO
-        val queueSource = NovelDownloadQueueSource.from(source) ?: return@launchIO
-        val novelStorage = novelDownloads.handles(source)
+        val novelStorage = novelDownloads.handles(manga, source)
+        val queueSource = NovelDownloadQueueSource.from(source, explicitlyNovel = novelStorage) ?: return@launchIO
         // Called in background thread, the operation can be slow with SAF.
         val chaptersWithoutDir =
             async {
@@ -401,7 +401,7 @@ class Downloader(
      * @param download the chapter to be downloaded.
      */
     private suspend fun downloadChapter(download: Download) {
-        if (novelDownloads.handles(download.source)) {
+        if (novelDownloads.handles(download.manga, download.source)) {
             downloadNovelChapter(download)
             return
         }

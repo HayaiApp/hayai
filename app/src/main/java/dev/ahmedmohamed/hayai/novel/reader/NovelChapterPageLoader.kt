@@ -3,6 +3,9 @@ package dev.ahmedmohamed.hayai.novel.reader
 import android.content.Context
 import dev.ahmedmohamed.hayai.novel.download.NovelAssetReferences
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadStore
+import dev.ahmedmohamed.hayai.novel.error.NovelFailureCarrier
+import dev.ahmedmohamed.hayai.novel.error.novelFailureMessage
+import dev.ahmedmohamed.hayai.novel.integration.NovelContentIdentity
 import dev.ahmedmohamed.hayai.novel.source.NovelAssetProvider
 import dev.ahmedmohamed.hayai.novel.source.NovelContentType
 import dev.ahmedmohamed.hayai.novel.source.NovelDocument
@@ -16,6 +19,7 @@ import dev.ahmedmohamed.hayai.novel.translation.NovelTranslationSettingsStore
 import dev.ahmedmohamed.hayai.novel.translation.SqliteNovelTranslationStore
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
+import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
@@ -122,7 +126,7 @@ internal class NovelDocumentRepository(
     private val offlineChapterUrls = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     suspend fun load(chapter: Chapter): NovelChapterContent {
-        check(NovelReaderIdentity.isNovel(source)) { "Source ${source.id} is not a novel source" }
+        check(Injekt.get<NovelContentIdentity>().isNovel(manga)) { "Entry ${manga.id} is not a novel" }
         val offline = downloadStore.loadDocument(source.id, chapter.url)
         if (offline != null) offlineChapterUrls += chapter.url else offlineChapterUrls -= chapter.url
         val chapterId = requireNotNull(chapter.id) { "Novel chapter is missing its durable database identity" }
@@ -130,10 +134,13 @@ internal class NovelDocumentRepository(
         var translatedOfflineLanguage: String? = null
         val document =
             offline ?: try {
-                (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter)
+                (source as? NovelSource)?.getChapterDocument(chapter) ?: NovelDocumentLoader.load(source, chapter, explicitlyNovel = true)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                if (error is NovelFailureCarrier) {
+                    throw IllegalArgumentException(context.novelFailureMessage(error, R.string.hayai_novel_reader_load_error), error)
+                }
                 if (!error.allowsOfflineTranslationFallback()) throw error
                 val targetLanguage = NovelTranslationSettingsStore(context).get().targetLanguage
                 val translated =

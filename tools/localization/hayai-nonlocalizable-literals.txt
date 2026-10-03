@@ -1573,7 +1573,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_chapter_stats stats " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_novel_highlights WHERE manga_id = ? " +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	"UNION ALL SELECT 1 FROM hayai_quotes WHERE manga_id = ? " +
-app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelContentIdentity.kt	private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.ifBlank { "asset.bin" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.joinToString("") { "%02x".format(it) }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelDataToolsController.kt	.replace("&", "&amp;")
@@ -1702,6 +1701,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMov
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val sourceMangaId = sourceManga.id ?: throw NovelMigrationException("Source novel has no database identity")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val targetMangaId = targetManga.id ?: throw NovelMigrationException("Target novel has no database identity")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelMigrationDataMover.kt	val values = ContentValues(1).apply { put("manga_id", targetMangaId) }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/integration/NovelSeriesType.kt	private val novelTags = setOf("novel", "light novel", "web novel")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	.setType("text/plain")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	@Suppress("DEPRECATION")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/lookup/NovelLookupLauncher.kt	const val GOOGLE_TRANSLATE_PACKAGE = "com.google.android.apps.translate"
@@ -2250,7 +2250,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	val ASSET_SCHEMES = setOf("hayai-novel-image", "novel-image")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	val REMOTE_SCHEMES = setOf("http", "https")
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelAssetWebViewClient.kt	WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	check(NovelReaderIdentity.isNovel(source)) { "Source ${source.id} is not a novel source" }
+app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	check(Injekt.get<NovelContentIdentity>().isNovel(manga)) { "Entry ${manga.id} is not a novel" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	private val downloadStore: NovelDownloadStore = NovelDownloadStore(File(context.filesDir, "hayai/novel-downloads")),
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	require(page is NovelProgressPage) { "Novel loader received a non-novel page" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelChapterPageLoader.kt	val chapterId = requireNotNull(chapter.id) { "Novel chapter is missing its durable database identity" }
@@ -2401,7 +2401,6 @@ app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var languageTag = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var novelTitle = ""
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/NovelTtsPlaybackService.kt	private var voiceName = ""
-app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt	check(!isNovel(manga, sourceManager)) { "Novel chapters do not use image-page indices" }
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/ReaderLauncher.kt	const val EXTRA_INITIAL_PAGE = "dev.ahmedmohamed.hayai.reader.INITIAL_PAGE"
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"(()=>{const id=${json.encodeToString(chapterId.toString())},until=$retryAt;const tick=()=>{" +
 app/src/main/java/dev/ahmedmohamed/hayai/novel/reader/WebNovelRenderer.kt	"<div class=\"hayai-block-state\"><strong>${android.text.TextUtils.htmlEncode(title)}</strong>" +

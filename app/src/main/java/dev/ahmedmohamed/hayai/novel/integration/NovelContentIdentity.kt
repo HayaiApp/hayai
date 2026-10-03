@@ -5,7 +5,6 @@ import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.isNovelSource
-import java.util.Locale
 
 /** Resolves manga and novel identity from live capabilities plus durable Hayai evidence. */
 class NovelContentIdentity internal constructor(
@@ -20,7 +19,7 @@ class NovelContentIdentity internal constructor(
         hasDurableNovelEvidence = DatabaseNovelIdentity(database)::matches,
     )
 
-    fun isNovel(manga: Manga): Boolean = sourceIsNovel(manga.source) || hasDurableNovelEvidence(manga)
+    fun isNovel(manga: Manga): Boolean = manga.hasNovelGenreIdentity() || sourceIsNovel(manga.source) || hasDurableNovelEvidence(manga)
 
     fun contentKind(manga: Manga): ContentKind = if (isNovel(manga)) ContentKind.Novel else ContentKind.Manga
 }
@@ -49,9 +48,4 @@ private class DatabaseNovelIdentity(
 }
 
 internal fun Manga.hasNovelGenreIdentity(): Boolean =
-    genre
-        ?.split(',')
-        ?.any { tag -> tag.trim().lowercase(Locale.US) in NOVEL_GENRES }
-        ?: false
-
-private val NOVEL_GENRES = setOf("novel", "light novel", "web novel")
+    NovelSeriesType.hasNovelTags(genre)

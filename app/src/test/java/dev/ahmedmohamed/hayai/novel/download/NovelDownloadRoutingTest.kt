@@ -31,6 +31,14 @@ class NovelDownloadRoutingTest {
     }
 
     @Test
+    fun `manually classified novel keeps the same authoritative download queue`() {
+        val source = FakeSource(isNovel = false)
+        assertEquals(ChapterDownloadStorage.HayaiNovel, ChapterDownloadRouting.storageFor(source, explicitlyNovel = true))
+        assertTrue(NovelDownloadQueueSource.from(source, explicitlyNovel = true) is HttpSource)
+        assertNull(NovelDownloadQueueSource.from(source))
+    }
+
+    @Test
     fun `ordinary HTTP sources enter the queue without an adapter`() {
         val source = FakeHttpSource()
 

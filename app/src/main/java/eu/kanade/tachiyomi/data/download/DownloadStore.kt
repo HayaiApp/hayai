@@ -91,7 +91,9 @@ class DownloadStore(
                     cachedManga.getOrPut(mangaId) {
                         db.getManga(mangaId).executeAsBlocking()
                     } ?: continue
-                val source = sourceManager.get(manga.source)?.let(NovelDownloadQueueSource::from) ?: continue
+                val source = sourceManager.get(manga.source)?.let {
+                    NovelDownloadQueueSource.from(it, dev.ahmedmohamed.hayai.novel.reader.ReaderLauncher.isNovel(manga, sourceManager))
+                } ?: continue
                 val chapter = db.getChapter(chapterId).executeAsBlocking() ?: continue
                 downloads.add(Download(source, manga, chapter))
             }
