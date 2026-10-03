@@ -1,6 +1,11 @@
 -dontobfuscate
 
 -keep class eu.kanade.tachiyomi.source.** { public protected *; } # Avoid access modification
+# Compile-only Tsundoku SourceTracker ABI, including legacy Kotlin default delegates.
+-keep interface eu.kanade.tachiyomi.source.SourceTracker { *; }
+-keep class eu.kanade.tachiyomi.source.SourceTracker$DefaultImpls { *; }
+-keep interface eu.kanade.tachiyomi.source.RateLimited { *; }
+-keep class eu.kanade.tachiyomi.source.RateLimited$DefaultImpls { *; }
 -keep,allowoptimization class eu.kanade.** { public protected *; }
 -keep,allowoptimization class dev.ahmedmohamed.hayai.** { public protected *; }
 -keep,allowoptimization class tachiyomi.** { public protected *; }

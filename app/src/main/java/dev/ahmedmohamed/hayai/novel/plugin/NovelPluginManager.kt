@@ -25,7 +25,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
-import java.io.ByteArrayOutputStream
 
 data class NovelPluginCatalog(
     val repositories: List<NovelPluginRepository> = emptyList(),
@@ -334,24 +333,7 @@ class NovelPluginManager(
     ): ByteArray =
         withContext(Dispatchers.IO) {
             requireSafeUrl(url, allowLocalHttp = true)
-            client.newCall(GET(url)).execute().use { response ->
-                novelRequire(response.isSuccessful, NovelFailure.Code.PluginHttp, response.code)
-                val body = response.body
-                val length = body.contentLength()
-                novelRequire(length <= maxBytes, NovelFailure.Code.PluginResponseTooLarge)
-                val input = body.byteStream()
-                val output = ByteArrayOutputStream(if (length in 1..maxBytes) length.toInt() else 8192)
-                val buffer = ByteArray(8192)
-                var total = 0L
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    total += count
-                    novelRequire(total <= maxBytes, NovelFailure.Code.PluginResponseTooLarge)
-                    output.write(buffer, 0, count)
-                }
-                output.toByteArray()
-            }
+            NovelPluginDownload.read(client.newCall(GET(url)), maxBytes)
         }
 
     companion object {

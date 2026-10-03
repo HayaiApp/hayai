@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.extension
 import android.content.pm.PackageInstaller
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
+import dev.ahmedmohamed.hayai.extension.install.ExtensionInstallActions
 import dev.ahmedmohamed.hayai.extension.managed.ManagedExtensionEntry
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.AbstractSectionableItem
@@ -27,6 +28,9 @@ data class ExtensionItem(
 ) : AbstractSectionableItem<ExtensionHolder, ExtensionGroupItem>(header) {
     val sessionProgress: Int?
         get() = (session?.progress?.times(100)?.toInt())
+
+    val canCancelInstall: Boolean
+        get() = ExtensionInstallActions.canCancel(installStep, session != null)
 
     /**
      * Returns the layout resource of this item.

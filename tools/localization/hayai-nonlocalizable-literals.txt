@@ -963,6 +963,7 @@ app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	where = "s
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiBackupService.kt	where = "source_id = ? AND manga_url = ?",
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt	"hayai-quote-v1",
 app/src/main/java/dev/ahmedmohamed/hayai/backup/HayaiQuoteRestoreIdentity.kt	).joinToString("\u0000")
+app/src/main/java/dev/ahmedmohamed/hayai/extension/install/ExtensionInstallEvent.kt	if (packageName.startsWith("Finished") || packageName.startsWith("Uninstalled")) {
 app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	"https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json"
 app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	const val CURSED_MANGA = "https://raw.githubusercontent.com/mojuru/cursed-manga-repo/repo/index.pb"
 app/src/main/java/dev/ahmedmohamed/hayai/extension/managed/ExtensionRepositoryDefaults.kt	const val KEIYOUSHI_MANGA = "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb"

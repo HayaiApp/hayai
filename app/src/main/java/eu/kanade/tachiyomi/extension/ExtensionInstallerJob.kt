@@ -13,6 +13,8 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import dev.ahmedmohamed.hayai.extension.install.ExtensionInstallBatch
+import dev.ahmedmohamed.hayai.extension.install.QueuedExtensionCancellations
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
@@ -24,16 +26,10 @@ import eu.kanade.tachiyomi.util.system.localeContext
 import eu.kanade.tachiyomi.util.system.notificationManager
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.tryToSetForeground
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -42,6 +38,7 @@ import timber.log.Timber
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.lang.ref.WeakReference
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.max
 
 class ExtensionInstallerJob(
@@ -52,13 +49,12 @@ class ExtensionInstallerJob(
 
     private val preferences: PreferencesHelper = Injekt.get()
 
-    private var activeInstalls = mutableListOf<String>()
+    private var activeInstalls = CopyOnWriteArrayList<String>()
 
     val extensionManager: ExtensionManager = Injekt.get()
 
-    private var emitScope = CoroutineScope(Job() + Dispatchers.Default)
-
     private var job: Job? = null
+    private val batch = ExtensionInstallBatch()
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notification = notifier.progressNotificationBuilder.build()
@@ -96,6 +92,7 @@ class ExtensionInstallerJob(
             } ?: return Result.failure()
         val list =
             infos.filter {
+                if (QueuedExtensionCancellations.contains(it.pkgName)) return@filter false
                 val installedExt =
                     extensionManager.installedExtensionsFlow.value.find { installed ->
                         installed.pkgName == it.pkgName
@@ -103,47 +100,50 @@ class ExtensionInstallerJob(
                 installedExt.versionCode < it.versionCode || installedExt.libVersion < it.libVersion
             }
 
-        activeInstalls = list.map { it.pkgName }.toMutableList()
-        emitScope.launch { list.forEach { extensionManager.setPending(it.pkgName) } }
+        activeInstalls = CopyOnWriteArrayList(list.map { it.pkgName })
         var installed = 0
         val installedExtensions = mutableListOf<ExtensionManager.ExtensionInfo>()
         val failedExtensions = mutableListOf<ExtensionManager.ExtensionInfo>()
-        val requestSemaphore = Semaphore(3)
-        coroutineScope {
-            job =
-                launchIO {
-                    list
-                        .map { extension ->
-                            async {
-                                requestSemaphore.withPermit {
-                                    extensionManager
-                                        .installExtension(extension, this)
-                                        .collect {
-                                            if (it.first.isCompleted()) {
-                                                activeInstalls.remove(extension.pkgName)
-                                                if (it.first == InstallStep.Installed) {
-                                                    installedExtensions.add(extension)
-                                                    installed++
-                                                    val prefCount = preferences.extensionUpdatesCount().get()
-                                                    preferences
-                                                        .extensionUpdatesCount()
-                                                        .set(max(prefCount - 1, 0))
-                                                } else {
-                                                    // Keep this extension counted as a pending update so it
-                                                    // isn't silently dropped - the re-check triggered below
-                                                    // will surface it again in the updates notification.
-                                                    failedExtensions.add(extension)
-                                                }
-                                            }
-                                            notifier.showProgressNotification(installed, list.size)
-                                            if (activeInstalls.isEmpty() || isStopped) {
-                                                cancel()
-                                            }
+        try {
+            coroutineScope {
+                job = launchIO {
+                    val byPackage = list.associateBy { it.pkgName }
+                    batch.run(byPackage.keys.toList()) { pkgName ->
+                        val extension = byPackage.getValue(pkgName)
+                        try {
+                            if (QueuedExtensionCancellations.contains(pkgName) || batch.wasCancelled(pkgName)) return@run
+                            extensionManager.installExtension(extension, this).collect { info ->
+                                synchronized(installedExtensions) {
+                                    if (info.first.isCompleted()) {
+                                        activeInstalls.remove(extension.pkgName)
+                                        if (info.first == InstallStep.Installed) {
+                                            installedExtensions.add(extension)
+                                            installed++
+                                            val prefCount = preferences.extensionUpdatesCount().get()
+                                            preferences.extensionUpdatesCount().set(max(prefCount - 1, 0))
+                                        } else {
+                                            failedExtensions.add(extension)
                                         }
+                                    }
+                                    notifier.showProgressNotification(installed, list.size)
                                 }
                             }
-                        }.awaitAll()
+                        } finally {
+                            activeInstalls.remove(pkgName)
+                        }
+                    }
                 }
+            }
+        } finally {
+            withContext(NonCancellable) {
+                activeInstalls.toList().forEach { extensionManager.cancelInstallation(it) }
+                activeInstalls.clear()
+                if (isStopped || job?.isCancelled == true) {
+                    extensionManager.emitToInstaller("Finished", (InstallStep.Error to null))
+                    context.notificationManager.cancel(Notifications.ID_EXTENSION_PROGRESS)
+                }
+                if (instance?.get() == this@ExtensionInstallerJob) instance = null
+            }
         }
 
         if (showUpdatedNotification && installedExtensions.size > 0) {
@@ -197,6 +197,8 @@ class ExtensionInstallerJob(
             info: List<ExtensionManager.ExtensionInfo>,
             showUpdatedExtension: Int = -1,
         ) {
+            if (info.isEmpty()) return
+            QueuedExtensionCancellations.start(info.map { it.pkgName })
             // chunked to satisfy input limits
             val requests =
                 info.chunked(32).map {
@@ -223,6 +225,12 @@ class ExtensionInstallerJob(
         fun activeInstalls(): List<String>? = instance?.get()?.activeInstalls
 
         fun removeActiveInstall(pkgName: String) = instance?.get()?.activeInstalls?.remove(pkgName)
+
+        fun cancelInstallation(pkgName: String) {
+            QueuedExtensionCancellations.cancel(pkgName)
+            instance?.get()?.batch?.cancel(pkgName)
+            removeActiveInstall(pkgName)
+        }
 
         fun stop(context: Context) {
             instance?.get()?.job?.cancel()

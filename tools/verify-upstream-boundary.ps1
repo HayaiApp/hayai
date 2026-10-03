@@ -31,6 +31,11 @@ try {
         # Approved in docs/architecture/j2k-reset.md. Defers J2K's install session until unknown-source permission exists.
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstallBroadcast.kt"
         "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionLoader.kt"
+        # Approved in docs/architecture/j2k-reset.md. Makes existing package/download operations cancellable and terminal.
+        "app/src/main/java/eu/kanade/tachiyomi/extension/util/ExtensionInstaller.kt"
+        "app/src/main/java/eu/kanade/tachiyomi/extension/ExtensionInstallerJob.kt"
+        # Approved in docs/architecture/j2k-reset.md. Cancels only the requested package in Shizuku's pending queue.
+        "app/src/main/java/eu/kanade/tachiyomi/extension/ShizukuInstaller.kt"
         "app/src/main/java/eu/kanade/tachiyomi/network/JavaScriptEngine.kt"
         # Approved in docs/architecture/j2k-reset.md. Updates only the default HTTP/WebView user-agent identity.
         "app/src/main/java/eu/kanade/tachiyomi/network/NetworkHelper.kt"

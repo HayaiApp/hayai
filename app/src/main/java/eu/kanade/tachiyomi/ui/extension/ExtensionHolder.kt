@@ -90,8 +90,8 @@ class ExtensionHolder(
             }.uppercase(Locale.ROOT)
         binding.installProgress.progress = item.sessionProgress ?: 0
         binding.installProgress.isVisible = item.sessionProgress != null
-        binding.cancelButton.isVisible = item.sessionProgress != null
-        binding.webviewButton.isVisible = extension.websiteUrl != null && item.sessionProgress == null
+        binding.cancelButton.isVisible = item.canCancelInstall
+        binding.webviewButton.isVisible = extension.websiteUrl != null && item.installStep?.isCompleted() != false
 
         val iconFallback =
             if (extension.backend == ManagedExtensionBackend.JavaScript) R.drawable.ic_code_24dp else R.mipmap.ic_launcher
@@ -107,15 +107,14 @@ class ExtensionHolder(
 
     @Suppress("ResourceType")
     fun bindButton(item: ExtensionItem) = with(binding.extButton) {
-        if (item.installStep == InstallStep.Done) return@with
-        val installStep = item.installStep
+        val installStep = item.installStep.takeUnless { it == InstallStep.Done }
         val extension = item.extension
         isEnabled = true
         isClickable = true
         binding.installProgress.progress = item.sessionProgress ?: 0
-        binding.cancelButton.isVisible = item.sessionProgress != null
+        binding.cancelButton.isVisible = item.canCancelInstall
         binding.installProgress.isVisible = item.sessionProgress != null
-        binding.webviewButton.isVisible = extension.websiteUrl != null && item.sessionProgress == null
+        binding.webviewButton.isVisible = extension.websiteUrl != null && item.installStep?.isCompleted() != false
         if (installStep != null) {
             applyStyle(R.style.Widget_Tachiyomi_Button_TextButton)
             setText(

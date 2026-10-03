@@ -1,6 +1,7 @@
 package dev.ahmedmohamed.hayai.extension.managed
 
 import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
+import dev.ahmedmohamed.hayai.extension.ExtensionCatalogReconciler
 import dev.ahmedmohamed.hayai.novel.plugin.InstalledNovelPlugin
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginCatalog
 import dev.ahmedmohamed.hayai.novel.plugin.NovelPluginDescriptor
@@ -94,6 +95,76 @@ class ManagedExtensionProjectorTest {
         )
 
         assertEquals(setOf("apk:update.apk", "js:update-js"), state.updates.map { it.key.stableValue }.toSet())
+    }
+
+    @Test
+    fun `first installed untrusted novel apk becomes a visible trust row immediately`() {
+        val untrusted = Extension.Untrusted(
+            name = "WTR-LAB",
+            pkgName = "eu.kanade.tachiyomi.novelextension.all.wtrlab",
+            versionName = "1.6.12",
+            versionCode = 12,
+            libVersion = 1.6,
+            signatureHash = "a".repeat(64),
+            lang = "all",
+            isNovel = true,
+        )
+        val snapshot = ApkExtensionSnapshot(emptyList(), emptyList(), emptyList(), emptyList())
+        val recorded = ExtensionCatalogReconciler.recordUntrusted(snapshot, untrusted)
+        val repeated = ExtensionCatalogReconciler.recordUntrusted(recorded, untrusted)
+        val state = ManagedExtensionProjector.project(repeated, NovelPluginCatalog(), filter)
+        assertEquals(1, repeated.untrusted.size)
+        assertEquals(ManagedInstallation.Untrusted, state.installed.single().installation)
+        assertEquals(setOf(ContentKind.Novel), state.installed.single().contentKinds)
+    }
+
+    @Test
+    fun `untrusted update replaces only its old installed record and failure`() {
+        val target = installedApk("target")
+        val other = installedApk("other")
+        val untrusted = Extension.Untrusted("Target", "target", "1.6.2", 2, 1.6, "hash")
+        val result = ExtensionCatalogReconciler.recordUntrusted(
+            ApkExtensionSnapshot(
+                listOf(target, other),
+                emptyList(),
+                emptyList(),
+                listOf(ApkLoadFailure("target", reason = ApkLoadFailure.Reason.ClassLoader)),
+            ),
+            untrusted,
+        )
+        assertEquals(listOf(other), result.installed)
+        assertEquals(listOf(untrusted), result.untrusted)
+        assertTrue(result.failures.isEmpty())
+    }
+
+    @Test
+    fun `novel update all dispatches apk and js once and skips active or untrusted entries`() {
+        val installedJs = InstalledNovelPlugin(plugin("js", "1.0.0"), REPO, 1L, "c".repeat(64))
+        val state = ManagedExtensionProjector.project(
+            ApkExtensionSnapshot(
+                listOf(installedApk("novel").copy(isNovel = true, hasUpdate = true)),
+                emptyList(),
+                listOf(availableApk("novel", 2).copy(isNovel = true)),
+                emptyList(),
+            ),
+            NovelPluginCatalog(
+                installed = listOf(installedJs),
+                available = listOf(plugin("js", "2.0.0")),
+                availableOrigins = mapOf("js" to REPO),
+            ),
+            filter,
+        )
+        val duplicated = state.entries + state.entries
+        val plan = ManagedExtensionUpdatePlan.create(duplicated, ContentKind.Novel, emptySet())
+        assertEquals(listOf("novel"), plan.apkPackages)
+        assertEquals(listOf("js"), plan.pluginIds)
+        val active = ManagedExtensionUpdatePlan.create(duplicated, ContentKind.Novel, setOf(ManagedExtensionKey.Js("js")))
+        assertTrue(active.pluginIds.isEmpty())
+        val manga = ManagedExtensionUpdatePlan.create(duplicated, ContentKind.Manga, emptySet())
+        assertTrue(manga.apkPackages.isEmpty())
+        assertTrue(manga.pluginIds.isEmpty())
+        val untrusted = duplicated.map { it.copy(installation = ManagedInstallation.Untrusted) }
+        assertTrue(ManagedExtensionUpdatePlan.create(untrusted, ContentKind.Novel, emptySet()).apkPackages.isEmpty())
     }
 
     private fun plugin(id: String, version: String) = NovelPluginDescriptor(

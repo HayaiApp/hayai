@@ -34,16 +34,17 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
         context: Context,
         intent: Intent,
     ) {
+        val extensionManager: ExtensionManager by injectLazy()
+        val downloadId = intent.getLongExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, -1)
+        var createdSession: Int? = null
         try {
             if (PACKAGE_INSTALLED_ACTION == intent.action) {
                 packageInstallStep(context, intent)
                 return
             }
 
-            val downloadId = intent.extras!!.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID)
+            if (!extensionManager.isInstallActive(downloadId)) return
             val packageInstaller = context.packageManager.packageInstaller
-            val data = UniFile.fromUri(context, intent.data).openInputStream()
-
             val params =
                 SessionParams(
                     SessionParams.MODE_FULL_INSTALL,
@@ -52,42 +53,53 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
                 params.setRequireUserAction(USER_ACTION_NOT_REQUIRED)
             }
             val sessionId = packageInstaller.createSession(params)
-            val session = packageInstaller.openSession(sessionId)
-            session.openWrite("package", 0, -1).use { packageInSession ->
-                data.copyTo(packageInSession)
-            }
-
-            val newIntent =
-                Intent(context, ExtensionInstallBroadcast::class.java)
-                    .setAction(PACKAGE_INSTALLED_ACTION)
-                    .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, downloadId)
-                    .putExtra(EXTRA_SESSION_ID, sessionId)
-
-            val mutableFlag =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    PendingIntent.FLAG_MUTABLE
-                } else {
-                    0
-                }
-            val pendingIntent =
-                PendingIntent.getBroadcast(
-                    context,
-                    downloadId.hashCode(),
-                    newIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag,
-                )
-            val statusReceiver = pendingIntent.intentSender
-            session.commit(statusReceiver)
-            val extensionManager: ExtensionManager by injectLazy()
+            createdSession = sessionId
             extensionManager.setInstalling(downloadId, sessionId)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(downloadId)
+            if (!extensionManager.isInstallActive(downloadId, sessionId)) {
+                packageInstaller.abandonSession(sessionId)
+                return
             }
-            data.close()
+            packageInstaller.openSession(sessionId).use { session ->
+                UniFile.fromUri(context, intent.data).openInputStream().use { data ->
+                    session.openWrite("package", 0, -1).use { packageInSession -> data.copyTo(packageInSession) }
+                }
+
+                val newIntent =
+                    Intent(context, ExtensionInstallBroadcast::class.java)
+                        .setAction(PACKAGE_INSTALLED_ACTION)
+                        .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, downloadId)
+                        .putExtra(EXTRA_SESSION_ID, sessionId)
+
+                val mutableFlag =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        PendingIntent.FLAG_MUTABLE
+                    } else {
+                        0
+                    }
+                val pendingIntent =
+                    PendingIntent.getBroadcast(
+                        context,
+                        downloadId.hashCode(),
+                        newIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag,
+                    )
+                val statusReceiver = pendingIntent.intentSender
+                if (!extensionManager.isInstallActive(downloadId, sessionId)) {
+                    packageInstaller.abandonSession(sessionId)
+                    return
+                }
+                session.commit(statusReceiver)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(downloadId)
+                }
+            }
         } catch (error: Exception) {
             // Either install package can't be found (probably bots) or there's a security exception
             // with the download manager. Nothing we can workaround.
-            context.toast(error.message)
+            createdSession?.let { runCatching { context.packageManager.packageInstaller.abandonSession(it) } }
+            val wasActive = extensionManager.isInstallActive(downloadId)
+            extensionManager.setInstallationResult(downloadId, false)
+            if (wasActive) context.toast(error.message)
         }
     }
 
@@ -105,6 +117,11 @@ class ExtensionInstallBroadcast : BroadcastReceiver() {
             if (PACKAGE_INSTALLED_ACTION == intent.action) {
                 val downloadId = extras.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID)
                 val extensionManager: ExtensionManager by injectLazy()
+                val sessionId = extras.getInt(EXTRA_SESSION_ID, -1)
+                if (!extensionManager.isInstallActive(downloadId, sessionId)) {
+                    runCatching { context.packageManager.packageInstaller.abandonSession(sessionId) }
+                    return
+                }
                 when (val status = extras.getInt(PackageInstaller.EXTRA_STATUS)) {
                     PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                         val confirmIntent = extras[Intent.EXTRA_INTENT] as? Intent ?: return
@@ -158,6 +175,11 @@ class ExtensionInstallActivity : Activity() {
             finish()
             return
         }
+        val extensionManager: ExtensionManager by injectLazy()
+        if (!extensionManager.isInstallActive(intent.getLongExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, -1))) {
+            finish()
+            return
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !packageManager.canRequestPackageInstalls()
@@ -195,11 +217,15 @@ class ExtensionInstallActivity : Activity() {
     }
 
     private fun installDownloadedExtension() {
+        val extensionManager: ExtensionManager by injectLazy()
+        val downloadId = intent.getLongExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, -1)
+        if (!extensionManager.isInstallActive(downloadId)) {
+            finish()
+            return
+        }
+        var createdSession: Int? = null
         try {
-            val downloadId = intent.extras!!.getLong(ExtensionInstaller.EXTRA_DOWNLOAD_ID)
             val packageInstaller = packageManager.packageInstaller
-            val data = UniFile.fromUri(this, intent.data).openInputStream()
-
             val params =
                 SessionParams(
                     SessionParams.MODE_FULL_INSTALL,
@@ -208,41 +234,54 @@ class ExtensionInstallActivity : Activity() {
                 params.setRequireUserAction(USER_ACTION_NOT_REQUIRED)
             }
             val sessionId = packageInstaller.createSession(params)
-            val session = packageInstaller.openSession(sessionId)
-            session.openWrite("package", 0, -1).use { packageInSession ->
-                data.copyTo(packageInSession)
-            }
-            val newIntent =
-                Intent(this, ExtensionInstallActivity::class.java)
-                    .setAction(PACKAGE_INSTALLED_ACTION)
-                    .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, downloadId)
-                    .putExtra(EXTRA_SESSION_ID, sessionId)
-            val mutableFlag =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    PendingIntent.FLAG_MUTABLE
-                } else {
-                    0
-                }
-            val pendingIntent =
-                PendingIntent.getActivity(
-                    this,
-                    downloadId.hashCode(),
-                    newIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag,
-                    activityOptionsBackgroundOptions()?.toBundle(),
-                )
-            val statusReceiver = pendingIntent.intentSender
-            session.commit(statusReceiver)
-            val extensionManager: ExtensionManager by injectLazy()
+            createdSession = sessionId
             extensionManager.setInstalling(downloadId, sessionId)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(downloadId)
+            if (!extensionManager.isInstallActive(downloadId, sessionId)) {
+                packageInstaller.abandonSession(sessionId)
+                finish()
+                return
             }
-            data.close()
+            packageInstaller.openSession(sessionId).use { session ->
+                UniFile.fromUri(this, intent.data).openInputStream().use { data ->
+                    session.openWrite("package", 0, -1).use { packageInSession -> data.copyTo(packageInSession) }
+                }
+                val newIntent =
+                    Intent(this, ExtensionInstallActivity::class.java)
+                        .setAction(PACKAGE_INSTALLED_ACTION)
+                        .putExtra(ExtensionInstaller.EXTRA_DOWNLOAD_ID, downloadId)
+                        .putExtra(EXTRA_SESSION_ID, sessionId)
+                val mutableFlag =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        PendingIntent.FLAG_MUTABLE
+                    } else {
+                        0
+                    }
+                val pendingIntent =
+                    PendingIntent.getActivity(
+                        this,
+                        downloadId.hashCode(),
+                        newIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag,
+                        activityOptionsBackgroundOptions()?.toBundle(),
+                    )
+                val statusReceiver = pendingIntent.intentSender
+                if (!extensionManager.isInstallActive(downloadId, sessionId)) {
+                    packageInstaller.abandonSession(sessionId)
+                    finish()
+                    return
+                }
+                session.commit(statusReceiver)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(downloadId)
+                }
+            }
         } catch (error: Exception) {
             // Either install package can't be found (probably bots) or there's a security exception
             // with the download manager. Nothing we can workaround.
-            toast(error.message)
+            createdSession?.let { runCatching { packageManager.packageInstaller.abandonSession(it) } }
+            val wasActive = extensionManager.isInstallActive(downloadId)
+            extensionManager.setInstallationResult(downloadId, false)
+            if (wasActive) toast(error.message)
         }
         finish()
     }

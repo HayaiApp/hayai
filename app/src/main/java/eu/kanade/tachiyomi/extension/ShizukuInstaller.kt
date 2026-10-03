@@ -162,9 +162,17 @@ class ShizukuInstaller(
     }
 
     fun processEntry(entry: Entry) {
+        if (!extensionManager.isInstallActive(entry.downloadId)) {
+            continueQueue(false)
+            return
+        }
         extensionManager.setInstalling(entry.downloadId, entry.uri.hashCode())
         ioScope.launch {
             try {
+                if (!extensionManager.isInstallActive(entry.downloadId, entry.uri.hashCode())) {
+                    continueQueue(false)
+                    return@launch
+                }
                 val shell = shellInterface ?: throw IllegalStateException("Shizuku service is not bound")
                 context.contentResolver.openAssetFileDescriptor(entry.uri, "r")!!.use {
                     shell.install(it, statusIntent.intentSender)
@@ -184,18 +192,19 @@ class ShizukuInstaller(
      * @see ready
      */
     fun checkQueue() {
-        if (!ready) {
-            return
+        if (!ready) return
+        var finished = false
+        val nextEntry = synchronized(queue) {
+            if (queue.isEmpty()) {
+                finished = waitingInstall.get() == null
+                null
+            } else {
+                queue.first().takeIf { waitingInstall.compareAndSet(null, it) }?.also { queue.removeAt(0) }
+            }
         }
-        if (queue.isEmpty()) {
-            finishedQueue(this)
-            return
-        }
-        val nextEntry = queue.first()
-        if (waitingInstall.compareAndSet(null, nextEntry)) {
-            queue.removeAt(0)
-            processEntry(nextEntry)
-        }
+        // Manager takes the operation lock; never call it while holding the queue monitor.
+        if (finished) finishedQueue(this)
+        nextEntry?.let(::processEntry)
     }
 
     /**
@@ -232,18 +241,14 @@ class ShizukuInstaller(
      * @param downloadId Download ID as known by [ExtensionManager]
      */
     private fun cancelQueue(downloadId: Long) {
-        val waitingInstall = this.waitingInstall.get()
-        val toCancel = queue.find { it.downloadId == downloadId } ?: waitingInstall ?: return
-        if (cancelEntry(toCancel)) {
-            queue.remove(toCancel)
-            if (waitingInstall == toCancel) {
-                // Currently processing removed entry, continue queue
-                this.waitingInstall.set(null)
-                checkQueue()
-            }
-            queue.forEach { extensionManager.setInstallationResult(it.downloadId, false) }
-//            extensionManager.up(downloadId, InstallStep.Idle)
-        }
+        cancelQueued(downloadId)
+    }
+
+    /** Committed sessions cannot be recalled; remove only this waiting package. */
+    fun cancelQueued(downloadId: Long): Boolean {
+        val removed = synchronized(queue) { queue.removeAll { it.downloadId == downloadId } }
+        if (removed) checkQueue()
+        return removed
     }
 
     // Don't cancel if entry is already started installing
@@ -267,8 +272,8 @@ class ShizukuInstaller(
         }
         ioScope.cancel()
         LocalBroadcastManager.getInstance(context).unregisterReceiver(cancelReceiver)
-        queue.forEach { extensionManager.setInstallationResult(it.pkgName, false) }
-        queue.clear()
+        val abandoned = synchronized(queue) { queue.toList().also { queue.clear() } }
+        abandoned.forEach { extensionManager.setInstallationResult(it.downloadId, false) }
         waitingInstall.set(null)
     }
 

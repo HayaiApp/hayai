@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.extension
 import android.content.Context
 import dev.ahmedmohamed.hayai.extension.ExtensionCatalogReconciler
 import dev.ahmedmohamed.hayai.extension.ApkLoadFailure
+import dev.ahmedmohamed.hayai.extension.managed.ApkExtensionSnapshot
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Parcelable
@@ -273,18 +274,11 @@ class ExtensionManager(
         result: Boolean,
     ) {
         val pkgName = getExtension(downloadId) ?: return
-        setInstallationResult(pkgName, result)
+        installer.setInstallationResult(pkgName, result, downloadId)
     }
 
     fun cleanUpInstallation(pkgName: String) {
         installer.cleanUpInstallation(pkgName)
-    }
-
-    fun setInstallationResult(
-        pkgName: String,
-        result: Boolean,
-    ) {
-        installer.setInstallationResult(pkgName, result)
     }
 
     /** Sets the result of the installation of an extension.
@@ -293,6 +287,11 @@ class ExtensionManager(
      */
     fun cancelInstallation(sessionId: Int) {
         installer.cancelInstallation(sessionId)
+    }
+
+    fun cancelInstallation(pkgName: String) {
+        ExtensionInstallerJob.cancelInstallation(pkgName)
+        installer.cancelInstallation(pkgName)
     }
 
     /**
@@ -304,9 +303,14 @@ class ExtensionManager(
         downloadId: Long,
         sessionId: Int,
     ) {
-        val pkgName = getExtension(downloadId) ?: return
-        installer.setInstalling(pkgName, sessionId)
+        val pkgName = getExtension(downloadId) ?: run {
+            installer.abandonSession(sessionId)
+            return
+        }
+        installer.setInstalling(pkgName, sessionId, downloadId)
     }
+
+    fun isInstallActive(downloadId: Long, sessionId: Int? = null): Boolean = installer.isInstallActive(downloadId, sessionId)
 
     suspend fun setPending(pkgName: String) {
         installer.setPending(pkgName)
@@ -462,13 +466,19 @@ class ExtensionManager(
         }
 
         override fun onExtensionUntrusted(extension: Extension.Untrusted) {
-            _failedExtensionsFlow.value = failedExtensionsFlow.value.filterNot { it.packageName == extension.pkgName }
-            val installedExtension =
-                _installedExtensionsFlow.value
-                    .find { it.pkgName == extension.pkgName }
-                    ?: return
-            _installedExtensionsFlow.value -= installedExtension
-            _untrustedExtensionsFlow.value += extension
+            val updated = ExtensionCatalogReconciler.recordUntrusted(
+                ApkExtensionSnapshot(
+                    installedExtensionsFlow.value,
+                    untrustedExtensionsFlow.value,
+                    availableExtensionsFlow.value,
+                    failedExtensionsFlow.value,
+                ),
+                extension,
+            )
+            _failedExtensionsFlow.value = updated.failures
+            _installedExtensionsFlow.value = updated.installed
+            _untrustedExtensionsFlow.value = updated.untrusted
+            emitToInstaller("Finished/${extension.pkgName}/Untrusted", ExtensionIntallInfo(InstallStep.Installed, null))
         }
 
         override fun onExtensionLoadFailed(failure: ApkLoadFailure) {
