@@ -55,6 +55,8 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/extension/ExtensionItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryController.kt"
+        # Approved in docs/architecture/j2k-reset.md. Keeps J2K's prefiltered rows authoritative after the dependency publication repair.
+        "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryCategoryAdapter.kt"
         # Approved in docs/architecture/j2k-reset.md. Delegates only novel-card title line count to a Hayai presentation policy.
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryGridHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/library/LibraryListHolder.kt"

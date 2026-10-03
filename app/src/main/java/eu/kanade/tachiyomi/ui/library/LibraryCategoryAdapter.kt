@@ -57,6 +57,7 @@ class LibraryCategoryAdapter(
      * The list of manga in this category.
      */
     private var mangas: List<LibraryItem> = emptyList()
+    private var updatingPrefilteredItems = false
 
     val libraryListener: LibraryListener? = controller
 
@@ -147,6 +148,22 @@ class LibraryCategoryAdapter(
 
     private fun performFilter() {
         runBlocking { performFilterAsync() }
+    }
+
+    override fun hasFilter(): Boolean = !updatingPrefilteredItems && super.hasFilter()
+
+    override fun updateDataSet(
+        items: List<IFlexible<*>>?,
+        animate: Boolean,
+    ) {
+        // QueryNode owns filtering, including the blank row shown when a category has no matches.
+        val wasUpdating = updatingPrefilteredItems
+        updatingPrefilteredItems = true
+        try {
+            super.updateDataSet(items, animate)
+        } finally {
+            updatingPrefilteredItems = wasUpdating
+        }
     }
 
     suspend fun performFilterAsync() {

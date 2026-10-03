@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.ui.manga
 
 import android.view.ActionMode
 import android.view.View
-import android.widget.TextView
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.recyclerview.widget.ItemTouchHelper
 import dev.ahmedmohamed.hayai.novel.download.NovelDownloadPresentationState
 import dev.ahmedmohamed.hayai.novel.integration.NovelChapterPresentation
@@ -42,6 +42,7 @@ class MangaDetailsAdapter(
     var items: List<ChapterItem> = emptyList()
     private var novelPresentations: Map<Long, NovelChapterPresentation> = emptyMap()
     private var novelOfflineChapterIds: Set<Long> = emptySet()
+    private var updatingPrefilteredItems = false
 
     val delegate: MangaDetailsInterface = controller
     val presenter = controller.presenter
@@ -101,6 +102,22 @@ class MangaDetailsAdapter(
     fun indexOf(item: ChapterItem): Int = items.indexOf(item)
 
     fun indexOf(chapterId: Long): Int = currentItems.indexOfFirst { it is ChapterItem && it.id == chapterId }
+
+    override fun hasFilter(): Boolean = !updatingPrefilteredItems && super.hasFilter()
+
+    override fun updateDataSet(
+        items: List<IFlexible<*>>?,
+        animate: Boolean,
+    ) {
+        // J2K owns filtering; FlexibleAdapter must update this already-filtered list, including its headers.
+        val wasUpdating = updatingPrefilteredItems
+        updatingPrefilteredItems = true
+        try {
+            super.updateDataSet(items, animate)
+        } finally {
+            updatingPrefilteredItems = wasUpdating
+        }
+    }
 
     fun performFilter() {
         val s = getFilter(String::class.java)
