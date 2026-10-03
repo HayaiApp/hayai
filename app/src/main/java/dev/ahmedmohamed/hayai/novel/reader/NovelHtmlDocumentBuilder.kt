@@ -136,7 +136,10 @@ internal object NovelHtmlDocumentBuilder {
           const reversePages = () => document.documentElement.dataset.writingDirection === 'vertical-rl';
           const blocks = () => [...document.querySelectorAll('.hayai-chapter-block')];
           const visibleBlock = () => {
-            if (!paged()) return blocks().find(block => block.getBoundingClientRect().bottom > 1) || blocks().at(-1) || null;
+            if (!paged()) {
+              const target = (parseFloat(getComputedStyle(document.body).paddingTop) || 0) + 1;
+              return blocks().find(block => block.getBoundingClientRect().bottom > target) || blocks().at(-1) || null;
+            }
             const target = pageStride() / 2;
             return blocks().find(block => pageRects(block).some(rect => rect.left <= target && rect.right > target)) || blocks().find(block => pageRects(block).some(rect => rect.right > 0 && rect.left < pageStride())) || blocks().at(-1) || null;
           };
@@ -278,13 +281,17 @@ internal object NovelHtmlDocumentBuilder {
                if (paged()) scroller().scrollBy({left:(reversePages()?-1:1)*pixels, behavior:'auto'});
               else scrollBy({top:pixels, behavior:'auto'});
             },
-            paragraphs() {
+            paragraphNodes() {
               const root=activeBlock(); if(!root)return [];
-              return [...root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]
-                .map((node, index) => ({index, text:(node.innerText || '').trim()})).filter(it => it.text);
+              const selector='h1,h2,h3,h4,h5,h6,p,li,blockquote,pre';
+              const nodes=[...root.querySelectorAll(selector)].filter(node=>(node.innerText||'').trim()&&!node.querySelector(selector));
+              return nodes.length?nodes:((root.innerText||'').trim()?[root]:[]);
+            },
+            paragraphs() {
+              return this.paragraphNodes().map((node, index) => ({index, text:(node.innerText || '').trim()}));
             },
             viewportParagraph() {
-              const root=activeBlock();const nodes=root?[...root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]:[];
+              const nodes=this.paragraphNodes();
               if(!nodes.length)return 0;
               const target=paged()?pageStride()*.2:innerHeight*.2;
               let best=0,distance=Number.MAX_VALUE;
@@ -331,12 +338,12 @@ internal object NovelHtmlDocumentBuilder {
                 occupied.push({start,end}); planned.push({item,start,end,first,last});
               }
               planned.sort((a,b)=>b.start-a.start).forEach(entry=>{try{const range=document.createRange();range.setStart(entry.first.node,entry.first.offset);range.setEnd(entry.last.node,entry.last.offset+1);const mark=document.createElement('mark');mark.className='hayai-persistent-highlight';mark.dataset.highlightId=entry.item.id;mark.style.backgroundColor=entry.item.color;mark.appendChild(range.extractContents());range.insertNode(mark);applied++;}catch(_){orphaned++;}});
-              if(window.HayaiReader&&HayaiReader.onHighlightReport)HayaiReader.onHighlightReport(applied,orphaned,overlaps);
+              if(window.HayaiReader&&HayaiReader.onHighlightReport)HayaiReader.onHighlightReport(applied,orphaned,overlaps,document.documentElement.dataset.documentId);
             },
             navigateHighlight(id) { const mark=[...document.querySelectorAll('mark.hayai-persistent-highlight')].find(node=>node.dataset.highlightId===id); if(mark){mark.scrollIntoView({block:'center',behavior:'smooth'});return true;}return false; },
             highlight(index) {
               document.querySelectorAll('.hayai-tts-active').forEach(it => it.classList.remove('hayai-tts-active'));
-              const root=activeBlock(); const nodes = root?[...root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')]:[];
+              const nodes=this.paragraphNodes();
               const node = nodes[index];
               if (node) {
                 node.classList.add('hayai-tts-active');

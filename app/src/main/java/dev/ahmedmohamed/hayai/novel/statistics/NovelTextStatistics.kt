@@ -10,15 +10,14 @@ import kotlin.math.ceil
 internal object NovelTextStatistics {
     const val DEFAULT_WORDS_PER_MINUTE = 200
 
-    fun analyze(document: NovelDocument): NovelChapterStatistics {
-        val readableText =
-            when (document.contentType) {
-                NovelContentType.Html -> htmlText(document.content)
-                NovelContentType.Markdown -> markdownText(document.content)
-                NovelContentType.PlainText -> document.content
-            }
-        return NovelChapterStatistics(wordCount(readableText))
-    }
+    fun readableText(document: NovelDocument): String =
+        when (document.contentType) {
+            NovelContentType.Html -> htmlText(document.content)
+            NovelContentType.Markdown -> markdownText(document.content)
+            NovelContentType.PlainText -> document.content
+        }
+
+    fun analyze(document: NovelDocument): NovelChapterStatistics = NovelChapterStatistics(wordCount(readableText(document)))
 
     internal fun wordCount(text: String): Long {
         if (text.isBlank()) return 0
@@ -53,6 +52,7 @@ internal object NovelTextStatistics {
         Jsoup
             .parse(html)
             .apply { select("script, style, template, noscript, svg").remove() }
+            .body()
             .text()
 
     private fun markdownText(markdown: String): String {

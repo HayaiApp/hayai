@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hayai_novel_entry_text_search">Search chapter text</string>
+    <string name="hayai_novel_entry_search_query">Search text</string>
+    <string name="hayai_novel_entry_search_regex">Regular expression</string>
+    <string name="hayai_novel_entry_search_case_sensitive">Match case</string>
+    <string name="hayai_novel_entry_search_whole_word">Whole words</string>
+    <string name="hayai_novel_entry_offline_only">Scans downloaded chapters and imported local novels.</string>
+    <string name="hayai_novel_entry_search_run">Search</string>
+    <string name="hayai_novel_entry_search_query_required">Enter text to search for</string>
+    <string name="hayai_novel_entry_search_invalid_regex">Invalid regular expression</string>
+    <string name="hayai_novel_entry_search_no_results">No matching chapters</string>
+    <string name="hayai_novel_entry_search_matches">%1$s matches</string>
+    <string name="hayai_novel_entry_search_coverage">Chapter coverage</string>
+    <string name="hayai_novel_entry_coverage">Scanned: %1$s chapters\nNot downloaded: %2$s chapters\nUnreadable: %3$s chapters</string>
+    <string name="hayai_novel_entry_search_again">Change search</string>
+    <string name="hayai_novel_entry_scanning">Scanning chapters…</string>
+    <string name="hayai_novel_entry_scan_failed">Unable to read chapter text</string>
+    <string name="hayai_novel_entry_word_statistics">Novel word statistics</string>
+    <string name="hayai_novel_entry_word_totals">Total words: %1$s\nAverage words per chapter: %2$s\nCounted chapters: %3$s of %4$s</string>
+    <string name="hayai_novel_entry_density">Word density: %1$d / 10</string>
+    <string name="hayai_novel_tts_language">Read aloud language</string>
+    <string name="hayai_novel_tts_language_auto">Automatic (displayed text or source language)</string>
+    <string name="hayai_novel_tts_language_unavailable">The speech engine has no voice for %1$s. Install a voice or choose another read aloud language.</string>
+</resources>

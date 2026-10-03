@@ -62,6 +62,7 @@ class LibraryGridHolder(
     private var transitionMangaId: Long? = null
     private val novelTitles = Injekt.get<NovelTitlePresentation>()
     private var boundManga: Manga? = null
+    private val originalTextHeight = binding.textLayout.layoutParams.height
 
     /**
      * The title has to be laid out before its line count is known, so the subtitle can only be
@@ -151,7 +152,10 @@ class LibraryGridHolder(
 
         // Each layout shows the title in a different view, no need to fill in the hidden ones
         when {
-            compact -> binding.compactTitle.text = item.manga.title.highlightText(filter, color)
+            compact -> {
+                binding.compactTitle.maxLines = novelTitles.maxLines(item.manga, authorMatched = false)
+                binding.compactTitle.text = item.manga.title.highlightText(filter, color)
+            }
             coverOnly -> binding.behindTitle.text = item.manga.title
             else -> binding.title.text = item.manga.title.highlightText(filter, color)
         }
@@ -181,9 +185,11 @@ class LibraryGridHolder(
                 }
             binding.subtitle.text = authorArtist.highlightText(filter, color)
 
-            // Measure the title with the room it normally gets, a previous bind may have capped it
-            if (binding.title.maxLines != 2) {
-                binding.title.maxLines = 2
+            val hasAuthorInFilter = filter.isNotBlank() && authorArtist.contains(filter, true)
+            val maxLines = novelTitles.maxLines(item.manga, hasAuthorInFilter)
+            binding.title.maxLines = maxLines
+            binding.textLayout.updateLayoutParams {
+                height = if (maxLines > 2) ViewGroup.LayoutParams.WRAP_CONTENT else originalTextHeight
             }
             binding.title.removeCallbacks(updateSubtitle)
             binding.title.post(updateSubtitle)

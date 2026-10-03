@@ -8,7 +8,9 @@ import android.content.Intent
 import android.os.Binder
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
@@ -26,9 +28,10 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     private lateinit var engine: TextToSpeech
     private var callbacks = WeakReference<Callbacks>(null)
     private var initialized = false
+    private var destroyed = false
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var playWhenReady = false
-    private var chunks: List<TtsChunk> = emptyList()
-    private var chunkIndex = 0
+    private val queue = NovelTtsQueue()
     private var paused = false
     private var playing = false
     private var allowBackground = false
@@ -36,17 +39,17 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     private var pitch = 1f
     private var voiceName = ""
     private var languageTag = ""
+    private var configurationError: String? = null
     private var generation = 0
     private var activeUtterance: String? = null
     private var mangaId = -1L
     private var chapterId = -1L
     private var novelTitle = ""
     private var chapterTitle = ""
-    private var chunksChapterId = -1L
 
     val isPlaying: Boolean get() = initialized && playing && !paused
-    val hasActivePlayback: Boolean get() = chunks.isNotEmpty() && (playing || paused)
-    val currentParagraphIndex: Int get() = chunks.getOrNull(chunkIndex)?.paragraphIndex ?: 0
+    val hasActivePlayback: Boolean get() = queue.chunks.isNotEmpty() && (playing || paused)
+    val currentParagraphIndex: Int get() = queue.paragraphIndex
 
     override fun onCreate() {
         super.onCreate()
@@ -57,7 +60,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (chunks.isEmpty()) {
+        if (queue.chunks.isEmpty()) {
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -71,21 +74,27 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onInit(status: Int) {
+        mainHandler.post { initializeEngine(status) }
+    }
+
+    private fun initializeEngine(status: Int) {
+        if (destroyed) return
         initialized = status == TextToSpeech.SUCCESS
         if (!initialized) return reportError(getString(R.string.hayai_novel_reader_tts_unavailable))
         engine.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {
-                    if (utteranceId == activeUtterance) callbacks.get()?.onParagraphChanged(chunks.getOrNull(chunkIndex)?.paragraphIndex ?: 0)
-                }
-
-                override fun onDone(utteranceId: String?) { if (utteranceId == activeUtterance) advance() }
-                @Deprecated("Deprecated by Android") override fun onError(utteranceId: String?) { if (utteranceId == activeUtterance) reportError(getString(R.string.hayai_novel_reader_tts_passage_error)) }
-                override fun onError(utteranceId: String?, errorCode: Int) { if (utteranceId == activeUtterance) reportError(getString(R.string.hayai_novel_reader_tts_error_code, errorCode)) }
+                override fun onStart(utteranceId: String?) = withUtterance(utteranceId) { callbacks.get()?.onParagraphChanged(queue.paragraphIndex) }
+                override fun onDone(utteranceId: String?) = withUtterance(utteranceId, ::advance)
+                @Deprecated("Deprecated by Android") override fun onError(utteranceId: String?) = withUtterance(utteranceId) { reportError(getString(R.string.hayai_novel_reader_tts_passage_error)) }
+                override fun onError(utteranceId: String?, errorCode: Int) = withUtterance(utteranceId) { reportError(getString(R.string.hayai_novel_reader_tts_error_code, errorCode)) }
             },
         )
         applyConfiguration()
         if (playWhenReady) { playWhenReady = false; play() }
+    }
+
+    private fun withUtterance(id: String?, action: () -> Unit) {
+        mainHandler.post { if (!destroyed && id != null && id == activeUtterance) action() }
     }
 
     fun attach(callbacks: Callbacks) { this.callbacks = WeakReference(callbacks); callbacks.onPlaybackChanged(isPlaying) }
@@ -97,25 +106,28 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
         this.voiceName = voiceName
         this.languageTag = languageTag
         this.allowBackground = allowBackground
-        if (initialized) applyConfiguration()
+        if (initialized) {
+            applyConfiguration()
+            if (isPlaying) configurationError?.let(::reportError)
+        }
     }
 
     fun setChapter(mangaId: Long, chapterId: Long, novelTitle: String, chapterTitle: String) {
+        if (this.mangaId != mangaId || this.chapterId != chapterId) {
+            stopPlayback()
+            queue.update(chapterId, emptyList(), TextToSpeech.getMaxSpeechInputLength() - 100)
+        }
         this.mangaId = mangaId
         this.chapterId = chapterId
         this.novelTitle = novelTitle
         this.chapterTitle = chapterTitle
     }
 
-    fun setParagraphs(paragraphs: List<String>, startParagraph: Int) {
-        val replacement = paragraphs.flatMapIndexed { index, text -> TtsTextUtils.splitTextForTts(text, TextToSpeech.getMaxSpeechInputLength() - 100).map { TtsChunk(index, it) } }
-        if (chunksChapterId == chapterId && replacement == chunks && chunks.isNotEmpty()) return
+    fun setParagraphs(paragraphs: List<String>, startParagraph: Int?) {
+        if (!queue.update(chapterId, paragraphs, TextToSpeech.getMaxSpeechInputLength() - 100, startParagraph)) return
         stopEngine(true)
         playing = false
         paused = false
-        chunks = replacement
-        chunksChapterId = chapterId
-        chunkIndex = chunks.indexOfFirst { it.paragraphIndex >= startParagraph }.takeIf { it >= 0 } ?: 0
     }
 
     fun replaceParagraphs(paragraphs: List<String>, startParagraph: Int) {
@@ -124,7 +136,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
         setParagraphs(paragraphs, startParagraph)
         when {
             resume -> play()
-            remainPaused && chunks.isNotEmpty() -> paused = true
+            remainPaused && queue.chunks.isNotEmpty() -> paused = true
         }
     }
 
@@ -132,7 +144,9 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
 
     fun play() {
         if (!initialized) { playWhenReady = true; return }
-        if (chunks.isEmpty()) return reportError(getString(R.string.hayai_novel_reader_tts_no_text))
+        if (queue.chunks.isEmpty()) return reportError(getString(R.string.hayai_novel_reader_tts_no_text))
+        configurationError?.let { return reportError(it) }
+        queue.restartIfCompleted()
         paused = false
         playing = true
         if (allowBackground) {
@@ -140,10 +154,11 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
             startForeground(NOTIFICATION_ID, notification())
         }
         speakCurrent()
-        callbacks.get()?.onPlaybackChanged(true)
+        if (isPlaying) callbacks.get()?.onPlaybackChanged(true)
     }
 
     fun pause() {
+        playWhenReady = false
         invalidate()
         engine.stop()
         paused = true
@@ -166,22 +181,23 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        destroyed = true
+        callbacks.clear()
+        mainHandler.removeCallbacksAndMessages(null)
         stopPlayback()
         engine.shutdown()
         super.onDestroy()
     }
 
     private fun seekParagraph(delta: Int) {
-        val current = chunks.getOrNull(chunkIndex)?.paragraphIndex ?: return
-        val target = (current + delta).coerceIn(0, chunks.last().paragraphIndex)
-        chunkIndex = chunks.indexOfFirst { it.paragraphIndex == target }.takeIf { it >= 0 } ?: chunkIndex
+        val target = queue.seekParagraph(delta) ?: return
         if (isPlaying) speakCurrent() else callbacks.get()?.onParagraphChanged(target)
     }
 
     private fun advance() {
         if (paused) return
-        chunkIndex += 1
-        if (chunkIndex < chunks.size) speakCurrent() else {
+        queue.advance()
+        if (queue.current != null) speakCurrent() else {
             playing = false
             stopEngine(true)
             callbacks.get()?.onPlaybackChanged(false)
@@ -191,10 +207,13 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun speakCurrent() {
-        val chunk = chunks.getOrNull(chunkIndex) ?: return
+        val chunk = queue.current ?: return
         generation += 1
-        activeUtterance = "hayai-$generation-$chunkIndex"
-        engine.speak(chunk.text, TextToSpeech.QUEUE_FLUSH, Bundle(), activeUtterance)
+        activeUtterance = "hayai-$generation-${queue.position}"
+        if (engine.speak(chunk.text, TextToSpeech.QUEUE_FLUSH, Bundle(), activeUtterance) == TextToSpeech.ERROR) {
+            reportError(getString(R.string.hayai_novel_reader_tts_passage_error))
+            return
+        }
         if (allowBackground) (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, notification())
     }
 
@@ -210,13 +229,14 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
     private fun removeForeground() = stopForeground(true)
 
     private fun applyConfiguration() {
+        configurationError = null
         engine.setSpeechRate(speed)
         engine.setPitch(pitch)
         val requestedLocale = languageTag.takeIf(String::isNotBlank)?.let(Locale::forLanguageTag)
-        if (requestedLocale != null && engine.isLanguageAvailable(requestedLocale) >= TextToSpeech.LANG_AVAILABLE) {
-            engine.language = requestedLocale
-        } else {
-            engine.language = Locale.getDefault()
+        val locale = requestedLocale ?: Locale.getDefault()
+        if (engine.setLanguage(locale) < TextToSpeech.LANG_AVAILABLE) {
+            configurationError = getString(R.string.hayai_novel_tts_language_unavailable, locale.displayName)
+            return
         }
         if (voiceName.isNotBlank()) {
             engine.voices?.firstOrNull { it.name == voiceName && (requestedLocale == null || it.locale.language == requestedLocale.language) }
@@ -226,6 +246,7 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
 
     private fun reportError(message: String) {
         playing = false
+        paused = queue.current != null
         stopEngine(true)
         callbacks.get()?.onPlaybackChanged(false)
         callbacks.get()?.onHighlightCleared()
@@ -239,11 +260,11 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
             .setContentText(
                 buildString {
                     val state = getString(if (isPlaying) R.string.reading else R.string.pause)
-                    val paragraph = chunks.getOrNull(chunkIndex)?.paragraphIndex?.plus(1) ?: 1
+                    val paragraph = queue.paragraphIndex + 1
                     append(if (chapterTitle.isBlank()) getString(R.string.hayai_novel_reader_tts_status, state, paragraph) else getString(R.string.hayai_novel_reader_tts_status_chapter, state, chapterTitle, paragraph))
                 },
             )
-            .setSubText(getString(R.string.hayai_novel_reader_tts_subtext, chunkIndex + 1, chunks.size.coerceAtLeast(1)))
+            .setSubText(getString(R.string.hayai_novel_reader_tts_subtext, queue.position + 1, queue.chunks.size.coerceAtLeast(1)))
             .setContentIntent(contentIntent())
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
@@ -278,8 +299,6 @@ class NovelTtsPlaybackService : Service(), TextToSpeech.OnInitListener {
             )
         }
     }
-
-    private data class TtsChunk(val paragraphIndex: Int, val text: String)
 
     interface Callbacks {
         fun onParagraphChanged(index: Int)

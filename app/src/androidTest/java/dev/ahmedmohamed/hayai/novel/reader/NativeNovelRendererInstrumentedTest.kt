@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.text.Spanned
+import android.text.style.UnderlineSpan
 import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -16,6 +18,8 @@ import androidx.core.widget.NestedScrollView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.ahmedmohamed.hayai.novel.source.NovelContentType
+import dev.ahmedmohamed.hayai.novel.source.NovelDocument
 import dev.ahmedmohamed.hayai.preferences.HayaiPreferences
 import eu.kanade.tachiyomi.data.preference.AndroidPreferenceStore
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -184,6 +188,49 @@ class NativeNovelRendererInstrumentedTest {
             assertFalse(textView(2) is EditText)
             assertTrue(textView(2).isTextSelectable)
             renderer.documentText { assertTrue(it.endsWith("Edited ending")) }
+        }
+    }
+
+    @Test
+    fun nativeTtsReadsDivAndLineBreakTextUsingOffsetsInTheDisplayedText() {
+        onUi {
+            val base = chapter(4, 1)
+            val request = (base.content as NovelBlockContent.Ready).request
+            renderer.display(base.copy(content = NovelBlockContent.Ready(request.copy(content = ProcessedNovelContent("<div>First line<br>Second line</div><blockquote><p>Quoted text</p></blockquote>", null)))), NovelBlockPlacement.ReplaceAll, focus = true)
+        }
+        await("replacement text measured") { textView(4).layout != null }
+        onUi {
+            renderer.paragraphs { assertEquals(listOf("First line", "Second line", "Quoted text"), it) }
+            renderer.highlightSpokenParagraph(1)
+            val text = textView(4).text as Spanned
+            val highlight = text.getSpans(0, text.length, UnderlineSpan::class.java).single()
+            assertEquals("Second line", text.subSequence(text.getSpanStart(highlight), text.getSpanEnd(highlight)).toString())
+        }
+    }
+
+    @Test
+    fun fullHtmlShowsOneChapterHeadingAndHideTitleShowsOnlyTheBody() {
+        val html = """<!doctype html><html><head><title>Chapter 1</title></head><body><h1>Chapter 1</h1><p>The verification lantern stayed lit after every restart.</p></body></html>"""
+        val processor = NovelContentProcessor()
+        for (hideTitle in listOf(false, true)) {
+            onUi {
+                val base = chapter(1, 1)
+                val request = (base.content as NovelBlockContent.Ready).request
+                val options = NovelContentOptions(hideTitle, false, false, false, false, false, false, 50, "[]")
+                val content = processor.process(NovelDocument(html, NovelContentType.Html, null), "Chapter 1", options)
+                renderer.display(
+                    base.copy(content = NovelBlockContent.Ready(request.copy(content = content, style = request.style.copy(hideChapterTitle = hideTitle)))),
+                    NovelBlockPlacement.ReplaceAll,
+                    focus = true,
+                )
+            }
+            await("full HTML chapter measured") { textView(1).layout != null }
+            onUi {
+                val shown = textView(1).text.toString()
+                assertEquals(if (hideTitle) 0 else 1, Regex("Chapter 1").findAll(shown).count())
+                assertTrue(shown.contains("The verification lantern stayed lit after every restart."))
+                assertTrue(textView(1).isTextSelectable)
+            }
         }
     }
 

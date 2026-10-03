@@ -41,6 +41,7 @@ internal class WebNovelRenderer(
     private var documentReady = false
     private var destroyed = false
     private var documentId = 0L
+    private var requestGeneration = 0L
     private var pendingFocus: Pair<Long, Int?>? = null
     private val pendingBlocks = mutableListOf<PendingBlock>()
     private var pendingRetainedIds: Set<Long>? = null
@@ -53,7 +54,7 @@ internal class WebNovelRenderer(
                         delegate = it,
                         readOnly = { !editMode },
                         onAction = ::dispatchSelectionAction,
-                        onSelectionModeChanged = callbacks::onSelectionModeChanged,
+                        onSelectionModeChanged = { if (!destroyed) callbacks.onSelectionModeChanged(it) },
                     )
                 }
             return super.startActionMode(wrapped, type)
@@ -75,7 +76,7 @@ internal class WebNovelRenderer(
         webChromeClient =
             object : WebChromeClient() {
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-                    if (showConsoleErrors() && consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    if (!destroyed && showConsoleErrors() && consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
                         callbacks.onRendererError(context.getString(R.string.hayai_novel_reader_web_error, consoleMessage.lineNumber(), consoleMessage.message()))
                     }
                     return true
@@ -88,11 +89,13 @@ internal class WebNovelRenderer(
                     override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
                         if (event.eventTime - event.downTime >= android.view.ViewConfiguration.getLongPressTimeout()) return true
                         val view = this@apply
-                        evaluateJavascript("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
+                        val x = event.x / view.width.coerceAtLeast(1)
+                        val y = event.y / view.height.coerceAtLeast(1)
+                        requestDocument("Boolean(getSelection() && !getSelection().isCollapsed)") { selected ->
                             if (selected != "true") {
                                 callbacks.onTap(
-                                    event.x / view.width.coerceAtLeast(1),
-                                    event.y / view.height.coerceAtLeast(1),
+                                    x,
+                                    y,
                                 )
                             }
                         }
@@ -108,6 +111,8 @@ internal class WebNovelRenderer(
     override val view: View = webView
 
     override fun display(block: NovelRenderBlock, placement: NovelBlockPlacement, focus: Boolean) {
+        if (destroyed) return
+        if (focus) requestGeneration++
         val content = block.content
         if (placement == NovelBlockPlacement.ReplaceAll && content is NovelBlockContent.Ready) {
             documentReady = false
@@ -146,7 +151,7 @@ internal class WebNovelRenderer(
                     evaluate("(()=>{${request.appendJavaScript}})()")
                 }
                 if (focus) {
-                    webView.evaluateJavascript(
+                    requestDocument(
                         "window.hayaiReader.progress()",
                     ) { callbacks.onReady(request.initialProgress) }
                 }
@@ -165,6 +170,7 @@ internal class WebNovelRenderer(
 
     override fun seek(progress: Int) = evaluate("window.hayaiReader.scrollToPercent(${progress.coerceIn(0, 100)})")
     override fun focus(chapterId: Long, progress: Int?) {
+        requestGeneration++
         if (!documentReady) {
             pendingFocus = chapterId to progress
             return
@@ -176,8 +182,8 @@ internal class WebNovelRenderer(
     override fun scrollToTop() = seek(0)
 
     override fun selection(callback: (NovelSelection?) -> Unit) {
-        webView.evaluateJavascript("JSON.stringify(window.hayaiReader.takeSelectionAnchor())") { encoded ->
-            val payload = decodeJsString(encoded) ?: return@evaluateJavascript callback(null)
+        requestDocument("JSON.stringify(window.hayaiReader.takeSelectionAnchor())") { encoded ->
+            val payload = decodeJsString(encoded) ?: return@requestDocument callback(null)
             callback(
                 runCatching { json.decodeFromString<SelectionPayload>(payload).asSelection() }
                     .getOrNull()
@@ -194,11 +200,11 @@ internal class WebNovelRenderer(
     }
 
     override fun documentText(callback: (String) -> Unit) {
-        webView.evaluateJavascript("window.hayaiReader.documentText()") { callback(decodeJsString(it).orEmpty()) }
+        requestDocument("window.hayaiReader.documentText()") { callback(decodeJsString(it).orEmpty()) }
     }
 
     override fun paragraphs(callback: (List<String>) -> Unit) {
-        webView.evaluateJavascript("JSON.stringify(window.hayaiReader.paragraphs())") { encoded ->
+        requestDocument("JSON.stringify(window.hayaiReader.paragraphs())") { encoded ->
             val payload = decodeJsString(encoded)
             val paragraphs = payload?.let { runCatching { json.decodeFromString<List<ParagraphPayload>>(it) }.getOrNull() }.orEmpty()
             callback(paragraphs.map(ParagraphPayload::text))
@@ -206,19 +212,19 @@ internal class WebNovelRenderer(
     }
 
     override fun viewportParagraph(callback: (Int) -> Unit) {
-        webView.evaluateJavascript("window.hayaiReader.viewportParagraph ? window.hayaiReader.viewportParagraph() : 0") {
+        requestDocument("window.hayaiReader.viewportParagraph ? window.hayaiReader.viewportParagraph() : 0") {
             callback(it.toIntOrNull()?.coerceAtLeast(0) ?: 0)
         }
     }
 
     override fun showTranslation(paragraphs: List<String>, onComplete: () -> Unit) {
-        webView.evaluateJavascript(
+        requestDocument(
             "window.hayaiReader.showTranslation(${json.encodeToString(paragraphs)})",
         ) { onComplete() }
     }
 
     override fun showOriginal(onComplete: () -> Unit) {
-        webView.evaluateJavascript("window.hayaiReader.showOriginal()") { onComplete() }
+        requestDocument("window.hayaiReader.showOriginal()") { onComplete() }
     }
 
     override fun applyHighlights(items: List<NovelPersistentHighlight>) {
@@ -231,7 +237,7 @@ internal class WebNovelRenderer(
 
     override fun highlightSpokenParagraph(index: Int) = evaluate("window.hayaiReader.highlight($index)")
     override fun clearSpokenHighlight() = evaluate("window.hayaiReader.clearHighlight()")
-    override fun isShort(callback: (Boolean) -> Unit) = webView.evaluateJavascript("(window.hayaiReader.documentText().length > 0) && (window.hayaiReader.progress() === 0) && (document.querySelector('.hayai-chapter-block[data-active=true]')?.offsetHeight <= innerHeight)") { callback(it == "true") }
+    override fun isShort(callback: (Boolean) -> Unit) = requestDocument("(window.hayaiReader.documentText().length > 0) && (window.hayaiReader.progress() === 0) && (document.querySelector('.hayai-chapter-block[data-active=true]')?.offsetHeight <= innerHeight)") { callback(it == "true") }
 
     override fun setEditMode(enabled: Boolean) {
         editMode = enabled
@@ -242,6 +248,7 @@ internal class WebNovelRenderer(
     }
 
     override fun destroy() {
+        if (destroyed) return
         destroyed = true
         pendingBlocks.clear()
         webView.removeJavascriptInterface(JS_INTERFACE)
@@ -251,6 +258,15 @@ internal class WebNovelRenderer(
 
     private fun evaluate(script: String) {
         if (!destroyed) webView.evaluateJavascript(script, null)
+    }
+
+    private fun requestDocument(script: String, callback: (String) -> Unit) {
+        if (destroyed) return
+        val requestedDocumentId = documentId
+        val generation = requestGeneration
+        webView.evaluateJavascript(script) { result ->
+            if (!destroyed && documentId == requestedDocumentId && requestGeneration == generation) callback(result)
+        }
     }
 
     private fun setBlockState(chapterId: Long, html: String, placement: String, focus: Boolean) {
@@ -273,7 +289,7 @@ internal class WebNovelRenderer(
             "(()=>{const id=${json.encodeToString(chapterId.toString())},until=$retryAt;const tick=()=>{" +
                 "const b=document.querySelector('[data-retry-id=\"'+id+'\"]');if(!b)return;const left=until-Date.now();" +
                 "b.disabled=left>0;b.textContent=left>0?$retryIn.replace('__SECONDS__',Math.ceil(left/1000)):$retry;" +
-                "if(left>0)setTimeout(tick,Math.min(1000,left));else b.onclick=()=>HayaiReader.retryChapter(id);};tick();})()",
+                "if(left>0)setTimeout(tick,Math.min(1000,left));else b.onclick=()=>HayaiReader.retryChapter(id,'$documentId');};tick();})()",
         )
     }
 
@@ -312,7 +328,10 @@ internal class WebNovelRenderer(
         }
 
         @JavascriptInterface
-        fun retryChapter(chapterId: String) = webView.post { chapterId.toLongOrNull()?.let(callbacks::onRetryChapter) }
+        fun retryChapter(chapterId: String, callbackDocumentId: String) = webView.post {
+            if (destroyed || !documentReady || callbackDocumentId.toLongOrNull() != documentId) return@post
+            chapterId.toLongOrNull()?.let(callbacks::onRetryChapter)
+        }
 
         @JavascriptInterface
         fun onReady(progress: Int, readyDocumentId: String) = webView.post {
@@ -326,8 +345,10 @@ internal class WebNovelRenderer(
         }
 
         @JavascriptInterface
-        fun onHighlightReport(applied: Int, orphaned: Int, overlaps: Int) {
-            if (orphaned > 0 || overlaps > 0) webView.post { callbacks.onRendererError(context.getString(R.string.hayai_novel_reader_highlight_restore_report, applied, orphaned, overlaps)) }
+        fun onHighlightReport(applied: Int, orphaned: Int, overlaps: Int, callbackDocumentId: String) {
+            if (orphaned > 0 || overlaps > 0) webView.post {
+                if (!destroyed && documentReady && callbackDocumentId.toLongOrNull() == documentId) callbacks.onRendererError(context.getString(R.string.hayai_novel_reader_highlight_restore_report, applied, orphaned, overlaps))
+            }
         }
     }
 

@@ -86,6 +86,7 @@ class HayaiPreferences(
     val novelTtsSpeed = store.getFloat("pref_novel_tts_speed", 1f)
     val novelTtsPitch = store.getFloat("pref_novel_tts_pitch", 1f)
     val novelTtsVoice = store.getString("pref_novel_tts_voice", "")
+    val novelTtsLanguage = store.getString("hayai_novel_tts_language", "auto")
     val novelTtsAutoNextChapter = store.getBoolean("pref_novel_tts_auto_next", true)
     val novelTtsHighlightStyle = store.getString("pref_novel_tts_highlight_style", "background")
     val novelTtsHighlightColor = store.getInt("pref_novel_tts_highlight_color", 0xFFFFD54F.toInt())

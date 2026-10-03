@@ -12,6 +12,7 @@ param(
     [switch] $KeepTestApp,
     [switch] $AllowAuthorizedAvd,
     [switch] $SkipAuthenticatedEh,
+    [ValidateRange(0, 1800)] [int] $ReaderIdleSeconds = 120,
     [switch] $DryRun
 )
 
@@ -117,6 +118,23 @@ function Tap-WindowNode($Node, [string] $Pattern) {
     Invoke-Adb @("shell", "input", "tap", ([int]$x), ([int]$y)) | Out-Null
     Start-Sleep -Milliseconds 800
 }
+function Scroll-Window([xml] $Window) {
+    $scrollContainer = $Window.SelectNodes("//node") | Where-Object {
+        $_.class -match '(NestedScrollView|\.ScrollView)$'
+    } | Select-Object -First 1
+    $bounds = if ($null -ne $scrollContainer) { $scrollContainer.bounds } else { $Window.hierarchy.node.bounds }
+    if ($bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "Window bounds were invalid." }
+    # Keep the gesture in the container's padding, clear of the reader action drag handles.
+    $x = [int]([int]$Matches[1] + ([int]$Matches[3] - [int]$Matches[1]) * 0.05)
+    $from = [int]([int]$Matches[2] + ([int]$Matches[4] - [int]$Matches[2]) * 0.85)
+    $to = [int]([int]$Matches[2] + ([int]$Matches[4] - [int]$Matches[2]) * 0.4)
+    Invoke-Adb @("shell", "input", "swipe", "$x", "$from", "$x", "$to", "500") | Out-Null
+}
+function Tap-ReaderCenter([xml] $Window) {
+    $reader = $Window.SelectNodes("//node") | Where-Object { $_.'resource-id' -match ':(id/)?reader_layout$' } | Select-Object -First 1
+    if ($null -eq $reader) { throw "The reader container was missing before the menu gesture." }
+    Tap-WindowNode $reader "Reader content"
+}
 function Tap-NodeAfterSwiping([string] $Pattern, [string] $EvidenceName, [int] $MaximumSwipes = 8) {
     for ($attempt = 0; $attempt -le $MaximumSwipes; $attempt++) {
         $window = Dump-Window "$EvidenceName-$attempt"
@@ -128,7 +146,7 @@ function Tap-NodeAfterSwiping([string] $Pattern, [string] $EvidenceName, [int] $
             Start-Sleep -Milliseconds 800
             return
         }
-        Invoke-Adb @("shell", "input", "swipe", "672", "2300", "672", "1150", "500") | Out-Null
+        Scroll-Window $window
         Start-Sleep -Milliseconds 500
     }
     throw "Scrollable UI node was not found: $Pattern"
@@ -138,22 +156,38 @@ function Assert-NodeAfterSwiping([string] $Pattern, [string] $EvidenceName, [int
     for ($attempt = 0; $attempt -le $MaximumSwipes; $attempt++) {
         $window = Dump-Window "$EvidenceName-$attempt"
         if ($null -ne (Find-NodeOptional $window $Pattern)) { return }
-        Invoke-Adb @("shell", "input", "swipe", "672", "2300", "672", "1150", "500") | Out-Null
+        Scroll-Window $window
         Start-Sleep -Milliseconds 500
     }
     throw "Scrollable UI node was not found: $Pattern"
 }
 function Dismiss-CompatibilityWarning {
-    try {
-        $window = Dump-Window "00-compatibility-warning"
-    } catch {
-        Write-Warning "Compatibility-dialog inspection was unavailable; continuing with app readiness checks. $($_.Exception.Message)"
+    for ($attempt = 0; $attempt -lt 4; $attempt++) {
+        try {
+            $window = Dump-Window "00-compatibility-warning-$attempt"
+        } catch {
+            Write-Warning "Compatibility-dialog inspection was unavailable; continuing with app readiness checks. $($_.Exception.Message)"
+            return
+        }
+        $systemUiFailure = $window.SelectNodes("//node") | Where-Object { $_.text -eq "System UI isn't responding" } | Select-Object -First 1
+        if ($systemUiFailure) {
+            Capture "00-system-ui-blocked-$attempt"
+            $closeSystemUi = $window.SelectNodes("//node") | Where-Object { $_.'resource-id' -eq "android:id/aerr_close" } | Select-Object -First 1
+            if ($null -eq $closeSystemUi) { throw "The emulator's System UI error had no recovery action." }
+            Tap-WindowNode $closeSystemUi "Restart emulator System UI"
+            Write-Output "Recovered the emulator's System UI; Hayai readiness and crash checks remain required."
+            Start-Sleep -Seconds 1
+            continue
+        }
+        $warning = $window.SelectNodes("//node") | Where-Object { $_.text -eq "Android App Compatibility" } | Select-Object -First 1
+        if ($warning) {
+            Tap-WindowNode (Find-Node $window "^Don't Show Again$") "Dismiss Android compatibility warning"
+            Start-Sleep -Milliseconds 500
+            continue
+        }
         return
     }
-    $warning = $window.SelectNodes("//node") | Where-Object { $_.text -eq "Android App Compatibility" } | Select-Object -First 1
-    if ($warning) {
-        Tap-Node "Don't Show Again" "00-compatibility-warning-dismiss"
-    }
+    throw "The emulator's compatibility dialogs did not clear."
 }
 function Dismiss-ImmersiveModePrompt {
     try {
@@ -254,6 +288,9 @@ if ($DryRun) {
 $script:evidence = Join-Path $EvidenceRoot ([DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss"))
 New-Item -ItemType Directory -Path $script:evidence -Force | Out-Null
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ("hayai-emulator-" + [guid]::NewGuid().ToString("N"))
+$temporary = [IO.Path]::GetFullPath($temporary)
+$temporaryParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
+if ((Split-Path -Parent $temporary) -ne $temporaryParent) { throw "The fixture directory escaped the temporary root." }
 New-Item -ItemType Directory -Path $temporary | Out-Null
 $startedEmulator = $false
 try {
@@ -318,14 +355,19 @@ try {
     $script:foregroundIntentArgs = @("shell", "am", "start", "--activity-reorder-to-front", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.reader.ReaderActivity", "--el", "manga", "100", "--el", "chapter", "1000")
     $readerWindow = Dump-Window "02-novel-reader-actions"
     if ($null -eq (Find-NodeOptional $readerWindow "Verification Novel")) {
-        Invoke-Adb @("shell", "input", "tap", "672", "1496") | Out-Null
+        Tap-ReaderCenter $readerWindow
         Start-Sleep -Seconds 1
         $readerWindow = Dump-Window "02-novel-reader-actions"
     }
     [void](Find-Node $readerWindow "Verification Novel")
     [void](Find-Node $readerWindow "Read aloud")
     $viewerContainerNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.'resource-id' -match ':(id/)?reader_layout$' } | Select-Object -First 1
-    $contentNode = $readerWindow.SelectNodes("//node") | Where-Object { $_.class -in @('android.widget.EditText', 'android.webkit.WebView') } | Select-Object -First 1
+    $contentNode = if ($null -ne $viewerContainerNode) {
+        $viewerContainerNode.SelectNodes(".//node") | Where-Object {
+            $_.class -in @('android.widget.EditText', 'android.webkit.WebView') -or
+            ($_.class -eq 'android.widget.TextView' -and $_.text -match 'The verification lantern stayed lit')
+        } | Select-Object -First 1
+    } else { $null }
     if ($null -eq $viewerContainerNode -or $null -eq $contentNode) { throw "The real J2K reader layout or novel content was missing from the hierarchy." }
     if ($viewerContainerNode.bounds -notmatch '\[(\d+),(\d+)\]\[(\d+),(\d+)\]') { throw "J2K reader-layout bounds were invalid." }
     $viewerBounds = @([int]$Matches[1], [int]$Matches[2], [int]$Matches[3], [int]$Matches[4])
@@ -346,6 +388,15 @@ try {
     } | Select-Object -First 1
     if ($null -eq $j2kProgress) { throw "The real J2K progress surface did not expose continuous novel progress as a percentage." }
     Capture "02-novel-reader"
+    $idleRemaining = $ReaderIdleSeconds
+    while ($idleRemaining -gt 0) {
+        $interval = [Math]::Min(30, $idleRemaining)
+        Start-Sleep -Seconds $interval
+        $idleRemaining -= $interval
+        $readerPid = (Invoke-Adb @("shell", "pidof", $ApplicationId) | Out-String).Trim()
+        if ([string]::IsNullOrWhiteSpace($readerPid)) { throw "The novel reader process exited during the controlled idle check." }
+    }
+    Capture "02a-reader-after-idle"
     Tap-WindowNode (Find-Node $readerWindow "^Read aloud$") "Read aloud"
     $ttsWindow = $null
     for ($attempt = 0; $attempt -lt 8 -and $null -eq $ttsWindow; $attempt++) {
@@ -383,8 +434,9 @@ try {
     $advancedWindow = Dump-Window "07-reader-advanced"
     [void](Find-Node $advancedWindow "Content")
     [void](Find-Node $advancedWindow "Use EPUB styles")
-    [void](Find-Node $advancedWindow "^Previous chapter$")
     Capture "07-reader-settings-advanced"
+    Assert-NodeAfterSwiping "^Previous chapter$" "07-reader-settings-advanced-actions"
+    Capture "07-reader-settings-advanced-actions"
     Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
     Start-Sleep -Seconds 3
     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
@@ -393,7 +445,7 @@ try {
     Dismiss-CompatibilityWarning
     Dismiss-ImmersiveModePrompt
     $script:foregroundIntentArgs = @("shell", "am", "start", "--activity-reorder-to-front", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.reader.ReaderActivity", "--el", "manga", "100", "--el", "chapter", "1000")
-    Invoke-Adb @("shell", "input", "tap", "672", "1496") | Out-Null
+    Tap-ReaderCenter (Dump-Window "09-offline-menu-gesture")
     Start-Sleep -Seconds 1
     Assert-Node "Offline" "09-offline-after-restart"
     Capture "09-offline-after-restart"
@@ -456,7 +508,17 @@ try {
     $fatal = Get-Content -LiteralPath (Join-Path $script:evidence "logcat.txt") | Select-String "FATAL EXCEPTION|AndroidRuntime: Process: $ApplicationId"
     if ($fatal) { throw "The verification run captured an application crash. See logcat.txt." }
     Write-Output "Hayai emulator verification passed. Evidence: $script:evidence"
+} catch {
+    $verificationFailure = $_
+    try {
+        Invoke-Adb @("logcat", "-d", "-v", "threadtime") | Set-Content -LiteralPath (Join-Path $script:evidence "failure-logcat.txt") -Encoding utf8
+        Capture "failure"
+    } catch {
+        Write-Warning "Unable to capture additional device diagnostics: $_"
+    }
+    throw $verificationFailure
 } finally {
+    if ((Split-Path -Parent ([IO.Path]::GetFullPath($temporary))) -ne $temporaryParent) { throw "Refusing cleanup outside the fixture temporary root." }
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
     if (!$KeepTestApp) {
         & $Adb -s $Serial shell am force-stop $ApplicationId 2>$null | Out-Null

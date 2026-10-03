@@ -11,6 +11,7 @@ import org.commonmark.renderer.html.HtmlRenderer
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 
 internal class NovelContentProcessor(
@@ -27,14 +28,18 @@ internal class NovelContentProcessor(
                 NovelContentType.Markdown -> markdownToHtml(document.content)
                 NovelContentType.PlainText -> plainTextToHtml(document.content)
             }
-        var parsed = Jsoup.parseBodyFragment(sourceHtml, document.baseUrl.orEmpty())
+        var parsed = Jsoup.parse(sourceHtml, document.baseUrl.orEmpty())
 
         if (options.showRawHtml) {
             parsed = Jsoup.parseBodyFragment("<pre>${escapeHtml(document.content)}</pre>")
         } else {
+            // The renderers consume a body fragment, but permitted EPUB head resources must still reach the Web renderer.
+            parsed.head().select("style, link[rel=stylesheet], script").filter { element ->
+                if (element.tagName() == "script") options.keepEmbeddedJs else options.keepEmbeddedCss
+            }.reversed().forEach { parsed.body().prependChild(it) }
             applyRegexReplacements(parsed, options.regexReplacements)
-            if (options.hideChapterTitle) removeDuplicateTitle(parsed, chapterName)
             sanitize(parsed, options)
+            removeDuplicateTitle(parsed, chapterName)
             if (options.forceLowercase) lowercaseTextNodes(parsed.body())
             if (options.autoSplitText) splitLongParagraphs(parsed, options.autoSplitWordCount)
         }
@@ -98,17 +103,26 @@ internal class NovelContentProcessor(
     ) {
         val normalizedChapter = normalizeTitle(chapterName)
         if (normalizedChapter.isBlank()) return
-        document
-            .select("h1, h2, h3, h4, h5, h6")
-            .firstOrNull { heading ->
-                val normalizedHeading = normalizeTitle(heading.text())
-                normalizedHeading.isNotBlank() &&
-                    (
-                        normalizedHeading == normalizedChapter ||
-                            normalizedChapter.contains(normalizedHeading) ||
-                            normalizedHeading.contains(normalizedChapter)
-                    )
-            }?.remove()
+        val heading = firstReadableNode(document.body()) as? Element ?: return
+        if (heading.tagName() in setOf("h1", "h2", "h3", "h4", "h5", "h6") && normalizeTitle(heading.text()) == normalizedChapter) {
+            heading.remove()
+        }
+    }
+
+    private fun firstReadableNode(root: Element): Node? {
+        for (node in root.childNodes()) {
+            when (node) {
+                is TextNode -> if (node.text().isNotBlank()) return node
+                is Element -> {
+                    when (node.tagName()) {
+                        "style", "script", "link", "meta", "title", "base", "template" -> continue
+                        "h1", "h2", "h3", "h4", "h5", "h6", "img", "image", "svg", "video", "audio", "hr" -> return node
+                        else -> firstReadableNode(node)?.let { return it }
+                    }
+                }
+            }
+        }
+        return null
     }
 
     private fun lowercaseTextNodes(root: Element) {

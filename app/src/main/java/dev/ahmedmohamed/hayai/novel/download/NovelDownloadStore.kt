@@ -27,6 +27,8 @@ class NovelDownloadStore(
         chapterUrl: String,
     ): Boolean = loadDocument(sourceId, chapterUrl) != null
 
+    fun hasStoredChapter(sourceId: Long, chapterUrl: String): Boolean = chapterDirectory(sourceId, chapterUrl).isDirectory
+
     fun loadDocument(
         sourceId: Long,
         chapterUrl: String,

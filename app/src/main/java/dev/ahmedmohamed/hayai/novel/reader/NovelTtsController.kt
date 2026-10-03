@@ -16,6 +16,7 @@ internal class NovelTtsController(
     private val connection =
         object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                if (destroyed) return
                 service = (binder as? NovelTtsPlaybackService.LocalBinder)?.service?.also { it.attach(this@NovelTtsController) }
                 service?.let { connected -> while (pending.isNotEmpty()) pending.removeFirst().invoke(connected) }
             }
@@ -38,7 +39,7 @@ internal class NovelTtsController(
         whenReady { configure(speed, pitch, voiceName, languageTag, allowBackground) }
     fun setChapter(mangaId: Long, chapterId: Long, novelTitle: String, chapterTitle: String) =
         whenReady { setChapter(mangaId, chapterId, novelTitle, chapterTitle) }
-    fun setParagraphs(paragraphs: List<String>, startParagraph: Int = 0) = whenReady { setParagraphs(paragraphs, startParagraph) }
+    fun setParagraphs(paragraphs: List<String>, startParagraph: Int? = null) = whenReady { setParagraphs(paragraphs, startParagraph) }
     fun replaceParagraphs(paragraphs: List<String>, startParagraph: Int = currentParagraphIndex) =
         whenReady { replaceParagraphs(paragraphs, startParagraph) }
     fun toggle() = whenReady { toggle() }
@@ -57,14 +58,16 @@ internal class NovelTtsController(
     }
 
     private fun whenReady(action: NovelTtsPlaybackService.() -> Unit) {
+        if (destroyed) return
         service?.action() ?: pending.addLast(action)
     }
 
-    override fun onParagraphChanged(index: Int) = callbacks.runOnUiThread { callbacks.onParagraphChanged(index) }
-    override fun onHighlightCleared() = callbacks.runOnUiThread(callbacks::onHighlightCleared)
-    override fun onPlaybackChanged(playing: Boolean) = callbacks.runOnUiThread { callbacks.onPlaybackChanged(playing) }
-    override fun onChapterCompleted() = callbacks.runOnUiThread(callbacks::onChapterCompleted)
-    override fun onError(message: String) = callbacks.runOnUiThread { callbacks.onError(message) }
+    private fun dispatch(action: () -> Unit) = callbacks.runOnUiThread { if (!destroyed) action() }
+    override fun onParagraphChanged(index: Int) = dispatch { callbacks.onParagraphChanged(index) }
+    override fun onHighlightCleared() = dispatch(callbacks::onHighlightCleared)
+    override fun onPlaybackChanged(playing: Boolean) = dispatch { callbacks.onPlaybackChanged(playing) }
+    override fun onChapterCompleted() = dispatch(callbacks::onChapterCompleted)
+    override fun onError(message: String) = dispatch { callbacks.onError(message) }
 
     interface Callbacks {
         fun onParagraphChanged(index: Int)

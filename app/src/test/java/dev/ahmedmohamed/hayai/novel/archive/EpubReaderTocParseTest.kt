@@ -151,7 +151,24 @@ class EpubReaderTocParseTest {
         assertEquals(listOf("c1.xhtml", "c1.xhtml"), toc.map { it.href })
 
         val names = EpubReader.normalizeTableOfContents(toc).map { it.title }
-        assertEquals(listOf("Section", "Section - Chapter 1"), names)
+        assertEquals(listOf("Section", "Chapter 1"), names)
+    }
+
+    @Test
+    fun `skipped ncx containers preserve chapter order without a book prefix or depth crash`() {
+        val navMap = ncx(
+            """
+            <ncx><navMap><navPoint><navLabel><text>Book</text></navLabel><content src="book.xhtml"/>
+              <navPoint><navLabel><text>Section without a file</text></navLabel>
+                <navPoint><navLabel><text>Chapter 1</text></navLabel><content src="c1.xhtml"/></navPoint>
+                <navPoint><navLabel><text>Chapter 2</text></navLabel><content src="c2.xhtml"/></navPoint>
+              </navPoint>
+            </navPoint></navMap></ncx>
+            """.trimIndent(),
+        )
+        val toc = EpubReader.buildTocFromNcxNavMap(navMap, "toc.ncx", identityResolve)
+        assertEquals(listOf(0, 2, 2), toc.map { it.depth })
+        assertEquals(listOf("Book", "Chapter 1", "Chapter 2"), EpubReader.normalizeTableOfContents(toc).map { it.title })
     }
 
     @Test

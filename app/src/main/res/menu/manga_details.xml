@@ -56,6 +56,16 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/hayai_action_novel_text_search"
+        android:title="@string/hayai_novel_entry_text_search"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/hayai_action_novel_word_statistics"
+        android:title="@string/hayai_novel_entry_word_statistics"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_remove_downloads"
         android:title="@string/remove_downloads"
         app:showAsAction="never">

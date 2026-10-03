@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hayai_novel_entry_text_search">البحث في نص الفصول</string>
+    <string name="hayai_novel_entry_search_query">نص البحث</string>
+    <string name="hayai_novel_entry_search_regex">تعبير نمطي</string>
+    <string name="hayai_novel_entry_search_case_sensitive">مطابقة حالة الأحرف</string>
+    <string name="hayai_novel_entry_search_whole_word">كلمات كاملة</string>
+    <string name="hayai_novel_entry_offline_only">يفحص الفصول المحمّلة والروايات المحلية المستوردة.</string>
+    <string name="hayai_novel_entry_search_run">بحث</string>
+    <string name="hayai_novel_entry_search_query_required">أدخل النص المطلوب البحث عنه</string>
+    <string name="hayai_novel_entry_search_invalid_regex">التعبير النمطي غير صالح</string>
+    <string name="hayai_novel_entry_search_no_results">لا توجد فصول مطابقة</string>
+    <string name="hayai_novel_entry_search_matches">%1$s نتائج</string>
+    <string name="hayai_novel_entry_search_coverage">الفصول التي شملها الفحص</string>
+    <string name="hayai_novel_entry_coverage">تم فحص: %1$s فصول\nغير محمّلة: %2$s فصول\nتعذّرت قراءة: %3$s فصول</string>
+    <string name="hayai_novel_entry_search_again">تغيير البحث</string>
+    <string name="hayai_novel_entry_scanning">جارٍ فحص الفصول…</string>
+    <string name="hayai_novel_entry_scan_failed">تعذّرت قراءة نص الفصول</string>
+    <string name="hayai_novel_entry_word_statistics">إحصاءات كلمات الرواية</string>
+    <string name="hayai_novel_entry_word_totals">مجموع الكلمات: %1$s\nمتوسط الكلمات في الفصل: %2$s\nالفصول المحسوبة: %3$s من %4$s</string>
+    <string name="hayai_novel_entry_density">كثافة الكلمات: %1$d / 10</string>
+    <string name="hayai_novel_tts_language">لغة القراءة بصوت عالٍ</string>
+    <string name="hayai_novel_tts_language_auto">تلقائية (لغة النص المعروض أو المصدر)</string>
+    <string name="hayai_novel_tts_language_unavailable">لا يتوفّر صوت للغة %1$s في محرّك النطق. ثبّت صوتًا أو اختر لغة أخرى للقراءة بصوت عالٍ.</string>
+</resources>

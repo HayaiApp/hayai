@@ -1284,6 +1284,9 @@ class MangaDetailsController :
             presenter.manga.favorite
         menu.findItem(R.id.action_export_novel_epub)?.isVisible =
             !presenter.isLockedFromSearch && novelIntegration.isNovel(presenter.manga)
+        val novelToolsVisible = !presenter.isLockedFromSearch && novelIntegration.isNovel(presenter.manga)
+        menu.findItem(R.id.hayai_action_novel_text_search)?.isVisible = novelToolsVisible
+        menu.findItem(R.id.hayai_action_novel_word_statistics)?.isVisible = novelToolsVisible
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -1291,6 +1294,15 @@ class MangaDetailsController :
             R.id.action_edit -> openEditMangaDialog()
             R.id.action_open_in_web_view -> openInWebView()
             R.id.action_refresh_tracking -> presenter.refreshTracking(true)
+            R.id.hayai_action_novel_text_search -> {
+                val activity = activity ?: return false
+                dev.ahmedmohamed.hayai.novel.reader.NovelEntryContentTools.showSearch(activity, presenter.manga) { chapter ->
+                    startActivity(ReaderLauncher.newIntent(activity, presenter.manga, chapter))
+                }
+            }
+            R.id.hayai_action_novel_word_statistics -> {
+                dev.ahmedmohamed.hayai.novel.reader.NovelEntryContentTools.showStatistics(activity ?: return false, presenter.manga)
+            }
             R.id.action_export_novel_epub -> {
                 router.pushController(
                     NovelDataToolsController(presenter.manga.id ?: return false).withFadeTransaction(),

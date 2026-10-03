@@ -37,7 +37,7 @@ import eu.kanade.tachiyomi.widget.TabbedBottomSheetDialog
 import java.text.NumberFormat
 
 internal class NovelReaderSettingsSheet(
-    activity: Activity,
+    private val activity: Activity,
     private val preferences: HayaiPreferences,
     private val onStyleChanged: () -> Unit,
     private val onChromeChanged: () -> Unit,
@@ -50,6 +50,18 @@ internal class NovelReaderSettingsSheet(
     private val layoutView = page { layoutPage(this) }
     private val ttsView = page { ttsPage(this) }
     private val moreView = page { morePage(this) }
+    private var chooserGeneration = 0
+    private var voiceEngine: android.speech.tts.TextToSpeech? = null
+    private var choicesSheet: NovelReaderContentSheet? = null
+
+    override fun dismiss() {
+        chooserGeneration++
+        voiceEngine?.shutdown()
+        voiceEngine = null
+        choicesSheet?.dismiss()
+        choicesSheet = null
+        super.dismiss()
+    }
 
     init {
         val tabs =
@@ -173,6 +185,7 @@ internal class NovelReaderSettingsSheet(
     }
 
     private fun ttsPage(page: LinearLayout) {
+        page.button(R.string.hayai_novel_tts_language) { chooseLanguage() }
         page.heading(R.string.hayai_novel_reader_read_aloud)
         page.sliderFloat(R.string.hayai_novel_reader_speed, preferences.novelTtsSpeed, 5, 60, 10f)
         page.sliderFloat(R.string.hayai_novel_reader_pitch, preferences.novelTtsPitch, 5, 60, 10f)
@@ -448,21 +461,53 @@ internal class NovelReaderSettingsSheet(
     }
 
     private fun chooseVoice() {
-        var engine: android.speech.tts.TextToSpeech? = null
-        engine = android.speech.tts.TextToSpeech(context) { result ->
-            if (result == android.speech.tts.TextToSpeech.SUCCESS) {
-                val voices = engine?.voices.orEmpty().filterNot { it.isNetworkConnectionRequired }.sortedWith(compareBy({ it.locale.displayName }, { it.name }))
-                val labels = listOf(context.getString(R.string.system_default)) + voices.map { voice ->
-                    context.getString(R.string.hayai_novel_reader_voice_label, voice.locale.displayName, voice.name)
+        choicesSheet?.dismiss()
+        voiceEngine?.shutdown()
+        val generation = ++chooserGeneration
+        var requestedEngine: android.speech.tts.TextToSpeech? = null
+        requestedEngine = android.speech.tts.TextToSpeech(context) { result ->
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                if (generation != chooserGeneration || !isShowing || activity.isFinishing || activity.isDestroyed) {
+                    requestedEngine?.shutdown()
+                    return@post
                 }
-                val values = listOf("") + voices.map { it.name }
-                context.materialAlertDialog().setTitle(R.string.hayai_novel_reader_installed_voice).setSingleChoiceItems(labels.toTypedArray(), values.indexOf(preferences.novelTtsVoice.get()).coerceAtLeast(0)) { dialog, index ->
-                    preferences.novelTtsVoice.set(values[index]); dialog.dismiss()
-                }.setOnDismissListener { engine?.shutdown() }.show()
-            } else {
-                engine?.shutdown()
+                val sheet = NovelReaderContentSheet(activity, context.getString(R.string.hayai_novel_reader_installed_voice))
+                choicesSheet = sheet
+                if (result == android.speech.tts.TextToSpeech.SUCCESS) {
+                    val displayLocale = context.resources.configuration.locales[0]
+                    val voices = requestedEngine?.voices.orEmpty().filterNot { it.isNetworkConnectionRequired }.sortedWith(compareBy({ it.locale.getDisplayName(displayLocale) }, { it.name }))
+                    val values = listOf("" to context.getString(R.string.system_default)) + voices.map { voice ->
+                        voice.name to context.getString(R.string.hayai_novel_reader_voice_label, voice.locale.getDisplayName(displayLocale), voice.name)
+                    }
+                    sheet.items(values, R.string.hayai_novel_reader_tts_unavailable, { it.second }, { if (it.first == preferences.novelTtsVoice.get()) context.getString(R.string.hayai_novel_sheet_selected) else "" }) { selected ->
+                        preferences.novelTtsVoice.set(selected.first)
+                        sheet.dismiss()
+                    }
+                } else {
+                    sheet.text(context.getString(R.string.hayai_novel_reader_tts_unavailable))
+                }
+                requestedEngine?.shutdown()
+                if (voiceEngine === requestedEngine) voiceEngine = null
+                sheet.show()
             }
         }
+        voiceEngine = requestedEngine
+    }
+
+    private fun chooseLanguage() {
+        choicesSheet?.dismiss()
+        chooserGeneration++
+        voiceEngine?.shutdown()
+        voiceEngine = null
+        val displayLocale = context.resources.configuration.locales[0]
+        val values = listOf("auto" to context.getString(R.string.hayai_novel_tts_language_auto)) + NovelTtsLanguage.availableLocales(displayLocale).map { it.toLanguageTag() to it.getDisplayName(displayLocale) }
+        val sheet = NovelReaderContentSheet(activity, context.getString(R.string.hayai_novel_tts_language))
+        choicesSheet = sheet
+        sheet.items(values, R.string.hayai_novel_reader_tts_unavailable, { it.second }, { if (it.first == preferences.novelTtsLanguage.get()) context.getString(R.string.hayai_novel_sheet_selected) else "" }) { selected ->
+            preferences.novelTtsLanguage.set(selected.first)
+            sheet.dismiss()
+        }
+        sheet.show()
     }
 
     private fun bottomActionEditor(container: LinearLayout) {

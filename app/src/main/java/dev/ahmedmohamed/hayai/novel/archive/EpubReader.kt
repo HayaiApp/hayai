@@ -653,6 +653,7 @@ class EpubReader(private val reader: ArchiveReader, private val resources: Resou
         }
 
         private fun normalizeByDepth(toc: List<EpubChapter>): List<EpubChapter> {
+            val hasSibling = computeSiblingPresence(toc)
             val ancestors = mutableListOf<String>()
 
             return toc.mapIndexed { index, chapter ->
@@ -670,9 +671,25 @@ class EpubReader(private val reader: ArchiveReader, private val resources: Resou
                     else -> rawTitle
                 }
 
-                ancestors.add(rawTitle)
+                ancestors.add(if (hasSibling[index]) rawTitle else "")
                 chapter.copy(title = normalizedTitle)
             }
+        }
+
+        // Tsundoku 626397e15f57963d2d1eaa176ea2d516e475528a: omit singleton book prefixes and tolerate skipped TOC depths.
+        private fun computeSiblingPresence(toc: List<EpubChapter>): BooleanArray {
+            val parentIndices = IntArray(toc.size)
+            val ancestors = mutableListOf<Int>()
+            toc.forEachIndexed { index, chapter ->
+                val depth = chapter.depth.coerceAtLeast(0)
+                while (ancestors.isNotEmpty() && toc[ancestors.last()].depth.coerceAtLeast(0) >= depth) {
+                    ancestors.removeAt(ancestors.lastIndex)
+                }
+                parentIndices[index] = ancestors.lastOrNull() ?: -1
+                ancestors.add(index)
+            }
+            val childCounts = parentIndices.toList().groupingBy { it }.eachCount()
+            return BooleanArray(toc.size) { (childCounts[parentIndices[it]] ?: 0) > 1 }
         }
 
         private fun normalizeByHeuristic(toc: List<EpubChapter>): List<EpubChapter> {

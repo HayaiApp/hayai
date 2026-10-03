@@ -61,6 +61,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.Closeable
 import java.text.NumberFormat
+import java.util.Locale
 
 internal class NovelReaderAttachment(
     private val activity: ReaderActivity,
@@ -261,6 +262,8 @@ internal class NovelReaderAttachment(
         menu.add(Menu.NONE, MENU_ADD_HIGHLIGHT, Menu.NONE, R.string.hayai_novel_reader_highlight)
         menu.add(Menu.NONE, MENU_HIGHLIGHTS, Menu.NONE, R.string.hayai_novel_reader_highlights)
         menu.add(Menu.NONE, MENU_STATISTICS, Menu.NONE, R.string.hayai_novel_reader_chapter_statistics)
+        menu.add(Menu.NONE, MENU_ENTRY_SEARCH, Menu.NONE, R.string.hayai_novel_entry_text_search)
+        menu.add(Menu.NONE, MENU_ENTRY_STATISTICS, Menu.NONE, R.string.hayai_novel_entry_word_statistics)
         menu.add(Menu.NONE, MENU_OFFLINE, Menu.NONE, R.string.hayai_novel_reader_toggle_offline)
         menu.add(Menu.NONE, MENU_TRANSLATE, Menu.NONE, R.string.hayai_novel_reader_translate_chapter)
         menu.add(Menu.NONE, MENU_OPEN_SOURCE, Menu.NONE, R.string.open_in_webview)
@@ -276,6 +279,8 @@ internal class NovelReaderAttachment(
             MENU_ADD_HIGHLIGHT -> true.also { captureHighlight() }
             MENU_HIGHLIGHTS -> true.also { showHighlights() }
             MENU_STATISTICS -> true.also { showStatistics() }
+            MENU_ENTRY_SEARCH -> true.also { NovelEntryContentTools.showSearch(activity, manga) { chapter -> activity.scope.launch { activity.loadChapter(chapter) } } }
+            MENU_ENTRY_STATISTICS -> true.also { NovelEntryContentTools.showStatistics(activity, manga) }
             MENU_OFFLINE -> true.also { toggleOffline() }
             MENU_TRANSLATE -> true.also { translateChapter() }
             MENU_OPEN_SOURCE -> true.also { openSource(inApp = true) }
@@ -458,20 +463,19 @@ internal class NovelReaderAttachment(
     private fun toggleTts() {
         if (tts.isPlaying) {
             tts.pause()
+        } else if (tts.hasActivePlayback) {
+            configureTts()
+            tts.play()
         } else {
-            startTts(0)
+            viewer.viewportParagraph(::startTts)
         }
     }
 
     private fun startTts(paragraph: Int) {
+        val chapterId = content?.chapter?.id ?: return
         viewer.paragraphs { paragraphs ->
-            tts.configure(
-                preferences.novelTtsSpeed.get(),
-                preferences.novelTtsPitch.get(),
-                preferences.novelTtsVoice.get(),
-                displayedLanguageTag,
-                preferences.novelTtsBackgroundPlayback.get(),
-            )
+            if (closed || content?.chapter?.id != chapterId) return@paragraphs
+            configureTts()
             tts.setParagraphs(paragraphs, paragraph)
             tts.play()
         }
@@ -850,14 +854,9 @@ internal class NovelReaderAttachment(
         preservePlayback: Boolean,
     ) {
         viewer.paragraphs { paragraphs ->
+            if (closed || content?.chapter?.id != chapterId) return@paragraphs
             if (viewer.currentChapterId != chapterId) return@paragraphs
-            tts.configure(
-                preferences.novelTtsSpeed.get(),
-                preferences.novelTtsPitch.get(),
-                preferences.novelTtsVoice.get(),
-                displayedLanguageTag,
-                preferences.novelTtsBackgroundPlayback.get(),
-            )
+            configureTts()
             if (preservePlayback) {
                 tts.replaceParagraphs(paragraphs)
             } else {
@@ -971,6 +970,16 @@ internal class NovelReaderAttachment(
     private fun sourcePageUrl(): String? =
         runCatching { (source as? HttpSource)?.getMangaUrl(manga) }.getOrNull()
 
+    private fun ttsLanguage(): String = NovelTtsLanguage.resolve(preferences.novelTtsLanguage.get(), displayedLanguageTag, source.lang, Locale.getDefault().toLanguageTag())
+
+    private fun configureTts() = tts.configure(
+        preferences.novelTtsSpeed.get(),
+        preferences.novelTtsPitch.get(),
+        preferences.novelTtsVoice.get(),
+        ttsLanguage(),
+        preferences.novelTtsBackgroundPlayback.get(),
+    )
+
     private fun openSource(inApp: Boolean) {
         val url = sourcePageUrl() ?: return activity.toast(R.string.hayai_novel_reader_source_no_page)
         val intent =
@@ -1021,6 +1030,8 @@ internal class NovelReaderAttachment(
         const val MENU_OPEN_SOURCE = 0x484107
         const val MENU_OPEN_EXTERNAL = 0x484108
         const val MENU_SHARE = 0x484109
+        const val MENU_ENTRY_SEARCH = 0x48410A
+        const val MENU_ENTRY_STATISTICS = 0x48410B
         const val DEFAULT_HIGHLIGHT_COLOR = 0xFFFFEB3B.toInt()
     }
 }

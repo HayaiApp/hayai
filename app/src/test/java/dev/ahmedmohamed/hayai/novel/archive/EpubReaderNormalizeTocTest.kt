@@ -102,7 +102,7 @@ class EpubReaderNormalizeTocTest {
     }
 
     @Test
-    fun `structural nesting works for non-english titles`() {
+    fun `a lone book title is not repeated for non-english chapters`() {
         // No keyword list involved, so German/Japanese labels normalize just like English ones.
         val result = normalize(
             "Erster Teil" to 0,
@@ -110,28 +110,46 @@ class EpubReaderNormalizeTocTest {
             "第1章" to 1,
         )
 
-        assertEquals(listOf("Erster Teil", "Erster Teil - Kapitel 1", "Erster Teil - 第1章"), result)
+        assertEquals(listOf("Erster Teil", "Kapitel 1", "第1章"), result)
     }
 
     @Test
-    fun `deep nesting joins the full ancestor chain`() {
+    fun `single grouping titles do not repeat throughout the chapter list`() {
         val result = normalize(
             "Book I" to 0,
             "Part A" to 1,
             "Chapter 1" to 2,
         )
 
-        assertEquals(listOf("Book I", "Book I - Part A", "Book I - Part A - Chapter 1"), result)
+        assertEquals(listOf("Book I", "Part A", "Chapter 1"), result)
     }
 
     @Test
-    fun `descriptive titles under a parent keep the parent prefix instead of heuristic mangling`() {
+    fun `descriptive titles under a lone parent remain unchanged`() {
         // A nested TOC forces the structural path even though a sibling looks like a heuristic subsection.
         val result = normalize(
             "Volume 1" to 0,
             "Chapter 1: The Beginning" to 1,
         )
 
-        assertEquals(listOf("Volume 1", "Volume 1 - Chapter 1: The Beginning"), result)
+        assertEquals(listOf("Volume 1", "Chapter 1: The Beginning"), result)
+    }
+
+    @Test
+    fun `skipped grouping entries allow a first chapter at a deeper level`() {
+        assertEquals(listOf("Chapter 1", "Chapter 2"), normalize("Chapter 1" to 2, "Chapter 2" to 2))
+    }
+
+    @Test
+    fun `a depth gap below a lone book title does not add the book prefix`() {
+        assertEquals(listOf("Book", "Chapter 1", "Chapter 2"), normalize("Book" to 0, "Chapter 1" to 3, "Chapter 2" to 3))
+    }
+
+    @Test
+    fun `separate volumes keep their prefixes even when child depths have gaps`() {
+        assertEquals(
+            listOf("Volume 1", "Volume 1 - Chapter 1", "Volume 2", "Volume 2 - Chapter 2"),
+            normalize("Volume 1" to 0, "Chapter 1" to 3, "Volume 2" to 0, "Chapter 2" to 2),
+        )
     }
 }

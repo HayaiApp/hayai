@@ -18,6 +18,7 @@ import dev.ahmedmohamed.hayai.novel.integration.NovelDataToolsController
 import dev.ahmedmohamed.hayai.novel.reader.NovelFontStore
 import dev.ahmedmohamed.hayai.novel.reader.NovelColorPickerDialog
 import dev.ahmedmohamed.hayai.novel.reader.NovelThemeColors
+import dev.ahmedmohamed.hayai.novel.reader.NovelTtsLanguage
 import dev.ahmedmohamed.hayai.novel.source.builder.NovelCustomSourceBuilderController
 import dev.ahmedmohamed.hayai.novel.translation.NovelLanguageToolsSettingsController
 import eu.kanade.tachiyomi.R
@@ -206,6 +207,14 @@ class NovelSettingsController : SettingsController() {
 
         preferenceCategory {
             title = context.getString(R.string.hayai_novel_reader_text_to_speech)
+            listPreference(activity) {
+                bindTo(novel.novelTtsLanguage)
+                titleRes = R.string.hayai_novel_tts_language
+                val displayLocale = context.resources.configuration.locales[0]
+                val languages = NovelTtsLanguage.availableLocales(displayLocale)
+                entries = listOf(context.getString(R.string.hayai_novel_tts_language_auto)) + languages.map { it.getDisplayName(displayLocale) }
+                entryValues = listOf("auto") + languages.map(java.util.Locale::toLanguageTag)
+            }
             floatChoice(context.getString(R.string.hayai_novel_reader_speech_speed), novel.novelTtsSpeed, (5..60 step 5).map { it / 10f }) { context.getString(R.string.hayai_novel_reader_multiplier_value, it) }
             floatChoice(context.getString(R.string.hayai_novel_reader_speech_pitch), novel.novelTtsPitch, (5..60 step 5).map { it / 10f }) { context.getString(R.string.hayai_novel_reader_multiplier_value, it) }
             editTextPreference(activity) { bindTo(novel.novelTtsVoice); title = context.getString(R.string.hayai_novel_reader_preferred_voice_id); summary = context.getString(R.string.hayai_novel_reader_voice_default_summary) }

@@ -31,7 +31,6 @@ import androidx.core.view.doOnPreDraw
 import androidx.core.widget.NestedScrollView
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.reader.viewer.GestureDetectorWithLongTap
-import org.jsoup.Jsoup
 
 internal class NativeNovelRenderer(
     context: Context,
@@ -61,7 +60,7 @@ internal class NativeNovelRenderer(
             context,
             object : GestureDetectorWithLongTap.Listener() {
                 override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
-                    if (!editMode && !suppressTap && !selectionModeActive && blocks.values.none { it.textView?.hasSelection() == true }) {
+                    if (!destroyed && !editMode && !suppressTap && !selectionModeActive && blocks.values.none { it.textView?.hasSelection() == true }) {
                         callbacks.onTap(
                             event.x / scroll.width.coerceAtLeast(1),
                             event.y / scroll.height.coerceAtLeast(1),
@@ -239,7 +238,7 @@ internal class NativeNovelRenderer(
 
     override fun isShort(callback: (Boolean) -> Unit) {
         val block = activeBlock() ?: return callback(false)
-        block.root.post { callback(block.root.height <= scroll.height) }
+        block.root.post { if (!destroyed && activeChapterId == block.id && blocks[block.id] === block) callback(block.root.height <= scroll.height) }
     }
 
     override fun setEditMode(enabled: Boolean) {
@@ -323,7 +322,7 @@ internal class NativeNovelRenderer(
         val title = if (request.style.hideChapterTitle) "" else "<h1>${android.text.TextUtils.htmlEncode(request.chapterTitle)}</h1>"
         val spanned = HtmlCompat.fromHtml(title + request.content.html, HtmlCompat.FROM_HTML_MODE_COMPACT)
         block.original = SpannableStringBuilder(spanned)
-        block.paragraphs = Jsoup.parse(request.content.html).select("h1,h2,h3,h4,h5,h6,p,li,blockquote").map { it.text().trim() }.filter(String::isNotBlank)
+        block.paragraphs = block.original.toString().split(Regex("\\n+")).map(String::trim).filter(String::isNotBlank)
         block.originalParagraphs = block.paragraphs
         setBlockText(block, SpannableStringBuilder(block.original))
         block.root.addView(textView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))

@@ -42,6 +42,61 @@ class NovelContentProcessorTest {
     }
 
     @Test
+    fun `full html excludes metadata and a matching leading title in show and hide modes`() {
+        val html = """<!doctype html><html><head><title>Chapter 1</title><meta name="description" content="Metadata only"></head><body><h1>Chapter 1</h1><p>Readable chapter body.</p></body></html>"""
+        for (hideTitle in listOf(false, true)) {
+            val result = processor.process(document(html), "Chapter 1", options(hideChapterTitle = hideTitle))
+            val body = Jsoup.parseBodyFragment(result.html).body()
+            assertEquals("Readable chapter body.", body.text())
+            assertTrue(body.select("title, meta, h1, head").isEmpty())
+            assertEquals("https://example.test/book/", result.baseUrl)
+        }
+    }
+
+    @Test
+    fun `fragments remove only an exact matching first readable heading`() {
+        for (hideTitle in listOf(false, true)) {
+            val wrapped = "<main><section>\n<h2>CHAPTER - 1</h2><p>Story.</p><h2>Chapter 1</h2></section></main>"
+            val result = processor.process(document(wrapped), "Chapter 1", options(hideChapterTitle = hideTitle))
+            val body = Jsoup.parseBodyFragment(result.html).body()
+            assertEquals(1, body.select("h2").size)
+            assertEquals("Story. Chapter 1", body.text())
+
+            val nonmatching = processor.process(document("<h1>Chapter 10</h1><p>Story.</p>"), "Chapter 1", options(hideChapterTitle = hideTitle))
+            assertEquals("Chapter 10", Jsoup.parseBodyFragment(nonmatching.html).selectFirst("h1")!!.text())
+
+            val narrative = processor.process(document("<p>Story begins.</p><h1>Chapter 1</h1>"), "Chapter 1", options(hideChapterTitle = hideTitle))
+            assertEquals("Chapter 1", Jsoup.parseBodyFragment(narrative.html).selectFirst("h1")!!.text())
+
+            val earlierHeading = processor.process(document("<h2>Introduction</h2><h1>Chapter 1</h1>"), "Chapter 1", options(hideChapterTitle = hideTitle))
+            assertEquals(2, Jsoup.parseBodyFragment(earlierHeading.html).select("h1, h2").size)
+        }
+    }
+
+    @Test
+    fun `full xhtml preserves explicitly enabled head resources without exposing metadata`() {
+        val html = """<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Book metadata</title><style id="head-style">p{color:red}</style><link rel="stylesheet" href="chapter.css"><script id="head-script">setup()</script></head><body><section><h1>Chapter 1</h1><style id="body-style">p{margin:1em}</style><script id="body-script">ready()</script><p>Story.</p></section></body></html>"""
+        val blocked = processor.process(document(html), "Chapter 1", options())
+        assertTrue(Jsoup.parseBodyFragment(blocked.html).select("title, style, link, script, h1").isEmpty())
+        assertEquals("Story.", Jsoup.parseBodyFragment(blocked.html).body().text())
+
+        val cssOnly = processor.process(document(html), "Chapter 1", options(keepEmbeddedCss = true))
+        val cssBody = Jsoup.parseBodyFragment(cssOnly.html).body()
+        assertEquals(2, cssBody.select("style").size)
+        assertEquals("chapter.css", cssBody.selectFirst("link[rel=stylesheet]")!!.attr("href"))
+        assertTrue(cssBody.select("title, script, h1").isEmpty())
+        assertEquals("Story.", cssBody.text())
+
+        val both = processor.process(document(html), "Chapter 1", options(keepEmbeddedCss = true, keepEmbeddedJs = true))
+        val bothBody = Jsoup.parseBodyFragment(both.html).body()
+        assertEquals(2, bothBody.select("style").size)
+        assertEquals(2, bothBody.select("script").size)
+        assertEquals(listOf("head-style", "", "head-script"), bothBody.children().take(3).map { it.id() })
+        assertTrue(bothBody.select("title, h1").isEmpty())
+        assertEquals("Story.", bothBody.text())
+    }
+
+    @Test
     fun `source scripts and styles are separately gated`() {
         val html = "<style>p{color:red}</style><script>safe()</script><p>Text</p>"
         val cssOnly = processor.process(document(html), "Chapter", options(keepEmbeddedCss = true))
