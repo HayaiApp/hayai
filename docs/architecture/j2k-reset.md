@@ -140,6 +140,8 @@ Offline novel files are deliberately excluded, matching J2K's treatment of downl
 
 ## Updating upstreams
 
+The October 3, 2026 integration advances J2K from `c88c8e1b3d864268785f6a9655ee471e4cc368c1` to `b83defe42b` (31 commits). This brings source and global search history, named saved searches and filters, search-header and back-navigation fixes, source-aware incognito keyboard behavior, duplicate-chapter download cleanup, recent-row corner corrections, tag contrast improvements, translations, and Android Gradle Plugin 9.3.3. The Gradle wrapper remains unchanged.
+
 Hayai's Manga/Novels search scope remains attached to J2K's new global-search entry path, including searches restored with filters. Upstream owns saved-search storage and UI. Hayai's old source presets migrate into it only when the current source filter schema can represent their complete state; unresolved entries remain durable migration input. No second active saved-search writer or dialog remains. Both the upstream preferences and pending legacy entries use the existing app-settings backup path. Core and Hayai database schemas are unchanged.
 
 The upstream `MainActivity` changes remain identical to the new parent. No new adapter is added to `App.kt`, `MainActivity.kt`, or the image `ReaderActivity.kt`. Duplicate chapter cleanup retains J2K's download authority and bookmark protection while applying the same category exclusions as ordinary read-based deletion.

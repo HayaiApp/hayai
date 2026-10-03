@@ -1,4 +1,4 @@
-# J2K-owned hardcoded UI literals present at c88c8e1b3d864268785f6a9655ee471e4cc368c1.
+# J2K-owned hardcoded UI literals present at b83defe42b2ac9f460667bda3a42fdd9d12e767e.
 # Regenerate only while rebasing onto a reviewed J2K baseline:
 # .\tools\verify-localization.ps1 -WriteUpstreamBaseline -UpstreamRef j2k/master
 app/src/main/java/eu/kanade/tachiyomi/data/download/DownloadNotifier.kt	setContentTitle("$title - $chapter".chop(30))
