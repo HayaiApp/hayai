@@ -1,5 +1,6 @@
 package dev.ahmedmohamed.hayai.source.filter
 
+import android.content.Context
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -37,7 +38,23 @@ class SourceTagCompletionItem(
         holder.wrapper.hint = filter.name
         holder.wrapper.helperText = completion.hint
         holder.wrapper.error = null
+        holder.inputWatcher?.let(holder.input::removeTextChangedListener)
+        val bindingGeneration = ++holder.bindingGeneration
         holder.input.setText("", false)
+        holder.input.threshold = MINIMUM_QUERY_LENGTH
+        val suggestionAdapter = TagSuggestionAdapter(
+            holder.itemView.context,
+            completion,
+            isCurrentQuery = { query ->
+                holder.bindingGeneration == bindingGeneration && holder.input.text?.toString().orEmpty() == query
+            },
+            onPublished = { hasSuggestions ->
+                if (hasSuggestions && holder.input.hasFocus() && holder.itemView.isAttachedToWindow) {
+                    holder.input.showDropDown()
+                }
+            },
+        )
+        holder.input.setAdapter(suggestionAdapter)
 
         fun renderSelections() {
             holder.chips.removeAllViews()
@@ -50,6 +67,7 @@ class SourceTagCompletionItem(
                         contentDescription = selection
                         setOnCloseIconClickListener {
                             completion.setSelections(completion.selections() - selection)
+                            holder.wrapper.error = null
                             renderSelections()
                         }
                     },
@@ -60,11 +78,18 @@ class SourceTagCompletionItem(
         fun submit(raw: String): Boolean {
             val candidate = raw.trim()
             if (candidate.isBlank()) return false
+            if (completion.isNamespaceSuggestion(candidate)) {
+                holder.wrapper.error = null
+                holder.input.setText(candidate)
+                holder.input.setSelection(candidate.length)
+                return true
+            }
+            val current = completion.selections()
+            if (current.none { it.equals(candidate, ignoreCase = true) } && current.size >= completion.maximumSelections) {
+                holder.wrapper.error = holder.itemView.context.getString(R.string.hayai_eh_filter_too_many_tags)
+                return false
+            }
             return runCatching {
-                val current = completion.selections()
-                if (candidate !in current && current.size >= completion.maximumSelections) {
-                    throw IllegalArgumentException(holder.itemView.context.getString(R.string.hayai_eh_filter_too_many_tags))
-                }
                 completion.setSelections(current + candidate)
                 holder.wrapper.error = null
                 holder.input.setText("", false)
@@ -76,20 +101,16 @@ class SourceTagCompletionItem(
             }
         }
 
-        holder.inputWatcher?.let(holder.input::removeTextChangedListener)
         holder.inputWatcher = holder.input.doAfterTextChanged { editable ->
-            val query = editable?.toString().orEmpty()
-            val suggestions = completion.suggestions(query)
-            holder.suggestionAdapter.clear()
-            holder.suggestionAdapter.addAll(suggestions)
-            holder.suggestionAdapter.notifyDataSetChanged()
-            if (suggestions.isNotEmpty() && holder.input.hasFocus()) holder.input.showDropDown()
+            holder.wrapper.error = null
+            if ((editable?.length ?: 0) < MINIMUM_QUERY_LENGTH) suggestionAdapter.clearSuggestions()
         }
         holder.input.setOnItemClickListener { parent, _, itemPosition, _ ->
-            submit(parent.getItemAtPosition(itemPosition).toString())
+            (parent.getItemAtPosition(itemPosition) as? String)?.let(::submit)
         }
         holder.input.setOnEditorActionListener { _, actionId, event ->
-            val submitted = actionId == EditorInfo.IME_ACTION_DONE || event?.keyCode == KeyEvent.KEYCODE_ENTER
+            val submitted = actionId == EditorInfo.IME_ACTION_DONE ||
+                (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
             submitted && submit(holder.input.text?.toString().orEmpty())
         }
         renderSelections()
@@ -106,7 +127,54 @@ class SourceTagCompletionItem(
         val wrapper: TextInputLayout = itemView.findViewById(R.id.hayai_tag_input_wrapper)
         val input: MaterialAutoCompleteTextView = itemView.findViewById(R.id.hayai_tag_input)
         val chips: ChipGroup = itemView.findViewById(R.id.hayai_tag_chips)
-        val suggestionAdapter = ArrayAdapter<String>(itemView.context, android.R.layout.simple_dropdown_item_1line).also(input::setAdapter)
+        var bindingGeneration = 0
         var inputWatcher: android.text.TextWatcher? = null
+    }
+
+    /** ArrayAdapter's default prefix filter would hide the catalog's substring and prefixed matches. */
+    private class TagSuggestionAdapter(
+        context: Context,
+        private val completion: SourceTagCompletionFilter,
+        private val isCurrentQuery: (String) -> Boolean,
+        private val onPublished: (Boolean) -> Unit,
+    ) : ArrayAdapter<String>(context, android.R.layout.simple_dropdown_item_1line) {
+        private var suggestions = emptyList<String>()
+        private val catalogFilter = object : android.widget.Filter() {
+            override fun performFiltering(constraint: CharSequence?): FilterResults {
+                val query = constraint?.toString().orEmpty()
+                val matches = if (query.length < MINIMUM_QUERY_LENGTH) emptyList() else {
+                    runCatching { completion.suggestions(query) }.getOrDefault(emptyList())
+                }
+                return FilterResults().apply {
+                    values = MatchingSuggestions(query, matches)
+                    count = matches.size
+                }
+            }
+
+            override fun publishResults(constraint: CharSequence?, results: FilterResults) {
+                val matches = results.values as? MatchingSuggestions ?: return
+                if (!isCurrentQuery(matches.query)) return
+                suggestions = matches.values
+                if (suggestions.isEmpty()) notifyDataSetInvalidated() else notifyDataSetChanged()
+                onPublished(suggestions.isNotEmpty())
+            }
+        }
+
+        override fun getCount(): Int = suggestions.size
+
+        override fun getItem(position: Int): String? = suggestions.getOrNull(position)
+
+        override fun getFilter(): android.widget.Filter = catalogFilter
+
+        fun clearSuggestions() {
+            suggestions = emptyList()
+            notifyDataSetInvalidated()
+        }
+
+        private data class MatchingSuggestions(val query: String, val values: List<String>)
+    }
+
+    private companion object {
+        const val MINIMUM_QUERY_LENGTH = 3
     }
 }

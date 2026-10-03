@@ -188,6 +188,7 @@ object SourceMetadataUi {
         genre.text = typeLabel(context, category)
         genre.setTextColor(contrastingTextColor(categoryColor))
         genreCard.setCardBackgroundColor(categoryColor)
+        genre.setOnClickListener { category.takeIf(String::isNotBlank)?.let(onSearch) }
 
         val pageCount = document.value(SourceMetadataKey.Pages)?.toIntOrNull() ?: 0
         pages.text = context.resources.getQuantityString(R.plurals.num_pages, pageCount, pageCount)

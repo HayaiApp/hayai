@@ -1767,20 +1767,13 @@ class MangaDetailsController :
     fun sourceSearch(text: String) = sourceSearch(listOf(text))
 
     fun sourceSearch(tags: List<String>) {
-        when (val previousController = previousController) {
-            is BrowseSourceController -> {
-                if (presenter.source is CatalogueSource) {
-                    router.getOnBackPressedDispatcher()?.onBackPressed()
-                    previousController.searchGenres(tags)
-                }
-            }
-            else -> {
-                if (presenter.source is CatalogueSource) {
-                    val controller = BrowseSourceController(presenter.source)
-                    router.pushController(controller.withFadeTransaction())
-                    controller.searchGenres(tags)
-                }
-            }
+        val source = presenter.source as? CatalogueSource ?: return
+        val previous = previousController as? BrowseSourceController
+        if (previous?.presenter?.sourceIsInitialized == true && previous.presenter.source.id == source.id) {
+            router.getOnBackPressedDispatcher()?.onBackPressed()
+            previous.searchGenres(tags)
+        } else {
+            router.pushController(BrowseSourceController(source, tags).withFadeTransaction())
         }
     }
 
@@ -1795,6 +1788,10 @@ class MangaDetailsController :
         isTag: Boolean,
     ) {
         finishFloatingActionMode()
+        if (isTag && dev.ahmedmohamed.hayai.source.filter.SourceGenreSearch.usesGalleryTags(presenter.source)) {
+            sourceSearch(content ?: view.text.toString())
+            return
+        }
         val previousController = previousController
         val hasDifferentAuthors =
             view.id == R.id.manga_author &&

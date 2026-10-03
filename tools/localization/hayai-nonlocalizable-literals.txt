@@ -643,7 +643,10 @@ app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	.replace("
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	@Suppress("UNCHECKED_CAST")
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhFilters.kt	arrayOf(context.getString(R.string.hayai_eh_filter_any), "2", "3", "4", "5"),
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	.map { tag -> prefix?.let { "$it$tag" } ?: tag }
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	"male", "female", "mixed", "location", "other",
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	"reclass", "language", "parody", "character", "group", "artist", "cosplayer",
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	const val ASSET_PATH = "hayai/eh_tags.txt"
+app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagCatalog.kt	return (NAMESPACES.asSequence().map { "$it:" } + tags.asSequence())
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	"$prefix$namespace$value"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	EhTagMode.Any -> "~"
 app/src/main/java/dev/ahmedmohamed/hayai/adult/eh/source/EhTagSelectionCodec.kt	EhTagMode.Exclude -> "-"
@@ -3226,6 +3229,8 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	else -> "$first\n\n$second"
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	require(output.length + read <= limit) { "Enhanced source details exceeded the size limit" }
 app/src/main/java/dev/ahmedmohamed/hayai/source/enhanced/HayaiEnhancedHttpSource.kt	return joinToString("\n") { row ->
+app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceGenreSearch.kt	val value = tags.singleOrNull()?.trim()?.lowercase(Locale.ROOT)?.replace(" ", "")?.replace("-", "") ?: return null
+app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionFilter.kt	private val NAMESPACE = Regex("[a-z][a-z0-9_-]{0,31}:", RegexOption.IGNORE_CASE)
 app/src/main/java/dev/ahmedmohamed/hayai/source/filter/SourceTagCompletionItem.kt	holder.input.setText("", false)
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataController.kt	const val MANGA_ID = "manga_id"
 app/src/main/java/dev/ahmedmohamed/hayai/source/metadata/SourceMetadataDocument.kt	EnhancedDescriptionLabel.Tags -> error("Tags are represented by SourceMetadataDocument.tags")
@@ -3284,13 +3289,19 @@ app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	pr
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	private val root = File(context.cacheDir, "hayai_source_previews").apply { mkdirs() }
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val files = root.walkTopDown().filter(File::isFile).filterNot { it.extension == "tmp" }.toList()
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewCache.kt	val temporary = File.createTempFile("$key.", ".tmp", directory)
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val ANCHOR_INDEX = "hayai_preview_anchor"
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val ANCHOR_OFFSET = "hayai_preview_offset"
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val CONTINUOUS = "hayai_preview_continuous"
+app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val CURRENT_PAGE = "hayai_preview_page"
 app/src/main/java/dev/ahmedmohamed/hayai/source/preview/SourcePreviewController.kt	const val MANGA_ID = "manga_id"
-app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	const val KEY = "hayai_saved_source_searches_v1"
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt	const val LEGACY_KEY = "hayai_saved_source_searches_v1"
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt	private val legacy = preferenceStore.getString(LEGACY_KEY, "[]")
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt	private val savedSearches = preferenceStore.getString(PreferenceKeys.savedSearches, "[]")
+app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchMigration.kt	val digest = MessageDigest.getInstance("SHA-256").digest("$sourceId\u0000$oldId".toByteArray(Charsets.UTF_8))
 app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.CheckBox -> result += SavedFilterState(path, "check", filter.state.toString())
 app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.Select<*> -> result += SavedFilterState(path, "select", filter.state.toString())
 app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.Text -> result += SavedFilterState(path, "text", filter.state.take(MAX_TEXT_LENGTH))
 app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	is Filter.TriState -> result += SavedFilterState(path, "tri", filter.state.toString())
-app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	private val preference = preferenceStore.getString(KEY, "[]")
 app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	result += if (selection == null) SavedFilterState(path, "sort-none", "") else SavedFilterState(path, "sort", selection.index.toString(), selection.ascending)
 app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "check" && filter is Filter.CheckBox -> saved.value.toBooleanStrictOrNull()?.let { filter.state = it; true }
 app/src/main/java/dev/ahmedmohamed/hayai/source/search/SavedSourceSearchStore.kt	saved.kind == "select" && filter is Filter.Select<*> -> saved.value.toIntOrNull()?.takeIf { it in filter.values.indices }?.let { filter.state = it; true }

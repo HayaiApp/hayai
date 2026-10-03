@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hayai_preview_layout">Preview layout</string>
+    <string name="hayai_preview_paged">Paged</string>
+    <string name="hayai_preview_continuous">Continuous scroll</string>
+    <string name="hayai_preview_previous">Previous preview page</string>
+    <string name="hayai_preview_next">Next preview page</string>
+    <string name="hayai_preview_wrong_page">The source returned a different preview page. Please retry.</string>
+</resources>

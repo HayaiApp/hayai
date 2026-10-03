@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="hayai_saved_search_imported_name">%1$s (imported %2$d)</string>
     <string name="hayai_download_app_updates">Automatically download app updates</string>
     <string name="hayai_dont_download_updates">Don\'t download automatically</string>
     <string name="hayai_library_scope">Library section</string>

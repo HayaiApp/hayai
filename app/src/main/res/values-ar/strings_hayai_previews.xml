@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hayai_preview_layout">طريقة عرض المعاينات</string>
+    <string name="hayai_preview_paged">صفحات</string>
+    <string name="hayai_preview_continuous">تمرير مستمر</string>
+    <string name="hayai_preview_previous">صفحة المعاينات السابقة</string>
+    <string name="hayai_preview_next">صفحة المعاينات التالية</string>
+    <string name="hayai_preview_wrong_page">أعاد المصدر صفحة معاينات مختلفة. يرجى إعادة المحاولة.</string>
+</resources>

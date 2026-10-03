@@ -128,8 +128,6 @@ try {
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/SourceItem.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceController.kt"
-        # Approved in docs/architecture/j2k-reset.md. Adds one saved-search action to the existing source filter sheet.
-        "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/SourceFilterSheet.kt"
         # Approved in docs/architecture/j2k-reset.md. Optional typed rich-result and tag-filter presentation only.
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceGridHolder.kt"
         "app/src/main/java/eu/kanade/tachiyomi/ui/source/browse/BrowseSourceHolder.kt"

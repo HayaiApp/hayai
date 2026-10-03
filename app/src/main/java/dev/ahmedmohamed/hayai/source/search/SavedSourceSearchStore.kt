@@ -1,12 +1,8 @@
 package dev.ahmedmohamed.hayai.source.search
 
-import eu.kanade.tachiyomi.data.preference.PreferenceStore
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import java.util.UUID
 
 @Serializable
 data class SavedSourceSearch(
@@ -24,43 +20,6 @@ data class SavedFilterState(
     val value: String,
     val extra: Boolean = false,
 )
-
-class SavedSourceSearchStore(
-    preferenceStore: PreferenceStore,
-    private val json: Json = Json { ignoreUnknownKeys = true },
-) {
-    private val preference = preferenceStore.getString(KEY, "[]")
-
-    fun list(sourceId: Long): List<SavedSourceSearch> = read().filter { it.sourceId == sourceId }
-
-    fun save(sourceId: Long, name: String, query: String, filters: FilterList): SavedSourceSearch {
-        val normalizedName = name.trim().take(MAX_NAME_LENGTH)
-        require(normalizedName.isNotBlank())
-        val current = read().toMutableList()
-        val existing = current.firstOrNull { it.sourceId == sourceId && it.name.equals(normalizedName, ignoreCase = true) }
-        val saved = SavedSourceSearch(existing?.id ?: UUID.randomUUID().toString(), sourceId, normalizedName, query.take(MAX_QUERY_LENGTH), SavedSourceFilterCodec.capture(filters))
-        current.removeAll { it.id == saved.id }
-        current += saved
-        write(current.takeLast(MAX_SAVED_SEARCHES))
-        return saved
-    }
-
-    fun delete(id: String) = write(read().filterNot { it.id == id })
-
-    private fun read(): List<SavedSourceSearch> =
-        runCatching { json.decodeFromString<List<SavedSourceSearch>>(preference.get()) }
-            .getOrDefault(emptyList())
-            .filter { it.id.length <= 64 && it.name.isNotBlank() && it.name.length <= MAX_NAME_LENGTH }
-
-    private fun write(items: List<SavedSourceSearch>) = preference.set(json.encodeToString(items))
-
-    private companion object {
-        const val KEY = "hayai_saved_source_searches_v1"
-        const val MAX_SAVED_SEARCHES = 100
-        const val MAX_NAME_LENGTH = 80
-        const val MAX_QUERY_LENGTH = 2_000
-    }
-}
 
 object SavedSourceFilterCodec {
     fun capture(filters: FilterList): List<SavedFilterState> = buildList {

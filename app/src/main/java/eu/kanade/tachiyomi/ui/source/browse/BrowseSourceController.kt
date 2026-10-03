@@ -9,8 +9,6 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.isVisible
@@ -28,9 +26,8 @@ import dev.ahmedmohamed.hayai.adult.eh.settings.EhPreferences
 import dev.ahmedmohamed.hayai.adult.eh.ui.EhSettingsController
 import dev.ahmedmohamed.hayai.source.presentation.SourceBrowseLayout
 import dev.ahmedmohamed.hayai.source.settings.SourceSettingsController
-import dev.ahmedmohamed.hayai.source.search.SavedSourceFilterCodec
-import dev.ahmedmohamed.hayai.source.search.SavedSourceSearch
-import dev.ahmedmohamed.hayai.source.search.SavedSourceSearchStore
+import dev.ahmedmohamed.hayai.source.search.SavedSourceSearchMigration
+import dev.ahmedmohamed.hayai.source.filter.SourceGenreSearch
 import eu.davidea.flexibleadapter.FlexibleAdapter
 import eu.davidea.flexibleadapter.items.IFlexible
 import eu.kanade.tachiyomi.R
@@ -124,12 +121,19 @@ open class BrowseSourceController(
         },
     )
 
+    constructor(source: CatalogueSource, genres: List<String>) : this(
+        Bundle().apply {
+            putLong(SOURCE_ID_KEY, source.id)
+            putStringArrayList(INITIAL_GENRES_KEY, ArrayList(genres))
+        },
+    )
+
     /**
      * Preferences helper.
      */
     private val preferences: PreferencesHelper by injectLazy()
     private val ehPreferences: EhPreferences by injectLazy()
-    private val savedSourceSearches by lazy { SavedSourceSearchStore(Injekt.get<PreferenceStore>()) }
+    private val savedSearchMigration by lazy { SavedSourceSearchMigration(Injekt.get<PreferenceStore>()) }
 
     /**
      * Adapter containing the list of manga from the catalogue.
@@ -229,6 +233,12 @@ open class BrowseSourceController(
             return
         }
 
+        runCatching {
+            savedSearchMigration.migrate(presenter.source.id, presenter.source::getFilterList) { name, number ->
+                view.context.getString(R.string.hayai_saved_search_imported_name, name, number)
+            }
+        }.onFailure { Timber.e(it) }
+
         // Initialize adapter, scroll listener and recycler views
         adapter = FlexibleAdapter(null, this)
         setupRecycler(view)
@@ -269,6 +279,10 @@ open class BrowseSourceController(
         }
         updatePopLatestIcons()
         requestFilePermissionsSafe(301, preferences, presenter.source is LocalSource)
+        args.getStringArrayList(INITIAL_GENRES_KEY)?.let {
+            args.remove(INITIAL_GENRES_KEY)
+            searchGenres(it)
+        }
     }
 
     override fun onDestroyView(view: View) {
@@ -537,73 +551,6 @@ open class BrowseSourceController(
         sheet.show()
     }
 
-    private fun showSavedSearches(sheet: SourceFilterSheet) {
-        val activity = activity ?: return
-        val saved = savedSourceSearches.list(presenter.source.id)
-        val labels = listOf(activity.getString(R.string.hayai_save_current_search)) + saved.map { it.name }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.hayai_saved_searches)
-            .setItems(labels.toTypedArray()) { _, which ->
-                if (which == 0) {
-                    val input = EditText(activity).apply {
-                        hint = activity.getString(R.string.hayai_saved_search_name)
-                        maxLines = 1
-                    }
-                    AlertDialog.Builder(activity)
-                        .setTitle(R.string.hayai_save_current_search)
-                        .setView(input)
-                        .setPositiveButton(R.string.save) { _, _ ->
-                            runCatching {
-                                savedSourceSearches.save(
-                                    presenter.source.id,
-                                    input.text.toString(),
-                                    presenter.query,
-                                    presenter.sourceFilters,
-                                )
-                            }.onSuccess {
-                                activity.toast(R.string.hayai_saved_search_saved)
-                            }.onFailure {
-                                activity.toast(R.string.hayai_saved_search_name_required)
-                            }
-                        }
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show()
-                } else {
-                    showSavedSearchActions(sheet, saved[which - 1])
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun showSavedSearchActions(sheet: SourceFilterSheet, saved: SavedSourceSearch) {
-        val activity = activity ?: return
-        AlertDialog.Builder(activity)
-            .setTitle(saved.name)
-            .setMessage(activity.getString(R.string.hayai_saved_search_details, saved.query.ifBlank { activity.getString(R.string.hayai_saved_search_no_query) }))
-            .setPositiveButton(R.string.hayai_apply_saved_search) { _, _ -> applySavedSearch(sheet, saved) }
-            .setNeutralButton(R.string.delete) { _, _ ->
-                savedSourceSearches.delete(saved.id)
-                activity.toast(R.string.hayai_saved_search_deleted)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun applySavedSearch(sheet: SourceFilterSheet, saved: SavedSourceSearch) {
-        val filters = presenter.source.getFilterList()
-        SavedSourceFilterCodec.restore(filters, saved.filters)
-        presenter.query = saved.query
-        presenter.sourceFilters = filters
-        presenter.appliedFilters = filters
-        activityBinding?.searchToolbar?.searchView?.setQuery(saved.query, false)
-        showProgressBar()
-        adapter?.clear()
-        presenter.restartPager(saved.query, filters)
-        updatePopLatestIcons()
-        sheet.dismissWithoutSearch()
-    }
-
     /**
      * Attempts to restart the request with a new genre-filtered query.
      * If the genre name can't be found the filters,
@@ -617,10 +564,18 @@ open class BrowseSourceController(
         names: List<String>,
         useContains: Boolean = false,
     ) {
+        if (adapter == null || !presenter.sourceIsInitialized) {
+            args.putStringArrayList(INITIAL_GENRES_KEY, ArrayList(names))
+            return
+        }
         presenter.sourceFilters = presenter.source.getFilterList()
         val genreNames = names.map { it.split(":").last().trim() }
-        var filterList: FilterList? = null
-        genres@ for (genreName in genreNames) {
+        var filterList: FilterList? = presenter.sourceFilters.takeIf { SourceGenreSearch.apply(presenter.source, it, names) }
+        if (filterList == null && SourceGenreSearch.usesGalleryTags(presenter.source)) {
+            searchWithQuery(names.joinToString(" "))
+            return
+        }
+        genres@ for (genreName in if (filterList == null) genreNames else emptyList()) {
             filter@ for (sourceFilter in presenter.sourceFilters) {
                 if (sourceFilter is Filter.Group<*>) {
                     for (filter in sourceFilter.state) {
@@ -1101,5 +1056,6 @@ open class BrowseSourceController(
         const val SEARCH_QUERY_KEY = "searchQuery"
         const val USE_LATEST_KEY = "useLatest"
         const val SMART_SEARCH_CONFIG_KEY = "smartSearchConfig"
+        private const val INITIAL_GENRES_KEY = "hayaiInitialGenres"
     }
 }

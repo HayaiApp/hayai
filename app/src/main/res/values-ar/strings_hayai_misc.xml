@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="hayai_source_badge_novel">رواية</string>
+    <string name="hayai_saved_search_imported_name">%1$s (مستورد %2$d)</string>
     <string name="hayai_failure_source_not_novel">هذا المصدر لا يوفّر نصوص الروايات.</string>
 </resources>

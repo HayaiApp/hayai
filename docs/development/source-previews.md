@@ -1,0 +1,11 @@
+# Source page previews
+
+The full preview screen reuses `SourcePreviewController`, its SY-sized thumbnail grid, the authenticated `SourceDetailsPreviewRegistry`, and `ReaderLauncher`. The behavior applies to every registered preview provider, including E-Hentai, ExHentai, NHentai, and LANraragi. Providers keep their existing ownership rules and gallery-page numbering.
+
+The layout menu offers **Paged** and **Continuous scroll**. Paged remains the default and displays one source listing at a time. Continuous scroll loads an adjacent listing as the grid approaches either end. Seeking into the middle of a gallery also loads the previous listing so the user can scroll backward without leaving the screen. Both modes use the existing **Go to page** slider, and previous/next actions remain available when a source cannot report its total page count.
+
+`SourcePreviewWindow` retains at most five contiguous listings. Global image indices preserve the first visible thumbnail and its vertical offset when listings are prepended or evicted. Stable RecyclerView IDs and DiffUtil updates retain visible thumbnail holders. Layout choice, current listing, and scroll anchor are view state stored in controller arguments; they introduce no second settings, chapter, or progress model. Tapping a thumbnail still opens the authoritative J2K chapter at the selected image index through `ReaderLauncher`.
+
+An explicit seek or layout change cancels the previous listing job. Destroying the view cancels listing and thumbnail jobs, invalidates queued layout callbacks, and recycles decoded bitmaps. A failed adjacent request preserves the visible grid and offers the existing Snackbar Retry action; it does not automatically repeat the failing request. Initial-page errors retain the existing EmptyView retry and ExHentai settings action.
+
+Focused coverage is in `SourcePreviewWindowTest`: middle-gallery seeks, forward/backward bounded windows, global anchors, unknown totals and terminal listings, and rejection of repeated or nonadjacent responses. Device verification should cover a gallery with several listings, switching layouts while scrolled, direct seeks, scrolling into previous/next listings, an interrupted request, and opening the expected reader image.
