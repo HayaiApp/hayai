@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.database.models.Category
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.LibraryManga
 import eu.kanade.tachiyomi.data.database.models.Manga
+import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.ui.library.LibraryCategoryAdapter
 import eu.kanade.tachiyomi.ui.library.LibraryHeaderItem
 import eu.kanade.tachiyomi.ui.library.LibraryItem
@@ -15,12 +16,15 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsAdapter
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
 import eu.kanade.tachiyomi.ui.manga.chapter.ChapterItem
+import eu.kanade.tachiyomi.widget.AutofitRecyclerView
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @RunWith(AndroidJUnit4::class)
 class PrefilteredAdapterInstrumentedTest {
@@ -89,8 +93,12 @@ class PrefilteredAdapterInstrumentedTest {
         val other = libraryItem(header, 2, "Unrelated manga")
         val later = libraryItem(header, 3, "New needle manga")
         val placeholder = LibraryItem(LibraryManga.createBlank(123), header, null)
-        activity.onActivity {
+        activity.onActivity { host ->
+            LibraryItem.updateDisplayPrefs()
             adapter = LibraryCategoryAdapter(null)
+            val recycler = AutofitRecyclerView(host)
+            recycler.useStaggered(Injekt.get<PreferencesHelper>())
+            recycler.adapter = adapter
             adapter.setFilter("title:needle")
             adapter.setItems(listOf(first, other))
         }

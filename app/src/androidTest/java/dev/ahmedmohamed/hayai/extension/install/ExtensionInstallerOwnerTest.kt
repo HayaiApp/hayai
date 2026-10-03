@@ -1,6 +1,7 @@
 package dev.ahmedmohamed.hayai.extension.install
 
 import android.content.pm.PackageInstaller
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
@@ -50,7 +51,7 @@ class ExtensionInstallerOwnerTest {
             assertNotNull(platform.getSessionInfo(session))
             assertFalse(installer.isInstallActive(Long.MAX_VALUE))
             installer.setInstalling("dev.hayai.fixture.cancelled", session, Long.MAX_VALUE)
-            assertNull(platform.getSessionInfo(session))
+            awaitAbandonedSession(platform, session)
             assertFalse(installer.isInstallActive(Long.MAX_VALUE, session))
         } finally {
             runCatching { platform.abandonSession(session) }
@@ -76,7 +77,7 @@ class ExtensionInstallerOwnerTest {
         try {
             installer.setInstalling(pkg, retrySession, Long.MAX_VALUE)
             installer.setInstalling(pkg, oldSession, Long.MAX_VALUE - 1)
-            assertNull(platform.getSessionInfo(oldSession))
+            awaitAbandonedSession(platform, oldSession)
             assertEquals(retrySession, installer.downloadInstallerMap[pkg])
             installer.setInstallationResult(pkg, false, Long.MAX_VALUE - 1)
             assertEquals(retrySession, installer.downloadInstallerMap[pkg])
@@ -89,5 +90,14 @@ class ExtensionInstallerOwnerTest {
             runCatching { platform.abandonSession(retrySession) }
             runCatching { platform.abandonSession(oldSession) }
         }
+    }
+
+    private fun awaitAbandonedSession(platform: PackageInstaller, sessionId: Int) {
+        // PackageInstallerService removes abandoned sessions on its install handler.
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        while (platform.getSessionInfo(sessionId) != null && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(25)
+        }
+        assertNull("The platform did not remove abandoned session $sessionId", platform.getSessionInfo(sessionId))
     }
 }

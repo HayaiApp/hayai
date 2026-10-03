@@ -437,7 +437,7 @@ try {
     Capture "07-reader-settings-advanced"
     Assert-NodeAfterSwiping "^Previous chapter$" "07-reader-settings-advanced-actions"
     Capture "07-reader-settings-advanced-actions"
-    Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline"
+    Tap-NodeAfterSwiping "Save or remove offline copy" "08-save-offline" -MaximumSwipes 24
     Start-Sleep -Seconds 3
     Invoke-Adb @("shell", "am", "force-stop", $ApplicationId) | Out-Null
     Invoke-Adb @("shell", "am", "start", "-S", "-W", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.reader.ReaderActivity", "--el", "manga", "100", "--el", "chapter", "1000") | Out-Null
@@ -454,7 +454,11 @@ try {
     Invoke-Adb @("shell", "am", "start", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity") | Out-Null
     $script:foregroundIntentArgs = @("shell", "am", "start", "--activity-reorder-to-front", "-n", "$ApplicationId/eu.kanade.tachiyomi.ui.main.MainActivity")
     Start-Sleep -Seconds 2
-    Tap-Node "^More$" "07-eh-more"
+    Tap-Node "^(More|More options)$" "07-eh-more"
+    $overflowWindow = Dump-Window "07-main-overflow"
+    if ($null -eq (Find-NodeOptional $overflowWindow "^Settings$")) {
+        Tap-WindowNode (Find-Node $overflowWindow "^More$") "More"
+    }
     Tap-Node "^Settings$" "07-eh-settings"
     Tap-NodeAfterSwiping "^Reader$" "07-reader-settings"
     Tap-NodeAfterSwiping "^Novel reader$" "07-novel-reader-settings"
